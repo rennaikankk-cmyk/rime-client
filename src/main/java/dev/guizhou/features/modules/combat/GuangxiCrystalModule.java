@@ -95,6 +95,7 @@ public class GuangxiCrystalModule extends Module {
 
     private enum AutoSwapMode { NONE, SILENT, INVENTORY }
     private final Setting<AutoSwapMode> autoSwap = mode("AutoSwap", AutoSwapMode.SILENT).setPage("General");
+    private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
 
     private final Setting<Boolean> predict          = bool("Predict", true).setPage("Sync");
     private final Setting<Integer> predictTicks     = num("PredictTicks", 4, 0, 20).setPage("Sync");
@@ -842,9 +843,11 @@ public class GuangxiCrystalModule extends Module {
         Vec3 hit = getClosestPointToEye(eyePos, crystal.getBoundingBox());
         float[] angles = MathUtil.calcAngle(eyePos, hit);
         if (!canBreakCrystal(crystal, angles[0], angles[1])) return;
-        GuizhouWare.rotationManager.submit(new RotationRequest(
-            "AutoCrystal_break", 60, angles[0], angles[1], RotationRequest.Mode.SILENT
-        ));
+        if (rotate.getValue()) {
+            GuizhouWare.rotationManager.submit(new RotationRequest(
+                "AutoCrystal_break", 60, angles[0], angles[1], RotationRequest.Mode.SILENT
+            ));
+        }
         diagBreakSent++;
         lastBreakMs = System.currentTimeMillis();
         mc.gameMode.attack(mc.player, crystal);

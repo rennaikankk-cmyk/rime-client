@@ -53,6 +53,7 @@ public class GuangxiTPModule extends Module {
     private final Setting<Integer> breakDelay = num("BreakDelay", 250, 0, 2000);
     private final Setting<Boolean> basePlace  = bool("BasePlace", true);
     private final Setting<Integer> baseDelay  = num("BaseDelay", 1000, 0, 5000);
+    private final Setting<Boolean> rotate     = bool("Rotate", true);
 
     private final Setting<Boolean> render      = bool("Render", true);
     private final Setting<Color>   renderColor = color("Color", 130, 80, 255, 60);
@@ -281,11 +282,13 @@ public class GuangxiTPModule extends Module {
         Vec3 cp = crystal.position();
         Vec3 fake = new Vec3(cp.x, cp.y + 2.2, cp.z);
 
-        GuizhouWare.rotationManager.submit(new RotationRequest(
-                "GuangxiTP_break", 40,
-                GuizhouWare.rotationManager.getServerYaw(),
-                GuizhouWare.rotationManager.getServerPitch(),
-                RotationRequest.Mode.SILENT));
+        if (rotate.getValue()) {
+            GuizhouWare.rotationManager.submit(new RotationRequest(
+                    "GuangxiTP_break", 40,
+                    GuizhouWare.rotationManager.getServerYaw(),
+                    GuizhouWare.rotationManager.getServerPitch(),
+                    RotationRequest.Mode.SILENT));
+        }
 
         sendDesyncMove(fake);
         mc.player.connection.send(

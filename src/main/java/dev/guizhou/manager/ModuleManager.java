@@ -110,6 +110,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new SurroundModule());
         register(new GuangxiPistonModule());
         register(new GuangxiTPModule());
+        register(new GuangxiBedModule());
         register(new PearlBlockerModule());
         register(new PhaseModule());
         register(new TrickshotModule());
