@@ -39,7 +39,7 @@ import java.awt.Color;
 import java.util.HashMap;
 import java.util.Map;
 
-public class PistonCrystalModule extends Module {
+public class GuangxiPistonModule extends Module {
 
     private static final String ROTATION_ID     = "PistonCrystal";
     private static final int    ROTATION_PRIORITY = 70;
@@ -75,8 +75,8 @@ public class PistonCrystalModule extends Module {
     private ArmorProfile                     targetProfile;
     private net.minecraft.world.Difficulty   targetDifficulty;
 
-    public PistonCrystalModule() {
-        super("PistonCrystal",
+    public GuangxiPistonModule() {
+        super("GuangxiPiston",
               "Pushes a crystal over a surrounded target with a piston and explodes it.",
               Category.COMBAT);
     }
@@ -173,7 +173,9 @@ public class PistonCrystalModule extends Module {
             return;
         if (setup.placeRedstone())
             GuizhouWare.placementManager.placeDirect(setup.redstone(), null, Items.REDSTONE_BLOCK);
-        GuizhouWare.placementManager.placeCrystal(setup.base(), true);
+        GuangxiCrystalModule autoCrystal = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
+        if (autoCrystal != null) autoCrystal.placeCrystalShared(setup.base(), true);
+        else GuizhouWare.placementManager.placeCrystal(setup.base(), true);
 
         int tick = mc.player.tickCount;
         if (setup.placeBase())   renderMap.put(setup.base(),    tick);

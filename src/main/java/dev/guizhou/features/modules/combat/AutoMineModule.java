@@ -7,7 +7,7 @@ import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.client.TargetsModule;
-import dev.guizhou.features.modules.world.SpeedMineModule;
+import dev.guizhou.features.modules.world.GuangxiMineModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.InteractionUtil;
 import dev.guizhou.util.MathUtil;
@@ -85,7 +85,7 @@ public class AutoMineModule extends Module {
     private final Long2LongOpenHashMap enemyBreaking = new Long2LongOpenHashMap();
     private static final long ENEMY_BREAK_TTL_MS = 1000;
 
-    private final SpeedMineModule.MineFinishListener finishListener = this::onMineFinish;
+    private final GuangxiMineModule.MineFinishListener finishListener = this::onMineFinish;
 
     public AutoMineModule() {
         super("AutoMine", "Automatically mines blocks around a target. Requires SpeedMine.", Category.COMBAT);
@@ -100,7 +100,7 @@ public class AutoMineModule extends Module {
 
     @Override
     public void onEnable() {
-        SpeedMineModule mine = GuizhouWare.moduleManager.getModuleByClass(SpeedMineModule.class);
+        GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
         if (mine != null) mine.addFinishListener(finishListener);
         enemyBreaking.clear();
         lastOuterPlaceTime = 0;
@@ -108,7 +108,7 @@ public class AutoMineModule extends Module {
 
     @Override
     public void onDisable() {
-        SpeedMineModule mine = GuizhouWare.moduleManager.getModuleByClass(SpeedMineModule.class);
+        GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
         if (mine != null) mine.removeFinishListener(finishListener);
         targetPlayer = null;
         target1 = target2 = null;
@@ -143,7 +143,7 @@ public class AutoMineModule extends Module {
         AntiSurroundMode swMode = antiSurroundMode.getValue();
         if (swMode == AntiSurroundMode.None) return;
 
-        AutoCrystalModule crystal = GuizhouWare.moduleManager.getModuleByClass(AutoCrystalModule.class);
+        GuangxiCrystalModule crystal = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
         if (crystal == null || !crystal.isEnabled()) return;
 
         if (swMode == AntiSurroundMode.Auto || swMode == AntiSurroundMode.Outer) {
@@ -199,7 +199,7 @@ public class AutoMineModule extends Module {
     }
 
     private void update() {
-        SpeedMineModule mine = speedMine();
+        GuangxiMineModule mine = speedMine();
         if (mine == null) return;
 
         if (tryCrawlMine(mine)) return;
@@ -255,7 +255,7 @@ public class AutoMineModule extends Module {
         }
     }
 
-    private boolean tryCrawlMine(SpeedMineModule mine) {
+    private boolean tryCrawlMine(GuangxiMineModule mine) {
         if (!crawlMine.getValue()) return false;
         if (mc.player.isCrouching()) return false;
 
@@ -313,10 +313,10 @@ public class AutoMineModule extends Module {
                 && p.getItemBySlot(EquipmentSlot.FEET).isEmpty();
     }
 
-    private void handleGlassPush(SpeedMineModule mine) {
+    private void handleGlassPush(GuangxiMineModule mine) {
         if (!glassPush.getValue()) { resetGlass(); return; }
 
-        AutoCrystalModule crystal = GuizhouWare.moduleManager.getModuleByClass(AutoCrystalModule.class);
+        GuangxiCrystalModule crystal = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
         if (crystal == null || !crystal.isEnabled()) { resetGlass(); return; }
 
         BlockPos pos = mine.getRebreakPos();
@@ -424,7 +424,7 @@ public class AutoMineModule extends Module {
     }
 
     private double evalCheckPos(CheckPos pos, boolean inBedrock) {
-        SpeedMineModule mine = speedMine();
+        GuangxiMineModule mine = speedMine();
         if (mine == null) return INVALID_SCORE;
 
         BlockPos blockPos = pos.blockPos;
@@ -443,7 +443,7 @@ public class AutoMineModule extends Module {
     }
 
     private boolean isGoodRebreak(BlockPos blockPos, boolean inBedrock) {
-        SpeedMineModule mine = speedMine();
+        GuangxiMineModule mine = speedMine();
         if (mine == null) return false;
         BlockPos rebreak = mine.getRebreakPos();
         if (rebreak == null || !blockPos.equals(rebreak)) return false;
@@ -706,8 +706,8 @@ public class AutoMineModule extends Module {
         }
     }
 
-    private SpeedMineModule speedMine() {
-        SpeedMineModule m = GuizhouWare.moduleManager.getModuleByClass(SpeedMineModule.class);
+    private GuangxiMineModule speedMine() {
+        GuangxiMineModule m = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
         return (m != null && m.isEnabled()) ? m : null;
     }
 

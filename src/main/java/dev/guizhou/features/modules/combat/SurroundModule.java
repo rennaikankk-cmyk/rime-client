@@ -10,7 +10,7 @@ import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.render.BreakIndicatorsModule;
-import dev.guizhou.features.modules.world.SpeedMineModule;
+import dev.guizhou.features.modules.world.GuangxiMineModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.ResultType;
@@ -363,7 +363,7 @@ public class SurroundModule extends Module {
     }
 
     private boolean speedMineClaims(BlockPos pos) {
-        SpeedMineModule mine = GuizhouWare.moduleManager.getModuleByClass(SpeedMineModule.class);
+        GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
         return mine != null && mine.isEnabled() && mine.isMining(pos);
     }
 

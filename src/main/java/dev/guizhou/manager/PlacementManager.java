@@ -217,11 +217,17 @@ public class PlacementManager extends Feature {
 
     /** Single placement, bypassing the queue. {@code face} pins the side to click against. */
     public boolean placeDirect(BlockPos pos, @Nullable Direction face, Item item) {
+        return placeDirect(pos, face, item, SwapMode.SILENT, SCOPE);
+    }
+
+    /** Single placement with an explicit swap mode/scope (e.g. BasePlace following AutoSwap). */
+    public boolean placeDirect(BlockPos pos, @Nullable Direction face, Item item,
+                               SwapMode mode, EnumSet<ResultType> scope) {
         if (nullCheck() || EatUtil.shouldDefer()) return false;
         if (budget() <= 0 || onCooldown(pos)) return false;
         if (!PlaceUtil.canPlace(pos)) return false;
 
-        boolean swapped = GuizhouWare.swapManager.withSwap(item, SCOPE, SwapMode.SILENT,
+        boolean swapped = GuizhouWare.swapManager.withSwap(item, scope, mode,
                 SwapPriority.PLACEMENT, () -> sendPlace(pos, face));
         if (!swapped) return false;
 
@@ -271,13 +277,28 @@ public class PlacementManager extends Feature {
      * obsidian/bedrock check for a base we are about to place ourselves.
      */
     public boolean placeCrystal(BlockPos base, boolean trustBase) {
+        return placeCrystal(base, trustBase, SwapMode.SILENT, SCOPE);
+    }
+
+    public boolean placeCrystal(BlockPos base, boolean trustBase, SwapMode mode, EnumSet<ResultType> scope) {
         if (nullCheck() || EatUtil.shouldDefer()) return false;
 
         BlockHitResult hit = crystalHit(base, trustBase);
         if (hit == null) return false;
 
-        return GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, SCOPE, SwapMode.SILENT,
+        return GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, scope, mode,
                 SwapPriority.CRYSTAL, () -> send(hit, InteractionHand.MAIN_HAND));
+    }
+
+    /** Places with the given hand directly, without any swap — for when a crystal is already held. */
+    public boolean placeCrystalDirect(BlockPos base, boolean trustBase, InteractionHand hand) {
+        if (nullCheck() || EatUtil.shouldDefer()) return false;
+
+        BlockHitResult hit = crystalHit(base, trustBase);
+        if (hit == null) return false;
+
+        send(hit, hand);
+        return true;
     }
 
     @Nullable
@@ -465,6 +486,11 @@ public class PlacementManager extends Feature {
                 .guizhouware$getBlockStatePredictionHandler().startPredicting()) {
             mc.getConnection().send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
         }
+    }
+
+    /** Raw UseItemOn send with a fresh prediction sequence, for desync-based placement (GuangxiTP). */
+    public void sendUseItemOnDirect(BlockHitResult hit, InteractionHand hand) {
+        send(hit, hand);
     }
 
     // ---------------------------------------------------------------- block updates

@@ -2,6 +2,7 @@ package dev.guizhou.mixin.entity;
 
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.features.modules.movement.VelocityModule;
+import dev.guizhou.features.modules.render.NoRenderModule;
 import dev.guizhou.features.modules.render.ShadersModule;
 import dev.guizhou.manager.RotationManager;
 import net.minecraft.client.Minecraft;
@@ -27,6 +28,13 @@ public class MixinEntity {
 
         cir.setReturnValue(self.calculateViewVector(rm.getRotationPitch(), rm.getRotationYaw()));
     }
+    @Inject(method = "spawnSprintParticle", at = @At("HEAD"), cancellable = true)
+    private void guizhouware$noLandParticles(CallbackInfo ci) {
+        if (NoRenderModule.isActive(m -> m.noLandParticle.getValue())) {
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "isCurrentlyGlowing", at = @At("RETURN"), cancellable = true)
     private void onIsCurrentlyGlowing(CallbackInfoReturnable<Boolean> cir) {
         Entity self = (Entity) (Object) this;

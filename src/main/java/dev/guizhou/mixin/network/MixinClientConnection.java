@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import dev.guizhou.event.impl.network.PacketEvent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.BundlePacket;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
@@ -34,6 +35,15 @@ public class MixinClientConnection {
             try {
                 if (silentSwapFix(packet)) {
                     ci.cancel();
+                    return;
+                }
+                if (packet instanceof BundlePacket<?> bundle) {
+                    // Bundled children are dispatched inside packet handling, never through
+                    // channelRead0 — post them here or receive listeners never see them
+                    // (insta-break on crystal spawn was dead because of this).
+                    for (Packet<?> child : bundle.subPackets()) {
+                        EVENT_BUS.post(new PacketEvent.Receive(child));
+                    }
                     return;
                 }
                 if (EVENT_BUS.post(new PacketEvent.Receive(packet))) {

@@ -28,6 +28,7 @@ public class NoRenderModule extends Module {
     public final Setting<Boolean> noTotemParticle = bool("NoPopParticle", false).setPage("Particles");
     public final Setting<Boolean> noWaterParticle = bool("NoWaterParticle", true).setPage("Particles");
     public final Setting<Boolean> noExplosion = bool("NoExplosion", true).setPage("Particles");
+    public final Setting<Boolean> noLandParticle = bool("NoLandParticle", false).setPage("Particles");
     public final Setting<Boolean> noBlockBreak = bool("NoBreakParticle", false).setPage("Particles");
     public final Setting<Boolean> noPotionParticle = bool("NoPotionParticle", false).setPage("Particles");
 

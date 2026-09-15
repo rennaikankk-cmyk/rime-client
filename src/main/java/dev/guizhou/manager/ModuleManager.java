@@ -26,7 +26,7 @@ import dev.guizhou.features.modules.movement.ElytraDashModule;
 import dev.guizhou.features.modules.world.AutoPortalModule;
 import dev.guizhou.features.modules.world.FastPortalModule;
 import dev.guizhou.features.modules.world.BomberModule;
-import dev.guizhou.features.modules.world.SpeedMineModule;
+import dev.guizhou.features.modules.world.GuangxiMineModule;
 import dev.guizhou.features.modules.world.NukerModule;
 import dev.guizhou.features.modules.world.ScaffoldModule;
 import dev.guizhou.features.modules.render.BlockHighlightModule;
@@ -72,7 +72,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new SwordGapModule());
         register(new AutoLogModule());
         register(new AutoSwordModule());
-        register(new AutoCrystalModule());
+        register(new GuangxiCrystalModule());
         register(new AutoAnchorModule());
         register(new AutoMineModule());
         register(new AutoXPModule());
@@ -108,13 +108,14 @@ public class ModuleManager implements Jsonable, Util {
         register(new MiddleClickExtraModule());
         register(new KeyPotionModule());
         register(new SurroundModule());
-        register(new PistonCrystalModule());
+        register(new GuangxiPistonModule());
+        register(new GuangxiTPModule());
         register(new PearlBlockerModule());
         register(new PhaseModule());
         register(new TrickshotModule());
         register(new MoFuckerModule());
         register(new BomberModule());
-        register(new SpeedMineModule());
+        register(new GuangxiMineModule());
         register(new NukerModule());
         register(new ScaffoldModule());
         register(new ReplenishModule());
@@ -192,7 +193,7 @@ public class ModuleManager implements Jsonable, Util {
 
     public void onKeyPressed(int key) {
         if (key <= 0 || mc.screen != null) return;
-        stream().filter(module -> !(module instanceof ClickGuiModule) && module.getBind().getKey() == key).forEach(module -> {
+        stream().filter(module -> module.getBind().getKey() == key).forEach(module -> {
             if (module.getBindMode() == Module.BindMode.HOLD) {
                 if (!module.isEnabled()) module.enable();
             } else {

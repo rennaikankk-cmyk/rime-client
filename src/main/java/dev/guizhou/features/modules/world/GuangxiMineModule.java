@@ -29,7 +29,7 @@ import java.awt.Color;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-public class SpeedMineModule extends Module implements MineApi {
+public class GuangxiMineModule extends Module implements MineApi {
 
     private static final int DECOY_Y_OFFSET = 2000;
 
@@ -91,8 +91,8 @@ public class SpeedMineModule extends Module implements MineApi {
         for (MineFinishListener l : finishListeners) l.onMineFinish(target);
     }
 
-    public SpeedMineModule() {
-        super("SpeedMine", "Packet mines the clicked block at best-tool speed behind a Grim decoy, then rebreaks it.", Category.WORLD);
+    public GuangxiMineModule() {
+        super("GuangxiMine", "Packet mines the clicked block at best-tool speed behind a Grim decoy, then rebreaks it.", Category.WORLD);
 
         breakAhead.setVisibility(v -> doubleBreak.getValue());
         lineWidth.setVisibility(v -> render.getValue());
@@ -436,12 +436,56 @@ public class SpeedMineModule extends Module implements MineApi {
         secondaryProgress = 0;
     }
 
+    // Display-side progress: the real progress only advances per tick (20fps steps read as
+    // stutter at high frame rates), so the render loop eases toward it every frame instead.
+    private double renderProgress;
+    private double renderSecondaryProgress;
+    private double lastRenderDt = 0.0;
+    private long lastRenderNs = 0L;
+    private BlockPos renderPrimaryPos;
+    private BlockPos renderSecondaryPos;
+
     @Subscribe
     private void onRender(Render3DEvent event) {
-        if (nullCheck() || !render.getValue()) return;
-        if (pos != null && started) drawBlock(event, pos, primaryColor.getValue(),
-                finished ? 1 : Math.min(progress / threshold.getValue(), 1));
-        if (secondaryPos != null) drawBlock(event, secondaryPos, sideColor.getValue(), secondaryProgress);
+        if (nullCheck() || !render.getValue()) {
+            lastRenderNs = 0L;
+            return;
+        }
+
+        long now = System.nanoTime();
+        if (lastRenderNs != 0L) lastRenderDt = (now - lastRenderNs) / 1_000_000_000.0;
+        lastRenderNs = now;
+
+        boolean primaryActive = pos != null && started;
+        double primaryTarget = primaryActive
+                ? (finished ? 1 : Math.min(progress / threshold.getValue(), 1)) : 0;
+        if (!primaryActive || renderPrimaryPos == null || !renderPrimaryPos.equals(pos)) {
+            renderPrimaryPos = primaryActive ? pos.immutable() : null;
+            renderProgress = primaryTarget;
+        } else {
+            renderProgress = easeProgress(renderProgress, primaryTarget, lastRenderDt);
+        }
+
+        boolean secondaryActive = secondaryPos != null;
+        if (!secondaryActive || renderSecondaryPos == null || !renderSecondaryPos.equals(secondaryPos)) {
+            renderSecondaryPos = secondaryActive ? secondaryPos.immutable() : null;
+            renderSecondaryProgress = secondaryActive ? secondaryProgress : 0;
+        } else {
+            renderSecondaryProgress = easeProgress(renderSecondaryProgress, secondaryProgress, lastRenderDt);
+        }
+
+        if (primaryActive && renderProgress > 0.004) {
+            drawBlock(event, pos, primaryColor.getValue(), renderProgress);
+        }
+        if (secondaryActive && renderSecondaryProgress > 0.004) {
+            drawBlock(event, secondaryPos, sideColor.getValue(), renderSecondaryProgress);
+        }
+    }
+
+    private static double easeProgress(double current, double target, double dtSeconds) {
+        if (dtSeconds <= 0) return target;
+        double f = 1.0 - Math.exp(-dtSeconds * 30.0);
+        return current + (target - current) * f;
     }
 
     private void drawBlock(Render3DEvent event, BlockPos target, Color side, double progress) {

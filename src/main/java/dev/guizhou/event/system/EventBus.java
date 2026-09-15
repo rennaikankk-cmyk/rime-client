@@ -5,6 +5,7 @@ import dev.guizhou.event.Event;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -29,10 +30,27 @@ public class EventBus {
             if (event.isCancelled()) {
                 return true;
             }
-            listener.invoke(event);
+            try {
+                listener.invoke(event);
+            } catch (Throwable t) {
+                // One throwing listener must not starve the rest of the chain (a packet-handler
+                // NPE used to silently abort every later subscriber for that packet type).
+                reportListenerFailure(listener, event, t);
+            }
         }
 
         return event.isCancelled();
+    }
+
+    private static final Set<String> reportedFailures = ConcurrentHashMap.newKeySet();
+
+    private static void reportListenerFailure(Listener listener, Event event, Throwable t) {
+        String key = listener.host().getClass().getName() + "#" + t.getClass().getName();
+        if (reportedFailures.add(key)) {
+            System.err.println("[GuizhouWare] event listener " + listener.host().getClass().getName()
+                    + " threw on " + event.getClass().getSimpleName() + ": " + t);
+            t.printStackTrace();
+        }
     }
 
     private void register(Object host, Class<?> klass) {

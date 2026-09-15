@@ -83,7 +83,7 @@ public class AutoSwordModule extends Module {
         if (attackCooldownTicks < 0f) attackCooldownTicks = 0f;
 
         if (!isMaceAttackReady()) {
-            AutoCrystalModule ac = GuizhouWare.moduleManager.getModuleByClass(AutoCrystalModule.class);
+            GuangxiCrystalModule ac = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
             if (ac != null && ac.isEnabled() && ac.getLastBestDamage() > 0f) {
                 currentTarget = null;
                 return;
@@ -148,7 +148,7 @@ public class AutoSwordModule extends Module {
     public void onRender3D(Render3DEvent event) {
         if (!render.getValue() || currentTarget == null || nullCheck() || mc.player.isDeadOrDying()) return;
 
-        AutoCrystalModule ac = GuizhouWare.moduleManager.getModuleByClass(AutoCrystalModule.class);
+        GuangxiCrystalModule ac = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
         if (ac != null && ac.isEnabled() && ac.getLastBestDamage() >= ac.getMinDamage()) return;
 
         float partialTicks = event.getDelta();

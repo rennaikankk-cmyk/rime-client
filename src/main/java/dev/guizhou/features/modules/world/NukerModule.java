@@ -69,7 +69,7 @@ public class NukerModule extends Module {
 
         targetedBlocks.clear();
 
-        SpeedMineModule mine = GuizhouWare.moduleManager.getModuleByClass(SpeedMineModule.class);
+        GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
         if (mine == null || !mine.isEnabled()) return;
 
         Vec3 eye = mc.player.getEyePosition();
