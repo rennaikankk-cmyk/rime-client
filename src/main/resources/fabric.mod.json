@@ -1,29 +1,28 @@
 {
   "schemaVersion": 1,
-  "id": "homovore",
+  "id": "guizhouware",
   "version": "${version}",
-  "name": "Homovore",
-  "description": "A Fabric utility mod for Minecraft.",
+  "name": "GuizhouWare",
+  "description": "GuizhouWare — 贵州客户端. Fork of Homovore (AGPL-3.0) by Leonetic & widerthaneurasia, with AutoCrystal enhancements ported from AlienV4.",
   "authors": [
-    "Leonetic",
-    "widerthaneurasia"
+    "renna"
   ],
   "contact": {
   },
   "license": "AGPL-3.0-or-later",
-  "icon": "assets/homovore/icon.png",
+  "icon": "assets/guizhouware/icon.png",
   "environment": "client",
-  "accessWidener": "homovore.accesswidener",
+  "accessWidener": "guizhouware.accesswidener",
   "entrypoints": {
     "client": [
-      "dev.leonetic.Homovore"
+      "dev.guizhou.GuizhouWare"
     ],
     "main": [
-      "dev.leonetic.Homovore"
+      "dev.guizhou.GuizhouWare"
     ]
   },
   "mixins": [
-    "homovore.mixins.json"
+    "guizhouware.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=${loader_version}",

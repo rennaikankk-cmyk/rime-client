@@ -42,7 +42,7 @@ repositories {
 }
 
 loom {
-    accessWidenerPath = file("src/main/resources/homovore.accesswidener")
+    accessWidenerPath = file("src/main/resources/guizhouware.accesswidener")
 }
 
 dependencies {

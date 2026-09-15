@@ -1,27 +1,27 @@
 <p align="center">
-  <img src="src/main/resources/assets/homovore/icon.png" alt="Homovore" width="180" />
+  <img src="src/main/resources/assets/guizhouware/icon.png" alt="GuizhouWare" width="180" />
 </p>
 
-<h1 align="center">Homovore</h1>
+<h1 align="center">GuizhouWare</h1>
 
 ### Join our discord: https://discord.gg/yMD5mhmNEc
 
 <p align="center">
-  <a href="https://github.com/leonetics/homovore-public/releases">
-    <img src="https://img.shields.io/github/downloads/leonetics/homovore-public/total?color=green&label=Total%20Downloads" alt="Total Downloads" />
+  <a href="https://github.com/leonetics/guizhouware-public/releases">
+    <img src="https://img.shields.io/github/downloads/leonetics/guizhouware-public/total?color=green&label=Total%20Downloads" alt="Total Downloads" />
   </a>
-  <a href="https://github.com/leonetics/homovore-public/commits">
-    <img src="https://img.shields.io/github/commit-activity/m/leonetics/homovore-public?label=Commits%20(last%20month)&color=yellow" alt="month" />
+  <a href="https://github.com/leonetics/guizhouware-public/commits">
+    <img src="https://img.shields.io/github/commit-activity/m/leonetics/guizhouware-public?label=Commits%20(last%20month)&color=yellow" alt="month" />
   </a>
-  <a href="https://github.com/leonetics/homovore-public/releases">
-    <img src="https://img.shields.io/github/v/release/leonetics/homovore-public?color=blue&label=Latest%20Release" alt="Latest Release" />
+  <a href="https://github.com/leonetics/guizhouware-public/releases">
+    <img src="https://img.shields.io/github/v/release/leonetics/guizhouware-public?color=blue&label=Latest%20Release" alt="Latest Release" />
   </a>
   <a href="https://discord.gg/yMD5mhmNEc">
     <img src="https://img.shields.io/discord/1481831852950950043?color=7289DB&label=Discord" alt="Discord" />
   </a>
 </p>
 
-**Homovore** is a 2b2t PVP client, written by Leonetic and WiderThanEurasia.
+**GuizhouWare** is a 2b2t PVP client, written by Leonetic and WiderThanEurasia.
 
 This project is a clean and open-source yet modern alternative aiming to be transparent and easy to extend without relying on unsafe third-party clients.
 
@@ -45,7 +45,7 @@ This project is a clean and open-source yet modern alternative aiming to be tran
 <details>
 <summary>How do I open the ClickGUI?</summary>
 
-The default keybind is **Right Shift**. You can rebind it in Minecraft's Controls menu (look for the Homovore category) or from the ClickGUI module itself.
+The default keybind is **Right Shift**. You can rebind it in Minecraft's Controls menu (look for the GuizhouWare category) or from the ClickGUI module itself.
 
 </details>
 
@@ -73,7 +73,7 @@ Open the ClickGUI, right-click a module to expand its settings, and use the bind
 <details>
 <summary>Where are my settings saved?</summary>
 
-Configs are stored in your Minecraft instance directory under the Homovore folder and persist between sessions.
+Configs are stored in your Minecraft instance directory under the GuizhouWare folder and persist between sessions.
 
 </details>
 
@@ -93,8 +93,8 @@ Configs are stored in your Minecraft instance directory under the Homovore folde
 1. Clone the repository:
 
     ```bash
-    git clone https://github.com/leonetics/homovore-public.git
-    cd homovore-public
+    git clone https://github.com/leonetics/guizhouware-public.git
+    cd guizhouware-public
     ```
 
 2. Build with Gradle:
@@ -104,7 +104,7 @@ Configs are stored in your Minecraft instance directory under the Homovore folde
     ```
 
 The compiled JAR will be located at:
-`build/libs/homovore-<version>.jar`
+`build/libs/guizhouware-<version>.jar`
 
 To run in a dev environment:
 
@@ -133,8 +133,8 @@ See [LICENSE](LICENSE).
 
 ## Special Thanks
 
-- [kiriyaga](https://github.com/Kiriyaga7615) — **Homovore would not have been possible without him.** Endless thanks for the foundation, guidance, and inspiration that made this client what it is.
+- [kiriyaga](https://github.com/Kiriyaga7615) — **GuizhouWare would not have been possible without him.** Endless thanks for the foundation, guidance, and inspiration that made this client what it is.
 
-- [Gonbler](https://github.com/gonbler) — some of Homovore's PVP stuff is built on his code. Thanks for the work on GWare that made those modules possible.
+- [Gonbler](https://github.com/gonbler) — some of GuizhouWare's PVP stuff is built on his code. Thanks for the work on GWare that made those modules possible.
 
 - [Pawstar](https://github.com/pawztar) — moral support
