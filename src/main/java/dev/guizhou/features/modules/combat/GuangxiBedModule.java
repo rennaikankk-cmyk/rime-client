@@ -70,6 +70,13 @@ public class GuangxiBedModule extends Module {
     private final Setting<Boolean> autoCraft = bool("AutoCraft", false);
     private final Setting<Integer> bedReserve = num("BedReserve", 2, 1, 36);
 
+    /** Swaps a bed from the main inventory into the chosen hotbar slot when it runs dry (Mio refill). */
+    private final Setting<Boolean>  refill     = bool("Refill", false);
+    private final Setting<Integer>  refillSlot = num("RefillSlot", 1, 1, 9);
+
+    /** Stretches the cooldown by measured TPS and pauses placements right after a rubberband. */
+    private final Setting<Boolean> tpsSync = bool("TpsSync", true);
+
     private final Setting<Boolean> render      = bool("Render", true);
     private final Setting<Color>   renderColor = color("Color", 255, 60, 60, 60);
 
@@ -86,6 +93,7 @@ public class GuangxiBedModule extends Module {
         super("GuangxiBed", "Nether/End bed aura: silent bed swap, place on the target, instant detonate.", Category.COMBAT);
         tpRange.setVisibility(v -> tpMode.getValue());
         bedReserve.setVisibility(v -> autoCraft.getValue());
+        refillSlot.setVisibility(v -> refill.getValue());
     }
 
     @Override
@@ -103,7 +111,9 @@ public class GuangxiBedModule extends Module {
             pendingHead = null;
             return;
         }
-        if (!timer.passedMs(cooldown.getValue())) return;
+        if (refill.getValue()) tickRefill();
+        if (tpsSync.getValue() && GuizhouWare.tpsCounterService.isRubberbandRecent()) return;
+        if (!timer.passedMs(bedCooldownMs())) return;
 
         if (autoCraft.getValue() && tickAutoCraft()) return;
 
@@ -146,6 +156,25 @@ public class GuangxiBedModule extends Module {
     }
 
     // ------------------------------------------------------------ auto craft
+
+    private long bedCooldownMs() {
+        if (!tpsSync.getValue()) return cooldown.getValue();
+        return (long) (cooldown.getValue() * GuizhouWare.tpsCounterService.delayScale());
+    }
+
+    /** Keeps the configured hotbar slot holding a bed, pulling from the main inventory. */
+    private void tickRefill() {
+        int hotbarIdx = refillSlot.getValue() - 1;
+        var inv = mc.player.getInventory();
+        if (inv.getItem(hotbarIdx).is(ItemTags.BEDS)) return;
+        for (int i = 9; i < 36; i++) {
+            if (!inv.getItem(i).is(ItemTags.BEDS)) continue;
+            // Player inventory menu: main inventory keeps its indices, button = hotbar slot.
+            mc.gameMode.handleInventoryMouseClick(
+                    mc.player.inventoryMenu.containerId, i, hotbarIdx, ClickType.SWAP, mc.player);
+            return;
+        }
+    }
 
     private int craftPhase = 0; // 0 idle, 1 waiting for the table screen, 2 closing
     private int craftTimeoutTick = 0;
@@ -346,7 +375,7 @@ public class GuangxiBedModule extends Module {
 
     private void execute() {
         BlockPos floor = pendingFoot.below();
-        Vec3 floorTop = new Vec3(floor.getX() + 0.5, floor.getY() + 1.0, floor.getZ() + 0.5);
+        Vec3 floorTop = new Vec3(floor.getX() + 0.5, floor.getY() + 0.95, floor.getZ() + 0.5); // 0.95: cursor 严格在面内（网易拒 1.0 边界）
         BlockHitResult placeHit = new BlockHitResult(floorTop, Direction.UP, floor, false);
 
         Vec3 bedCenter = new Vec3(pendingFoot.getX() + 0.5, pendingFoot.getY() + 0.5, pendingFoot.getZ() + 0.5);

@@ -20,9 +20,7 @@ import dev.guizhou.features.modules.funny.MoFuckerModule;
 import dev.guizhou.features.modules.movement.SprintModule;
 import dev.guizhou.features.modules.movement.VelocityModule;
 import dev.guizhou.features.modules.movement.NoSlowModule;
-import dev.guizhou.features.modules.movement.ElytraAssistModule;
-import dev.guizhou.features.modules.movement.ElytraFlyModule;
-import dev.guizhou.features.modules.movement.ElytraDashModule;
+import dev.guizhou.features.modules.movement.GuangxiElytraModule;
 import dev.guizhou.features.modules.world.AutoPortalModule;
 import dev.guizhou.features.modules.world.FastPortalModule;
 import dev.guizhou.features.modules.world.BomberModule;
@@ -78,10 +76,8 @@ public class ModuleManager implements Jsonable, Util {
         register(new AutoXPModule());
         register(new VelocityModule());
         register(new SprintModule());
-        register(new ElytraAssistModule());
-        register(new ElytraFlyModule());
-        register(new ElytraDashModule());
         register(new NoSlowModule());
+        register(new GuangxiElytraModule());
 
         register(new AutoPortalModule());
         register(new FastPortalModule());
@@ -110,6 +106,9 @@ public class ModuleManager implements Jsonable, Util {
         register(new SurroundModule());
         register(new GuangxiPistonModule());
         register(new GuangxiTPModule());
+        register(new GuangxiDesyncModule());
+        register(new GuangxiElytraChaseModule());
+        register(new GuangxiSpearTPModule());
         register(new GuangxiBedModule());
         register(new PearlBlockerModule());
         register(new PhaseModule());

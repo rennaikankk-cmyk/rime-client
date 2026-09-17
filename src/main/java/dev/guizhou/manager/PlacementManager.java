@@ -17,6 +17,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -84,6 +85,28 @@ public class PlacementManager extends Feature {
     }
 
     private final CopyOnWriteArrayList<PlacementListener> listeners = new CopyOnWriteArrayList<>();
+
+    /**
+     * When set, the next placement UseItemOn is wrapped in a sneak-state sandwich
+     * (PRESS_SHIFT → place → RELEASE_SHIFT, or the reverse if we already sneak) so the
+     * server sees a sneak interaction. Modules set this around a single placement call.
+     */
+    private boolean sneakSandwich = false;
+
+    public void setSneakSandwich(boolean enabled) {
+        this.sneakSandwich = enabled;
+    }
+
+    /**
+     * WallPlace (Mio): squared reduced range within which a crystal placement is attempted even
+     * when the base has no line of sight. Servers without placement-LOS validation accept it;
+     * LOS-checking servers just drop the packet. &lt;= 0 keeps the strict LOS gate.
+     */
+    private double crystalWallRangeSq = -1.0;
+
+    public void setCrystalWallRangeSq(double sqRange) {
+        this.crystalWallRangeSq = sqRange;
+    }
 
     public void addListener(PlacementListener listener)    { listeners.addIfAbsent(listener); }
     public void removeListener(PlacementListener listener) { listeners.remove(listener); }
@@ -281,9 +304,15 @@ public class PlacementManager extends Feature {
     }
 
     public boolean placeCrystal(BlockPos base, boolean trustBase, SwapMode mode, EnumSet<ResultType> scope) {
+        return placeCrystal(base, trustBase, mode, scope, null);
+    }
+
+    /** {@code allowOccupant} lets the cell contain that entity (FacePlace target). */
+    public boolean placeCrystal(BlockPos base, boolean trustBase, SwapMode mode, EnumSet<ResultType> scope,
+                                net.minecraft.world.entity.LivingEntity allowOccupant) {
         if (nullCheck() || EatUtil.shouldDefer()) return false;
 
-        BlockHitResult hit = crystalHit(base, trustBase);
+        BlockHitResult hit = crystalHit(base, trustBase, allowOccupant);
         if (hit == null) return false;
 
         return GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, scope, mode,
@@ -292,9 +321,14 @@ public class PlacementManager extends Feature {
 
     /** Places with the given hand directly, without any swap — for when a crystal is already held. */
     public boolean placeCrystalDirect(BlockPos base, boolean trustBase, InteractionHand hand) {
+        return placeCrystalDirect(base, trustBase, hand, null);
+    }
+
+    public boolean placeCrystalDirect(BlockPos base, boolean trustBase, InteractionHand hand,
+                                      net.minecraft.world.entity.LivingEntity allowOccupant) {
         if (nullCheck() || EatUtil.shouldDefer()) return false;
 
-        BlockHitResult hit = crystalHit(base, trustBase);
+        BlockHitResult hit = crystalHit(base, trustBase, allowOccupant);
         if (hit == null) return false;
 
         send(hit, hand);
@@ -303,6 +337,12 @@ public class PlacementManager extends Feature {
 
     @Nullable
     private BlockHitResult crystalHit(BlockPos base, boolean trustBase) {
+        return crystalHit(base, trustBase, null);
+    }
+
+    @Nullable
+    private BlockHitResult crystalHit(BlockPos base, boolean trustBase,
+                                      net.minecraft.world.entity.LivingEntity allowOccupant) {
         if (!trustBase) {
             BlockState baseState = mc.level.getBlockState(base);
             if (!baseState.is(Blocks.OBSIDIAN) && !baseState.is(Blocks.BEDROCK)) return null;
@@ -313,6 +353,7 @@ public class PlacementManager extends Feature {
         if (!airState.isAir() && !(airState.is(Blocks.FIRE) && mc.level.dimension().equals(Level.END))) return null;
 
         for (Entity e : mc.level.getEntities(null, new AABB(airPos))) {
+            if (e == allowOccupant) continue;
             if (e instanceof ItemEntity) continue;
             if (e instanceof EndCrystal crystal
                     && (crystal.tickCount < 5 || crystal.blockPosition().equals(airPos))) continue;
@@ -334,17 +375,23 @@ public class PlacementManager extends Feature {
         double offX = Math.clamp(playerPos.x - Math.floor(playerPos.x), 0.2, 0.8) - 0.5;
         double offY = Math.clamp(playerPos.y - Math.floor(playerPos.y), 0.2, 0.8) - 0.5;
         double offZ = Math.clamp(playerPos.z - Math.floor(playerPos.z), 0.2, 0.8) - 0.5;
+        // 0.45 keeps the cursor strictly inside the block face — exactly-1.0 edge cursors are
+        // silently rejected by NetEase-family servers (wire-capture verified, 2026-09-16).
         Vec3 hitVec = switch (clickFace) {
-            case UP, DOWN -> baseCenter.add(offX, clickFace == Direction.UP ? 0.5 : -0.5, offZ);
-            case NORTH, SOUTH -> baseCenter.add(offX, offY, clickFace == Direction.SOUTH ? 0.5 : -0.5);
-            case EAST, WEST -> baseCenter.add(clickFace == Direction.EAST ? 0.5 : -0.5, offY, offZ);
+            case UP, DOWN -> baseCenter.add(offX, clickFace == Direction.UP ? 0.45 : -0.45, offZ);
+            case NORTH, SOUTH -> baseCenter.add(offX, offY, clickFace == Direction.SOUTH ? 0.45 : -0.45);
+            case EAST, WEST -> baseCenter.add(clickFace == Direction.EAST ? 0.45 : -0.45, offY, offZ);
         };
 
         AABB baseBox = new AABB(base);
         if (!baseBox.contains(eye)) {
             float[] angles = MathUtil.calcAngle(eye, hitVec);
             Vec3 reachEnd = eye.add(lookVector(angles[0], angles[1]).scale(6.0));
-            if (baseBox.clip(eye, reachEnd).isEmpty()) return null;
+            if (baseBox.clip(eye, reachEnd).isEmpty()
+                    && (crystalWallRangeSq <= 0.0
+                        || eye.distanceToSqr(hitVec) > crystalWallRangeSq)) {
+                return null;
+            }
         }
 
         return new BlockHitResult(hitVec, clickFace, base, false);
@@ -457,8 +504,12 @@ public class PlacementManager extends Feature {
         return best;
     }
 
+    /**
+     * Hit point on a block face, pulled 0.05 INSIDE the block: NetEase-family servers reject
+     * placements whose cursor sits exactly on the face plane (0.0/1.0 edge) — vanilla allows it.
+     */
     private static Vec3 faceCenter(BlockPos pos, Direction dir) {
-        return Vec3.atCenterOf(pos).add(dir.getStepX() * 0.5, dir.getStepY() * 0.5, dir.getStepZ() * 0.5);
+        return Vec3.atCenterOf(pos).add(dir.getStepX() * 0.45, dir.getStepY() * 0.45, dir.getStepZ() * 0.45);
     }
 
     private static boolean isInteractable(Block block) {
@@ -484,7 +535,18 @@ public class PlacementManager extends Feature {
     private void send(BlockHitResult hit, InteractionHand hand) {
         try (var prediction = ((ClientLevelAccessor) mc.level)
                 .guizhouware$getBlockStatePredictionHandler().startPredicting()) {
-            mc.getConnection().send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
+            if (sneakSandwich && mc.player != null) {
+                // 1.21.11: sneak state rides in the input packet — flip shift, place, restore.
+                net.minecraft.world.entity.player.Input cur = mc.player.getLastSentInput();
+                net.minecraft.world.entity.player.Input flipped = new net.minecraft.world.entity.player.Input(
+                        cur.forward(), cur.backward(), cur.left(), cur.right(), cur.jump(),
+                        !cur.shift(), cur.sprint());
+                mc.getConnection().send(new ServerboundPlayerInputPacket(flipped));
+                mc.getConnection().send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
+                mc.getConnection().send(new ServerboundPlayerInputPacket(cur));
+            } else {
+                mc.getConnection().send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
+            }
         }
     }
 

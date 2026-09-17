@@ -25,13 +25,17 @@ import dev.guizhou.util.player.ChatUtil;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongIterator;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundExplodePacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.InteractionHand;
@@ -93,6 +97,20 @@ public class GuangxiCrystalModule extends Module {
 
     private final Setting<Boolean> damageSync    = bool("DamageSync", false).setPage("General");
 
+    /** FacePlace (Mio): when the target is low HP or nearly stripped of armor, cells the target
+     *  itself occupies become placeable and bypass MinDamage — the classic finisher. */
+    private final Setting<Boolean> facePlace        = bool("FacePlace", true).setPage("General");
+    private final Setting<Double>  facePlaceHealth  = num("FacePlaceHealth", 8.0, 0.0, 36.0).setPage("General");
+    private final Setting<Integer> facePlaceArmor   = num("FacePlaceArmor", 2, 0, 4).setPage("General");
+
+    /** Wraps the placement UseItemOn in a sneak-state packet sandwich. */
+    private final Setting<Boolean> sneakPlace = bool("SneakPlace", false).setPage("General");
+
+    /** WallPlace (Mio): attempt placement on bases without line of sight within a reduced range —
+     *  servers that don't validate placement LOS (vanilla, most legacy) accept it. */
+    private final Setting<Boolean> wallPlace  = bool("WallPlace", true).setPage("General");
+    private final Setting<Double>  wallRange  = num("WallRange", 4.5, 0.5, 6.0).setPage("General");
+
     private enum AutoSwapMode { NONE, SILENT, INVENTORY }
     private final Setting<AutoSwapMode> autoSwap = mode("AutoSwap", AutoSwapMode.SILENT).setPage("General");
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
@@ -107,6 +125,15 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<Integer> switchPause      = num("SwitchPause", 100, 0, 1000).setPage("Sync");
     private final Setting<Integer> minAge           = num("MinAge", 0, 0, 20).setPage("Sync");
     private final Setting<Boolean> thread           = bool("Thread", false).setPage("Sync");
+
+    /** TpsSync (Mio): stretch tick-based delays by 20/measuredTPS so cadence survives server lag,
+     *  and pause placements briefly right after a server rubberband. */
+    private final Setting<Boolean> tpsSync = bool("TpsSync", true).setPage("Sync");
+
+    /** GhostHit (Mio HitFactor): after our own place/break, also attack the next entity ids —
+     *  the server allocates ids sequentially, so the crystal we just placed is often id+1. */
+    private final Setting<Boolean>  ghostHit    = bool("GhostHit", false).setPage("Sync");
+    private final Setting<Integer>  ghostFactor = num("GhostFactor", 2, 1, 4).setPage("Sync");
 
     private final Setting<Boolean> legacy112        = bool("1.12", false).setPage("General");
 
@@ -205,6 +232,50 @@ public class GuangxiCrystalModule extends Module {
         return r * r;
     }
 
+    // ------------------------------------------------------------ Mio-derived timing helpers
+
+    /** Scales a tick-based delay window by measured server TPS (1.0 at 20 TPS). */
+    private long tpsMs(long baseMs) {
+        if (!tpsSync.getValue()) return baseMs;
+        return (long) (baseMs * GuizhouWare.tpsCounterService.delayScale());
+    }
+
+    private long pendingWindowMs() {
+        return tpsMs(PLACE_PENDING_MS);
+    }
+
+    /** True right after a server rubberband — placing into an unconfirmed world wastes blocks. */
+    private boolean rubberbandQuiet() {
+        return !tpsSync.getValue() || !GuizhouWare.tpsCounterService.isRubberbandRecent();
+    }
+
+    // ------------------------------------------------------------ GhostHit (Mio HitFactor)
+
+    private int lastMaxEntityId = -1;
+    private int diagGhost = 0;
+
+    /** Raw-buffer attack by entity id — the STREAM_CODEC path lets us hit ids the server has
+     *  not sent us yet, because normal attack() needs a live client-side Entity. */
+    private void sendGhostAttack(int entityId) {
+        if (mc.getConnection() == null) return;
+        FriendlyByteBuf buf = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        buf.writeVarInt(entityId);
+        buf.writeVarInt(1); // ActionType.ATTACK
+        buf.writeBoolean(mc.player.isShiftKeyDown());
+        mc.getConnection().send(ServerboundInteractPacket.STREAM_CODEC.decode(buf));
+        diagGhost++;
+    }
+
+    /** Attacks the {@code factor-1} entity ids after {@code anchorId}: the server hands out ids
+     *  sequentially, so the crystal our own placement is about to spawn is usually anchorId+1. */
+    private void sendGhostAttacksAfter(int anchorId) {
+        if (!ghostHit.getValue() || ghostFactor.getValue() <= 1 || anchorId <= 0) return;
+        int n = Math.min(ghostFactor.getValue(), 4);
+        for (int i = 1; i < n; i++) {
+            sendGhostAttack(anchorId + i);
+        }
+    }
+
     private final Long2LongOpenHashMap crystalPlaces = new Long2LongOpenHashMap();
 
     private float lastBestDamage    = 0;
@@ -254,6 +325,10 @@ public class GuangxiCrystalModule extends Module {
         waitHurt.setVisibility(v -> hurtSync.getValue());
         syncTimeout.setVisibility(v -> hurtSync.getValue());
         balanceOffset.setVisibility(v -> balance.getValue());
+        facePlaceHealth.setVisibility(v -> facePlace.getValue());
+        facePlaceArmor.setVisibility(v -> facePlace.getValue());
+        wallRange.setVisibility(v -> wallPlace.getValue());
+        ghostFactor.setVisibility(v -> ghostHit.getValue());
     }
 
     @Override
@@ -412,7 +487,14 @@ public class GuangxiCrystalModule extends Module {
         }
 
         if (event.getPacket() instanceof ClientboundAddEntityPacket pkt) {
+            if (pkt.getId() > lastMaxEntityId) lastMaxEntityId = pkt.getId();
             instaGates[9]++; // any spawn packet reached this listener
+            if (packetLog.getValue() && pkt.getType() == EntityType.END_CRYSTAL) {
+                GuizhouWare.LOGGER.info("[Sniff] spawn id={} pos=({},{},{})",
+                        pkt.getId(),
+                        String.format("%.1f", pkt.getX()), String.format("%.1f", pkt.getY()),
+                        String.format("%.1f", pkt.getZ()));
+            }
             onCrystalSpawn(pkt);
         }
     }
@@ -428,6 +510,18 @@ public class GuangxiCrystalModule extends Module {
                 lastCarriedSlot = pkt.getSlot();
                 switchTimer.reset();
             }
+        }
+        // Packet sniffer: logs every placement exactly as it leaves the client, so a
+        // working placement (RusherHack / manual) can be diffed against ours field by field.
+        if (packetLog.getValue() && event.getPacket() instanceof ServerboundUseItemOnPacket use) {
+            var hit = use.getHitResult();
+            Vec3 loc = hit.getLocation();
+            GuizhouWare.LOGGER.info("[Sniff] use pos={} face={} cur=({},{},{}) hand={} seq={}",
+                    hit.getBlockPos().toShortString(), hit.getDirection(),
+                    String.format("%.3f", loc.x - hit.getBlockPos().getX()),
+                    String.format("%.3f", loc.y - hit.getBlockPos().getY()),
+                    String.format("%.3f", loc.z - hit.getBlockPos().getZ()),
+                    use.getHand(), use.getSequence());
         }
         if (!packetLog.getValue()) return;
         diagSendCounts.computeIfAbsent(event.getPacket().getClass().getSimpleName(), k -> new int[1])[0]++;
@@ -453,9 +547,10 @@ public class GuangxiCrystalModule extends Module {
                 .sorted((a, b) -> Integer.compare(b.getValue()[0], a.getValue()[0]))
                 .forEach(e -> breakdown.append(e.getKey()).append('=').append(e.getValue()[0]).append(' '));
         GuizhouWare.LOGGER.info(
-                "[ACDiag] {}ms sends={} peakTick={} peakSec={} | place att/sent={}/{} break={} insta={} gates[delay={} age={} switch={} eat={} mace={} range={} self={} rot={} sync={} any={} crys={}] | {}",
+                "[ACDiag] {}ms sends={} peakTick={} peakSec={} | place att/sent={}/{} break={} insta={} ghost={} tps={} gates[delay={} age={} switch={} eat={} mace={} range={} self={} rot={} sync={} any={} crys={}] | {}",
                 now - diagWindowStart, diagWindowSends, diagPeakTickSends, diagPeakWindow,
-                diagPlaceAttempt, diagPlaceSent, diagBreakSent, diagInstaBreak,
+                diagPlaceAttempt, diagPlaceSent, diagBreakSent, diagInstaBreak, diagGhost,
+                String.format("%.1f", GuizhouWare.tpsCounterService.getAverageTPS()),
                 instaGates[0], instaGates[1], instaGates[2], instaGates[3], instaGates[4],
                 instaGates[5], instaGates[6], instaGates[7], instaGates[8],
                 instaGates[9], instaGates[10],
@@ -464,6 +559,7 @@ public class GuangxiCrystalModule extends Module {
         diagWindowSends = 0;
         diagPeakTickSends = 0;
         diagPlaceAttempt = diagPlaceSent = diagBreakSent = diagInstaBreak = 0;
+        diagGhost = 0;
         java.util.Arrays.fill(instaGates, 0);
         diagWindowStart = now;
     }
@@ -477,6 +573,7 @@ public class GuangxiCrystalModule extends Module {
         diagLastTickSends = 0L;
         diagPeakTickSends = 0;
         diagPlaceAttempt = diagPlaceSent = diagBreakSent = diagInstaBreak = 0;
+        diagGhost = 0;
         java.util.Arrays.fill(instaGates, 0);
     }
 
@@ -487,7 +584,7 @@ public class GuangxiCrystalModule extends Module {
         if (pkt.getType() != EntityType.END_CRYSTAL) return;
         if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (minAge.getValue() > 0) { instaGates[1]++; return; } // fresh spawn is tick 0; tick-loop break respects minAge
-        if (!switchTimer.passedMs(switchPause.getValue())) { instaGates[2]++; return; }
+        if (!switchTimer.passedMs(tpsMs(switchPause.getValue()))) { instaGates[2]++; return; }
 
         if (EatUtil.shouldDefer()) { instaGates[3]++; return; }
         AutoSwordModule sword = GuizhouWare.moduleManager.getModuleByClass(AutoSwordModule.class);
@@ -515,6 +612,8 @@ public class GuangxiCrystalModule extends Module {
         mc.player.connection.send(
                 ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown()));
         mc.player.connection.send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
+        // Alternation means our next placement is imminent: pre-attack the ids it will spawn at.
+        sendGhostAttacksAfter(pkt.getId());
     }
 
     /** Per-second insta-break gate rejections: [delay,minAge,switch,eat,mace,range,self,rot,sync, anySpawn, crystalSpawn]. */
@@ -539,7 +638,7 @@ public class GuangxiCrystalModule extends Module {
         double scanRadius = placeRangeValue() + 12.0;
         List<TargetCache> potentialTargets = collectTargets(targets, scanRadius);
 
-        if (doBreak.getValue() && breakTimer.passedMs(breakDelay.getValue())) {
+        if (doBreak.getValue() && breakTimer.passedMs(tpsMs(breakDelay.getValue()))) {
             EndCrystal target = findBestCrystal(potentialTargets);
             if (target != null) {
                 breakCrystal(target);
@@ -548,7 +647,7 @@ public class GuangxiCrystalModule extends Module {
             }
         }
 
-        if (!place.getValue() || !placeTimer.passedMs(placeDelay.getValue())) return;
+        if (!place.getValue() || !placeTimer.passedMs(tpsMs(placeDelay.getValue()))) return;
 
         if (mc.player.tickCount == lastReactorPlaceTick) return;
         lastReactorPlaceTick = mc.player.tickCount;
@@ -563,6 +662,10 @@ public class GuangxiCrystalModule extends Module {
     @Subscribe
     private void onPreTick(PreTickEvent event) {
         if (nullCheck() || mc.player.isDeadOrDying()) return;
+        if (!rubberbandQuiet()) {
+            lastBestDamage = 0;
+            return;
+        }
         ensureSelfCache();
         ownSwapPackets.set(0);
 
@@ -581,7 +684,7 @@ public class GuangxiCrystalModule extends Module {
                 && enemyNearby(antiChineseEnemyRange.getValue());
 
         boolean broke = false;
-        if (doBreak.getValue() && breakTimer.passedMs(breakDelay.getValue())) {
+        if (doBreak.getValue() && breakTimer.passedMs(tpsMs(breakDelay.getValue()))) {
             TargetsModule breakTargets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
             List<TargetCache> breakTargetCache = collectTargets(breakTargets, breakRangeValue() + 12.0);
             EndCrystal target = findBestCrystal(breakTargetCache);
@@ -592,7 +695,7 @@ public class GuangxiCrystalModule extends Module {
             }
         }
 
-        if (!broke && antiChineseReady && breakTimer.passedMs(breakDelay.getValue())) {
+        if (!broke && antiChineseReady && breakTimer.passedMs(tpsMs(breakDelay.getValue()))) {
             EndCrystal acTarget = findAntiChineseCrystal();
             if (acTarget != null) {
                 breakCrystal(acTarget);
@@ -600,7 +703,7 @@ public class GuangxiCrystalModule extends Module {
             }
         }
 
-        boolean canPlace = place.getValue() && placeTimer.passedMs(placeDelay.getValue());
+        boolean canPlace = place.getValue() && placeTimer.passedMs(tpsMs(placeDelay.getValue()));
 
         long calcStart = System.nanoTime();
 
@@ -838,7 +941,7 @@ public class GuangxiCrystalModule extends Module {
     }
 
     private void breakCrystal(EndCrystal crystal) {
-        if (!switchTimer.passedMs(switchPause.getValue())) return;
+        if (!switchTimer.passedMs(tpsMs(switchPause.getValue()))) return;
         Vec3 eyePos = mc.player.getEyePosition(1.0f);
         Vec3 hit = getClosestPointToEye(eyePos, crystal.getBoundingBox());
         float[] angles = MathUtil.calcAngle(eyePos, hit);
@@ -859,7 +962,11 @@ public class GuangxiCrystalModule extends Module {
         if (bb.contains(eyePos)) return true;
         Vec3 look = getLookVector(yaw, pitch);
         Vec3 reachEnd = eyePos.add(look.scale(breakRangeValue()));
-        return bb.clip(eyePos, reachEnd).isPresent();
+        if (bb.clip(eyePos, reachEnd).isPresent()) return true;
+        // WallPlace: through-wall attack within range — servers without attack-LOS
+        // validation (vanilla/legacy) accept it.
+        return wallPlace.getValue()
+                && sqDistToBox(eyePos, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ) <= breakRangeSq();
     }
 
     private PlaceTarget findBestPlace(List<TargetCache> potentialTargets) {
@@ -867,7 +974,6 @@ public class GuangxiCrystalModule extends Module {
         BlockPos playerPos = mc.player.blockPosition();
         int r = (int) Math.ceil(placeRangeValue());
         long now = System.currentTimeMillis();
-        boolean isEnd = mc.level.dimension().equals(Level.END);
         double placeRangeSq = placeRangeSq();
         double breakRangeSq = breakRangeSq();
         double maxSelf = maxSelfDamage.getValue();
@@ -892,7 +998,7 @@ public class GuangxiCrystalModule extends Module {
                     int ay = by + 1;
                     cursor.set(bx, ay, bz);
                     var airState = mc.level.getBlockState(cursor);
-                    if (!airState.isAir() && !(airState.is(Blocks.FIRE) && isEnd)) { scanAir++; continue; }
+                    if (!airState.isAir() && !airState.is(Blocks.FIRE)) { scanAir++; continue; } // FIRE is clearable now
                     if (legacy112.getValue() && !mc.level.getBlockState(cursor.set(bx, ay + 1, bz)).isAir()) { scanAir++; continue; }
 
                     if (sqDistToBox(eyePos, bx, ay, bz, bx + 1, ay + 1, bz + 1) > placeRangeSq) { scanPlaceR++; continue; }
@@ -930,7 +1036,7 @@ public class GuangxiCrystalModule extends Module {
         BlockPos locked = null;
         if (lastPlaceAir != null) {
             long lockTs = crystalPlaces.get(lastPlaceAir.asLong());
-            boolean pending = lockTs != 0L && now - lockTs < PLACE_PENDING_MS;
+            boolean pending = lockTs != 0L && now - lockTs < pendingWindowMs();
             if (pending || hasLiveCrystalAt(lastPlaceAir)) {
                 double cx = lastPlaceAir.getX() + 0.5, cy = lastPlaceAir.getY(), cz = lastPlaceAir.getZ() + 0.5;
                 Vec3 lockEye = bestReachEye(new AABB(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1));
@@ -972,13 +1078,14 @@ public class GuangxiCrystalModule extends Module {
                 rejLocked++;
                 continue;
             }
-            if (isBlocked(c.airPos)) {
+            LivingEntity faceEntity = faceOverlapAllowed(c.airPos, potentialTargets);
+            if (faceEntity == null && isBlocked(c.airPos)) {
                 if (c.bound > topRejectBound) { topRejectBound = c.bound; topReject = c.airPos + " blocked"; }
                 rejBlocked++;
                 continue;
             }
             long pendingTs = crystalPlaces.get(c.airPos.asLong());
-            if (pendingTs != 0L && now - pendingTs < PLACE_PENDING_MS) {
+            if (pendingTs != 0L && now - pendingTs < pendingWindowMs()) {
                 if (c.bound > topRejectBound) { topRejectBound = c.bound; topReject = c.airPos + " pending"; }
                 rejPending++;
                 continue;
@@ -996,7 +1103,9 @@ public class GuangxiCrystalModule extends Module {
                 TargetCache tc = potentialTargets.get(j);
                 if (tc.pos.distanceToSqr(c.crystalCenter) > 144.0) continue;
                 float dmg = calcDamage(tc, c.crystalCenter);
-                if (dmg < getDynamicMin(tc.hp, tc.abs, tc.armorBroken)) continue;
+                // FacePlace-eligible targets bypass MinDamage entirely (finisher damage).
+                double minGate = isFacePlaceEligible(tc) ? 0.5 : getDynamicMin(tc.hp, tc.abs, tc.armorBroken);
+                if (dmg < minGate) continue;
                 totalDmg += dmg;
                 anyTarget = true;
             }
@@ -1010,7 +1119,7 @@ public class GuangxiCrystalModule extends Module {
                 rejBal++;
                 continue;
             }
-            if (best == null || totalDmg > best.damage) best = new PlaceTarget(c.base, totalDmg);
+            if (best == null || totalDmg > best.damage) best = new PlaceTarget(c.base, totalDmg, faceEntity);
         }
         logPlacePick(best, topReject, topRejectBound,
                 scanAir, scanPlaceR, scanBreakR, scanLowBound,
@@ -1109,7 +1218,6 @@ public class GuangxiCrystalModule extends Module {
         BlockPos playerPos = mc.player.blockPosition();
         int r = (int) Math.ceil(placeRangeValue());
         long now = System.currentTimeMillis();
-        boolean isEnd = mc.level.dimension().equals(Level.END);
         double placeRangeSq = placeRangeSq();
         double breakRangeSq = breakRangeSq();
         double maxSelf = maxSelfDamage.getValue();
@@ -1133,7 +1241,7 @@ public class GuangxiCrystalModule extends Module {
                     int ay = by + 1;
                     cursor.set(bx, ay, bz);
                     var airState = mc.level.getBlockState(cursor);
-                    if (!airState.isAir() && !(airState.is(Blocks.FIRE) && isEnd)) continue;
+                    if (!airState.isAir() && !airState.is(Blocks.FIRE)) continue;
                     if (legacy112.getValue() && !mc.level.getBlockState(cursor.set(bx, ay + 1, bz)).isAir()) continue;
 
                     if (sqDistToBox(eyePos, bx, ay, bz, bx + 1, ay + 1, bz + 1) > placeRangeSq) continue;
@@ -1152,7 +1260,7 @@ public class GuangxiCrystalModule extends Module {
 
                     if (isBlocked(airPos)) continue;
                     long pendingTs = crystalPlaces.get(airPos.asLong());
-                    if (pendingTs != 0L && now - pendingTs < PLACE_PENDING_MS) continue;
+                    if (pendingTs != 0L && now - pendingTs < pendingWindowMs()) continue;
 
                     if (!selfDamageOk(crystalCenter, null, maxSelf, playerHealth)) continue;
 
@@ -1253,13 +1361,65 @@ public class GuangxiCrystalModule extends Module {
                                int protPoints) {}
 
     private boolean isBlocked(BlockPos airPos) {
+        return isBlockedExcept(airPos, null);
+    }
+
+    /** Like {@link #isBlocked} but {@code allow} may legally overlap the cell (FacePlace). */
+    private boolean isBlockedExcept(BlockPos airPos, LivingEntity allow) {
         for (Entity e : mc.level.getEntities(null, new AABB(airPos))) {
+            if (e == allow) continue;
             if (e instanceof ItemEntity) continue;
             if (e instanceof EndCrystal crystal && crystal.tickCount < 5) continue;
             if (e instanceof EndCrystal crystal && crystal.blockPosition().equals(airPos)) continue;
             return true;
         }
         return false;
+    }
+
+    // ------------------------------------------------------------ FacePlace (Mio)
+
+    private int equippedArmorPieces(Player p) {
+        int n = 0;
+        for (EquipmentSlot slot : new EquipmentSlot[]{
+                EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
+            if (!p.getItemBySlot(slot).isEmpty()) n++;
+        }
+        return n;
+    }
+
+    /** FacePlace triggers on near-death or nearly-stripped targets — punch through MinDamage. */
+    private boolean isFacePlaceEligible(TargetCache tc) {
+        if (!facePlace.getValue()) return false;
+        if (!(tc.entity instanceof Player p)) return false;
+        if (tc.hp + tc.abs <= facePlaceHealth.getValue().floatValue()) return true;
+        return equippedArmorPieces(p) <= facePlaceArmor.getValue();
+    }
+
+    /**
+     * Returns the face-eligible target allowed to occupy this cell, or null when the cell must
+     * stay entity-clean. When the only blocker is a FacePlace-eligible target the cell becomes a
+     * face-place candidate (crystals legally place through standing entities).
+     */
+    @org.jetbrains.annotations.Nullable
+    private LivingEntity faceOverlapAllowed(BlockPos airPos, List<TargetCache> targets) {
+        AABB cell = new AABB(airPos);
+        LivingEntity allowed = null;
+        outer:
+        for (Entity e : mc.level.getEntities(null, cell)) {
+            if (e instanceof ItemEntity) continue;
+            if (e instanceof EndCrystal crystal && crystal.tickCount < 5) continue;
+            if (e instanceof EndCrystal crystal && crystal.blockPosition().equals(airPos)) continue;
+            if (e instanceof LivingEntity living) {
+                for (int i = 0, n = targets.size(); i < n; i++) {
+                    if (targets.get(i).entity == living && isFacePlaceEligible(targets.get(i))) {
+                        allowed = living;
+                        continue outer;
+                    }
+                }
+            }
+            return null;
+        }
+        return allowed;
     }
 
     private void doPlace(PlaceTarget target) {
@@ -1281,10 +1441,34 @@ public class GuangxiCrystalModule extends Module {
         }
         lastBestDamage = target.damage;
 
+        // Fire over the base blocks the server-side placement: clear it with an instant
+        // 2-packet break and place next tick (Mio trick).
+        BlockPos air = target.base.above();
+        if (mc.level.getBlockState(air).is(Blocks.FIRE)) {
+            mc.getConnection().send(new ServerboundPlayerActionPacket(
+                    ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, air, Direction.DOWN));
+            mc.getConnection().send(new ServerboundPlayerActionPacket(
+                    ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, air, Direction.DOWN));
+            diagPlaceAttempt++;
+            return;
+        }
+
         diagPlaceAttempt++;
-        if (placeCrystalShared(target.base, trustBase)) {
+        boolean sent;
+        GuizhouWare.placementManager.setSneakSandwich(sneakPlace.getValue());
+        GuizhouWare.placementManager.setCrystalWallRangeSq(
+                wallPlace.getValue() ? wallRange.getValue() * wallRange.getValue() : -1.0);
+        try {
+            sent = placeCrystalShared(target.base, trustBase, target.faceEntity());
+        } finally {
+            GuizhouWare.placementManager.setSneakSandwich(false);
+            GuizhouWare.placementManager.setCrystalWallRangeSq(-1.0);
+        }
+        if (sent) {
             diagPlaceSent++;
-            recordPlace(target.base.above());
+            recordPlace(air);
+            // The spawn for this placement takes the next sequential entity id.
+            sendGhostAttacksAfter(lastMaxEntityId);
         }
     }
 
@@ -1292,25 +1476,31 @@ public class GuangxiCrystalModule extends Module {
      * Crystal placement shared with PistonCrystal: a held crystal (either hand) places directly
      * with that hand and zero swap packets; NONE refuses to swap; SILENT hotbar-swaps and reverts;
      * INVENTORY window-swaps from anywhere (main inventory included) and reverts within the tick.
+     * {@code faceEntity} (FacePlace) may legally occupy the target cell.
      */
     public boolean placeCrystalShared(BlockPos base, boolean trustBase) {
+        return placeCrystalShared(base, trustBase, null);
+    }
+
+    public boolean placeCrystalShared(BlockPos base, boolean trustBase, LivingEntity faceEntity) {
         boolean mainCrystal = mc.player.getMainHandItem().is(Items.END_CRYSTAL);
         boolean offCrystal = mc.player.getOffhandItem().is(Items.END_CRYSTAL);
         if (mainCrystal || offCrystal) {
             return GuizhouWare.placementManager.placeCrystalDirect(base, trustBase,
-                    offCrystal && !mainCrystal ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND);
+                    offCrystal && !mainCrystal ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND,
+                    faceEntity);
         }
         return switch (autoSwap.getValue()) {
             case NONE -> false;
             case SILENT -> {
                 ownSwapPackets.set(2); // swap + swap-back must not trigger the break switch-pause
                 yield GuizhouWare.placementManager.placeCrystal(base, trustBase,
-                        SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE);
+                        SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, faceEntity);
             }
             case INVENTORY -> {
                 ownSwapPackets.set(2);
                 yield GuizhouWare.placementManager.placeCrystal(base, trustBase,
-                        SwapMode.ALTSILENT, InventoryUtil.FULL_SCOPE);
+                        SwapMode.ALTSILENT, InventoryUtil.FULL_SCOPE, faceEntity);
             }
         };
     }
@@ -1338,7 +1528,7 @@ public class GuangxiCrystalModule extends Module {
 
         long now = System.currentTimeMillis();
         long pendingTs = crystalPlaces.get(airPos.asLong());
-        if (pendingTs != 0L && now - pendingTs < PLACE_PENDING_MS) return false;
+        if (pendingTs != 0L && now - pendingTs < pendingWindowMs()) return false;
 
         doPlace(new PlaceTarget(base, 0f), false);
         return crystalPlaces.get(airPos.asLong()) != pendingTs;
@@ -1522,19 +1712,20 @@ public class GuangxiCrystalModule extends Module {
         if (!baseState.is(Blocks.OBSIDIAN) && !baseState.is(Blocks.BEDROCK)) return false;
         BlockPos air = t.base().above();
         BlockState airState = mc.level.getBlockState(air);
-        boolean isEnd = mc.level.dimension().equals(Level.END);
-        if (!airState.isAir() && !(airState.is(Blocks.FIRE) && isEnd)) return false;
+        if (!airState.isAir() && !airState.is(Blocks.FIRE)) return false; // FIRE cleared by doPlace
         if (legacy112.getValue() && !mc.level.getBlockState(air.above()).isAir()) return false;
-        if (isBlocked(air)) return false;
+        boolean faceStill = t.faceEntity() != null
+                && !t.faceEntity().isRemoved() && !t.faceEntity().isDeadOrDying();
+        if (isBlockedExcept(air, faceStill ? t.faceEntity() : null)) return false;
         long now = System.currentTimeMillis();
         long ts = crystalPlaces.get(air.asLong());
-        return ts == 0L || now - ts >= PLACE_PENDING_MS;
+        return ts == 0L || now - ts >= pendingWindowMs();
     }
 
     private boolean isSyncHeld(LivingEntity target) {
         return hurtSync.getValue()
                 && target.hurtTime > waitHurt.getValue()
-                && System.currentTimeMillis() - lastBreakMs < syncTimeout.getValue();
+                && System.currentTimeMillis() - lastBreakMs < tpsMs(syncTimeout.getValue());
     }
 
     private boolean anyBreakTargetReady(Vec3 center) {
@@ -1730,7 +1921,9 @@ public class GuangxiCrystalModule extends Module {
         return String.valueOf(explodeTimes.size());
     }
 
-    private record PlaceTarget(BlockPos base, float damage) {}
+    private record PlaceTarget(BlockPos base, float damage, LivingEntity faceEntity) {
+        PlaceTarget(BlockPos base, float damage) { this(base, damage, null); }
+    }
     private record BasePlaceTarget(BlockPos base, float damage) {}
     private record PlaceCandidate(BlockPos base, BlockPos airPos, Vec3 crystalCenter, float bound) {}
 

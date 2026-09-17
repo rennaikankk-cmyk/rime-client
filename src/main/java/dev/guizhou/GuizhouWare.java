@@ -32,6 +32,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
     public static RotationManager rotationManager;
     public static SwapManager swapManager;
     public static TPSCounterService tpsCounterService;
+    public static NetworkSanitizer networkSanitizer;
     public static GuiMove guiMove;
 
     @Override
@@ -52,6 +53,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
         rotationManager = new RotationManager();
         swapManager = new SwapManager();
         tpsCounterService = new TPSCounterService();
+        networkSanitizer = new NetworkSanitizer();
         guiMove = new GuiMove();
 
         TextUtil.init();
@@ -72,6 +74,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
         enemyManager.init();
         playerInfoManager.init();
         tpsCounterService.init();
+        networkSanitizer.init();
         guiMove.init();
 
         configManager.load();
