@@ -103,6 +103,11 @@ public final class CombatProbe implements ClientModInitializer {
   }
   var flight=GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
   var chase=GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraChaseModule.class);
+  Object selected=field(chase,"target");
+  if(!MODE.equals("ARMOR") && selected instanceof net.minecraft.world.entity.Entity entity
+      && !entity.getUUID().equals(target.getUUID())) {
+   throw new AssertionError("Probe selected an entity other than the measured target: "+entity);
+  }
   if(MODE.equals("ARMOR")) {
    var armorModule=GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.movement.ArmorFlyModule.class);
    if(running==200)flight.enableByChase();
@@ -129,6 +134,12 @@ public final class CombatProbe implements ClientModInitializer {
  }
  void setup(Minecraft mc) {
   var server=mc.getSingleplayerServer(); var p=server.getPlayerList().getPlayer(mc.player.getUUID()); var level=p.level(); server.setDifficulty(net.minecraft.world.Difficulty.NORMAL,true);
+  // Each run copies a saved world, which may contain the previous probe target.
+  // Remove loaded mobs from the copy so target selection and damage refer to the same entity.
+  var previousMobs=new ArrayList<net.minecraft.world.entity.Mob>();
+  for(var entity:level.getAllEntities()) if(entity instanceof net.minecraft.world.entity.Mob mob) previousMobs.add(mob);
+  previousMobs.forEach(net.minecraft.world.entity.Entity::discard);
+  server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),"gamerule minecraft:spawn_mobs false");
   for(int x=-24;x<=24;x++)for(int z=-24;z<=24;z++) {
    level.setBlock(new BlockPos(x,100,z),Blocks.STONE.defaultBlockState(),3);
    for(int y=101;y<=116;y++)level.setBlock(new BlockPos(x,y,z),Blocks.AIR.defaultBlockState(),3);

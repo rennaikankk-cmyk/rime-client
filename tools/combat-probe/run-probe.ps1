@@ -17,7 +17,7 @@ $run=Join-Path $base "runs\$Name"
 if(Test-Path -LiteralPath $run){throw 'Use a fresh run name; previous evidence is never overwritten'}
 New-Item -ItemType Directory -Force -Path "$run\saves","$run\guizhouware" | Out-Null
 Copy-Item -LiteralPath $world -Destination "$run\saves\ProbeWorld" -Recurse
-[IO.File]::WriteAllText("$run\options.txt","onboardAccessibility:false`nrenderDistance:4`nsimulationDistance:4`npauseOnLostFocus:false`n")
+[IO.File]::WriteAllText("$run\options.txt","onboardAccessibility:false`nrenderDistance:4`nsimulationDistance:5`npauseOnLostFocus:false`n")
 [IO.File]::WriteAllText("$run\guizhouware\telemetry.json",'{"enabled":false}')
 $env:JAVA_HOME=$JavaHome
 Push-Location -LiteralPath $repo
