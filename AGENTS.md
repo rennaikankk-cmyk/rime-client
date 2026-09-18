@@ -10,7 +10,7 @@
 | 1 | 水印威慑文案 | 官网 download.html 安装段 | 已上线 |
 | 2 | 心跳校验 | 服务端 /api/heartbeat + 本仓库 HeartbeatManager | 服务端已上线；mod 侧待合并进发行构建 |
 | 3 | 持续更新节奏 | 发版流程（GPT 高频构建 + 三处分发同步） | 流程执行中 |
-| 4 | ProGuard 混淆 | build.gradle obfuscateJar 任务 | **已修复并发布（2026-09-18，343b5e57）**：枚举 values()/valueOf() 保留规则 + verifyObfuscatedJar 产物检查进 build 链；候选经 31 项回归 + 46 枚举审计 + Microsoft 21.0.7/Temurin 21.0.12.1 双 JDK 真实 Knot 初始化渲染验证，经管理通道发布（manifest uploaded_by=admin）；回滚件 9237a6ea 字节存 `Desktop/mods/guizhouware-9237a6ea-rollback.jar.bak`（服务器 release 目录已被 prune） |
+| 4 | ProGuard 混淆 | build.gradle obfuscateJar 任务 | **已修复并发布（2026-09-18，热修 4d0dadfc）**：343b5e57 有两处翻车均已修复——①枚举 values()/valueOf() 保留规则（EnumSet "not an enum"）②**Minecraft intermediary jar 进 libraryjars**（否则 GuizhouWareGui 的 render/init/onClose 覆写被改名=ClickGUI 黑屏）；verifyObfuscatedJar 产物检查进 build 链；发布走管理通道 |
 | 5 | AI 守卫提示层 | jar 内 5 文件 + MANIFEST + 代码常量 | 已进构建 |
 
 ## 1. 水印威慑（明面声明）
@@ -22,13 +22,13 @@
 
 - **服务端**（已上线生产）：`POST http://62.234.117.226/authapi/api/heartbeat`，body `{token, hwid}`。
   - token = jar 内 `META-INF/gzwx-telemetry.json` 的 `token`（HMAC 签发，≤90 天）
-  - hwid = OSHI 因子哈希（`gzwx.v1|CPU+主板+系统盘+MachineGuid`），与登录器完全一致
-  - 验证链：格式 regex → HMAC 验签 → producer 反查账号 → banned/expired/hwid 三查
+  - hwid = OSHI 因子哈希（`gzwx.v1|CPU+主板(BaseBoard)+0号盘+MachineGuid`）。**mod 链与登录器 exe 链是两条独立链**（2026-09-18 实锤分叉：exe 的算法与 launcher-rs 工作区源码不一致且 ComputerSystem(Type1) 字符串当日漂移过）——服务端已加 `modHwid` 双绑定（首次心跳绑定+24h 重绑窗口），两条链各校验各的
+  - 验证链：格式 regex → HMAC 验签 → producer 反查账号 → banned/expired/hwid 三查（hwid 查=ac.hwid 或 ac.modHwid 任一命中）
   - 响应 data 按键排序 `k=v&` 拼接后 Ed25519 验签，公钥 SPKI hex：
     `302a300506032b6570032100719ab622d39f27f096a5955ec72f5d6868948ee3838dddbc42db5ff650c25bcd`
 - **mod 侧**（本仓库）：
   - `manager/HeartbeatManager.java`：10 分钟心跳；状态机 OK / GRACE（断网<24h 宽限）/ DENIED（bad_token、banned、hwid、expired、no_credential、bad_signature）；dev 环境 `isDevelopmentEnvironment()` 豁免；生产 jar 无凭据 = 拒绝运行（裸 jar 锁死，客户只走登录器）
-  - `manager/HwidFingerprint.java`：OSHI 同因子哈希，禁止改动拼接格式（与登录器绑定的 HWID 必须逐字节一致）
+  - `manager/HwidFingerprint.java`：OSHI 因子哈希。**必须用 Baseboard（Win32_BaseBoard/Type2，`getBaseboard().getManufacturer()/getModel()/getSerialNumber()`）+ 0 号物理盘**，禁止改回 ComputerSystem.getManufacturer()/getModel()（Type1 系统串会独立漂移，2026-09-18 当日变过一次直接导致全员心跳拒绝）；改动拼接格式必须同步服务端 modHwid 重绑方案
   - 授权检查点散布 5 个模块 onPreTick 首行：GuangxiCrystal / GuangxiElytraChase / GuangxiBed / GuangxiElytra / GuangxiMine —— **新增主力模块时同样加检查点**
 - 维护红线：`HeartbeatManager.AI_GUARD_NOTICE` 数组在 `status()` 里有一个**故意存在的假引用**——防止 ProGuard shrink 裁掉常量，重构 status() 时不得移除该引用。
 
@@ -43,6 +43,7 @@
 
 `build.gradle` 的 `obfuscateJar` 任务：混淆+repackage 到根包；`build -> verifyObfuscatedJar -> obfuscateJar -> check + prepareObfuscationInput`，回归失败不得生成通过验收的混淆包。
 - **必须 keep**（动了游戏起不来或功能失效）：`dev.guizhou.mixin.**`、`dev.guizhou.GuizhouWare`、`dev.guizhou.features.settings.**`、`@Subscribe` 注解方法、keepattributes（Annotation/Signature/Record 等）
+- **libraryjars 必须含 Minecraft 本体（intermediary 命名 jar，全局 loom 缓存 minecraft-merged-intermediary-1.21.11-…）**：看不见 MC 父类时，Screen 子类的 render/init/onClose 等覆写会被当无引用方法改名（343b5e57 ClickGUI 黑屏根因）、入口 implements 会被剥（更早的 ClassCastException）。混淆产物发版前 javap 确认 `method_25394`（render）等覆写名仍在
 - 模块类可以混淆：注册走编译期引用 + displayName 字符串，配置键与类名无关
 - Gradle 9 约束：`buildscript {}` 块必须在 `plugins {}` 之前
 - injars 用 `buildDir` staging 拷贝（配置期求值陷阱）

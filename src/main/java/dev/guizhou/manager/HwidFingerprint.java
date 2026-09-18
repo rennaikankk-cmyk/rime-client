@@ -22,21 +22,35 @@ public final class HwidFingerprint {
             oshi.SystemInfo si = new oshi.SystemInfo();
             oshi.hardware.HardwareAbstractionLayer hw = si.getHardware();
             sb.append(n(hw.getProcessor().getProcessorIdentifier().getProcessorID())).append('|');
-            oshi.hardware.ComputerSystem cs = hw.getComputerSystem();
-            sb.append(n(cs.getManufacturer())).append('/')
-              .append(n(cs.getModel())).append('/')
-              .append(n(cs.getBaseboard() == null ? "" : n(cs.getBaseboard().getSerialNumber()))).append('|');
+            // Board factors come from Win32_BaseBoard (SMBIOS Type 2), byte-for-byte the
+            // launcher's chain. Do NOT use ComputerSystem.getManufacturer()/getModel() —
+            // those read the System (Type 1) strings, which can drift independently of
+            // the board strings and silently change the fingerprint.
+            oshi.hardware.Baseboard bb = hw.getComputerSystem().getBaseboard();
+            String board = bb == null ? ""
+                    : raw(bb.getManufacturer()) + "/" + raw(bb.getModel()) + "/" + raw(bb.getSerialNumber());
+            sb.append(board.trim()).append('|');
+            // Launcher semantics: serial of physical drive 0 (\\.\PHYSICALDRIVE0).
             String drive = System.getenv("SystemDrive");
             if (drive == null || drive.isEmpty()) drive = "C:";
             boolean diskFound = false;
             for (oshi.hardware.HWDiskStore d : hw.getDiskStores()) {
-                if (diskFound) break;
-                for (oshi.hardware.HWPartition pt : d.getPartitions()) {
-                    String mp = pt.getMountPoint();
-                    if (mp != null && mp.toLowerCase().startsWith(drive.toLowerCase())) {
-                        sb.append(n(d.getSerial()));
-                        diskFound = true;
-                        break;
+                if (d.getName() != null && d.getName().endsWith("PHYSICALDRIVE0")) {
+                    sb.append(n(d.getSerial()));
+                    diskFound = true;
+                    break;
+                }
+            }
+            if (!diskFound) {
+                for (oshi.hardware.HWDiskStore d : hw.getDiskStores()) {
+                    if (diskFound) break;
+                    for (oshi.hardware.HWPartition pt : d.getPartitions()) {
+                        String mp = pt.getMountPoint();
+                        if (mp != null && mp.toLowerCase().startsWith(drive.toLowerCase())) {
+                            sb.append(n(d.getSerial()));
+                            diskFound = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -55,6 +69,9 @@ public final class HwidFingerprint {
     }
 
     private static String n(String s) { return s == null ? "" : s.trim(); }
+
+    /** Null-to-empty without trimming: the launcher only trims the joined board string. */
+    private static String raw(String s) { return s == null ? "" : s; }
 
     /** HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid — changes only on OS reinstall */
     private static String machineGuid() {

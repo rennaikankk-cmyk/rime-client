@@ -232,6 +232,14 @@ tasks.register('obfuscateJar', proguard.gradle.ProGuardTask) {
     // JDK base classes: without this ProGuard strips 'extends java.lang.Enum' from
     // enums (ClassCastException: not an enum) just like it stripped entrypoint interfaces
     libraryjars files("${System.getProperty('java.home')}/jmods/java.base.jmod")
+    // Minecraft itself (intermediary names): without it ProGuard cannot see that
+    // GuizhouWareGui extends class_437 (Screen), so the render/init/onClose overrides
+    // look like unreferenced methods, get renamed, and the ClickGUI renders nothing.
+    def mcIntermediary = new File(new File(System.getProperty('user.home'),
+            '.gradle/caches/fabric-loom/minecraftMaven/net/minecraft/minecraft-merged-intermediary/' +
+            '1.21.11-loom.mappings.1_21_11.layered+hash.2198-v2'),
+            'minecraft-merged-intermediary-1.21.11-loom.mappings.1_21_11.layered+hash.2198-v2.jar')
+    if (mcIntermediary.exists()) libraryjars files(mcIntermediary)
     injars obfuscationInput.get().asFile
     outjars obfuscationOutput.get().asFile
     printmapping obfuscationMapping.get().asFile
