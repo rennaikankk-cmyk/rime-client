@@ -16,6 +16,9 @@ import dev.guizhou.features.commands.Command;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.BuildConfig;
+import dev.guizhou.features.modules.combat.GuangxiElytraChaseModule;
+import dev.guizhou.features.modules.movement.GuangxiElytraModule;
+import dev.guizhou.util.telemetry.FlightSummary;
 import dev.guizhou.util.telemetry.TelemetryBuffer;
 import dev.guizhou.util.telemetry.TelemetryCapability;
 import dev.guizhou.util.telemetry.TelemetryPrivacy;
@@ -92,6 +95,17 @@ public class TelemetryManager extends Feature {
     private int cwRubberbacks;
     private long lastCorrection;
     private PendingCorrection correction;
+
+    // flight diagnostics window: memory-only per-tick accumulation while armorfly or pursuit is active
+    private FlightSummary flightWindow;
+    private JsonObject flightWindowConfig;
+    private String flightWindowTag;
+    private String flightWindowMode;
+    private long flightWindowStart;
+    private long flightLastActive;
+    private Vec3 flightLastPos;
+    private boolean flightHasLastPos;
+    private volatile boolean flightSummaryBlocked;
 
     private record PendingPacket(String session, PacketEvent event) {}
     private record Sample(long nanos, JsonObject data) {}
@@ -234,6 +248,7 @@ public class TelemetryManager extends Feature {
                     || now - combatWindowStart >= 10 * 60 * SECOND)) {
             flushCombatSummary(now);
         }
+        if (!flightSummaryBlocked) tickFlight(now);
         combatTargets.entrySet().removeIf(entry -> now - entry.getValue() > 15 * SECOND);
         deaths.entrySet().removeIf(entry -> {
             Entity entity = mc.level.getEntity(entry.getKey());
@@ -271,6 +286,126 @@ public class TelemetryManager extends Feature {
         combatWindowStart = 0;
         lastCombatEvent = 0;
         cwAttacks = cwDamageDealt = cwDamageTaken = cwKills = cwDeaths = cwTotems = cwRubberbacks = 0;
+        flightWindow = null;
+        flightWindowConfig = null;
+        flightWindowTag = null;
+        flightWindowMode = null;
+        flightWindowStart = 0;
+        flightLastActive = 0;
+        flightLastPos = null;
+        flightHasLastPos = false;
+        flightSummaryBlocked = false;
+    }
+
+    /** Accumulates the flight diagnostics window; observation only, never sends packets. */
+    private void tickFlight(long now) {
+        GuangxiElytraModule flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        GuangxiElytraChaseModule chase = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraChaseModule.class);
+        boolean armorfly = flight != null && flight.isArmorSwapActive();
+        boolean chaseActive = chase != null && chase.isEnabled() && chase.hasHeading();
+        boolean dive = GuangxiElytraChaseModule.isMaceDiveActive();
+        if (!armorfly && !chaseActive && !dive) {
+            if (flightWindow != null && now - flightLastActive >= SECOND) settleFlight(now, false);
+            return;
+        }
+        flightLastActive = now;
+        if (flightWindow == null) {
+            openFlightWindow(now);
+        } else if (flightWindow.shouldFlush(now) || now - flightWindowStart >= FlightSummary.MAX_WINDOW_NANOS) {
+            settleFlight(now, false);
+            openFlightWindow(now);
+        }
+        Vec3 position = mc.player.position();
+        double dx = 0, dy = 0, dz = 0;
+        if (flightHasLastPos && flightLastPos != null) {
+            dx = position.x - flightLastPos.x;
+            dy = position.y - flightLastPos.y;
+            dz = position.z - flightLastPos.z;
+        }
+        flightLastPos = position;
+        flightHasLastPos = true;
+        boolean gliding = mc.player.isFallFlying();
+        double requested = Double.NaN, applied = Double.NaN;
+        if (flight != null && flight.lastAppliedTick() == mc.player.tickCount) {
+            requested = flight.lastRequestedBpt();
+            applied = flight.lastAppliedBpt();
+        }
+        flightWindow.tick(now, dx, dy, dz, gliding, armorfly, chaseActive, dive,
+                flight != null && flight.isBoostAttached(),
+                mc.player.getDeltaMovement().horizontalDistance() * 20,
+                requested, applied, flight == null ? FlightSummary.BLOCK_NONE : flight.lastRocketBlock());
+    }
+
+    private void openFlightWindow(long now) {
+        flightWindow = new FlightSummary();
+        flightWindowConfig = flightConfig();
+        flightWindowMode = flightChaseMode();
+        flightWindowTag = flightWindowConfig + "|" + flightWindowMode;
+        flightWindowStart = now;
+        flightHasLastPos = false;
+    }
+
+    /** Closes the window; uploaded only when still valid and its configuration is unchanged. */
+    private void settleFlight(long now, boolean forceUpload) {
+        if (flightWindow == null) return;
+        FlightSummary.Window window = flightWindow.close(now);
+        String tag = flightConfig() + "|" + flightChaseMode();
+        boolean uploadable = window != null && tag.equals(flightWindowTag);
+        if (uploadable && (forceUpload || canUpload())) {
+            enqueue("flight_summary", FlightSummary.render(window, flightWindowMode, flightWindowConfig));
+        }
+        flightWindow = null;
+        flightWindowConfig = null;
+        flightWindowTag = null;
+        flightWindowMode = null;
+        flightWindowStart = 0;
+        flightLastPos = null;
+        flightHasLastPos = false;
+    }
+
+    private String flightChaseMode() {
+        GuangxiElytraChaseModule chase = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraChaseModule.class);
+        if (chase == null || !chase.isEnabled()) return "OFF";
+        var setting = chase.getSettingByName("Mode");
+        return setting != null && setting.getValue() instanceof Enum<?> mode ? mode.name() : "OFF";
+    }
+
+    /** Small fixed whitelist covering the settings this comparison round depends on. */
+    private JsonObject flightConfig() {
+        JsonObject config = new JsonObject();
+        GuangxiElytraModule flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        GuangxiElytraChaseModule chase = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraChaseModule.class);
+        if (flight != null) {
+            putSetting(config, flight, "FlightMode", "flight_mode");
+            putSetting(config, flight, "MotionMode", "motion_mode");
+            putSetting(config, flight, "Speed", "speed");
+            putSetting(config, flight, "AutoRescale", "auto_rescale");
+            putSetting(config, flight, "RescaleAmount", "rescale_amount");
+            putSetting(config, flight, "YCap", "y_cap");
+            putSetting(config, flight, "CornerClimb", "corner_climb");
+            putSetting(config, flight, "ArmorFly", "armor_fly");
+            putSetting(config, flight, "GrimBoost", "grim_boost");
+            putSetting(config, flight, "PullupAngle", "pullup_angle");
+        }
+        if (chase != null) {
+            putSetting(config, chase, "Mode", "chase_mode");
+            putSetting(config, chase, "MaceAdaptive", "mace_adaptive");
+            putSetting(config, chase, "MaceTerminal", "mace_terminal");
+            putSetting(config, chase, "MaceHeight", "mace_height");
+            putSetting(config, chase, "MaceMinFallDistance", "mace_min_fall");
+            putSetting(config, chase, "AutoMaceDive", "auto_mace_dive");
+            putSetting(config, chase, "CombatRange", "combat_range");
+        }
+        return config;
+    }
+
+    private static void putSetting(JsonObject target, Module module, String name, String key) {
+        Setting<?> setting = module.getSettingByName(name);
+        if (setting == null) return;
+        Object value = setting.getValue();
+        if (value instanceof Boolean flag) target.addProperty(key, flag);
+        else if (value instanceof Number number) target.addProperty(key, TelemetryPrivacy.bounded(number.doubleValue(), -60_000_000, 60_000_000));
+        else if (value instanceof Enum<?> option && TelemetryPrivacy.safeIdentifier(option.name())) target.addProperty(key, option.name());
     }
 
     @Subscribe(priority = Integer.MIN_VALUE)
@@ -391,8 +526,18 @@ public class TelemetryManager extends Feature {
     @Subscribe(priority = Integer.MIN_VALUE)
     private void onModuleToggle(ClientEvent event) {
         if (!ready() || event.getType() != ClientEvent.Type.TOGGLE_MODULE
-                || !(event.getFeature() instanceof Module module) || !relevantModule(module)
-                || !allow("toggle:" + module.getName(), SECOND)) return;
+                || !(event.getFeature() instanceof Module module) || !relevantModule(module)) {
+            if (event.getType() == ClientEvent.Type.TOGGLE_MODULE
+                    && event.getFeature() instanceof Module toggled
+                    && (toggled.getName().equals("GuangxiElytra") || toggled.getName().equals("GuangxiElytraChase"))) {
+                settleFlight(System.nanoTime(), false);
+            }
+            return;
+        }
+        if ((module.getName().equals("GuangxiElytra") || module.getName().equals("GuangxiElytraChase"))) {
+            settleFlight(System.nanoTime(), false);
+        }
+        if (!allow("toggle:" + module.getName(), SECOND)) return;
         JsonObject data = new JsonObject();
         data.addProperty("module", module.getName());
         data.addProperty("enabled", module.isEnabled());
@@ -406,6 +551,7 @@ public class TelemetryManager extends Feature {
             if (expected == null || !expected.equals(sessionId)) return;
             finishCorrection();
             flushCombatSummary(System.nanoTime());
+            settleFlight(System.nanoTime(), true);
             JsonObject data = new JsonObject();
             data.addProperty("duration_ms", Math.max(0, (System.nanoTime() - sessionStarted) / 1_000_000L));
             enqueue("session_end", data);
@@ -418,9 +564,15 @@ public class TelemetryManager extends Feature {
     public void onPlayerCorrection(double distanceSq) {
         if (!ready() || !Double.isFinite(distanceSq) || distanceSq <= 0.01) return;
         long now = System.nanoTime();
+        // Counted before the detailed-event rate limit: the summary total must not
+        // undercount corrections that arrive inside the five-second window.
+        cwRubberbacks++;
+        if (flightWindow != null) {
+            flightWindow.correction();
+            flightHasLastPos = false;
+        }
         if (lastCorrection != 0 && now - lastCorrection < 5 * SECOND) return;
         lastCorrection = now;
-        cwRubberbacks++;
         finishCorrection();
         JsonObject data = new JsonObject();
         data.addProperty("distance", bounded(Math.sqrt(distanceSq), 0, 60_000_000));
@@ -557,6 +709,11 @@ public class TelemetryManager extends Feature {
                         } else {
                             failures = Math.min(6, failures + 1);
                             long seconds = Math.min(1800, 30L << failures);
+                            if (response != null && response.statusCode() == 400) {
+                                // A strict receiver that does not know flight_summary rejects the
+                                // whole batch; stop producing them until the next session.
+                                flightSummaryBlocked = true;
+                            }
                             if (response != null && response.statusCode() == 429) {
                                 try {
                                     seconds = Math.max(seconds, Math.min(3600,

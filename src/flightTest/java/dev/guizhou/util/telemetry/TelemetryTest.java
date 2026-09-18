@@ -89,9 +89,11 @@ public final class TelemetryTest {
         queue.offer(event("correction", "important"));
         for (int i = 0; i < 1000; i++) queue.offer(event("attack_intent", "a".repeat(4096)));
         queue.offer(event("session_end", "close"));
+        queue.offer(event("flight_summary", "window"));
         JsonObject batch = queue.batch(new JsonObject());
         String json = batch.toString();
-        check(json.contains("important") && json.contains("session_end"), "Combat burst discarded correction or session close");
+        check(json.contains("important") && json.contains("session_end") && json.contains("window"),
+                "Combat burst discarded correction, session close or flight summary");
     }
 
     private static JsonObject event(String type, String text) {

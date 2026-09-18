@@ -24,7 +24,7 @@ public final class TelemetryBuffer {
         }
         String type = event.has("type") ? event.get("type").getAsString() : "";
         boolean priority = switch (type) {
-            case "correction", "session_start", "session_end", "probe_result", "totem", "death" -> true;
+            case "correction", "session_start", "session_end", "probe_result", "totem", "death", "flight_summary" -> true;
             default -> false;
         };
         entries.addLast(new Entry(event.deepCopy(), length, priority));

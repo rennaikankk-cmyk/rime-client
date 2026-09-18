@@ -161,7 +161,10 @@ public final class ElytraFlightLifecycleTest {
         int swap = use.call("withSwap");
         check(safeCall < using && using < swap, "Actual firework use must check inventory and item-use safety before swapping");
         Step refused = use.steps.get(safeCall + 1);
-        check(refused.opcode == Opcodes.IFEQ && use.steps.get(use.target(refused)).opcode == Opcodes.RETURN,
+        int refusal = -1;
+        if (refused.opcode == Opcodes.IFEQ) refusal = use.target(refused);
+        else if (refused.opcode == Opcodes.IFNE) refusal = safeCall + 2;
+        check(refusal >= 0 && returnsAtMostWithRocketMarker(use, refusal),
                 "An unsafe inventory context must return before a firework swap");
         List<Trace> actions = methods.values().stream().filter(trace -> trace.hasCall("useItem")).toList();
         check(actions.size() == 1, "Expected one automatic firework use action");
@@ -188,7 +191,7 @@ public final class ElytraFlightLifecycleTest {
                 "Rocket trajectory sweeps belong after cheap readiness checks and before the actual inventory swap");
         Step blockedTrajectory = use.steps.get(trajectory + 1);
         check(blockedTrajectory.opcode == Opcodes.IFNE
-                        && use.steps.get(trajectory + 2).opcode == Opcodes.RETURN,
+                        && returnsAtMostWithRocketMarker(use, trajectory + 2),
                 "Moving the expensive trajectory check must preserve its collision rejection");
         check(use.call("getLookAngle") < trajectory,
                 "The final rocket trajectory check must still inspect the actual outgoing flight direction");
@@ -725,6 +728,25 @@ public final class ElytraFlightLifecycleTest {
         int next = start + 1;
         if (trace.steps.get(next).opcode == Opcodes.GOTO) next = trace.target(trace.steps.get(next));
         check(trace.steps.get(next).opcode == Opcodes.IRETURN, context + " must return without enabling standalone boost");
+    }
+
+    /** A rocket refusal path may return directly or after only the passive diagnostic write. */
+    private static boolean returnsAtMostWithRocketMarker(Trace trace, int index) {
+        if (index < 0 || index >= trace.steps.size()) return false;
+        Step step = trace.steps.get(index);
+        if (step.opcode == Opcodes.RETURN) return true;
+        if (step.opcode == Opcodes.ALOAD && Integer.valueOf(0).equals(step.operand())
+                && index + 2 < trace.steps.size()) {
+            Step constant = trace.steps.get(index + 1);
+            boolean load = constant.opcode >= Opcodes.ICONST_M1 && constant.opcode <= Opcodes.ICONST_5
+                    || constant.opcode == Opcodes.LDC || constant.opcode == Opcodes.BIPUSH
+                    || constant.opcode == Opcodes.SIPUSH;
+            Step write = trace.steps.get(index + 2);
+            return load && write.opcode == Opcodes.PUTFIELD && "lastRocketBlock".equals(write.name)
+                    && index + 3 < trace.steps.size()
+                    && trace.steps.get(index + 3).opcode == Opcodes.RETURN;
+        }
+        return false;
     }
 
     private static Map<String, Trace> readFlight() throws IOException {

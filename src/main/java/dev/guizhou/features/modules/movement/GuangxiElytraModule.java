@@ -150,6 +150,12 @@ public class GuangxiElytraModule extends Module {
     private int boostRemaining;
     private boolean attachedBoost;
 
+    // passive diagnostics, written on the game thread and read by TelemetryManager; never affect flight
+    private volatile double lastRequestedBpt;
+    private volatile double lastAppliedBpt;
+    private volatile int lastAppliedTick = Integer.MIN_VALUE;
+    private volatile int lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
+
     // auto-equip state
     private boolean weEquipped;
     private int stowedChestSlot = -1;
@@ -531,7 +537,36 @@ clearFlightRotation();
             safetyHoldTicks = 6;
         }
         lastApplied = applied;
+        lastRequestedBpt = request.length();
+        lastAppliedBpt = applied.length();
+        lastAppliedTick = mc.player.tickCount;
         return applied;
+    }
+
+    /** Observation-only accessors for the flight diagnostics window. */
+    public boolean isBoostAttached() {
+        return attachedBoost;
+    }
+
+    public boolean isArmorSwapActive() {
+        return armorSwap.active();
+    }
+
+    public double lastRequestedBpt() {
+        return lastRequestedBpt;
+    }
+
+    public double lastAppliedBpt() {
+        return lastAppliedBpt;
+    }
+
+    /** Player tick of the last applyFlightVelocity; older stamps are not fresh samples. */
+    public int lastAppliedTick() {
+        return lastAppliedTick;
+    }
+
+    public int lastRocketBlock() {
+        return lastRocketBlock;
     }
 
     /** CONTROL / ROTATION direction per rennaikanksmp ElytraFlight. */
@@ -1107,20 +1142,43 @@ clearFlightRotation();
     }
 
     private void tryRocket(double targetSpeed) {
-        if (!canUseRocket() || mc.player.isUsingItem()) return;
-        if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()) return;
+        if (!canUseRocket()) {
+            lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NOT_ENABLED;
+            return;
+        }
+        if (mc.player.isUsingItem()) {
+            lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_USING_ITEM;
+            return;
+        }
+        if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()) {
+            lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_MACE_DESCENT;
+            return;
+        }
         double velocitySq = mc.player.getDeltaMovement().lengthSqr();
-        if (targetSpeed != Double.MAX_VALUE && velocitySq >= targetSpeed * targetSpeed) return;
-        if (ticksSinceRocket < refireTicks) return;
-        if (hasUsefulBoost()) return;
+        if (targetSpeed != Double.MAX_VALUE && velocitySq >= targetSpeed * targetSpeed) {
+            lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_SPEED_GATE;
+            return;
+        }
+        if (ticksSinceRocket < refireTicks) {
+            lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_REFIRE;
+            return;
+        }
+        if (hasUsefulBoost()) {
+            lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_USEFUL_BOOST;
+            return;
+        }
 
         Result rocket = InventoryUtil.find(GuangxiElytraModule::safeRocket, FULL_SCOPE);
         if (!rocket.found()) {
             ticksSinceRocket = -40;
+            lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NO_ROCKET;
             return;
         }
 
-        if (!rocketTrajectoryClear(mc.player.getLookAngle())) return;
+        if (!rocketTrajectoryClear(mc.player.getLookAngle())) {
+            lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_TRAJECTORY;
+            return;
+        }
 
         int nextRefire = estimatedRocketLifetime(rocket.stack()) - 1;
         boolean[] used = {false};
@@ -1134,6 +1192,7 @@ clearFlightRotation();
             ticksSinceRocket = 0;
             refireTicks = nextRefire;
             boostScanTick = Integer.MIN_VALUE;
+            lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
         }
     }
 
