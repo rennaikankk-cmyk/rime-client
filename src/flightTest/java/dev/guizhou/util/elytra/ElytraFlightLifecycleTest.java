@@ -96,10 +96,15 @@ public final class ElytraFlightLifecycleTest {
         check(rocket.hasCall("active") && rocket.hasCall("usableElytra"),
                 "Armor-cycle rockets must wait for a worn-wing restart window");
         Trace requested = methods.get("wantsArmorSwap");
-        check(requested.hasCall("isEnabled")
+        check(requested.hasCall("armorFlyRequested")
                         && requested.fieldAfter(Opcodes.GETFIELD, "correctionPending", -1) >= 0
                         && requested.fieldAfter(Opcodes.GETFIELD, "boostRetryTick", -1) >= 0,
-                "Armor restarts must stop while flight is disabled or recovering from a correction");
+                "Armor restarts need an independent or legacy owner and must respect correction recovery");
+        Trace owner = methods.get("armorFlyRequested");
+        check(owner.hasCall("authorized") && owner.hasCall("requested") && owner.hasCall("isEnabled"),
+                "Independent armor ownership must retain authorization and the legacy setting");
+        check(disable.hasCall("requested") && methods.get("releaseArmorFly").hasCall("armorFlyRequested"),
+                "Closing either flight owner must preserve the other owner");
         int descent = requested.call("preservesMaceDescent");
         Step descending = requested.steps.get(descent + 1);
         check(descending.opcode == Opcodes.IFNE,
@@ -193,24 +198,29 @@ public final class ElytraFlightLifecycleTest {
         check(blockedTrajectory.opcode == Opcodes.IFNE
                         && returnsAtMostWithRocketMarker(use, trajectory + 2),
                 "Moving the expensive trajectory check must preserve its collision rejection");
-        check(use.call("getLookAngle") < trajectory,
+        check(use.call("rocketLaunchDirection") < trajectory,
                 "The final rocket trajectory check must still inspect the actual outgoing flight direction");
         int refreshTrajectory = refresh.call("rocketTrajectoryClear");
         check(refresh.hasCall("preservesMaceDescent") && refresh.call("found") < refreshTrajectory
-                        && refresh.call("getLookAngle") < refreshTrajectory,
+                        && refresh.call("rocketLaunchDirection") < refreshTrajectory,
                 "A spear may release charging only for a present rocket with a safe actual launch direction");
         Step refusedRefresh = refresh.steps.get(refreshTrajectory + 1);
         check(refusedRefresh.opcode == Opcodes.IFEQ,
                 "A blocked rocket trajectory must refuse the spear boost-refresh request");
         assertFalseReturn(refresh, refresh.target(refusedRefresh), "Blocked spear boost refresh");
         Trace trajectoryCheck = methods.get("rocketTrajectoryClear");
-        check(trajectoryCheck.hasCall("trajectoryClear") && !trajectoryCheck.hasCall("getLookAngle")
+        check(trajectoryCheck.hasCall("rocketLaunchClear") && !trajectoryCheck.hasCall("getLookAngle")
                         && trajectoryCheck.fieldAfter(Opcodes.GETFIELD, "terrainGuard", -1) >= 0
                         && trajectoryCheck.fieldAfter(Opcodes.GETFIELD, "safeLanding", -1) >= 0,
                 "Both boost request and launch must share the same terrain and landing trajectory predicate");
         check(trajectoryCheck.handles.stream().anyMatch(handle -> handle.getOwner().equals(FLIGHT)
                         && handle.getName().equals("clearRelativePath")),
                 "The shared launch predicate must retain the live swept-body collision check");
+        Trace direction = methods.get("rocketLaunchDirection");
+        check(direction.hasCall("isRotating") && direction.hasCall("isBypassUseSpoof")
+                        && direction.hasCall("getRotationPitch") && direction.hasCall("getRotationYaw")
+                        && direction.hasCall("getLookAngle"),
+                "Launch safety must match the use-packet rotation while retaining the manual-view fallback");
     }
 
     private static void verifySafeRocketPredicate(Trace safe) {

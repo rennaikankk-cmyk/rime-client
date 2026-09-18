@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"combat_runtime_probe","version":"1","name":"Isolated Combat Runtime Probe","environment":"client","entrypoints":{"client":["probe.CombatProbe"]},"depends":{"fabricloader":">=0.18.0","minecraft":"1.21.11","guizhouware":"*"}}

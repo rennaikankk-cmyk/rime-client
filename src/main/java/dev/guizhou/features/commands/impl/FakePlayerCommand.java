@@ -102,6 +102,7 @@ public class FakePlayerCommand extends Command {
         RemotePlayer fake = new RemotePlayer(mc.level, profile);
         fake.setId(nextId--);
         fake.copyPosition(mc.player);
+        fake.setOnGround(mc.player.onGround());
         fake.setYHeadRot(mc.player.getYHeadRot());
         fake.setHealth(20f);
         for (EquipmentSlot slot : COPIED_SLOTS) {
@@ -109,6 +110,7 @@ public class FakePlayerCommand extends Command {
         }
         mc.level.addEntity(fake);
         spawned.add(fake);
+        Command.sendMessage("本地假人可用于观察追踪与接近动作；它不在服务器上，不会收到真实伤害。伤害/图腾测试请使用服务器训练目标（.fakeplayer pop 仅模拟图腾动画）。");
         if (despawned > 0) {
             return success("Replaced fake player with {green} %s", name);
         }

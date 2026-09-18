@@ -7,6 +7,7 @@ public final class MaceApproachTest {
     private static int checks;
 
     public static void main(String[] args) {
+        stationaryRecovery();
         close(3.0, time(new Vec3(6, 0, 0), Vec3.ZERO, 2, 0), "stationary");
         close(6.0, time(new Vec3(6, 0, 0), new Vec3(1, 0, 0), 2, 0), "fleeing");
         close(1.5, time(new Vec3(6, 0, 0), new Vec3(-2, 0, 0), 2, 0), "equal-speed meeting");
@@ -58,7 +59,8 @@ public final class MaceApproachTest {
             Vec3 velocity = new Vec3(i % 7 * 0.13, i % 3 * 0.11, i % 5 * 0.09);
             var p = MaceApproach.climb(Vec3.ZERO, new Vec3(5 + i % 23, i % 9, 2), velocity,
                     2.4, 4 + i % 40, 1.5, i % 4, true);
-            check(Double.isFinite(p.aim().lengthSqr()) && p.ticks() <= 20 && p.ticks() >= 0,
+            check(Double.isFinite(p.aim().lengthSqr())
+                            && (velocity.lengthSqr() < 1.0E-8 || p.ticks() <= 20) && p.ticks() >= 0,
                     "bounded finite plan");
         }
         for (Vec3 velocity : new Vec3[]{new Vec3(0.8, 0, 0), new Vec3(0.6, 0.2, 0.8)}) {
@@ -70,6 +72,24 @@ public final class MaceApproachTest {
                     + legacy + " ticks, adaptive climb " + adaptive + " ticks (not a server benchmark)");
         }
         System.out.println("MaceApproachTest passed: " + checks + " checks");
+    }
+
+    private static void stationaryRecovery() {
+        for (double speed : new double[]{0.5, 1.0, 2.0}) {
+            for (double height : new double[]{10, 64}) {
+                Vec3 self = new Vec3(0, 0, 0), target = new Vec3(1, 0, 0);
+                var plan = MaceApproach.climb(self, target, Vec3.ZERO, speed, height, 1.5, 0, true);
+                check(plan.reachable(), "A stationary nearby target must not trap a slow player in horizontal catch-up");
+                close(height, plan.height(), "A stationary target does not require sacrificing smash height");
+                close(height, plan.aim().y, "Low-altitude recovery must request a real climb");
+                for (int tick = 0; tick < 160 && self.y < height - 0.1; tick++) {
+                    plan = MaceApproach.climb(self, target, Vec3.ZERO, speed, height, 1.5, 0, true);
+                    Vec3 offset = plan.aim().subtract(self);
+                    self = self.add(offset.normalize().scale(Math.min(speed, offset.length())));
+                }
+                check(self.y >= height - 0.1, "Repeated replanning must complete the stationary-target climb");
+            }
+        }
     }
 
     private static int approachTicks(Vec3 velocity, boolean adaptive) {

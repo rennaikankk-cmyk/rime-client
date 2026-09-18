@@ -202,7 +202,7 @@ public final class ArmorSwapController {
     }
 
     private void finishMonitoring() {
-        if (!cycle.active() && !flight.isEnabled() && registered) {
+        if (!cycle.active() && !flight.isEnabled() && !flight.armorFlyRequested() && registered) {
             EVENT_BUS.unregister(this);
             registered = false;
         }

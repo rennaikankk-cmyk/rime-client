@@ -13,6 +13,7 @@ public final class FlightTerrainSafetyTest {
         movingTerrain();
         trajectories();
         rocketTrajectories();
+        rocketLaunchRecovery();
         recoveryHeadroom();
         invalidInputs();
         boundedHorizon();
@@ -55,7 +56,11 @@ public final class FlightTerrainSafetyTest {
     private static void recoveryHeadroom() {
         Vec3 velocity = new Vec3(0.0, -0.6, 1.0);
         var openRecovery = FlightTerrainSafety.recoveryLook(velocity, FORWARD, GRAVITY, 12, OPEN);
-        check(openRecovery.isPresent() && openRecovery.get().y > 0.5, "Open space prefers moderate pull-up");
+        check(openRecovery.isPresent() && Math.abs(openRecovery.get().y) < 1.0E-6,
+                "A clear level escape must not repeatedly climb over a grounded combat target");
+        var forcedClimb = FlightTerrainSafety.recoveryLook(velocity, FORWARD, GRAVITY, 12, floor(-3.0));
+        check(forcedClimb.isPresent() && forcedClimb.get().y > 0.0,
+                "When level travel would hit the floor recovery still pulls up");
         FlightTerrainSafety.Clearance ceiling = obstacle(-100.0, 0.8, -100.0, 100.0, 2.0, 100.0);
         var underCeiling = FlightTerrainSafety.recoveryLook(velocity, FORWARD, GRAVITY, 5, ceiling);
         check(underCeiling.isPresent(), "A level escape remains available below a low ceiling");
@@ -94,8 +99,11 @@ public final class FlightTerrainSafetyTest {
         check(!FlightTerrainSafety.trajectoryClear(slow, Vec3.ZERO, GRAVITY, 4, true, OPEN),
                 "Boosted prediction rejects an undefined heading");
         FlightTerrainSafety.Clearance ceiling = obstacle(-100.0, 1.2, -100.0, 100.0, 3.0, 100.0);
-        check(FlightTerrainSafety.recoveryLook(slow, FORWARD, GRAVITY, 4, false, ceiling)
-                .orElseThrow().y > 0.5, "Unboosted recovery can pull up below this ceiling");
+        Vec3 pullUp = ElytraPhysics.pitchYawToRotation(-35.0F, 0.0F);
+        check(FlightTerrainSafety.trajectoryClear(slow, pullUp, GRAVITY, 4, false, ceiling),
+                "Unboosted pull-up fits below this ceiling");
+        check(!FlightTerrainSafety.trajectoryClear(slow, pullUp, GRAVITY, 4, true, ceiling),
+                "The same boosted pull-up would hit the ceiling");
         check(Math.abs(FlightTerrainSafety.recoveryLook(slow, FORWARD, GRAVITY, 4, true, ceiling)
                 .orElseThrow().y) < 1.0E-6, "Boosted recovery rejects pull-ups that would hit the ceiling");
     }
@@ -115,6 +123,27 @@ public final class FlightTerrainSafetyTest {
         check(!FlightTerrainSafety.trajectoryClear(FORWARD, FORWARD, -1.0, 12, OPEN), "Negative gravity is invalid");
         check(FlightTerrainSafety.landingRisk(FORWARD, GRAVITY, 12, null), "Missing collision world fails closed");
         check(risk(new Vec3(Double.MAX_VALUE, -1.0, Double.MAX_VALUE), OPEN), "Overflow magnitude fails closed");
+    }
+
+    private static void rocketLaunchRecovery() {
+        Vec3 slow = new Vec3(0.0, -0.02, 0.1);
+        Vec3 up = new Vec3(0.0, Math.sin(Math.toRadians(35)), Math.cos(Math.toRadians(35)));
+        check(!FlightTerrainSafety.trajectoryClear(slow, up, GRAVITY, 16, true, floor(-1)),
+                "Baseline reproduces low-altitude launch refusal when unboosted glide reaches the floor");
+        check(FlightTerrainSafety.rocketLaunchClear(slow, up, GRAVITY, 16, 2, 10, floor(-1)),
+                "A new rocket can recover low-speed flight when its delayed, finite burn clears the floor");
+        check(!FlightTerrainSafety.rocketLaunchClear(new Vec3(0,-1,0.1), up, GRAVITY, 16, 2, 10, floor(-1)),
+                "Do not assume thrust arrives before a delayed launch would hit the floor");
+        check(!FlightTerrainSafety.rocketLaunchClear(slow, up, GRAVITY, 16, 2, 10,
+                obstacle(-100,0.8,-100,100,2,100)), "Recovery cannot launch into a low ceiling");
+        check(!FlightTerrainSafety.rocketLaunchClear(slow, FORWARD, GRAVITY, 16, 2, 10,
+                obstacle(-4,-10,3,4,10,4)), "Recovery cannot launch through a wall");
+        check(!FlightTerrainSafety.rocketLaunchClear(slow, FORWARD, GRAVITY, 40, 0, 1, floor(-1)),
+                "Launch prediction must also check the coast after a short burn ends");
+        check(!FlightTerrainSafety.rocketLaunchClear(slow, up, GRAVITY, 16, -1, 10, OPEN)
+                && !FlightTerrainSafety.rocketLaunchClear(slow, up, GRAVITY, 16, 11, 10, OPEN)
+                && !FlightTerrainSafety.rocketLaunchClear(slow, up, GRAVITY, 16, 2, 0, OPEN),
+                "Invalid arrival or burn bounds fail closed");
     }
 
     private static void boundedHorizon() {

@@ -228,14 +228,48 @@ public class GuangxiElytraModule extends Module {
     }
 
     public boolean wantsArmorSwap() {
-        return isEnabled() && armorFly.getValue() && mc.player != null && !correctionPending.get()
+        return armorFlyRequested() && mc.player != null && !correctionPending.get()
                 && mc.player.tickCount >= boostRetryTick
                 && !dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()
                 && !needsLandingRecovery();
     }
 
+    public boolean armorFlyRequested() {
+        return dev.guizhou.manager.HeartbeatManager.authorized()
+                && (ArmorFlyModule.requested() || isEnabled() && armorFly.getValue());
+    }
+
+    public void monitorArmorFly() { armorSwap.monitor(); }
+
+    public void releaseArmorFly() {
+        if (!armorFlyRequested()) {
+            armorSwap.stop();
+            if (!isEnabled()) swapBackChest();
+        }
+    }
+
     public void finishArmorSwapRecovery() {
-        finishDiveRecovery();
+        if (!isEnabled() && ArmorFlyModule.requested()) resumeGliding();
+        else finishDiveRecovery();
+    }
+
+    public void independentArmorCorrection() { correctionPending.set(true); }
+
+    /** Reuse equipment and rocket safety without owning motion, rotation or packet filtering. */
+    public void serviceIndependentArmorFly(boolean rockets) {
+        if (isEnabled() || !ArmorFlyModule.requested()) return;
+        lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
+        checkFlightSession();
+        if (nullCheck() || mc.player == null || mc.gameMode == null) return;
+        if (correctionPending.getAndSet(false)) {
+            resetFlightState();
+            boostRetryTick = (long) mc.player.tickCount + correctionPauseTicks.getValue();
+        }
+        scanAttachedBoosts();
+        if (mc.player.tickCount < boostRetryTick) return;
+        if (ticksSinceRocket < Integer.MAX_VALUE) ticksSinceRocket++;
+        if (!mc.player.isFallFlying()) maybeTakeoff();
+        else if (rockets) tryRocket(Double.MAX_VALUE);
     }
 
     public boolean respectsGlideMomentum() {
@@ -279,8 +313,8 @@ public class GuangxiElytraModule extends Module {
     @Override
     public void onDisable() {
         restoreNoGravity();
-        armorSwap.stop();
-        if (mc.player != null && mc.player == statePlayer) {
+        if (!ArmorFlyModule.requested()) armorSwap.stop();
+        if (!ArmorFlyModule.requested() && mc.player != null && mc.player == statePlayer) {
             swapBackChest();
         }
         resetFlightState();
@@ -835,8 +869,7 @@ clearFlightRotation();
             Vec3 escape = intent.value();
             safetyRocketReady = danger && !intent.isBraking() && escape.lengthSqr() > 1.0E-6
                     && safetyRocketAligned(escape)
-                    && FlightTerrainSafety.trajectoryClear(velocity, escape,
-                    mc.player.getAttributeValue(Attributes.GRAVITY), 16, true, this::clearRelativePath);
+                    && rocketTrajectoryClear(escape);
         }
     }
 
@@ -1142,7 +1175,7 @@ clearFlightRotation();
                 && mc.player.getDeltaMovement().lengthSqr() >= targetSpeed * targetSpeed) return false;
         scanAttachedBoosts();
         return !attachedBoost && InventoryUtil.find(GuangxiElytraModule::safeRocket, FULL_SCOPE).found()
-                && rocketTrajectoryClear(mc.player.getLookAngle());
+                && rocketTrajectoryClear(rocketLaunchDirection());
     }
 
     private void tryRocket(double targetSpeed) {
@@ -1179,7 +1212,7 @@ clearFlightRotation();
             return;
         }
 
-        if (!rocketTrajectoryClear(mc.player.getLookAngle())) {
+        if (!rocketTrajectoryClear(rocketLaunchDirection())) {
             lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_TRAJECTORY;
             return;
         }
@@ -1202,12 +1235,25 @@ clearFlightRotation();
 
     private boolean rocketTrajectoryClear(Vec3 look) {
         return !(terrainGuard.getValue() || safeLanding.getValue())
-                || FlightTerrainSafety.trajectoryClear(mc.player.getDeltaMovement(), look,
-                mc.player.getAttributeValue(Attributes.GRAVITY), 16, true, this::clearRelativePath);
+                || FlightTerrainSafety.rocketLaunchClear(mc.player.getDeltaMovement(), look,
+                mc.player.getAttributeValue(Attributes.GRAVITY), 16, rocketArrivalTicks(), 10, this::clearRelativePath);
+    }
+
+    private int rocketArrivalTicks() {
+        var info = mc.getConnection() == null ? null : mc.getConnection().getPlayerInfo(mc.player.getUUID());
+        return info == null ? 2 : (int) Math.clamp((info.getLatency() + 49L) / 50L + 1, 1, 10);
+    }
+
+    /** Match MixinMultiPlayerGameMode's use-packet rotation, including free-look. */
+    private Vec3 rocketLaunchDirection() {
+        var rotations = GuizhouWare.rotationManager;
+        return rotations != null && rotations.isRotating() && !rotations.isBypassUseSpoof()
+                ? Vec3.directionFromRotation(rotations.getRotationPitch(), rotations.getRotationYaw())
+                : mc.player.getLookAngle();
     }
 
     private boolean canUseRocket() {
-        return isEnabled() && mc.player != null && mc.level != null && mc.gameMode != null
+        return (isEnabled() || ArmorFlyModule.requested()) && mc.player != null && mc.level != null && mc.gameMode != null
                 && mc.getConnection() != null && mc.screen == null
                 && mc.player.containerMenu == mc.player.inventoryMenu
                 && mc.player.containerMenu.getCarried().isEmpty()

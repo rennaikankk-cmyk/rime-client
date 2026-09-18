@@ -32,6 +32,12 @@ public final class MaceApproach {
         double floor = Math.min(height, Math.max(3.0, minimumFall + 1.5));
         double delay = Math.clamp(latency * 0.5, 0.0, 1.5);
         Vec3 observed = target.add(velocity.scale(delay));
+        // A stationary target cannot escape during the climb. Applying the moving-target
+        // detour budget here strands a slow player beside it with a zero-height heading.
+        if (stable && velocity.lengthSqr() < 1.0E-8) {
+            Vec3 apex = target.add(0.0, height, 0.0);
+            return new Plan(apex, height, (apex.distanceTo(self) + height) / speed, true);
+        }
         double horizon = horizon(velocity, stable);
         double direct = interceptTime(observed.subtract(self), velocity, speed, 0.0);
         // Do not buy damage height with an arbitrarily long detour behind a fleeing target.

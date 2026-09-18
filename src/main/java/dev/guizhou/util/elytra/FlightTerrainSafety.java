@@ -81,8 +81,35 @@ public final class FlightTerrainSafety {
         return velocity.scale(0.5).add(look.scale(0.85));
     }
 
+    /** A new rocket has a finite guaranteed burn after its bounded arrival delay.
+     * Unlike an already attached rocket, it cannot expire before it starts. */
+    public static boolean rocketLaunchClear(Vec3 velocity, Vec3 look, double gravity,
+            int horizonTicks, int maxDelayTicks, int burnTicks, Clearance space) {
+        if (!valid(velocity, gravity, horizonTicks, space) || !finite(look)
+                || look.lengthSqr() < EPSILON || maxDelayTicks < 0 || maxDelayTicks > 10
+                || burnTicks < 1 || !space.clear(Vec3.ZERO, Vec3.ZERO)) return false;
+        Vec3 direction = look.normalize();
+        int horizon = Math.min(horizonTicks, MAX_HORIZON);
+        for (int delay = 0; delay <= maxDelayTicks; delay++) {
+            for (boolean boostBefore : new boolean[]{false, true}) {
+                Vec3 position = Vec3.ZERO;
+                Vec3 predicted = velocity;
+                for (int tick = 0; tick < horizon; tick++) {
+                    boolean burning = tick >= delay && (long) tick - delay < burnTicks;
+                    if (burning && boostBefore) predicted = rocketVelocity(predicted, direction);
+                    predicted = ElytraPhysics.simulateGlide(predicted, direction, gravity);
+                    if (burning && !boostBefore) predicted = rocketVelocity(predicted, direction);
+                    Vec3 next = position.add(predicted);
+                    if (!finite(predicted) || !finite(next) || !space.clear(position, next)) return false;
+                    position = next;
+                }
+            }
+        }
+        return true;
+    }
+
     /**
-     * Prefer a moderate pull-up, then shallower or level escape headings. Both
+     * Prefer a clear level escape before pulling up. Both
      * initial headroom and the ensuing glide must be clear. Server corrections
      * are outside this prediction.
      */
@@ -98,7 +125,7 @@ public final class FlightTerrainSafety {
         if (horizontal.lengthSqr() < EPSILON) horizontal = new Vec3(velocity.x, 0.0, velocity.z);
         if (horizontal.lengthSqr() < EPSILON) horizontal = new Vec3(0.0, 0.0, 1.0);
         float yaw = ElytraPhysics.rotationToYaw(horizontal);
-        for (float pitch : new float[]{-35.0F, -20.0F, 0.0F}) {
+        for (float pitch : new float[]{0.0F, -20.0F, -35.0F}) {
             for (float turn : new float[]{0.0F, 30.0F, -30.0F, 60.0F, -60.0F, 90.0F, -90.0F, 180.0F}) {
                 Vec3 look = ElytraPhysics.pitchYawToRotation(pitch, yaw + turn).normalize();
                 if (space.clear(Vec3.ZERO, look.scale(0.75))

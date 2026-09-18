@@ -361,7 +361,8 @@ public class TelemetryManager extends Feature {
                 flight != null && flight.isBoostAttached(),
                 mc.player.getDeltaMovement().horizontalDistance() * 20,
                 requested, applied,
-                flight == null || !flight.isEnabled() ? FlightSummary.BLOCK_NONE : flight.lastRocketBlock());
+                flight == null || !flight.isEnabled() && !flight.armorFlyRequested()
+                        ? FlightSummary.BLOCK_NONE : flight.lastRocketBlock());
     }
 
     private void openFlightWindow(long now, String tag) {
@@ -424,7 +425,7 @@ public class TelemetryManager extends Feature {
             putSetting(config, flight, "RescaleAmount", "rescale_amount");
             putSetting(config, flight, "YCap", "y_cap");
             putSetting(config, flight, "CornerClimb", "corner_climb");
-            putSetting(config, flight, "ArmorFly", "armor_fly");
+            config.addProperty("armor_fly", flight.armorFlyRequested());
             putSetting(config, flight, "GrimBoost", "grim_boost");
             putSetting(config, flight, "PullupAngle", "pullup_angle");
         }

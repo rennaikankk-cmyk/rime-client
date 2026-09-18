@@ -14,7 +14,8 @@ public final class FlightRecoveryPlanTest {
     public static void main(String[] args) {
         FlightCollisionSnapshot open = new FlightCollisionSnapshot(Vec3.ZERO, BODY, BOUNDS, List.of());
         FlightRecoveryPlan plan = new FlightRecoveryPlan(7, 100, Vec3.ZERO, VELOCITY, FORWARD, 0.08, false, open);
-        check(plan.calculate().orElseThrow().y > 0.5, "Open snapshot provides a pull-up candidate");
+        check(Math.abs(plan.calculate().orElseThrow().y) < 1.0E-6,
+                "Open snapshot prefers the same level recovery as the synchronous planner");
         check(new FlightRecoveryPlan(7, 100, Vec3.ZERO, VELOCITY, FORWARD, 0.08, true, open)
                 .calculate().isPresent(), "A bounded local rocket prediction still provides a candidate");
         FlightCollisionSnapshot blocked = new FlightCollisionSnapshot(Vec3.ZERO, BODY, BOUNDS,

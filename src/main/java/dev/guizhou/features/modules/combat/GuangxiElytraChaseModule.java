@@ -98,7 +98,7 @@ public class GuangxiElytraChaseModule extends Module {
 
     // ---- Advanced ----
     private final Setting<Boolean> maceUseExtraAttack = bool("MaceUseExtraAttack", true).setPage("Advanced");
-    private final Setting<Boolean> autoMaceDive = bool("AutoMaceDive", false).setPage("Advanced");
+    private final Setting<Boolean> autoMaceDive = bool("AutoMaceDive", true).setPage("Mace");
     private final Setting<Boolean> maceAdaptive = bool("MaceAdaptive", true).setPage("Advanced");
     private final Setting<Boolean> maceTerminal = bool("MaceTerminal", true).setPage("Advanced");
     private final Setting<Double> maceHeight = num("MaceHeight", 10.0, 1.0, 64.0).setPage("Advanced");
@@ -315,6 +315,9 @@ public class GuangxiElytraChaseModule extends Module {
     public void onEnable() {
         resetRuntime();
         syncFlightControl();
+        if ((mode.getValue() == Mode.MACE || mode.getValue() == Mode.MXS) && !autoMaceDive.getValue()) {
+            dev.guizhou.features.commands.Command.sendMessage("重锤自动下砸未开启：滑翔中不会产生重击。可在 Mace 页开启 AutoMaceDive；需在快捷栏放胸甲。旧配置保留了关闭状态。");
+        }
     }
 
     @Override
@@ -327,6 +330,7 @@ public class GuangxiElytraChaseModule extends Module {
     }
 
     private void resetRuntime() {
+        clearDiveAim();
         flightRoute.reset();
         invalidatePlanning();
         routeAvoiding = false;
@@ -445,6 +449,7 @@ public class GuangxiElytraChaseModule extends Module {
     @Subscribe(priority = 100)
     private void onPreTick(PreTickEvent event) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        clearDiveAim();
 if (nullCheck() || mc.player == null) {
             if (trackedLevel != null || trackedPlayer != null) resetRuntime();
             return;
@@ -649,6 +654,13 @@ if (nullCheck() || mc.player == null) {
         double probe = flight.navigationLookahead();
         Vec3 intended = combatAction == AerialCombatPolicy.Action.CHASE ? behavior.heading : defensiveHeading;
         Vec3 goal = mc.player.position().add(requested.normalize().scale(Math.max(1.0, intended.length())));
+        if (combatAction == AerialCombatPolicy.Action.CHASE
+                && (behavior instanceof SpearBehavior || behavior instanceof MxsBehavior mxs && !mxs.usingMace)) {
+            // The minimum-speed spear request is not an instruction to continue through
+            // the floor beyond a nearby grounded target.
+            double toTarget = mc.player.getEyePosition().distanceTo(target.getEyePosition());
+            goal = mc.player.position().add(requested.normalize().scale(Math.min(intended.length(), toTarget)));
+        }
         if (preservesMaceDescent()) {
             Behavior active = behavior instanceof MxsBehavior mxs ? mxs.active : behavior;
             Vec3 aim = active instanceof MaceBehavior mace ? mace.strikePlan().aim()
@@ -730,7 +742,12 @@ if (nullCheck() || mc.player == null) {
             targetMotion = MotionClass.NORMAL;
             return;
         }
-        targetGrounded = target.onGround();
+        // Stationary remote entities (including local practice dummies) may never
+        // receive a movement packet carrying onGround. Verify support locally too.
+        targetGrounded = target.onGround() || Math.abs(target.getDeltaMovement().y) < 0.1
+                && !(target instanceof LivingEntity living && living.isFallFlying())
+                && mc.level.getBlockCollisions(target,
+                target.getBoundingBox().deflate(0.01).move(0.0, -0.08, 0.0)).iterator().hasNext();
         targetHistory.sample(target.position(), mc.player.tickCount, targetGrounded);
         if (targetGrounded) {
             targetMotion = MotionClass.NORMAL;
@@ -942,6 +959,7 @@ if (nullCheck() || mc.player == null) {
                 naturalFallTicks = 12;
                 clearSpearAim();
                 heading = Vec3.ZERO;
+                aimDiveExit();
                 return FOLLOW;
             }
             double distanceSquared = target.getBoundingBox().distanceToSqr(mc.player.getEyePosition());
@@ -1017,10 +1035,12 @@ if (nullCheck() || mc.player == null) {
             if (!armed || !isValid(target)) return false;
             double configuredRange = target instanceof Player p && isUsingSpear(p)
                     ? spearRange.getValue() : combatRange.getValue();
-            boolean ready = willUseMaceAttack() || maceUseExtraAttack.getValue()
+            boolean smash = willUseMaceAttack();
+            boolean ready = smash || maceUseExtraAttack.getValue()
                     && mc.player.getAttackStrengthScale(0.5F) > 0.95F;
             if (!ready || target.getBoundingBox().distanceToSqr(mc.player.getEyePosition())
                     > configuredRange * configuredRange || !attack(target)) return false;
+            if (!smash) return false; // An optional ordinary hit does not complete a smash pass.
             lastAttackSentTick = mc.player.tickCount;
             state = WAIT_ATTACK;
             terminal = false;
@@ -1081,6 +1101,7 @@ if (nullCheck() || mc.player == null) {
         private void tickDive() {
             heading = Vec3.ZERO;
             weaponControlActive = true;
+            aimDiveExit();
             if (!autoMaceDive.getValue() || EatUtil.shouldDefer() || mc.player.isUsingItem()) {
                 recoverMissedDive();
                 return;
@@ -1098,6 +1119,19 @@ if (nullCheck() || mc.player == null) {
                     || !dropPathClear()) {
                 recoverMissedDive();
             }
+        }
+
+        private void aimDiveExit() {
+            // Removing the wings is asynchronous. Until vanilla clears the glide
+            // flag, keep steering at the drop: restoring the camera here redirects
+            // the still-attached rocket sideways and invalidates the intercept.
+            if (!mc.player.isFallFlying()) {
+                GuizhouWare.rotationManager.cancel("ElytraChase_dive");
+                return;
+            }
+            float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), strikePlan().aim());
+            GuizhouWare.rotationManager.submit(new RotationRequest("ElytraChase_dive", 70,
+                    angles[0], angles[1], RotationRequest.Mode.MOTION, true, true));
         }
 
         /** Climb while awaiting one server confirmation, with a bounded retry window. */
@@ -1160,7 +1194,7 @@ if (nullCheck() || mc.player == null) {
         }
 
         Vec3 targetPos() {
-            Vec3 base = predictedTarget();
+            Vec3 base = predictedTarget().add(spearPacketOffset());
             return targetGrounded
                     ? new Vec3(base.x, target.getEyeY(), base.z)
                     : target.getBoundingBox().getCenter().add(base.subtract(target.position()));
@@ -1187,8 +1221,8 @@ if (nullCheck() || mc.player == null) {
             if (!armed || state != PULL_OVER && !isUsingSpear(mc.player)) {
                 clearSpearAim();
                 state = FOLLOW;
-                Vec3 toward = targetPos().subtract(mc.player.getEyePosition());
-                double distance = toward.length();
+                Vec3 toward = approachHeading(targetPos());
+                double distance = mc.player.getEyePosition().distanceTo(targetPos());
                 double standOff = Math.max(spearAttackDistance.getValue(), 6.0);
                 heading = distance < standOff ? escapeHeading(targetPos())
                         : toward.normalize().scale(Math.max(0.0, distance - standOff));
@@ -1208,7 +1242,11 @@ if (nullCheck() || mc.player == null) {
             }
             state = nextState;
             if (state == PULL_OVER && weapons.isHoldingUse()) prepareWeapon(true, false);
-            if (state != PULL_OVER && !makingChargeRoom && isUsingSpear(mc.player)) aimSpear();
+            if (state != PULL_OVER && !makingChargeRoom && isUsingSpear(mc.player)
+                    && (!targetGrounded || mc.player.getEyeY() <= targetPos().y + 2.5)
+                    && mc.player.getEyePosition().distanceTo(target.getBoundingBox().getCenter())
+                    <= SpearCombat.maxRange(mc.player, mc.player.getUseItem())
+                    + Math.max(1.0, mc.player.getDeltaMovement().length() * 2.0)) aimSpear();
             else clearSpearAim();
         }
 
@@ -1271,10 +1309,21 @@ if (nullCheck() || mc.player == null) {
 
         Vec3 escapeHeading(Vec3 targetPosition) {
             Vec3 away = mc.player.getEyePosition().subtract(targetPosition);
+            if (targetGrounded) away = new Vec3(away.x, 0.0, away.z);
             if (away.lengthSqr() < 1.0E-9) {
                 away = mc.player.getLookAngle().scale(-1.0);
+                if (targetGrounded) away = new Vec3(away.x, 0.0, away.z);
+                if (away.lengthSqr() < 1.0E-9) away = new Vec3(0.0, 0.0, 1.0);
             }
             return away.lengthSqr() < 36.0 ? away.normalize().scale(6.0) : away;
+        }
+
+        @Override
+        void inject(FlightVelocity fv) {
+            super.inject(fv);
+            // A spear pass needs its intercept direction; filling independent envelope
+            // axes can turn a shallow disengagement into a climb over the target.
+            fv.preserveDirection();
         }
 
         boolean tooClose(Vec3 tp) {
@@ -1282,16 +1331,32 @@ if (nullCheck() || mc.player == null) {
             if (isUsingSpear(mc.player)) {
                 noEntry = Math.max(noEntry, SpearCombat.minRange(mc.player, mc.player.getUseItem()) + 0.35);
             }
-            return noEntry > 0.1 && target.getBoundingBox().distanceToSqr(mc.player.getEyePosition())
+            AABB interceptBox = target.getBoundingBox().move(spearPacketOffset());
+            return noEntry > 0.1 && interceptBox.distanceToSqr(mc.player.getEyePosition())
                     < noEntry * noEntry;
         }
 
         Vec3 toTargetAtLeast(Vec3 tp, double minLen) {
-            Vec3 v = tp.subtract(mc.player.getEyePosition());
+            Vec3 v = approachHeading(tp);
             if (v.length() < minLen) {
                 v = v.normalize().scale(minLen);
             }
             return v;
+        }
+
+        Vec3 approachHeading(Vec3 tp) {
+            Vec3 delta = tp.subtract(mc.player.getEyePosition());
+            if (!targetGrounded || delta.y >= -2.5) return delta;
+            // Establish a shallow approach lane before aiming the weapon. A vertical
+            // chase over a grounded target otherwise alternates dive and terrain pull-up.
+            Vec3 flat = new Vec3(delta.x, 0.0, delta.z);
+            double distance = flat.length();
+            if (distance < Math.max(8.0, Math.min(-delta.y * 3.0, range.getValue() * 0.4))) {
+                flat = distance > 0.01 ? flat.scale(-1.0 / distance)
+                        : new Vec3(mc.player.getDeltaMovement().x, 0.0, mc.player.getDeltaMovement().z).normalize();
+                if (flat.lengthSqr() < 1.0E-6) flat = new Vec3(0.0, 0.0, 1.0);
+            } else flat = flat.normalize();
+            return flat.add(0.0, -0.18, 0.0).normalize().scale(6.0);
         }
 
         /** IX.adjustMovementForSpear: sidestep when their charged-spear ray hits us. */
@@ -1475,6 +1540,7 @@ if (nullCheck() || mc.player == null) {
         Vec3 actualLook = Vec3.directionFromRotation(sentPitch, sentYaw);
         if (!box.contains(eye) && box.clip(eye, eye.add(actualLook.scale(reach))).isEmpty()) return false;
 
+        boolean smash = willUseMaceAttack();
         attackGeneration++;
         maceFeedback.clear();
         pendingAttack = null;
@@ -1489,7 +1555,7 @@ if (nullCheck() || mc.player == null) {
         }
         if (attempt == null || attempt.isCancelled()) return false;
         lastAttackTick = mc.player.tickCount;
-        maceFeedback.arm(entity.getId(), lastAttackTick, confirmationTicks());
+        if (smash) maceFeedback.arm(entity.getId(), lastAttackTick, confirmationTicks());
         mc.player.swing(InteractionHand.MAIN_HAND);
         return true;
     }
@@ -1514,12 +1580,25 @@ if (nullCheck() || mc.player == null) {
         return confirmationTicks;
     }
 
+    private void clearDiveAim() {
+        if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("ElytraChase_dive");
+    }
+
     private void aimSpear() {
         Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
-        Vec3 aim = target.getBoundingBox().getCenter().add(velocity.scale(Math.min(2.0, latencyTicks * 0.5)));
+        Vec3 aim = target.getBoundingBox().getCenter().add(spearPacketOffset())
+                .add(velocity.scale(Math.min(3.0, 1.0 + latencyTicks * 0.5)));
         float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), aim);
         GuizhouWare.rotationManager.submit(new RotationRequest("ElytraChase_spear", 15,
                 angles[0], angles[1], RotationRequest.Mode.MOTION, true, true));
+    }
+
+    private Vec3 spearPacketOffset() {
+        var interpolation = target.getInterpolation();
+        if (interpolation == null || !interpolation.hasActiveInterpolation()) return Vec3.ZERO;
+        Vec3 offset = interpolation.position().subtract(target.position());
+        // A teleport/discontinuity is not a reliable short-range attack estimate.
+        return Double.isFinite(offset.lengthSqr()) && offset.lengthSqr() <= 144.0 ? offset : Vec3.ZERO;
     }
 
     private void clearSpearAim() {

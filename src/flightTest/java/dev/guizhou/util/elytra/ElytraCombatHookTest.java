@@ -50,7 +50,41 @@ public final class ElytraCombatHookTest {
         verifyDefenseIntegration();
         verifyDiveIntegration();
         verifyMaceDescentOwnership();
+        verifyCombatRegressionWiring();
         System.out.println("ElytraCombatHookTest passed: " + checks + " checks");
+    }
+
+    private static void verifyCombatRegressionWiring() throws IOException {
+        Map<String, Trace> chase = read(CHASE);
+        Map<String, Trace> mace = read(CHASE + "$MaceBehavior");
+        Map<String, Trace> spear = read(CHASE + "$SpearBehavior");
+        for (String name : List.of("tickFollow", "tickDive")) {
+            check(method(mace, name).hasCall(CHASE + "$MaceBehavior", "aimDiveExit"),
+                    "Glide exit must retain dive steering from entry through flag acknowledgement");
+        }
+        Trace exit = method(mace, "aimDiveExit");
+        check(exit.hasCall("net/minecraft/client/player/LocalPlayer", "isFallFlying")
+                        && exit.hasCall(ROTATION, "submit") && exit.hasCall(ROTATION, "cancel"),
+                "Dive steering ends after the real glide flag ends");
+        for (String name : List.of("onPreTick", "resetRuntime")) {
+            check(method(chase, name).hasCall(CHASE, "clearDiveAim"),
+                    "Paused, disabled, or changed-target ticks must not retain a dive rotation");
+        }
+        check(method(spear, "inject").hasCall("dev/guizhou/util/elytra/FlightVelocity", "preserveDirection"),
+                "Spear steering must not independently expand the climb axis");
+        check(method(spear, "toTargetAtLeast").hasCall(CHASE + "$SpearBehavior", "approachHeading"),
+                "Ground approaches must pass through the shallow-lane planner");
+        for (String name : List.of("targetPos", "tooClose")) {
+            check(method(spear, name).hasCall(CHASE, "spearPacketOffset"),
+                    "Spear steering and retreat must not use a stale rendered target position");
+        }
+        check(method(chase, "aimSpear").hasCall(CHASE, "spearPacketOffset"),
+                "Spear aim must include the same packet position as navigation");
+        Trace standalone = method(read(FLIGHT), "serviceIndependentArmorFly");
+        for (String forbidden : List.of("enable", "alignLook", "applyFlightVelocity", "buildSetbackTrigger")) {
+            check(!standalone.hasCall(FLIGHT, forbidden), "Independent armor must not take direction or exploit ownership");
+        }
+        check(standalone.hasCall(FLIGHT, "tryRocket"), "Independent armor must service rockets in its wing window");
     }
 
     private static void verifyVanillaSmashGate() throws IOException {

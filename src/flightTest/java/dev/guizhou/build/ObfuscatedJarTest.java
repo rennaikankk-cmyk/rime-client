@@ -268,7 +268,7 @@ public final class ObfuscatedJarTest {
         requiredMethod(heartbeat, authorized + "()Z");
         requiredMethod(heartbeat, denied + "()V");
         for (String simpleName : List.of("GuangxiCrystalModule", "GuangxiElytraChaseModule",
-                "GuangxiBedModule", "GuangxiElytraModule", "GuangxiMineModule", "AutoUseModule")) {
+                "GuangxiBedModule", "GuangxiElytraModule", "GuangxiMineModule", "AutoUseModule", "ArmorFlyModule")) {
             List<ClassInfo> matches = before.values().stream()
                     .filter(info -> info.name.endsWith("/" + simpleName)).toList();
             check(matches.size() == 1, "Expected one protected module: " + simpleName);
@@ -279,7 +279,7 @@ public final class ObfuscatedJarTest {
                             && method.descriptor.endsWith(";)V"))
                     .filter(method -> method.steps.stream().anyMatch(step ->
                             member(step, Opcodes.INVOKESTATIC, HEARTBEAT, "authorized", "()Z"))).toList();
-            int expectedCheckpoints = simpleName.equals("GuangxiElytraChaseModule") ? 2 : 1;
+            int expectedCheckpoints = simpleName.equals("GuangxiElytraChaseModule") || simpleName.equals("ArmorFlyModule") ? 2 : 1;
             check(sourceTicks.size() == expectedCheckpoints, "Input authorization checkpoint count: " + simpleName);
             for (MethodInfo sourceTick : sourceTicks) {
                 String tickName = sourceTick.name;
