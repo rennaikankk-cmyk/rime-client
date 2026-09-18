@@ -596,7 +596,7 @@ public final class ElytraCombatHookTest {
         Trace rocket = method(movement, "tryRocket");
         int preserveRocket = rocket.call(CHASE, "preservesMaceDescent");
         check(rocket.steps.get(preserveRocket + 1).opcode == Opcodes.IFEQ
-                        && rocket.steps.get(preserveRocket + 2).opcode == Opcodes.RETURN,
+                        && rocketRefusalOnlyPassiveMarker(rocket, preserveRocket + 2),
                 "Automatic rocket use cannot interrupt the natural mace descent");
 
         Trace safety = method(movement, "applyTerrainSafety");
@@ -753,6 +753,21 @@ public final class ElytraCombatHookTest {
     private static void check(boolean value, String message) {
         checks++;
         if (!value) throw new AssertionError(message);
+    }
+
+    /** A refusal path may return directly or after only the passive rocket-block write. */
+    private static boolean rocketRefusalOnlyPassiveMarker(Trace trace, int index) {
+        if (index < 0 || index >= trace.steps.size()) return false;
+        Step step = trace.steps.get(index);
+        if (step.opcode == Opcodes.RETURN) return true;
+        if (step.opcode != Opcodes.ALOAD || !Integer.valueOf(0).equals(step.constant())
+                || index + 3 >= trace.steps.size()) return false;
+        boolean load = trace.steps.get(index + 1).opcode >= Opcodes.ICONST_M1
+                && trace.steps.get(index + 1).opcode <= Opcodes.ICONST_5
+                || trace.steps.get(index + 1).opcode == Opcodes.LDC;
+        Step write = trace.steps.get(index + 2);
+        return load && write.opcode == Opcodes.PUTFIELD && "lastRocketBlock".equals(write.name)
+                && trace.steps.get(index + 3).opcode == Opcodes.RETURN;
     }
 
     private static final class Trace {
