@@ -9,8 +9,13 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
+import dev.guizhou.event.impl.entity.player.PreTickEvent;
+import dev.guizhou.event.system.EventBus;
+import dev.guizhou.event.system.Subscribe;
+
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,6 +28,8 @@ public final class ElytraCombatHookTest {
     private static final String CHASE = "dev/guizhou/features/modules/combat/GuangxiElytraChaseModule";
     private static final String MACE = "net/minecraft/world/item/MaceItem";
     private static final String ROTATION = "dev/guizhou/manager/RotationManager";
+    private static final String SILENT_WINDOW = ROTATION + "$SilentArbitration";
+    private static final String PRE_TICK_DESC = "(Ldev/guizhou/event/impl/entity/player/PreTickEvent;)V";
     private static final String DAMAGE = "net/minecraft/network/protocol/game/ClientboundDamageEventPacket";
     private static final String FLIGHT = "dev/guizhou/features/modules/movement/GuangxiElytraModule";
     private static int checks;
@@ -30,11 +37,14 @@ public final class ElytraCombatHookTest {
     private ElytraCombatHookTest() {
     }
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, ReflectiveOperationException {
         verifyVanillaSmashGate();
         verifyChaseSmashGate();
         verifyAttackRotation();
         verifyAcceptedAttack();
+        verifySilentWindowBoundary();
+        verifySilentWindowBehavior();
+        verifyEventDispatchOrder();
         verifyDamageFeedback();
         verifyImmediateAttack();
         verifyDefenseIntegration();
@@ -160,6 +170,146 @@ public final class ElytraCombatHookTest {
         int acceptedYaw = rotation.field(CHASE, "sentYaw", Opcodes.PUTFIELD);
         check(!canReach(rotation, 0, acceptedYaw, rotateCancelled, new HashSet<>()),
                 "Unaccepted rotation must not become the attack ray");
+    }
+
+    /** The silent arbitration window must not outlive its tick: the post-movement attack
+     * submission is the closing tick's last opportunity, never the next tick's gate. */
+    private static void verifySilentWindowBoundary() throws IOException {
+        Map<String, Trace> rotation = read(ROTATION);
+        Trace submit = method(rotation, "submit");
+        int blocks = submit.call(SILENT_WINDOW, "blocks");
+        int send = submit.call(ROTATION, "performSilent");
+        int accept = submit.call(SILENT_WINDOW, "accepted");
+        int sync = submit.field(ROTATION, "silentSyncRequired", Opcodes.PUTFIELD);
+        check(blocks < send && send < accept && accept < sync,
+                "Silent submit must arbitrate on the window before sending and still mark the sync after");
+
+        Trace boundary = null;
+        Trace updater = null;
+        for (Map.Entry<String, Trace> entry : rotation.entrySet()) {
+            if (!entry.getKey().endsWith(PRE_TICK_DESC)) continue;
+            if (entry.getValue().priority == Integer.MAX_VALUE) boundary = entry.getValue();
+            if (entry.getValue().priority == Integer.MIN_VALUE) updater = entry.getValue();
+        }
+        check(boundary != null,
+                "A MAX_VALUE tick-boundary listener must close the silent window before combat modules run");
+        int closes = 0;
+        for (Step step : boundary.steps) {
+            if (step.opcode >= Opcodes.INVOKEVIRTUAL && step.opcode <= Opcodes.INVOKEINTERFACE) closes++;
+            check(step.opcode != Opcodes.PUTFIELD || !"silentSyncRequired".equals(step.name),
+                    "The tick boundary must not write the orientation sync marker");
+        }
+        check(closes == 1 && boundary.hasCall(SILENT_WINDOW, "close"),
+                "The tick boundary does nothing but close the arbitration window");
+        check(updater != null, "The MIN_VALUE rotation updater stays the last pre-tick listener");
+
+        Map<String, Trace> mixinRotation = read("dev/guizhou/mixin/entity/MixinLocalPlayerRotation");
+        Trace tail = method(mixinRotation, "guizhouware$spoofRotationTail");
+        check(tail.hasCall(ROTATION, "setSilentSyncRequired") && tail.hasCall(ROTATION, "resetSilentTick"),
+                "The sendPosition tail still consumes the sync marker and closes the window");
+
+        Map<String, Trace> clientPlayer = read("dev/guizhou/mixin/entity/MixinClientPlayerEntity");
+        Trace postHook = method(clientPlayer, "tickHook3");
+        check(postHook.hasCall("dev/guizhou/event/system/EventBus", "post"),
+                "The post-movement hook posts the movement event");
+        // The ordering evidence lives in the @Inject metadata, not in instructions.
+        String[] postTarget = new String[1];
+        String[] postShift = new String[1];
+        readClass("dev/guizhou/mixin/entity/MixinClientPlayerEntity").accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor,
+                                             String signature, String[] exceptions) {
+                if (!name.equals("tickHook3")) return null;
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public AnnotationVisitor visitAnnotation(String annotationDescriptor, boolean visible) {
+                        if (!annotationDescriptor.equals("Lorg/spongepowered/asm/mixin/injection/Inject;")) return null;
+                        return new AnnotationVisitor(Opcodes.ASM9) {
+                            @Override
+                            public AnnotationVisitor visitArray(String member) {
+                                // @Inject#at is an At[] array member.
+                                if (!member.equals("at")) return null;
+                                return new AnnotationVisitor(Opcodes.ASM9) {
+                                    @Override
+                                    public AnnotationVisitor visitAnnotation(String nested, String descriptor) {
+                                        return new AnnotationVisitor(Opcodes.ASM9) {
+                                            @Override
+                                            public void visit(String member, Object value) {
+                                                if (member.equals("target")) postTarget[0] = String.valueOf(value);
+                                            }
+
+                                            @Override
+                                            public void visitEnum(String member, String descriptor, String value) {
+                                                if (member.equals("shift")) postShift[0] = value;
+                                            }
+                                        };
+                                    }
+                                };
+                            }
+                        };
+                    }
+                };
+            }
+        }, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        check(postTarget[0] != null && postTarget[0].contains("sendPosition") && "AFTER".equals(postShift[0]),
+                "The post-movement event fires only after the sendPosition invoke returns");
+    }
+
+    /** Drives the real arbitration window through the reported cross-tick sequence. */
+    private static void verifySilentWindowBehavior() throws ReflectiveOperationException {
+        Class<?> window;
+        try {
+            window = Class.forName(SILENT_WINDOW.replace('/', '.'));
+        } catch (ClassNotFoundException missing) {
+            check(false, "The pure silent-arbitration window is missing: the cross-tick gate is unfixed");
+            return;
+        }
+        Object gate = window.getDeclaredConstructor().newInstance();
+        var blocks = window.getMethod("blocks", int.class);
+        var accept = window.getMethod("accepted", int.class);
+        var close = window.getMethod("close");
+        check(!(Boolean) blocks.invoke(gate, 70), "A fresh window blocks nothing");
+        accept.invoke(gate, 70);
+        check((Boolean) blocks.invoke(gate, 70) && (Boolean) blocks.invoke(gate, 60),
+                "Same window: equal and lower priorities are rejected");
+        check(!(Boolean) blocks.invoke(gate, 80), "Same window: a higher priority is accepted");
+        accept.invoke(gate, 80);
+        check((Boolean) blocks.invoke(gate, 75), "After a higher accept, medium priorities stay gated");
+        close.invoke(gate);
+        accept.invoke(gate, 70);
+        check((Boolean) blocks.invoke(gate, 70),
+                "Inside the post-movement window the same priority is still arbitrated");
+        close.invoke(gate);
+        check(!(Boolean) blocks.invoke(gate, 70),
+                "The next tick's pre-movement silent must not be blocked by the old tick's gate");
+        for (Field field : window.getDeclaredFields()) {
+            check(!field.getName().contains("sync"),
+                    "The arbitration window must not own the orientation sync marker");
+        }
+    }
+
+    /** Premise check with the real dispatcher: the boundary outranks combat listeners. */
+    private static void verifyEventDispatchOrder() {
+        EventBus bus = new EventBus();
+        List<String> order = new ArrayList<>();
+        Object combat = new Object() {
+            @Subscribe(priority = 100)
+            private void onPreTick(PreTickEvent event) { order.add("combat"); }
+        };
+        Object armor = new Object() {
+            @Subscribe(priority = 150)
+            private void onPreTick(PreTickEvent event) { order.add("armor"); }
+        };
+        Object boundary = new Object() {
+            @Subscribe(priority = Integer.MAX_VALUE)
+            private void onPreTick(PreTickEvent event) { order.add("boundary"); }
+        };
+        bus.register(combat);
+        bus.register(armor);
+        bus.register(boundary);
+        bus.post(new PreTickEvent());
+        check(order.equals(List.of("boundary", "armor", "combat")),
+                "EventBus must dispatch the MAX_VALUE tick boundary before armor and combat listeners");
     }
 
     private static void verifyDamageFeedback() throws IOException {

@@ -37,9 +37,35 @@ public class RotationManager {
     private boolean bypassUseSpoof;
 
     private boolean silentSyncRequired;
-    private boolean silentSentThisTick;
+    private final SilentArbitration silentWindow = new SilentArbitration();
     private int silentSentPriority;
     private long lastSilentMs;
+
+    /**
+     * Arbitration window for silent packets: the first accepted send of a window owns it,
+     * equal or lower priorities are rejected until the window closes. Windows close at the
+     * sendPosition tail and at the tick boundary, so a post-movement submission (which runs
+     * after sendPosition) can never gate the next tick's pre-movement requests. The pending
+     * orientation sync and its priority live in the manager and outlive the window on
+     * purpose; they are consumed by the next normal movement packet.
+     */
+    public static final class SilentArbitration {
+        private boolean open;
+        private int priority;
+
+        public boolean blocks(int requestPriority) {
+            return open && requestPriority <= priority;
+        }
+
+        public void accepted(int requestPriority) {
+            open = true;
+            priority = requestPriority;
+        }
+
+        public void close() {
+            open = false;
+        }
+    }
 
     private final List<RotationRequest> requests = new ArrayList<>();
     private String lastActiveId;
@@ -53,9 +79,9 @@ public class RotationManager {
 
     public void submit(RotationRequest request) {
         if (request.mode == RotationRequest.Mode.SILENT) {
-            if (silentSentThisTick && request.priority <= silentSentPriority) return;
+            if (silentWindow.blocks(request.priority)) return;
             performSilent(request);
-            silentSentThisTick = true;
+            silentWindow.accepted(request.priority);
             silentSentPriority = request.priority;
             silentSyncRequired = true;
             lastSilentMs = System.currentTimeMillis();
@@ -82,6 +108,14 @@ public class RotationManager {
                 .map(r -> Math.abs(yawDifference(r.targetYaw, rotationYaw)) <= THRESHOLD
                         && Math.abs(r.targetPitch - rotationPitch) <= THRESHOLD)
                 .orElse(false);
+    }
+
+    /** First listener of every tick: the post-movement silent window died with the old
+     * tick, so its priority must not arbitrate this tick's pre-movement requests. The
+     * pending orientation sync and its priority stay untouched until sendPosition. */
+    @Subscribe(priority = Integer.MAX_VALUE)
+    private void onTickBoundary(PreTickEvent event) {
+        silentWindow.close();
     }
 
     @Subscribe(priority = Integer.MIN_VALUE)
@@ -315,7 +349,7 @@ public class RotationManager {
 
     public void setSilentSyncRequired(boolean required) { silentSyncRequired = required; }
 
-    public void resetSilentTick() { silentSentThisTick = false; }
+    public void resetSilentTick() { silentWindow.close(); }
     public boolean isSilentActive() { return System.currentTimeMillis() - lastSilentMs < 500; }
 
     private static float yawDifference(float target, float current) {
