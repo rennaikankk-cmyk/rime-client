@@ -36,7 +36,10 @@ public final class ItemUseOwnershipTest {
         check(!ownership.ownsHeldUse(player, level, stack, otherStack, true, 2, 2), "A stale use stack does not own the newly held item");
         ownership.start(player, level, stack, ItemUseOwnership.Hand.OFF);
         check(ownership.ownsHeldUse(player, level, stack, stack, false, 2, 2), "Offhand ownership works");
-        check(!ownership.ownsHeldUse(player, level, stack, stack, false, 3, 2), "Offhand use also yields to a slot change");
+        check(ownership.ownsHeldUse(player, level, stack, stack, false, 3, 2),
+                "Offhand use survives a main-hand slot scroll, as in vanilla");
+        check(!ownership.ownsHeldUse(player, level, stack, otherStack, false, 2, 2),
+                "Offhand ownership still requires the held stack identity");
     }
 
     private static void manualTakeover() {

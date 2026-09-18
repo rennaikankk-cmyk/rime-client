@@ -38,7 +38,10 @@ public final class ItemUseOwnership {
 
     public boolean ownsHeldUse(Object currentPlayer, Object currentLevel, Object usingStack,
                                Object heldStack, boolean mainHand, int selected, int originallySelected) {
-        return selected == originallySelected && heldStack == stack
+        // Only a main-hand use follows the selected hotbar slot; vanilla keeps an
+        // off-hand use running through a main-hand scroll, and dropping ownership
+        // there would let the key-release guard put a held shield down.
+        return (!mainHand || selected == originallySelected) && heldStack == stack
                 && ownsActiveUse(currentPlayer, currentLevel, usingStack, mainHand);
     }
 
