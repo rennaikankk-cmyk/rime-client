@@ -28,9 +28,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import dev.guizhou.util.render.font.Fonts;
 
 public class NametagsModule extends Module {
 
+    /** CJK-capable custom font (bundled IB serif chain) for nametag text. */
+    public Setting<Boolean> nametagFont = bool("NametagFont", true).setPage("Info");
     public Setting<Boolean> showPearls  = bool("ShowPearls",  true).setPage("Info");
     public Setting<Boolean> showItems   = bool("ShowItems",   true).setPage("Info");
     public Setting<Boolean> showArmor   = bool("ShowArmor",   true).setPage("Info");
@@ -228,9 +231,9 @@ public class NametagsModule extends Module {
         float anchorY = screen[1];
         float s = (float) Math.max(minScale.getValue(), scale.getValue() * 8.0 / (dist + 8.0));
 
-        int nameW = mc.font.width(name);
+        int nameW = Fonts.nametagWidth(name);
         int halfW = nameW / 2;
-        int textH = mc.font.lineHeight;
+        int textH = Fonts.nametagLineHeight();
         int textTopY = -textH;
 
         graphics.pose().pushMatrix();
@@ -238,7 +241,7 @@ public class NametagsModule extends Module {
         graphics.pose().scale(s, s);
 
         graphics.fill(-halfW - 2, textTopY - 1, halfW + 2, 1, bgColor.getValue().getRGB());
-        graphics.drawString(mc.font, name, -halfW, textTopY, nameArgb);
+        Fonts.drawNametagString(graphics, name, -halfW, textTopY, nameArgb);
 
         graphics.pose().popMatrix();
     }
@@ -260,13 +263,13 @@ public class NametagsModule extends Module {
 
         float s = (float) Math.max(minScale.getValue(), scale.getValue() * 8.0 / (dist + 8.0));
 
-        int nameW      = mc.font.width(name);
-        int secondaryW = mc.font.width(secondaryStr);
+        int nameW      = Fonts.nametagWidth(name);
+        int secondaryW = Fonts.nametagWidth(secondaryStr);
 
         String popsStr = (showPops.getValue() && totemPops > 0) ? " -" + totemPops : "";
-        int popsW = mc.font.width(popsStr);
+        int popsW = Fonts.nametagWidth(popsStr);
 
-        int textH    = mc.font.lineHeight;
+        int textH    = Fonts.nametagLineHeight();
         int textTopY = -textH;
 
         int iconCount = (leadIcons == null) ? 0 : leadIcons.size();
@@ -296,12 +299,12 @@ public class NametagsModule extends Module {
             }
         }
 
-        graphics.drawString(mc.font, name, nameX, textTopY, nameArgb);
+        Fonts.drawNametagString(graphics, name, nameX, textTopY, nameArgb);
         if (!secondaryStr.isEmpty()) {
-            graphics.drawString(mc.font, secondaryStr, nameX + nameW, textTopY, distColor.getValue().getRGB());
+            Fonts.drawNametagString(graphics, secondaryStr, nameX + nameW, textTopY, distColor.getValue().getRGB());
         }
         if (!popsStr.isEmpty()) {
-            graphics.drawString(mc.font, popsStr, nameX + nameW + secondaryW, textTopY, popColor.getValue().getRGB());
+            Fonts.drawNametagString(graphics, popsStr, nameX + nameW + secondaryW, textTopY, popColor.getValue().getRGB());
         }
 
         if (showArmor.getValue()) {

@@ -105,7 +105,8 @@ public class GuangxiBedModule extends Module {
 
     @Subscribe
     private void onPreTick(PreTickEvent event) {
-        if (nullCheck() || mc.player.isDeadOrDying()) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (mc.level.dimension() != Level.NETHER && mc.level.dimension() != Level.END) {
             pendingFoot = null;
             pendingHead = null;
@@ -468,7 +469,7 @@ public class GuangxiBedModule extends Module {
         return Direction.SOUTH;
     }
 
-    @Subscribe
+    @Override
     public void onRender3D(Render3DEvent event) {
         if (!render.getValue() || renderPos == null || nullCheck()) return;
         if (System.currentTimeMillis() - renderStartMs > 1000L) {

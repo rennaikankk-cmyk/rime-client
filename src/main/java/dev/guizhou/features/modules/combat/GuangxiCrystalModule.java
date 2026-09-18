@@ -12,6 +12,8 @@ import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.PlacementManager;
 import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.DamageSyncTracker;
+import dev.guizhou.util.combat.CrystalAttackWindow;
+import dev.guizhou.util.combat.CrystalSelectionPolicy;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.PredictUtil;
@@ -29,7 +31,9 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundExplodePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
@@ -39,7 +43,8 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionHand;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.damagesource.CombatRules;
@@ -56,6 +61,7 @@ import net.minecraft.world.item.enchantment.Enchantments;
 import dev.guizhou.util.EnchantmentUtil;
 import dev.guizhou.util.player.EatUtil;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -71,14 +77,12 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 
 public class GuangxiCrystalModule extends Module {
@@ -124,7 +128,6 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<Integer> syncTimeout      = num("SyncTimeout", 500, 0, 2000).setPage("Sync");
     private final Setting<Integer> switchPause      = num("SwitchPause", 100, 0, 1000).setPage("Sync");
     private final Setting<Integer> minAge           = num("MinAge", 0, 0, 20).setPage("Sync");
-    private final Setting<Boolean> thread           = bool("Thread", false).setPage("Sync");
 
     /** TpsSync (Mio): stretch tick-based delays by 20/measuredTPS so cadence survives server lag,
      *  and pause placements briefly right after a server rubberband. */
@@ -174,8 +177,6 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<RangePreset> rangePreset = mode("RangePreset", RangePreset.B2B2T).setPage("General");
     private final Setting<Double> placeRange = num("PlaceRange", 6.0, 0.0, 6.0).setPage("General");
     private final Setting<Double> breakRange = num("BreakRange", 3.0, 0.0, 6.0).setPage("General");
-    private static final int     BALANCE        = 4;
-    private static final double  HEALTH_BALANCE = 0.20;
     private static final double  ARMOR_BALANCE  = 0.20;
     private static final boolean NO_SELF_POP    = true; // retained for config compatibility; Reserve now drives the margin
 
@@ -189,23 +190,36 @@ public class GuangxiCrystalModule extends Module {
     private final Timer placeTimer  = new Timer();
     private final Timer breakTimer  = new Timer();
     private final Timer switchTimer = new Timer();
+    private final CrystalAttackWindow attackWindow = new CrystalAttackWindow();
 
     private int lastCarriedSlot = -1;
     private long lastBreakMs = 0L;
+    private float sentYaw;
+    private float sentPitch;
+    private boolean sentRotationKnown;
+    private PacketEvent.Send pendingRotation;
+    private PacketEvent.Send pendingAttack;
+    private boolean sendingCrystalAttack;
     private final java.util.concurrent.atomic.AtomicInteger ownSwapPackets =
             new java.util.concurrent.atomic.AtomicInteger(0);
 
-    private final AtomicBoolean calcInFlight = new AtomicBoolean(false);
-    private volatile ExecutorService calcExecutor;
-    private volatile AsyncCalcResult asyncResult;
+    private volatile long lifecycleGeneration;
+    private ClientLevel sessionLevel;
+    private LocalPlayer sessionPlayer;
 
-    private record AsyncCalcResult(PlaceTarget crystal, BasePlaceTarget base, long ts) {}
-
-    private record SelfCache(Vec3 pos, AABB box, float health, float armor, float toughness,
+    private record SelfCache(Vec3 pos, AABB box, Vec3 currentPos, AABB currentBox,
+                             float health, float armor, float toughness,
                              int epf, Difficulty difficulty) {}
 
-    private int selfCacheTick = Integer.MIN_VALUE;
-    private volatile SelfCache selfCache = null;
+    private SelfCache selfCache = null;
+    // tick-scoped entity snapshot: candidate-cell occupancy filters in memory instead of
+    // one world query per candidate (O(candidates) queries -> O(1) per decision cycle)
+    private volatile List<Entity> entitySnapshot = List.of();
+    private volatile int entitySnapshotTick = -1;
+    private record SelfDamageKey(Vec3 center, BlockPos phantomBase) {}
+    private final Map<SelfDamageKey, Float> selfDamageCache = new HashMap<>();
+    private static final EquipmentSlot[] ARMOR_SLOTS = {
+            EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
     private double placeRangeValue() {
         return switch (rangePreset.getValue()) {
@@ -220,6 +234,13 @@ public class GuangxiCrystalModule extends Module {
             case B2B2T, VANILLA -> 3.0;
             case CUSTOM -> breakRange.getValue();
         };
+    }
+
+    /** GuangxiProbe applies measured server boundaries here (preset -> CUSTOM). */
+    public void applyCalibratedRanges(double place, double breakR) {
+        rangePreset.setValue(RangePreset.CUSTOM);
+        placeRange.setValue(Math.max(0.5, Math.min(6.0, place)));
+        breakRange.setValue(Math.max(0.5, Math.min(6.0, breakR)));
     }
 
     private double placeRangeSq() {
@@ -257,13 +278,17 @@ public class GuangxiCrystalModule extends Module {
     /** Raw-buffer attack by entity id — the STREAM_CODEC path lets us hit ids the server has
      *  not sent us yet, because normal attack() needs a live client-side Entity. */
     private void sendGhostAttack(int entityId) {
-        if (mc.getConnection() == null) return;
+        if (mc.getConnection() == null || weaponControlBusy()) return;
         FriendlyByteBuf buf = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
-        buf.writeVarInt(entityId);
-        buf.writeVarInt(1); // ActionType.ATTACK
-        buf.writeBoolean(mc.player.isShiftKeyDown());
-        mc.getConnection().send(ServerboundInteractPacket.STREAM_CODEC.decode(buf));
-        diagGhost++;
+        try {
+            buf.writeVarInt(entityId);
+            buf.writeVarInt(1); // ActionType.ATTACK
+            buf.writeBoolean(mc.player.isShiftKeyDown());
+            mc.getConnection().send(ServerboundInteractPacket.STREAM_CODEC.decode(buf));
+            diagGhost++;
+        } finally {
+            buf.release();
+        }
     }
 
     /** Attacks the {@code factor-1} entity ids after {@code anchorId}: the server hands out ids
@@ -333,40 +358,61 @@ public class GuangxiCrystalModule extends Module {
 
     @Override
     public void onEnable() {
+        lifecycleGeneration++;
+        sessionLevel = mc.level;
+        sessionPlayer = mc.player;
+        resetSessionState();
+        GuizhouWare.placementManager.addListener(placementListener);
+    }
+
+    private void resetSessionState() {
         crystalPlaces.clear();
         deadIds.clear();
+        attackWindow.clear();
         placeTimer.reset();
         breakTimer.reset();
         switchTimer.reset();
         lastBreakMs = 0L;
-        asyncResult = null;
-        calcInFlight.set(false);
+        sentRotationKnown = false;
+        pendingRotation = null;
+        pendingAttack = null;
+        sendingCrystalAttack = false;
         lastBestDamage = 0;
         lastCalcMs = 0;
         lastReactorPlaceTick = -1;
+        lastPlaceAir = null;
+        lastMaxEntityId = -1;
+        lastCarriedSlot = -1;
+        ownSwapPackets.set(0);
+        selfCache = null;
+        entitySnapshot = List.of();
+        entitySnapshotTick = -1;
+        selfDamageCache.clear();
+        cachedChunk = null;
+        cachedChunkX = cachedChunkZ = Integer.MIN_VALUE;
+        seeThrough.clear();
+        miningCheck.clear();
+        candidates.clear();
+        explodeTimes.clear();
+        renderPos = null;
+        smoothBox = null;
         resetDiag();
-        GuizhouWare.placementManager.addListener(placementListener);
+    }
+
+    private void ensureSession() {
+        if (sessionLevel == mc.level && sessionPlayer == mc.player) return;
+        sessionLevel = mc.level;
+        sessionPlayer = mc.player;
+        resetSessionState();
     }
 
     @Override
     public void onDisable() {
+        lifecycleGeneration++;
         GuizhouWare.placementManager.removeListener(placementListener);
-        ExecutorService exec = calcExecutor;
-        if (exec != null) {
-            exec.shutdownNow();
-            calcExecutor = null;
-        }
-        asyncResult = null;
-        calcInFlight.set(false);
-        crystalPlaces.clear();
-        deadIds.clear();
-        lastBestDamage = 0;
-        lastPlaceAir = null;
-        selfCache = null;
-        selfCacheTick = Integer.MIN_VALUE;
-        resetDiag();
-        renderPos = null;
-        smoothBox = null;
+        resetSessionState();
+        sessionLevel = null;
+        sessionPlayer = null;
     }
 
     private void markRender(BlockPos crystalPos) {
@@ -476,9 +522,40 @@ public class GuangxiCrystalModule extends Module {
 
     @Subscribe
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (mc.level == null) return;
+        var packet = event.getPacket();
+        if (!(packet instanceof ClientboundEntityEventPacket)
+                && !(packet instanceof ClientboundAddEntityPacket)
+                && !(packet instanceof ClientboundExplodePacket)
+                && !(packet instanceof ClientboundPlayerPositionPacket)) return;
+        executeForSession(() -> handleIncomingPacket(packet));
+    }
 
-        if (event.getPacket() instanceof ClientboundEntityEventPacket pkt) {
+    private void executeForSession(Runnable action) {
+        ClientLevel level = mc.level;
+        LocalPlayer player = mc.player;
+        long generation = lifecycleGeneration;
+        if (level == null || player == null) return;
+        mc.execute(() -> {
+            if (!isEnabled() || lifecycleGeneration != generation
+                    || mc.level != level || mc.player != player) return;
+            ensureSession();
+            action.run();
+        });
+    }
+
+    private void handleIncomingPacket(net.minecraft.network.protocol.Packet<?> packet) {
+        if (packet instanceof ClientboundPlayerPositionPacket) {
+            sentRotationKnown = false;
+            pendingRotation = null;
+            return;
+        }
+        if (packet instanceof ClientboundExplodePacket) {
+            long now = System.currentTimeMillis();
+            explodeTimes.addLast(now);
+            while (!explodeTimes.isEmpty() && now - explodeTimes.peekFirst() > 1000) explodeTimes.removeFirst();
+            return;
+        }
+        if (packet instanceof ClientboundEntityEventPacket pkt) {
             if (pkt.getEventId() != 3) return;
 
             var e = pkt.getEntity(mc.level);
@@ -486,7 +563,7 @@ public class GuangxiCrystalModule extends Module {
             return;
         }
 
-        if (event.getPacket() instanceof ClientboundAddEntityPacket pkt) {
+        if (packet instanceof ClientboundAddEntityPacket pkt) {
             if (pkt.getId() > lastMaxEntityId) lastMaxEntityId = pkt.getId();
             instaGates[9]++; // any spawn packet reached this listener
             if (packetLog.getValue() && pkt.getType() == EntityType.END_CRYSTAL) {
@@ -499,10 +576,39 @@ public class GuangxiCrystalModule extends Module {
         }
     }
 
-    @Subscribe
+    @Subscribe(priority = Integer.MIN_VALUE)
     private void onPacketSendDiag(PacketEvent.Send event) {
-        if (event.getPacket() instanceof ServerboundSetCarriedItemPacket pkt) {
-            if (ownSwapPackets.getAndUpdate(v -> v > 0 ? v - 1 : 0) > 0) {
+        var packet = event.getPacket();
+        if (sendingCrystalAttack && mc.isSameThread() && packet instanceof ServerboundInteractPacket) {
+            pendingAttack = event;
+        }
+        if (packet instanceof ServerboundMovePlayerPacket move && move.hasRotation()) {
+            executeForSession(() -> {
+                acceptPendingRotation();
+                pendingRotation = event;
+            });
+        }
+        boolean ownSwap = packet instanceof ServerboundSetCarriedItemPacket
+                && ownSwapPackets.getAndUpdate(v -> v > 0 ? v - 1 : 0) > 0;
+        if (!(packet instanceof ServerboundSetCarriedItemPacket) && !packetLog.getValue()) return;
+        executeForSession(() -> {
+            if (!event.isCancelled()) recordOutgoingPacket(packet, ownSwap);
+        });
+    }
+
+    private void acceptPendingRotation() {
+        PacketEvent.Send event = pendingRotation;
+        pendingRotation = null;
+        if (event != null && !event.isCancelled() && event.getPacket() instanceof ServerboundMovePlayerPacket move) {
+            sentYaw = move.getYRot(0.0F);
+            sentPitch = move.getXRot(0.0F);
+            sentRotationKnown = Float.isFinite(sentYaw) && Float.isFinite(sentPitch);
+        }
+    }
+
+    private void recordOutgoingPacket(net.minecraft.network.protocol.Packet<?> packet, boolean ownSwap) {
+        if (packet instanceof ServerboundSetCarriedItemPacket pkt) {
+            if (ownSwap) {
                 // Our own placement swap — must not lock out breaking (placeDelay=0 spam
                 // would otherwise keep the switch-pause permanently engaged).
                 lastCarriedSlot = pkt.getSlot();
@@ -513,7 +619,7 @@ public class GuangxiCrystalModule extends Module {
         }
         // Packet sniffer: logs every placement exactly as it leaves the client, so a
         // working placement (RusherHack / manual) can be diffed against ours field by field.
-        if (packetLog.getValue() && event.getPacket() instanceof ServerboundUseItemOnPacket use) {
+        if (packetLog.getValue() && packet instanceof ServerboundUseItemOnPacket use) {
             var hit = use.getHitResult();
             Vec3 loc = hit.getLocation();
             GuizhouWare.LOGGER.info("[Sniff] use pos={} face={} cur=({},{},{}) hand={} seq={}",
@@ -524,7 +630,7 @@ public class GuangxiCrystalModule extends Module {
                     use.getHand(), use.getSequence());
         }
         if (!packetLog.getValue()) return;
-        diagSendCounts.computeIfAbsent(event.getPacket().getClass().getSimpleName(), k -> new int[1])[0]++;
+        diagSendCounts.computeIfAbsent(packet.getClass().getSimpleName(), k -> new int[1])[0]++;
         diagWindowSends++;
         diagLifetimeSends++;
         long now = System.currentTimeMillis();
@@ -583,10 +689,12 @@ public class GuangxiCrystalModule extends Module {
         if (!doBreak.getValue() || breakDelay.getValue() != 0) { if (pkt.getType() == EntityType.END_CRYSTAL) instaGates[0]++; return; }
         if (pkt.getType() != EntityType.END_CRYSTAL) return;
         if (nullCheck() || mc.player.isDeadOrDying()) return;
+        if (!rubberbandQuiet()) return;
         if (minAge.getValue() > 0) { instaGates[1]++; return; } // fresh spawn is tick 0; tick-loop break respects minAge
         if (!switchTimer.passedMs(tpsMs(switchPause.getValue()))) { instaGates[2]++; return; }
+        if (!attackWindow.canAttack(pkt.getId(), mc.player.tickCount)) return;
 
-        if (EatUtil.shouldDefer()) { instaGates[3]++; return; }
+        if (weaponControlBusy()) { instaGates[3]++; return; }
         AutoSwordModule sword = GuizhouWare.moduleManager.getModuleByClass(AutoSwordModule.class);
         if (sword != null && sword.isEnabled() && sword.isMaceAttackReady()) { instaGates[4]++; return; }
 
@@ -599,18 +707,19 @@ public class GuangxiCrystalModule extends Module {
         if (sqDistToBox(reachEye, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ)
                 > breakRangeSq()) { instaGates[5]++; return; }
 
+        acceptPendingRotation();
+        if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) { instaGates[7]++; return; }
+        ensureSelfCache();
+        updateSeeThrough();
         float playerHealth = selfNow().health();
         if (!selfDamageOk(crystal.position(), null, maxSelfDamage.getValue(), playerHealth)) { instaGates[6]++; return; }
 
-        float serverYaw = GuizhouWare.rotationManager.getServerYaw();
-        float serverPitch = GuizhouWare.rotationManager.getServerPitch();
-        if (!canBreakCrystal(crystal, serverYaw, serverPitch)) { instaGates[7]++; return; }
-        if (!anyBreakTargetReady(crystal.position())) { instaGates[8]++; return; }
-
-        diagInstaBreak++;
-        lastBreakMs = System.currentTimeMillis();
-        mc.player.connection.send(
-                ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown()));
+        TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
+        List<TargetCache> potentialTargets = collectTargets(targets, breakRangeValue() + 14.0);
+        float damage = breakDamage(potentialTargets, crystal.position(), false);
+        if (damage <= 0.0F || !balanceOk(damage, crystal.position(), null)) { instaGates[8]++; return; }
+        if (!sendCrystalAttack(crystal, true)) return;
+        lastBestDamage = damage;
         mc.player.connection.send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
         // Alternation means our next placement is imminent: pre-attack the ids it will spawn at.
         sendGhostAttacksAfter(pkt.getId());
@@ -622,9 +731,12 @@ public class GuangxiCrystalModule extends Module {
     private void onBlockUpdate(BlockPos pos, boolean nowAir) {
         if (!nowAir) return;
         if (nullCheck() || mc.player.isDeadOrDying()) return;
+        ensureSession();
+        if (!rubberbandQuiet()) return;
         ensureSelfCache();
+        refreshEntitySnapshot();
 
-        if (EatUtil.shouldDefer()) return;
+        if (weaponControlBusy()) return;
 
         AutoSwordModule sword = GuizhouWare.moduleManager.getModuleByClass(AutoSwordModule.class);
         if (sword != null && sword.isEnabled() && sword.isMaceAttackReady()) return;
@@ -634,42 +746,48 @@ public class GuangxiCrystalModule extends Module {
 
         updateSeeThrough();
 
+        boolean canBreak = doBreak.getValue() && breakTimer.passedMs(tpsMs(breakDelay.getValue()))
+                && switchTimer.passedMs(tpsMs(switchPause.getValue()));
+        boolean canPlace = place.getValue() && placeTimer.passedMs(tpsMs(placeDelay.getValue()))
+                && canSupplyCrystal() && mc.player.tickCount != lastReactorPlaceTick;
+        if (!canBreak && !canPlace) return;
+
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
         double scanRadius = placeRangeValue() + 12.0;
         List<TargetCache> potentialTargets = collectTargets(targets, scanRadius);
 
-        if (doBreak.getValue() && breakTimer.passedMs(tpsMs(breakDelay.getValue()))) {
+        if (canBreak) {
             EndCrystal target = findBestCrystal(potentialTargets);
-            if (target != null) {
-                breakCrystal(target);
-                breakTimer.reset();
+            if (target != null && breakCrystal(target)) {
                 return;
             }
         }
 
-        if (!place.getValue() || !placeTimer.passedMs(tpsMs(placeDelay.getValue()))) return;
-
-        if (mc.player.tickCount == lastReactorPlaceTick) return;
-        lastReactorPlaceTick = mc.player.tickCount;
-
+        if (!canPlace) return;
         PlaceTarget placeTarget = findBestPlace(potentialTargets);
-        if (placeTarget != null) {
-            doPlace(placeTarget);
+        if (placeTarget != null && doPlace(placeTarget)) {
+            lastReactorPlaceTick = mc.player.tickCount;
             placeTimer.reset();
         }
     }
 
     @Subscribe
     private void onPreTick(PreTickEvent event) {
-        if (nullCheck() || mc.player.isDeadOrDying()) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+if (nullCheck() || mc.player.isDeadOrDying()) return;
+        ensureSession();
         if (!rubberbandQuiet()) {
             lastBestDamage = 0;
             return;
         }
         ensureSelfCache();
+        refreshEntitySnapshot();
         ownSwapPackets.set(0);
 
-        if (EatUtil.shouldDefer()) return;
+        if (weaponControlBusy()) {
+            lastBestDamage = 0;
+            return;
+        }
 
         AutoSwordModule sword = GuizhouWare.moduleManager.getModuleByClass(AutoSwordModule.class);
         if (sword != null && sword.isEnabled() && sword.isMaceAttackReady()) {
@@ -683,58 +801,39 @@ public class GuangxiCrystalModule extends Module {
         boolean antiChineseReady = antiChinese.getValue()
                 && enemyNearby(antiChineseEnemyRange.getValue());
 
+        boolean breakReady = breakTimer.passedMs(tpsMs(breakDelay.getValue()))
+                && switchTimer.passedMs(tpsMs(switchPause.getValue()));
+        boolean canBreak = doBreak.getValue() && breakReady;
+        boolean placeReady = placeTimer.passedMs(tpsMs(placeDelay.getValue()));
+        boolean canPlace = place.getValue() && placeReady && canSupplyCrystal();
+        boolean canBase = basePlace.getValue() && placeReady && canSupplyObsidian();
+        if (!canBreak && !canPlace && !canBase && !antiChineseReady) return;
+
+        long calcStart = System.nanoTime();
+        TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
+        double scanRadius = Math.max(breakRangeValue(), placeRangeValue()) + 12.0
+                + (canBase ? placeRangeValue() : 0.0);
+        if (canBase) scanRadius = Math.max(scanRadius, basePlaceTargetRange.getValue());
+        List<TargetCache> potentialTargets = canBreak || canPlace || canBase
+                ? collectTargets(targets, scanRadius) : List.of();
+
         boolean broke = false;
-        if (doBreak.getValue() && breakTimer.passedMs(tpsMs(breakDelay.getValue()))) {
-            TargetsModule breakTargets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
-            List<TargetCache> breakTargetCache = collectTargets(breakTargets, breakRangeValue() + 12.0);
-            EndCrystal target = findBestCrystal(breakTargetCache);
-            if (target != null) {
-                breakCrystal(target);
-                breakTimer.reset();
+        if (canBreak) {
+            EndCrystal target = findBestCrystal(potentialTargets);
+            if (target != null && breakCrystal(target)) {
                 broke = true;
             }
         }
 
-        if (!broke && antiChineseReady && breakTimer.passedMs(tpsMs(breakDelay.getValue()))) {
+        if (!broke && antiChineseReady && breakReady) {
             EndCrystal acTarget = findAntiChineseCrystal();
-            if (acTarget != null) {
-                breakCrystal(acTarget);
-                breakTimer.reset();
-            }
+            if (acTarget != null) breakCrystal(acTarget);
         }
 
-        boolean canPlace = place.getValue() && placeTimer.passedMs(tpsMs(placeDelay.getValue()));
-
-        long calcStart = System.nanoTime();
-
-        TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
-
-        double scanRadius = placeRangeValue() + 12.0
-                + (basePlace.getValue() ? placeRangeValue() : 0.0);
-        List<TargetCache> potentialTargets = collectTargets(targets, scanRadius);
-
-        PlaceTarget     crystalTarget;
-        BasePlaceTarget baseTarget;
-        if (thread.getValue()) {
-            crystalTarget = null;
-            baseTarget = null;
-            AsyncCalcResult r = asyncResult;
-            if (r != null && System.currentTimeMillis() - r.ts() < 100L) {
-                if (canPlace && r.crystal() != null && isPlaceTargetStillValid(r.crystal())) {
-                    crystalTarget = r.crystal();
-                }
-                if (basePlace.getValue() && r.base() != null && PlaceUtil.canPlace(r.base().base())) {
-                    baseTarget = r.base();
-                }
-            }
-            if (!calcInFlight.get()) {
-                submitAsyncCalc(potentialTargets,
-                        basePlace.getValue() ? findClosestBaseTarget(targets) : null);
-            }
-        } else {
-            crystalTarget = canPlace ? findBestPlace(potentialTargets) : null;
-            baseTarget    = basePlace.getValue() ? findBestBasePlace(findClosestBaseTarget(targets), potentialTargets) : null;
-        }
+        // World collision, entity lists, and mining state are owned by the client thread.
+        PlaceTarget crystalTarget = canPlace ? findBestPlace(potentialTargets) : null;
+        BasePlaceTarget baseTarget = canBase
+                ? findBestBasePlace(findClosestBaseTarget(potentialTargets), potentialTargets) : null;
 
         lastCalcMs = (System.nanoTime() - calcStart) / 1_000_000.0;
         if (debug.getValue()) {
@@ -752,29 +851,42 @@ public class GuangxiCrystalModule extends Module {
 
             boolean basePlaced = doBasePlace(baseTarget);
             if (basePlaced) {
+                placeTimer.reset();
+                placed = true;
                 if (canPlace) {
                     doPlace(new PlaceTarget(baseTarget.base, baseTarget.damage), true);
-                    placeTimer.reset();
-                    placed = true;
                 }
             }
-        } else if (crystalTarget != null) {
-            doPlace(crystalTarget);
-            placeTimer.reset();
-            placed = true;
+        }
+        if (!placed && crystalTarget != null) {
+            placed = doPlace(crystalTarget);
+            if (placed) placeTimer.reset();
         }
 
         if (!placed && antiChineseReady && canPlace) {
             PlaceTarget acPlace = findAntiChinesePlace();
-            if (acPlace != null) {
-                doPlace(acPlace);
+            if (acPlace != null && doPlace(acPlace)) {
                 placeTimer.reset();
             }
         }
     }
 
+    private boolean canSupplyCrystal() {
+        if (mc.player.getMainHandItem().is(Items.END_CRYSTAL)
+                || mc.player.getOffhandItem().is(Items.END_CRYSTAL)) return true;
+        if (autoSwap.getValue() == AutoSwapMode.NONE) return false;
+        return InventoryUtil.find(Items.END_CRYSTAL, autoSwap.getValue() == AutoSwapMode.INVENTORY
+                ? InventoryUtil.FULL_SCOPE : InventoryUtil.HOTBAR_SCOPE).found();
+    }
+
+    private boolean canSupplyObsidian() {
+        Result obs = InventoryUtil.find(Items.OBSIDIAN, autoSwap.getValue() == AutoSwapMode.INVENTORY
+                ? InventoryUtil.FULL_SCOPE : InventoryUtil.HOTBAR_SCOPE);
+        return obs.found() && obs.type() != ResultType.OFFHAND;
+    }
+
     private BasePlaceTarget findBestBasePlace(LivingEntity primary, List<TargetCache> potentialTargets) {
-        if (primary == null) return null;
+        if (primary == null || potentialTargets.isEmpty()) return null;
 
         Vec3 eye = mc.player.getEyePosition(1.0f);
         Vec3 playerCenter = mc.player.position();
@@ -881,18 +993,20 @@ public class GuangxiCrystalModule extends Module {
         ownSwapPackets.set(2); // our own swap must not trigger the break switch-pause
         SwapMode mode = autoSwap.getValue() == AutoSwapMode.INVENTORY
                 ? SwapMode.ALTSILENT : SwapMode.SILENT;
-        return GuizhouWare.placementManager.placeDirect(target.base, null, Items.OBSIDIAN, mode, scope);
+        try {
+            return GuizhouWare.placementManager.placeDirect(target.base, null, Items.OBSIDIAN, mode, scope);
+        } finally {
+            ownSwapPackets.set(0);
+        }
     }
 
-    private LivingEntity findClosestBaseTarget(TargetsModule targets) {
+    private LivingEntity findClosestBaseTarget(List<TargetCache> targets) {
         double range = basePlaceTargetRange.getValue();
         double rangeSq = range * range;
         LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
-        AABB area = mc.player.getBoundingBox().inflate(range);
-        for (Entity e : mc.level.getEntities(mc.player, area)) {
-            if (!(e instanceof Player p)) continue;
-            if (targets != null && !targets.isValidPlayerTarget(p)) continue;
+        for (TargetCache target : targets) {
+            if (!(target.entity instanceof Player p)) continue;
             double d = mc.player.distanceToSqr(p);
             if (d > rangeSq) continue;
             if (d < bestDist) { bestDist = d; best = p; }
@@ -901,6 +1015,7 @@ public class GuangxiCrystalModule extends Module {
     }
 
     private EndCrystal findBestCrystal(List<TargetCache> potentialTargets) {
+        if (potentialTargets.isEmpty()) return null;
         EndCrystal best = null;
         float bestDmg = 0;
         float playerHealth = selfNow().health();
@@ -910,29 +1025,20 @@ public class GuangxiCrystalModule extends Module {
         AABB searchArea = mc.player.getBoundingBox().inflate(breakRangeValue() + 2);
         for (Entity e : mc.level.getEntities(null, searchArea)) {
             if (!(e instanceof EndCrystal crystal)) continue;
-            if (crystal.tickCount < minAge.getValue()) continue;
+            if (!crystalAttackEligible(crystal)) continue;
 
             AABB bb = crystal.getBoundingBox();
             Vec3 reachEye = bestReachEye(bb);
             if (sqDistToBox(reachEye, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ) > breakRangeSq) continue;
+            if (!canPlanCrystalAttack(crystal)) continue;
 
             Vec3 cp = crystal.position();
-            if (!anyTargetWithin(potentialTargets, cp, 144.0)) continue;
+            if (breakDamage(potentialTargets, cp, true) <= bestDmg) continue;
 
             if (!selfDamageOk(cp, null, maxSelf, playerHealth)) continue;
 
-            float totalDmg = 0;
-            boolean anyTarget = false;
-            for (TargetCache tc : potentialTargets) {
-                if (tc.pos.distanceToSqr(cp) > 144.0) continue;
-                if (damageSync.getValue() && DamageSyncTracker.shouldHold(tc.entity)) continue;
-                if (isSyncHeld(tc.entity)) continue;
-                float dmg = calcDamage(tc, cp);
-                if (dmg < getDynamicMin(tc.hp, tc.abs, tc.armorBroken)) continue;
-                totalDmg += dmg;
-                anyTarget = true;
-            }
-            if (!anyTarget) continue;
+            float totalDmg = breakDamage(potentialTargets, cp, false);
+            if (totalDmg <= bestDmg) continue;
             if (!balanceOk(totalDmg, cp, null)) continue;
             if (totalDmg > bestDmg) { bestDmg = totalDmg; best = crystal; }
         }
@@ -940,20 +1046,80 @@ public class GuangxiCrystalModule extends Module {
         return best;
     }
 
-    private void breakCrystal(EndCrystal crystal) {
-        if (!switchTimer.passedMs(tpsMs(switchPause.getValue()))) return;
-        Vec3 eyePos = mc.player.getEyePosition(1.0f);
-        Vec3 hit = getClosestPointToEye(eyePos, crystal.getBoundingBox());
-        float[] angles = MathUtil.calcAngle(eyePos, hit);
-        if (!canBreakCrystal(crystal, angles[0], angles[1])) return;
+    private boolean breakCrystal(EndCrystal crystal) {
+        if (mc.gameMode == null || mc.getConnection() == null || weaponControlBusy()
+                || !crystalAttackEligible(crystal)
+                || !switchTimer.passedMs(tpsMs(switchPause.getValue()))) return false;
         if (rotate.getValue()) {
+            Vec3 eyePos = mc.player.getEyePosition(1.0f);
+            Vec3 hit = getClosestPointToEye(eyePos, crystal.getBoundingBox());
+            float[] angles = MathUtil.calcAngle(eyePos, hit);
+            if (!canBreakCrystal(crystal, angles[0], angles[1])) return false;
             GuizhouWare.rotationManager.submit(new RotationRequest(
                 "AutoCrystal_break", 60, angles[0], angles[1], RotationRequest.Mode.SILENT
             ));
         }
-        diagBreakSent++;
+        acceptPendingRotation();
+        if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) return false;
+        return sendCrystalAttack(crystal, false);
+    }
+
+    private boolean crystalAttackEligible(EndCrystal crystal) {
+        return crystal.isAlive() && !crystal.isRemoved() && !deadIds.contains(crystal.getId())
+                && crystal.tickCount >= minAge.getValue()
+                && attackWindow.canAttack(crystal.getId(), mc.player.tickCount);
+    }
+
+    private boolean canPlanCrystalAttack(EndCrystal crystal) {
+        if (rotate.getValue()) {
+            Vec3 eye = mc.player.getEyePosition(1.0F);
+            float[] angles = MathUtil.calcAngle(eye, getClosestPointToEye(eye, crystal.getBoundingBox()));
+            return canBreakCrystal(crystal, angles[0], angles[1]);
+        }
+        acceptPendingRotation();
+        return sentRotationKnown && canBreakCrystal(crystal, sentYaw, sentPitch);
+    }
+
+    private float breakDamage(List<TargetCache> potentialTargets, Vec3 center, boolean optimistic) {
+        float total = 0.0F;
+        for (TargetCache tc : potentialTargets) {
+            if (tc.pos.distanceToSqr(center) > 144.0 || isSyncHeld(tc.entity)) continue;
+            if (damageSync.getValue() && DamageSyncTracker.shouldHold(tc.entity)) continue;
+            float damage = optimistic ? maxDamage(tc, center) : calcDamage(tc, center);
+            if (damage > 0.0F && damage >= getPlaceMin(tc)) total += damage;
+        }
+        return total;
+    }
+
+    private boolean sendCrystalAttack(EndCrystal crystal, boolean instant) {
+        if (mc.gameMode == null || mc.getConnection() == null || weaponControlBusy()
+                || !crystalAttackEligible(crystal)
+                || !breakTimer.passedMs(tpsMs(breakDelay.getValue()))
+                || !switchTimer.passedMs(tpsMs(switchPause.getValue()))) return false;
+        if (!selfDamageOk(crystal.position(), null, maxSelfDamage.getValue(), selfNow().health())) return false;
+
+        // Send is cancellable at Connection HEAD; inspect the complete dispatch before committing cadence.
+        pendingAttack = null;
+        sendingCrystalAttack = true;
+        PacketEvent.Send attempt;
+        try {
+            if (instant) {
+                mc.player.connection.send(ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown()));
+            } else {
+                mc.gameMode.attack(mc.player, crystal);
+            }
+            attempt = pendingAttack;
+        } finally {
+            sendingCrystalAttack = false;
+            pendingAttack = null;
+        }
+        if (attempt == null || attempt.isCancelled()) return false;
+        attackWindow.markSent(crystal.getId(), mc.player.tickCount);
+        breakTimer.reset();
         lastBreakMs = System.currentTimeMillis();
-        mc.gameMode.attack(mc.player, crystal);
+        if (instant) diagInstaBreak++;
+        else diagBreakSent++;
+        return true;
     }
 
     private boolean canBreakCrystal(EndCrystal crystal, float yaw, float pitch) {
@@ -962,14 +1128,17 @@ public class GuangxiCrystalModule extends Module {
         if (bb.contains(eyePos)) return true;
         Vec3 look = getLookVector(yaw, pitch);
         Vec3 reachEnd = eyePos.add(look.scale(breakRangeValue()));
-        if (bb.clip(eyePos, reachEnd).isPresent()) return true;
-        // WallPlace: through-wall attack within range — servers without attack-LOS
-        // validation (vanilla/legacy) accept it.
-        return wallPlace.getValue()
-                && sqDistToBox(eyePos, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ) <= breakRangeSq();
+        var hit = bb.clip(eyePos, reachEnd);
+        if (hit.isEmpty()) return false;
+        BlockHitResult obstruction = mc.level.clip(new ClipContext(eyePos, hit.get(),
+                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
+        if (obstruction.getType() == HitResult.Type.MISS
+                || obstruction.getLocation().distanceToSqr(eyePos) + 1.0E-6 >= hit.get().distanceToSqr(eyePos)) return true;
+        return wallPlace.getValue() && hit.get().distanceToSqr(eyePos) <= wallRange.getValue() * wallRange.getValue();
     }
 
     private PlaceTarget findBestPlace(List<TargetCache> potentialTargets) {
+        if (potentialTargets.isEmpty()) return null;
         Vec3 eyePos = mc.player.getEyePosition(1.0f);
         BlockPos playerPos = mc.player.blockPosition();
         int r = (int) Math.ceil(placeRangeValue());
@@ -1015,7 +1184,7 @@ public class GuangxiCrystalModule extends Module {
                         TargetCache tc = potentialTargets.get(i);
                         if (tc.pos.distanceToSqr(crystalCenter) > 144.0) continue;
                         float dmg = maxDamage(tc, crystalCenter);
-                        if (dmg < getDynamicMin(tc.hp, tc.abs, tc.armorBroken)) continue;
+                        if (dmg < getPlaceMin(tc)) continue;
                         boundTotal += dmg;
                         anyTarget = true;
                     }
@@ -1104,7 +1273,7 @@ public class GuangxiCrystalModule extends Module {
                 if (tc.pos.distanceToSqr(c.crystalCenter) > 144.0) continue;
                 float dmg = calcDamage(tc, c.crystalCenter);
                 // FacePlace-eligible targets bypass MinDamage entirely (finisher damage).
-                double minGate = isFacePlaceEligible(tc) ? 0.5 : getDynamicMin(tc.hp, tc.abs, tc.armorBroken);
+                double minGate = getPlaceMin(tc);
                 if (dmg < minGate) continue;
                 totalDmg += dmg;
                 anyTarget = true;
@@ -1282,11 +1451,12 @@ public class GuangxiCrystalModule extends Module {
         AABB searchArea = mc.player.getBoundingBox().inflate(breakRangeValue() + 2);
         for (Entity e : mc.level.getEntities(null, searchArea)) {
             if (!(e instanceof EndCrystal crystal)) continue;
-            if (crystal.tickCount < minAge.getValue()) continue;
+            if (!crystalAttackEligible(crystal)) continue;
 
             AABB bb = crystal.getBoundingBox();
             Vec3 reachEye = bestReachEye(bb);
             if (sqDistToBox(reachEye, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ) > breakRangeSq) continue;
+            if (!canPlanCrystalAttack(crystal)) continue;
 
             Vec3 cp = crystal.position();
             if (!nearBurrowBlock(cp)) continue;
@@ -1320,15 +1490,15 @@ public class GuangxiCrystalModule extends Module {
             float armor     = (float) living.getAttributeValue(Attributes.ARMOR);
             float toughness = (float) living.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
 
-            int protPoints = 0;
-            if (!living.getItemBySlot(EquipmentSlot.HEAD).isEmpty())  protPoints += 4;
-            if (!living.getItemBySlot(EquipmentSlot.CHEST).isEmpty()) protPoints += 4;
-            if (!living.getItemBySlot(EquipmentSlot.LEGS).isEmpty())  protPoints += 8;
-            if (!living.getItemBySlot(EquipmentSlot.FEET).isEmpty())  protPoints += 4;
+            int protPoints = protectionPoints(living);
+
+            boolean faceEligible = facePlace.getValue() && living instanceof Player p
+                    && (living.getHealth() + living.getAbsorptionAmount() <= facePlaceHealth.getValue()
+                        || equippedArmorPieces(p) <= facePlaceArmor.getValue());
 
             out.add(new TargetCache(living, tPos, tBox,
                     living.getHealth(), living.getAbsorptionAmount(), armorBroken,
-                    armor, toughness, protPoints));
+                    armor, toughness, protPoints, faceEligible));
         }
         return out;
     }
@@ -1358,7 +1528,27 @@ public class GuangxiCrystalModule extends Module {
 
     private record TargetCache(LivingEntity entity, Vec3 pos, AABB box, float hp, float abs,
                                boolean armorBroken, float armor, float toughness,
-                               int protPoints) {}
+                               int protPoints, boolean faceEligible) {}
+
+    /** Main-thread refresh; background planning reads the immutable list through the volatile. */
+    private void refreshEntitySnapshot() {
+        int tick = mc.player == null ? -1 : mc.player.tickCount;
+        if (tick == entitySnapshotTick) return;
+        double r = Math.max(Math.max(placeRangeValue(), breakRangeValue()) + 4.0, 8.0);
+        List<Entity> snap = new ArrayList<>(mc.level.getEntities(null, mc.player.getBoundingBox().inflate(r)));
+        entitySnapshot = snap;
+        entitySnapshotTick = tick;
+    }
+
+    private List<Entity> snapshotEntities() {
+        int tick = mc.player == null ? -1 : mc.player.tickCount;
+        List<Entity> snap = entitySnapshot;
+        if (tick == entitySnapshotTick && !snap.isEmpty()) return snap;
+        if (mc.level == null) return List.of();
+        // stale or cold (e.g. synchronous mode before the first refresh): rebuild locally
+        double r = Math.max(Math.max(placeRangeValue(), breakRangeValue()) + 4.0, 8.0);
+        return mc.level.getEntities(null, mc.player.getBoundingBox().inflate(r));
+    }
 
     private boolean isBlocked(BlockPos airPos) {
         return isBlockedExcept(airPos, null);
@@ -1366,7 +1556,9 @@ public class GuangxiCrystalModule extends Module {
 
     /** Like {@link #isBlocked} but {@code allow} may legally overlap the cell (FacePlace). */
     private boolean isBlockedExcept(BlockPos airPos, LivingEntity allow) {
-        for (Entity e : mc.level.getEntities(null, new AABB(airPos))) {
+        AABB cell = new AABB(airPos);
+        for (Entity e : snapshotEntities()) {
+            if (!e.getBoundingBox().intersects(cell)) continue;
             if (e == allow) continue;
             if (e instanceof ItemEntity) continue;
             if (e instanceof EndCrystal crystal && crystal.tickCount < 5) continue;
@@ -1380,8 +1572,7 @@ public class GuangxiCrystalModule extends Module {
 
     private int equippedArmorPieces(Player p) {
         int n = 0;
-        for (EquipmentSlot slot : new EquipmentSlot[]{
-                EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
+        for (EquipmentSlot slot : ARMOR_SLOTS) {
             if (!p.getItemBySlot(slot).isEmpty()) n++;
         }
         return n;
@@ -1389,10 +1580,7 @@ public class GuangxiCrystalModule extends Module {
 
     /** FacePlace triggers on near-death or nearly-stripped targets — punch through MinDamage. */
     private boolean isFacePlaceEligible(TargetCache tc) {
-        if (!facePlace.getValue()) return false;
-        if (!(tc.entity instanceof Player p)) return false;
-        if (tc.hp + tc.abs <= facePlaceHealth.getValue().floatValue()) return true;
-        return equippedArmorPieces(p) <= facePlaceArmor.getValue();
+        return tc.faceEligible;
     }
 
     /**
@@ -1405,7 +1593,8 @@ public class GuangxiCrystalModule extends Module {
         AABB cell = new AABB(airPos);
         LivingEntity allowed = null;
         outer:
-        for (Entity e : mc.level.getEntities(null, cell)) {
+        for (Entity e : snapshotEntities()) {
+            if (!e.getBoundingBox().intersects(cell)) continue;
             if (e instanceof ItemEntity) continue;
             if (e instanceof EndCrystal crystal && crystal.tickCount < 5) continue;
             if (e instanceof EndCrystal crystal && crystal.blockPosition().equals(airPos)) continue;
@@ -1422,22 +1611,22 @@ public class GuangxiCrystalModule extends Module {
         return allowed;
     }
 
-    private void doPlace(PlaceTarget target) {
-        doPlace(target, false);
+    private boolean doPlace(PlaceTarget target) {
+        return doPlace(target, false);
     }
 
-    private void doPlace(PlaceTarget target, boolean trustBase) {
+    private boolean doPlace(PlaceTarget target, boolean trustBase) {
         boolean holdingCrystal = mc.player.getMainHandItem().is(Items.END_CRYSTAL)
                 || mc.player.getOffhandItem().is(Items.END_CRYSTAL);
         if (autoSwap.getValue() == AutoSwapMode.NONE) {
             if (!holdingCrystal) {
                 lastBestDamage = 0;
-                return;
+                return false;
             }
         } else if (!holdingCrystal
                 && !InventoryUtil.find(Items.END_CRYSTAL, InventoryUtil.FULL_SCOPE).found()) {
             lastBestDamage = 0;
-            return;
+            return false;
         }
         lastBestDamage = target.damage;
 
@@ -1450,7 +1639,7 @@ public class GuangxiCrystalModule extends Module {
             mc.getConnection().send(new ServerboundPlayerActionPacket(
                     ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, air, Direction.DOWN));
             diagPlaceAttempt++;
-            return;
+            return false;
         }
 
         diagPlaceAttempt++;
@@ -1470,6 +1659,7 @@ public class GuangxiCrystalModule extends Module {
             // The spawn for this placement takes the next sequential entity id.
             sendGhostAttacksAfter(lastMaxEntityId);
         }
+        return sent;
     }
 
     /**
@@ -1483,6 +1673,7 @@ public class GuangxiCrystalModule extends Module {
     }
 
     public boolean placeCrystalShared(BlockPos base, boolean trustBase, LivingEntity faceEntity) {
+        if (weaponControlBusy()) return false;
         boolean mainCrystal = mc.player.getMainHandItem().is(Items.END_CRYSTAL);
         boolean offCrystal = mc.player.getOffhandItem().is(Items.END_CRYSTAL);
         if (mainCrystal || offCrystal) {
@@ -1494,13 +1685,21 @@ public class GuangxiCrystalModule extends Module {
             case NONE -> false;
             case SILENT -> {
                 ownSwapPackets.set(2); // swap + swap-back must not trigger the break switch-pause
-                yield GuizhouWare.placementManager.placeCrystal(base, trustBase,
-                        SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, faceEntity);
+                try {
+                    yield GuizhouWare.placementManager.placeCrystal(base, trustBase,
+                            SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, faceEntity);
+                } finally {
+                    ownSwapPackets.set(0);
+                }
             }
             case INVENTORY -> {
                 ownSwapPackets.set(2);
-                yield GuizhouWare.placementManager.placeCrystal(base, trustBase,
-                        SwapMode.ALTSILENT, InventoryUtil.FULL_SCOPE, faceEntity);
+                try {
+                    yield GuizhouWare.placementManager.placeCrystal(base, trustBase,
+                            SwapMode.ALTSILENT, InventoryUtil.FULL_SCOPE, faceEntity);
+                } finally {
+                    ownSwapPackets.set(0);
+                }
             }
         };
     }
@@ -1519,7 +1718,9 @@ public class GuangxiCrystalModule extends Module {
     }
 
     public boolean preplaceCrystal(BlockPos airPos, boolean snap) {
-        if (nullCheck() || !place.getValue()) return false;
+        if (nullCheck() || !place.getValue() || weaponControlBusy()) return false;
+        ensureSession();
+        if (!rubberbandQuiet()) return false;
 
         BlockPos base = airPos.below();
         var baseState = mc.level.getBlockState(base);
@@ -1530,13 +1731,22 @@ public class GuangxiCrystalModule extends Module {
         long pendingTs = crystalPlaces.get(airPos.asLong());
         if (pendingTs != 0L && now - pendingTs < pendingWindowMs()) return false;
 
-        doPlace(new PlaceTarget(base, 0f), false);
-        return crystalPlaces.get(airPos.asLong()) != pendingTs;
+        ensureSelfCache();
+        updateSeeThrough();
+        Vec3 center = new Vec3(airPos.getX() + 0.5, airPos.getY(), airPos.getZ() + 0.5);
+        if (!selfDamageOk(center, null, maxSelfDamage.getValue(), selfNow().health())) return false;
+        return doPlace(new PlaceTarget(base, 0f), false);
+    }
+
+    private boolean weaponControlBusy() {
+        return EatUtil.shouldDefer() || GuangxiElytraChaseModule.blocksCrystalCombat();
     }
 
     public boolean isDesirablePlacement(BlockPos airPos) {
         if (nullCheck()) return false;
+        ensureSession();
         ensureSelfCache();
+        updateSeeThrough();
 
         BlockPos base = airPos.below();
         BlockState baseState = mc.level.getBlockState(base);
@@ -1617,16 +1827,29 @@ public class GuangxiCrystalModule extends Module {
 
     private float maxDamageSelf(Vec3 explosionPos) {
         SelfCache sc = selfNow();
-        double dist = sc.pos().distanceTo(explosionPos);
+        double dist = Math.min(sc.pos().distanceTo(explosionPos), sc.currentPos().distanceTo(explosionPos));
         if (dist > 12.0) return 0;
         return selfDamage(dist, 1.0, sc);
     }
 
     private float calcDamageSelf(Vec3 explosionPos, BlockPos phantomObsidianPos) {
         SelfCache sc = selfNow();
-        double dist = sc.pos().distanceTo(explosionPos);
+        SelfDamageKey key = new SelfDamageKey(explosionPos,
+                phantomObsidianPos == null ? null : phantomObsidianPos.immutable());
+        Float cached = selfDamageCache.get(key);
+        if (cached != null) return cached;
+        float damage = selfDamageAt(sc, sc.currentPos(), sc.currentBox(), explosionPos, phantomObsidianPos);
+        if (!sc.pos().equals(sc.currentPos())) {
+            damage = Math.max(damage, selfDamageAt(sc, sc.pos(), sc.box(), explosionPos, phantomObsidianPos));
+        }
+        selfDamageCache.put(key, damage);
+        return damage;
+    }
+
+    private float selfDamageAt(SelfCache sc, Vec3 position, AABB box, Vec3 explosionPos, BlockPos phantomBase) {
+        double dist = position.distanceTo(explosionPos);
         if (dist > 12.0) return 0;
-        double exposure = calcExposure(explosionPos, sc.box(), phantomObsidianPos);
+        double exposure = calcExposure(explosionPos, box, phantomBase);
         return selfDamage(dist, exposure, sc);
     }
 
@@ -1643,103 +1866,45 @@ public class GuangxiCrystalModule extends Module {
         return c;
     }
 
-    /**
-     * Main-thread only: refreshes the per-tick self snapshot consumed by the damage
-     * calculation, including the async placement thread.
-     */
+    /** Main-thread only: refresh the self snapshot before a calculation pass. */
     private void ensureSelfCache() {
-        if (selfCache != null && selfCacheTick == mc.player.tickCount) return;
-        selfCacheTick = mc.player.tickCount;
+        // A chunk can be replaced at the same coordinates; keep this cache within one pass.
+        cachedChunk = null;
+        cachedChunkX = cachedChunkZ = Integer.MIN_VALUE;
+        selfDamageCache.clear();
 
         float health = mc.player.getHealth() + mc.player.getAbsorptionAmount();
         float armor = (float) mc.player.getAttributeValue(Attributes.ARMOR);
         float toughness = (float) mc.player.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
 
-        int epf = 0;
-        for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
-            ItemStack stack = mc.player.getItemBySlot(slot);
-            if (stack.isEmpty()) continue;
-            epf += EnchantmentUtil.getLevel(Enchantments.PROTECTION, stack);
-            epf += 2 * EnchantmentUtil.getLevel(Enchantments.BLAST_PROTECTION, stack);
-        }
-        epf = Math.min(epf, 20);
-
-        Vec3 pos = mc.player.position();
-        AABB box = mc.player.getBoundingBox();
+        Vec3 currentPos = mc.player.position();
+        AABB currentBox = mc.player.getBoundingBox();
+        Vec3 pos = currentPos;
+        AABB box = currentBox;
         if (selfPredictionActive()) {
             Vec3 p = PredictUtil.predict(mc.player, selfPredictTicks.getValue(), maxMotionY.getValue());
             pos = p;
             box = box.move(p.x - mc.player.getX(), p.y - mc.player.getY(), p.z - mc.player.getZ());
         }
-        selfCache = new SelfCache(pos, box, health, armor, toughness, epf, mc.level.getDifficulty());
+        selfCache = new SelfCache(pos, box, currentPos, currentBox, health, armor, toughness,
+                protectionPoints(mc.player), mc.level.getDifficulty());
     }
 
-    private void submitAsyncCalc(List<TargetCache> targets, LivingEntity primary) {
-        ExecutorService exec = calcExecutor;
-        if (exec == null || exec.isShutdown()) {
-            exec = Executors.newSingleThreadExecutor(r -> {
-                Thread t = new Thread(r, "GuizhouWare-AutoCrystal");
-                t.setDaemon(true);
-                return t;
-            });
-            calcExecutor = exec;
+    private int protectionPoints(LivingEntity entity) {
+        int points = 0;
+        for (EquipmentSlot slot : ARMOR_SLOTS) {
+            ItemStack stack = entity.getItemBySlot(slot);
+            if (stack.isEmpty()) continue;
+            points += EnchantmentUtil.getLevel(Enchantments.PROTECTION, stack);
+            points += 2 * EnchantmentUtil.getLevel(Enchantments.BLAST_PROTECTION, stack);
         }
-        final ExecutorService service = exec;
-        final List<TargetCache> snapshot = new ArrayList<>(targets);
-        final LivingEntity prim = primary;
-        calcInFlight.set(true);
-        try {
-            service.execute(() -> {
-                try {
-                    PlaceTarget crystal = findBestPlace(snapshot);
-                    BasePlaceTarget base = basePlace.getValue() && prim != null
-                            ? findBestBasePlace(prim, snapshot) : null;
-                    asyncResult = new AsyncCalcResult(crystal, base, System.currentTimeMillis());
-                } catch (Throwable ignored) {
-                    asyncResult = null;
-                } finally {
-                    calcInFlight.set(false);
-                }
-            });
-        } catch (RejectedExecutionException ignored) {
-            calcInFlight.set(false);
-        }
-    }
-
-    /** Revalidates an async-produced place target against current world state on the main thread. */
-    private boolean isPlaceTargetStillValid(PlaceTarget t) {
-        BlockState baseState = mc.level.getBlockState(t.base());
-        if (!baseState.is(Blocks.OBSIDIAN) && !baseState.is(Blocks.BEDROCK)) return false;
-        BlockPos air = t.base().above();
-        BlockState airState = mc.level.getBlockState(air);
-        if (!airState.isAir() && !airState.is(Blocks.FIRE)) return false; // FIRE cleared by doPlace
-        if (legacy112.getValue() && !mc.level.getBlockState(air.above()).isAir()) return false;
-        boolean faceStill = t.faceEntity() != null
-                && !t.faceEntity().isRemoved() && !t.faceEntity().isDeadOrDying();
-        if (isBlockedExcept(air, faceStill ? t.faceEntity() : null)) return false;
-        long now = System.currentTimeMillis();
-        long ts = crystalPlaces.get(air.asLong());
-        return ts == 0L || now - ts >= pendingWindowMs();
+        return Math.min(points, 20);
     }
 
     private boolean isSyncHeld(LivingEntity target) {
         return hurtSync.getValue()
                 && target.hurtTime > waitHurt.getValue()
                 && System.currentTimeMillis() - lastBreakMs < tpsMs(syncTimeout.getValue());
-    }
-
-    private boolean anyBreakTargetReady(Vec3 center) {
-        if (!hurtSync.getValue()) return true;
-        TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
-        boolean anyTarget = false;
-        for (Player p : mc.level.players()) {
-            if (p == mc.player || p.isDeadOrDying()) continue;
-            if (targets != null && !targets.isValidPlayerTarget(p)) continue;
-            if (p.position().distanceToSqr(center) > 144.0) continue;
-            anyTarget = true;
-            if (!isSyncHeld(p)) return true;
-        }
-        return !anyTarget; // no target near: defensive clear, keep original behavior
     }
 
     private float selfDamage(double dist, double exposure, SelfCache sc) {
@@ -1776,12 +1941,10 @@ public class GuangxiCrystalModule extends Module {
                                  double maxSelf, float playerHealth) {
         double reserve = reserveHp.getValue();
         float optimistic = maxDamageSelf(crystalCenter);
-        if (optimistic <= maxSelf && optimistic + reserve < playerHealth) return true;
+        if (CrystalSelectionPolicy.isSelfDamageSafe(optimistic, maxSelf, playerHealth, reserve)) return true;
 
         float real = calcDamageSelf(crystalCenter, phantomObsidianPos);
-        if (real > maxSelf) return false;
-        if (real + reserve >= playerHealth) return false;
-        return true;
+        return CrystalSelectionPolicy.isSelfDamageSafe(real, maxSelf, playerHealth, reserve);
     }
 
     private float armorAbsorb(float dmg, float armor, float toughness) {
@@ -1844,17 +2007,18 @@ public class GuangxiCrystalModule extends Module {
     }
 
     private double getDynamicMin(float health, float absorption, boolean armorBroken) {
-        double min = minDamage.getValue();
-        float hp = health + absorption;
-        if ((hp / 36.0f) <= HEALTH_BALANCE) min /= BALANCE;
-        if (armorBroken) min /= BALANCE;
-        return min;
+        return CrystalSelectionPolicy.minimumDamage(minDamage.getValue(), health + absorption,
+                armorBroken, false);
+    }
+
+    private double getPlaceMin(TargetCache target) {
+        return CrystalSelectionPolicy.minimumDamage(minDamage.getValue(), target.hp + target.abs,
+                target.armorBroken, isFacePlaceEligible(target));
     }
 
     private boolean isAnyArmorBroken(Player player) {
         int threshold = (int) (ARMOR_BALANCE * 100);
-        for (EquipmentSlot slot : new EquipmentSlot[]{
-                EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
+        for (EquipmentSlot slot : ARMOR_SLOTS) {
             var stack = player.getItemBySlot(slot);
             if (stack.isEmpty() || stack.getMaxDamage() <= 0) continue;
             int durabilityPct = 100 - (stack.getDamageValue() * 100 / stack.getMaxDamage());
@@ -1905,14 +2069,6 @@ public class GuangxiCrystalModule extends Module {
     }
 
     private final java.util.ArrayDeque<Long> explodeTimes = new java.util.ArrayDeque<>();
-
-    @Subscribe
-    private void onExplodePacket(PacketEvent.Receive event) {
-        if (!(event.getPacket() instanceof ClientboundExplodePacket)) return;
-        long now = System.currentTimeMillis();
-        explodeTimes.addLast(now);
-        while (!explodeTimes.isEmpty() && now - explodeTimes.peekFirst() > 1000) explodeTimes.removeFirst();
-    }
 
     @Override
     public String getMeta() {

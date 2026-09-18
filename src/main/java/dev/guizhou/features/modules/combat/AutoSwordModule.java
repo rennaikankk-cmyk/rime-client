@@ -12,6 +12,7 @@ import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.inventory.SwapMode;
 import dev.guizhou.util.inventory.SwapPriority;
 import dev.guizhou.util.EnchantmentUtil;
+import dev.guizhou.util.combat.MaceDamageScore;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.util.render.RenderUtil;
@@ -20,10 +21,12 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.tags.EntityTypeTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
@@ -82,6 +85,11 @@ public class AutoSwordModule extends Module {
         attackCooldownTicks -= (tps / 20f);
         if (attackCooldownTicks < 0f) attackCooldownTicks = 0f;
 
+        if (GuangxiElytraChaseModule.isWeaponControlActive()) {
+            currentTarget = null;
+            return;
+        }
+
         if (!isMaceAttackReady()) {
             GuangxiCrystalModule ac = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
             if (ac != null && ac.isEnabled() && ac.getLastBestDamage() > 0f) {
@@ -95,7 +103,7 @@ public class AutoSwordModule extends Module {
 
         if (attackCooldownTicks > 0f) return;
 
-        int weaponSlot = getWeapon();
+        int weaponSlot = getWeapon(currentTarget);
         if (weaponSlot == -1) return;
 
         Vec3 eyePos = mc.player.getEyePosition(1.0f);
@@ -117,14 +125,7 @@ public class AutoSwordModule extends Module {
         ItemStack weaponStack = mc.player.getInventory().getItem(weaponSlot);
         boolean doCrit = shouldCrit(weaponStack);
 
-        boolean needSwap = weaponSlot != GuizhouWare.swapManager.serverSlot();
-
-        if (needSwap && mc.player.isUsingItem()
-                && mc.player.getUsedItemHand() == InteractionHand.MAIN_HAND) {
-            return;
-        }
-
-        if (needSwap && EatUtil.shouldDefer()) return;
+        if (!canUseWeapon(weaponSlot)) return;
 
         Result weapon = new Result(weaponSlot, weaponStack, ResultType.HOTBAR);
         boolean swung = GuizhouWare.swapManager.withSwap(weapon, SwapMode.SILENT, SwapPriority.WEAPON, () -> {
@@ -165,13 +166,21 @@ public class AutoSwordModule extends Module {
     }
 
     public boolean isMaceAttackReady() {
-        if (mc.player == null) return false;
+        if (!isEnabled() || nullCheck() || mc.player.isDeadOrDying() || mc.gameMode == null
+                || mc.getConnection() == null || attackCooldownTicks > 0.0F
+                || GuangxiElytraChaseModule.isWeaponControlActive()
+                || !MaceItem.canSmashAttack(mc.player)) return false;
+        Entity target = findTarget();
+        if (target == null || !mc.player.hasLineOfSight(target)) return false;
+        int slot = getWeapon(target);
+        return slot >= 0 && mc.player.getInventory().getItem(slot).getItem() instanceof MaceItem
+                && canUseWeapon(slot);
+    }
 
-        if (!MaceItem.canSmashAttack(mc.player)) return false;
-        for (int slot = 0; slot < 9; slot++) {
-            if (mc.player.getInventory().getItem(slot).getItem() instanceof MaceItem) return true;
-        }
-        return false;
+    private boolean canUseWeapon(int slot) {
+        boolean needSwap = slot != GuizhouWare.swapManager.serverSlot();
+        return !needSwap || !(mc.player.isUsingItem() && mc.player.getUsedItemHand() == InteractionHand.MAIN_HAND)
+                && !EatUtil.shouldDefer();
     }
 
     private boolean shouldCrit(ItemStack weaponStack) {
@@ -251,9 +260,10 @@ public class AutoSwordModule extends Module {
         return (baseTicks * (20f / tps));
     }
 
-    private int getWeapon() {
+    private int getWeapon(Entity target) {
         int bestSlot = -1;
-        float bestDamage = -1f;
+        double bestDamage = -1.0;
+        boolean smash = target != null && MaceItem.canSmashAttack(mc.player);
 
         for (int slot = 0; slot < 9; slot++) {
             ItemStack held = mc.player.getInventory().getItem(slot);
@@ -265,6 +275,15 @@ public class AutoSwordModule extends Module {
             boolean isMace = held.getItem() instanceof MaceItem;
 
             if (!isSword && !isAxe && !isTrident && !isMace) continue;
+
+            if (smash) {
+                double damage = smashScore(held, target);
+                if (damage > bestDamage) {
+                    bestDamage = damage;
+                    bestSlot = slot;
+                }
+                continue;
+            }
 
             float attackDamage = 0f;
 
@@ -289,6 +308,30 @@ public class AutoSwordModule extends Module {
             }
         }
         return bestSlot;
+    }
+
+    private double smashScore(ItemStack weapon, Entity target) {
+        ItemAttributeModifiers modifiers = weapon.getOrDefault(DataComponents.ATTRIBUTE_MODIFIERS,
+                ItemAttributeModifiers.EMPTY);
+        double base = modifiers.compute(Attributes.ATTACK_DAMAGE,
+                mc.player.getAttributeBaseValue(Attributes.ATTACK_DAMAGE), EquipmentSlot.MAINHAND);
+        int targetLevels = 0;
+        if (target.getType().is(EntityTypeTags.SENSITIVE_TO_SMITE))
+            targetLevels += EnchantmentUtil.getLevel(Enchantments.SMITE, weapon);
+        if (target.getType().is(EntityTypeTags.SENSITIVE_TO_BANE_OF_ARTHROPODS))
+            targetLevels += EnchantmentUtil.getLevel(Enchantments.BANE_OF_ARTHROPODS, weapon);
+        if (target.getType().is(EntityTypeTags.SENSITIVE_TO_IMPALING))
+            targetLevels += EnchantmentUtil.getLevel(Enchantments.IMPALING, weapon);
+        double enchantments = MaceDamageScore.enchantmentDamage(
+                EnchantmentUtil.getLevel(Enchantments.SHARPNESS, weapon), targetLevels);
+        double fallBonus = 0.0;
+        int density = 0;
+        if (weapon.getItem() instanceof MaceItem mace) {
+            // The client branch provides vanilla fall damage; Density is applied only on ServerLevel.
+            fallBonus = mace.getAttackDamageBonus(target, (float) base, mc.player.damageSources().mace(mc.player));
+            density = EnchantmentUtil.getLevel(Enchantments.DENSITY, weapon);
+        }
+        return MaceDamageScore.damage(base, enchantments, fallBonus, mc.player.fallDistance, density);
     }
 
     private Vec3 getClosestPointToEye(Vec3 eye, AABB box) {

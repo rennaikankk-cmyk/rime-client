@@ -41,7 +41,7 @@ public class BlockHighlightModule extends Module {
         lastNanos = 0;
     }
 
-    @Subscribe
+    @Override
     public void onRender3D(Render3DEvent event) {
         long now = System.nanoTime();
         float dt = lastNanos == 0 ? 0f : (now - lastNanos) / 1_000_000f;

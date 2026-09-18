@@ -64,6 +64,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new HudClientModule());
         register(new ClickGuiModule());
         register(new NotificationsModule());
+        register(new dev.guizhou.features.modules.client.GuangxiProbeModule());
         register(new TargetsModule());
         register(new AutoTrapModule());
         register(new AutoTotemModule());

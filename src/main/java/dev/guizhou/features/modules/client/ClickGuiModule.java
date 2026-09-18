@@ -17,7 +17,7 @@ public class ClickGuiModule extends Module {
 
     public Setting<String>  prefix           = str("Prefix", ".");
     public Setting<Theme>   theme            = mode("Theme", Theme.GUIZHOUWARE);
-    public Setting<Color>   customColor      = color("Custom Color", 120, 170, 210, 220);
+    public Setting<Color>   customColor      = color("Custom Color", 114, 168, 216, 220);
     public Setting<Boolean> smooth           = bool("Smooth", true);
     public Setting<Integer> rainbowHue       = num("Delay", 240, 0, 600);
     public Setting<Float>   rainbowBrightness = num("Brightness", 200.0f, 1.0f, 255.0f);
@@ -27,17 +27,18 @@ public class ClickGuiModule extends Module {
     public Setting<Boolean> hudFont      = bool("HUD Font", false);
     public Setting<String>  fontName     = str("Font Name", "");
 
-    private static final Color CAT_COMBAT   = new Color(196,  88,  90);
-    private static final Color CAT_WORLD    = new Color(118, 168, 118);
-    private static final Color CAT_RENDER   = new Color( 98, 166, 200);
-    private static final Color CAT_MOVEMENT = new Color(212, 142,  78);
-    private static final Color CAT_PLAYER   = new Color(202, 180,  92);
-    private static final Color CAT_FUNNY    = new Color(198, 124, 178);
-    private static final Color CAT_CLIENT   = new Color( 70,  75,  82);
-    private static final Color CAT_HUD      = new Color( 96, 142, 200);
+    /* IB (InternalBeyond) 色板：雾蓝玻璃 + 烛火暗红点缀，低饱和统一气质 */
+    private static final Color CAT_COMBAT   = new Color(160,  82,  82); // Infernal 烛火暗红
+    private static final Color CAT_WORLD    = new Color(123, 168, 160); // 雾青
+    private static final Color CAT_RENDER   = new Color(114, 168, 216); // 雾蓝 (--ibr-acc #72a8d8)
+    private static final Color CAT_MOVEMENT = new Color(201, 168, 106); // 烛光金
+    private static final Color CAT_PLAYER   = new Color(178, 192, 216); // 月光银灰 (--silver)
+    private static final Color CAT_FUNNY    = new Color(154, 134, 184); // 紫雾
+    private static final Color CAT_CLIENT   = new Color( 90, 105, 135); // 深夜蓝灰
+    private static final Color CAT_HUD      = new Color(128, 176, 224); // 雾浅蓝
 
-    private static final Color GUIZHOUWARE_ACCENT = new Color(140, 26, 38);
-    private static final Color GUIZHOUWARE_MODULE = new Color(190, 72, 82);
+    private static final Color GUIZHOUWARE_ACCENT = new Color( 80, 128, 176); // IB 深雾蓝 #5080b0
+    private static final Color GUIZHOUWARE_MODULE = new Color(114, 168, 216); // IB 亮雾蓝 #72a8d8
 
     public Color categoryAccent(Module.Category cat) {
         return categoryAccent(cat, 0f);

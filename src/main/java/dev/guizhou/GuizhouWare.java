@@ -33,6 +33,8 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
     public static SwapManager swapManager;
     public static TPSCounterService tpsCounterService;
     public static NetworkSanitizer networkSanitizer;
+    public static TelemetryManager telemetryManager;
+    public static HeartbeatManager heartbeatManager;
     public static GuiMove guiMove;
 
     @Override
@@ -54,6 +56,8 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
         swapManager = new SwapManager();
         tpsCounterService = new TPSCounterService();
         networkSanitizer = new NetworkSanitizer();
+        telemetryManager = new TelemetryManager();
+        heartbeatManager = new HeartbeatManager();
         guiMove = new GuiMove();
 
         TextUtil.init();
@@ -75,6 +79,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
         playerInfoManager.init();
         tpsCounterService.init();
         networkSanitizer.init();
+        heartbeatManager.init();
         guiMove.init();
 
         configManager.load();

@@ -4,9 +4,11 @@ import java.lang.invoke.*;
 import java.lang.reflect.Method;
 import java.util.function.Consumer;
 
-public record Listener(Object host, int priority, Consumer<Object> consumer) {
+public record Listener(Object host, int priority, Consumer<Object> consumer, String timingKey) {
     public static Listener of(Object host, int priority, Method method) {
-        return new Listener(host, priority, buildLambdaMetafactory(host, method));
+        String key = host.getClass().getSimpleName() + "#" + method.getName()
+                + "(" + method.getParameterTypes()[0].getSimpleName() + ")";
+        return new Listener(host, priority, buildLambdaMetafactory(host, method), key);
     }
 
     public void invoke(Object event) {
@@ -20,11 +22,12 @@ public record Listener(Object host, int priority, Consumer<Object> consumer) {
     @SuppressWarnings("unchecked")
     private static Consumer<Object> buildLambdaMetafactory(Object host, Method method) {
         try {
-            MethodHandles.Lookup lookup = MethodHandles.privateLookupIn(host.getClass(), MethodHandles.lookup());
+            Class<?> declaringClass = method.getDeclaringClass();
+            MethodHandles.Lookup lookup = MethodHandles.privateLookupIn(declaringClass, MethodHandles.lookup());
             CallSite site = LambdaMetafactory.metafactory(
                     lookup,
                     "accept",
-                    MethodType.methodType(Consumer.class, host.getClass()),
+                    MethodType.methodType(Consumer.class, declaringClass),
                     MethodType.methodType(void.class, Object.class),
                     lookup.unreflect(method),
                     MethodType.methodType(void.class, method.getParameterTypes()[0])

@@ -1,5 +1,6 @@
 package dev.guizhou.util.render.font;
 
+import dev.guizhou.GuizhouWare;
 import dev.guizhou.features.modules.client.ClickGuiModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -13,7 +14,9 @@ public final class Fonts {
     private Fonts() {}
 
     private static final Minecraft mc = Minecraft.getInstance();
-    private static final String BUNDLED_PATH = "/assets/guizhouware/font/default.ttf";
+    // InternalBeyond-style bundled chain: serif latin first, CJK second, OS sans last.
+    private static final String BUNDLED_LATIN_PATH = "/assets/guizhouware/font/ib_latin.ttf";
+    private static final String BUNDLED_ZH_PATH = "/assets/guizhouware/font/ib_zh.ttf";
 
     private static final float SHADOW_OFFSET = 0.7f;
 
@@ -21,14 +24,24 @@ public final class Fonts {
     private static volatile boolean dirty = true;
     private static volatile boolean hudPass = false;
 
-    private static Font bundledBase;
+    private static java.awt.Font bundledLatin;
+    private static java.awt.Font bundledZh;
     private static boolean bundledLoaded;
 
     private static ClickGuiModule cfg() { return ClickGuiModule.getInstance(); }
 
     private static boolean clickGuiOn() { ClickGuiModule c = cfg(); return c != null && c.clickGuiFont.getValue(); }
     private static boolean hudOn()      { ClickGuiModule c = cfg(); return c != null && c.hudFont.getValue(); }
-    private static boolean anyOn()      { return clickGuiOn() || hudOn(); }
+    private static boolean nametagOn() {
+        try {
+            dev.guizhou.features.modules.render.NametagsModule m =
+                    GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.render.NametagsModule.class);
+            return m != null && m.nametagFont.getValue();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+    private static boolean anyOn()      { return clickGuiOn() || hudOn() || nametagOn(); }
 
     public static void markDirty() { dirty = true; }
 
@@ -83,6 +96,27 @@ public final class Fonts {
         return fr == null ? mc.font.width(text) : Math.round(fr.getTextWidth(text));
     }
 
+    /** Nametag text through the custom renderer (CJK-capable), vanilla font as fallback. */
+    public static void drawNametagString(GuiGraphics graphics, String text, float x, float y, int color) {
+        FontRenderer fr = (nametagOn() || clickGuiOn()) ? renderer() : null;
+        if (fr == null) {
+            graphics.drawString(mc.font, text, (int) x, (int) y, color);
+            return;
+        }
+        fr.drawString(graphics, text, x + SHADOW_OFFSET, y + SHADOW_OFFSET, color, true);
+        fr.drawString(graphics, text, x, y, color, false);
+    }
+
+    public static int nametagWidth(String text) {
+        FontRenderer fr = (nametagOn() || clickGuiOn()) ? renderer() : null;
+        return fr == null ? mc.font.width(text) : Math.round(fr.getTextWidth(text));
+    }
+
+    public static int nametagLineHeight() {
+        FontRenderer fr = (nametagOn() || clickGuiOn()) ? renderer() : null;
+        return fr == null ? mc.font.lineHeight : Math.max(1, Math.round(fr.getHeight()));
+    }
+
     private static FontRenderer renderer() {
         if (!anyOn()) {
             disposeIfPresent();
@@ -98,9 +132,25 @@ public final class Fonts {
         disposeIfPresent();
 
         ClickGuiModule c = cfg();
-        Font base = resolveBaseFont(c == null ? "" : c.fontName.getValue());
-        renderer = new FontRenderer(new Font[]{base});
+        renderer = new FontRenderer(resolveBaseFonts(c == null ? "" : c.fontName.getValue()));
         dirty = false;
+    }
+
+    /**
+     * Font chain: user's system font first (if set), then bundled IB serif latin,
+     * bundled CJK, OS sans — AWT picks the first font that has the glyph, so a
+     * latin-only custom font still renders Chinese through the bundled CJK face.
+     */
+    private static Font[] resolveBaseFonts(String familyName) {
+        java.util.List<Font> chain = new java.util.ArrayList<>(4);
+        if (familyName != null && !familyName.isBlank()) {
+            chain.add(new Font(familyName.trim(), Font.PLAIN, 1));
+        }
+        loadBundled();
+        if (bundledLatin != null) chain.add(bundledLatin);
+        if (bundledZh != null) chain.add(bundledZh);
+        chain.add(new Font(Font.SANS_SERIF, Font.PLAIN, 1));
+        return chain.toArray(new Font[0]);
     }
 
     private static synchronized void disposeIfPresent() {
@@ -109,26 +159,38 @@ public final class Fonts {
         if (old != null) old.close();
     }
 
-    private static Font resolveBaseFont(String familyName) {
-        if (familyName != null && !familyName.isBlank()) {
-
-            return new Font(familyName.trim(), Font.PLAIN, 1);
+    private static void loadBundled() {
+        if (bundledLoaded) return;
+        bundledLoaded = true;
+        bundledLatin = loadTtf(BUNDLED_LATIN_PATH);
+        // CJK face is an optional side download (launcher puts it at
+        // guizhouware/fonts/ib_zh.ttf next to the mods dir) — keeps the jar lean.
+        bundledZh = loadExternalTtf("guizhouware", "fonts", "ib_zh.ttf");
+        if (bundledZh == null) {
+            bundledZh = loadTtf(BUNDLED_ZH_PATH);
         }
-        Font bundled = bundled();
-        if (bundled != null) return bundled;
-        return new Font(Font.SANS_SERIF, Font.PLAIN, 1);
     }
 
-    private static Font bundled() {
-        if (bundledLoaded) return bundledBase;
-        bundledLoaded = true;
-        try (InputStream is = Fonts.class.getResourceAsStream(BUNDLED_PATH)) {
-            if (is != null) {
-                bundledBase = Font.createFont(Font.TRUETYPE_FONT, is).deriveFont(1f);
+    private static Font loadExternalTtf(String... segments) {
+        try {
+            java.nio.file.Path p = java.nio.file.Paths.get("", segments);
+            if (java.nio.file.Files.exists(p)) {
+                return Font.createFont(Font.TRUETYPE_FONT, p.toFile()).deriveFont(1f);
             }
         } catch (Exception e) {
-            bundledBase = null;
+            // external font optional — fall through
         }
-        return bundledBase;
+        return null;
+    }
+
+    private static Font loadTtf(String resourcePath) {
+        try (InputStream is = Fonts.class.getResourceAsStream(resourcePath)) {
+            if (is != null) {
+                return Font.createFont(Font.TRUETYPE_FONT, is).deriveFont(1f);
+            }
+        } catch (Exception e) {
+            // bundled font optional — fall through to the OS sans tail of the chain
+        }
+        return null;
     }
 }

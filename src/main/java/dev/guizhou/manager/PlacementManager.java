@@ -2,7 +2,6 @@ package dev.guizhou.manager;
 
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.entity.player.TickEvent;
-import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.Feature;
 import dev.guizhou.mixin.client.ClientLevelAccessor;
@@ -14,9 +13,7 @@ import dev.guizhou.util.inventory.SwapPriority;
 import dev.guizhou.util.player.EatUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
-import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.world.InteractionHand;
@@ -272,8 +269,11 @@ public class PlacementManager extends Feature {
             hitPos = faceCenter(pos, hitSide);
         } else {
             clicked = pos.relative(side);
-            hitPos = faceCenter(pos, side);
             hitSide = side.getOpposite();
+            // The hit position belongs to the clicked anchor's face, not the target cell —
+            // anchoring pos's face center onto the anchor puts the cursor 1.05 outside it,
+            // which cursor-checking servers (NetEase, Grim) silently reject.
+            hitPos = faceCenter(clicked, hitSide);
         }
 
         // Logs and pillars take their axis from the face that was clicked, so a batch placed off the
@@ -286,7 +286,7 @@ public class PlacementManager extends Feature {
                     case Z -> Direction.SOUTH;
                     case Y -> Direction.UP;
                 };
-                hitPos = faceCenter(pos, hitSide);
+                hitPos = faceCenter(clicked, hitSide);
             }
         }
 
@@ -557,30 +557,17 @@ public class PlacementManager extends Feature {
 
     // ---------------------------------------------------------------- block updates
 
-    @Subscribe
-    private void onPacketReceive(PacketEvent.Receive event) {
-        Packet<?> packet = event.getPacket();
-        if (packet instanceof ClientboundBlockUpdatePacket bup) {
-            handleBlockUpdate(bup);
-        } else if (packet instanceof ClientboundBundlePacket bundle) {
-            for (Packet<?> sub : bundle.subPackets()) {
-                if (sub instanceof ClientboundBlockUpdatePacket bup) handleBlockUpdate(bup);
-            }
-        }
-    }
-
-    private void handleBlockUpdate(ClientboundBlockUpdatePacket packet) {
+    /** Called after vanilla applies the update, so reactive scans observe the new block. */
+    public void onBlockUpdateApplied(ClientboundBlockUpdatePacket packet) {
+        if (!mc.isSameThread() || mc.level == null || mc.player == null) return;
         BlockPos pos = packet.getPos().immutable();
         boolean nowAir = packet.getBlockState().isAir();
         // The server confirmed the block: the cooldown that was suppressing retries has done its job.
         if (!nowAir) cooldowns.remove(pos);
 
-        // Runs on the netty thread; everything below touches the level and sends packets.
-        mc.execute(() -> {
-            for (PlacementListener listener : listeners) {
-                listener.onBlockUpdate(pos, nowAir);
-            }
-            flushQueue();
-        });
+        for (PlacementListener listener : listeners) {
+            listener.onBlockUpdate(pos, nowAir);
+        }
+        flushQueue();
     }
 }

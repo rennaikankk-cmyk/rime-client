@@ -3,7 +3,6 @@ package dev.guizhou.util.render.font;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
-import it.unimi.dsi.fastutil.chars.Char2ObjectArrayMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
@@ -20,6 +19,7 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.nio.IntBuffer;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
@@ -28,10 +28,10 @@ public class GlyphMap {
     private static final AtomicInteger ID_COUNTER = new AtomicInteger();
 
     private final Font[] fonts;
-    private final char include;
-    private final char exclude;
+    private final int include;
+    private final int exclude;
     private final int padding;
-    private final Char2ObjectArrayMap<Glyph> glyphs = new Char2ObjectArrayMap<>();
+    private final Glyph[] glyphs;
 
     private boolean generated;
     private DynamicTexture texture;
@@ -39,11 +39,15 @@ public class GlyphMap {
     private int width;
     private int height;
 
-    public GlyphMap(Font[] fonts, char include, char exclude, int padding) {
+    public GlyphMap(Font[] fonts, int include, int exclude, int padding) {
+        if (include < 0 || exclude > Character.MAX_VALUE + 1 || include >= exclude) {
+            throw new IllegalArgumentException("Invalid glyph page range: " + include + ".." + exclude);
+        }
         this.fonts = fonts;
         this.include = include;
         this.exclude = exclude;
         this.padding = padding;
+        this.glyphs = new Glyph[exclude - include];
     }
 
     public void generate() {
@@ -52,8 +56,9 @@ public class GlyphMap {
 
     public Glyph getGlyph(char character) {
         synchronized (this) {
+            if (!contains(character)) return null;
             if (!generated) generateInternal();
-            return glyphs.get(character);
+            return glyphs[character - include];
         }
     }
 
@@ -71,7 +76,7 @@ public class GlyphMap {
                 texture = null;
                 textureId = null;
             }
-            glyphs.clear();
+            Arrays.fill(glyphs, null);
             width = -1;
             height = -1;
         }
@@ -146,9 +151,9 @@ public class GlyphMap {
                 g.setFont(font);
                 FontMetrics fm = g.getFontMetrics();
                 g.drawString(String.valueOf(chars[i]), ux[i], uy[i] + fm.getAscent());
-                glyphs.put(chars[i], new Glyph(this, ux[i], uy[i], gw[i], gh[i], adv[i], chars[i]));
+                glyphs[i] = new Glyph(this, ux[i], uy[i], gw[i], gh[i], adv[i], chars[i]);
             } else {
-                glyphs.put(chars[i], new Glyph(this, 0, 0, 0, 0, adv[i], chars[i]));
+                glyphs[i] = new Glyph(this, 0, 0, 0, 0, adv[i], chars[i]);
             }
         }
         g.dispose();
@@ -192,6 +197,36 @@ public class GlyphMap {
             if (font.canDisplay(c)) return font;
         }
         return fonts[0];
+    }
+
+    static final class PageCache {
+        private static final int CHARACTER_COUNT = Character.MAX_VALUE + 1;
+        private final int pageSize;
+        private final GlyphMap[] pages;
+
+        PageCache(int pageSize) {
+            if (pageSize <= 0) throw new IllegalArgumentException("pageSize <= 0");
+            this.pageSize = Math.min(pageSize, CHARACTER_COUNT);
+            this.pages = new GlyphMap[(CHARACTER_COUNT + this.pageSize - 1) / this.pageSize];
+        }
+
+        synchronized GlyphMap getOrCreate(Font[] fonts, char character, int padding) {
+            int index = character / pageSize;
+            GlyphMap page = pages[index];
+            if (page == null) {
+                int start = index * pageSize;
+                page = new GlyphMap(fonts, start, Math.min(start + pageSize, CHARACTER_COUNT), padding);
+                pages[index] = page;
+            }
+            return page;
+        }
+
+        synchronized void clear() {
+            for (int i = 0; i < pages.length; i++) {
+                if (pages[i] != null) pages[i].destroy();
+                pages[i] = null;
+            }
+        }
     }
 
     public record Glyph(GlyphMap parent, int u, int v, int width, int height,

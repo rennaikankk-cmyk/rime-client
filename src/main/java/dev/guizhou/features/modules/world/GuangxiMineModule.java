@@ -334,6 +334,7 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     @Subscribe
     private void onTick(PreTickEvent event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
         if (nullCheck()) return;
 
         if (stopCooldown > 0) stopCooldown--;

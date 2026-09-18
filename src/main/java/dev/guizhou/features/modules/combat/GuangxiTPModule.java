@@ -401,7 +401,7 @@ public class GuangxiTPModule extends Module {
         return dmg * (1.0f - j / 25.0f);
     }
 
-    @Subscribe
+    @Override
     public void onRender3D(Render3DEvent event) {
         if (!render.getValue() || renderPos == null || nullCheck()) return;
         if (System.currentTimeMillis() - renderStartMs > 800L) {

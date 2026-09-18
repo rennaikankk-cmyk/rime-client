@@ -7,6 +7,7 @@ import dev.guizhou.features.modules.movement.VelocityModule;
 import dev.guizhou.features.modules.player.NoRotateModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundExplodePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
@@ -31,10 +32,23 @@ public class MixinClientPlayNetworkHandler {
     @Unique
     private float rotation$prevPitch;
 
+    @Inject(method = "handleBlockUpdate", at = @At("TAIL"), require = 1)
+    private void onBlockUpdateApplied(ClientboundBlockUpdatePacket packet, CallbackInfo ci) {
+        if (!Minecraft.getInstance().isSameThread() || GuizhouWare.placementManager == null) return;
+        GuizhouWare.placementManager.onBlockUpdateApplied(packet);
+    }
+
     @Inject(method = "handleMovePlayer", at = @At("HEAD"))
     private void onHandleMovePlayerPre(ClientboundPlayerPositionPacket packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || GuizhouWare.rotationManager == null) return;
+        if (!mc.isSameThread() || mc.player == null) return;
+        if (GuizhouWare.tpsCounterService != null) {
+            double distanceSq = GuizhouWare.tpsCounterService.onPlayerCorrection(packet);
+            if (GuizhouWare.telemetryManager != null) {
+                GuizhouWare.telemetryManager.onPlayerCorrection(distanceSq);
+            }
+        }
+        if (GuizhouWare.rotationManager == null) return;
         rotation$prevYaw = mc.player.getYRot();
         rotation$prevPitch = mc.player.getXRot();
     }
@@ -42,7 +56,7 @@ public class MixinClientPlayNetworkHandler {
     @Inject(method = "handleMovePlayer", at = @At("TAIL"))
     private void onHandleMovePlayerPost(ClientboundPlayerPositionPacket packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || GuizhouWare.rotationManager == null) return;
+        if (!mc.isSameThread() || mc.player == null || GuizhouWare.rotationManager == null) return;
         if (GuizhouWare.rotationManager.isSilentActive() || NoRotateModule.isActive()) {
             mc.player.setYRot(rotation$prevYaw);
             mc.player.setXRot(rotation$prevPitch);

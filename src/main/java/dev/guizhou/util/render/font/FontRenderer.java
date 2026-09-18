@@ -29,10 +29,9 @@ public class FontRenderer implements Closeable {
     private static final float TARGET_ASCENT = 7f;
 
     private final Map<Identifier, ObjectList<DrawEntry>> glyphPages = new HashMap<>();
-    private final ObjectList<GlyphMap> maps = new ObjectArrayList<>();
+    private final GlyphMap.PageCache maps;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    private final int charsPerPage;
     private final int padding;
 
     private Font[] baseFonts;
@@ -52,8 +51,8 @@ public class FontRenderer implements Closeable {
         if (paddingBetweenCharacters < 0) throw new IllegalArgumentException("padding < 0");
 
         this.baseFonts = fonts;
-        this.charsPerPage = charactersPerPage;
         this.padding = paddingBetweenCharacters;
+        this.maps = new GlyphMap.PageCache(charactersPerPage);
         init();
     }
 
@@ -208,30 +207,16 @@ public class FontRenderer implements Closeable {
     private GlyphMap.Glyph locateGlyph(char ch) {
         lock.readLock().lock();
         try {
-            for (GlyphMap m : maps) {
-                if (m.contains(ch)) return m.getGlyph(ch);
-            }
+            return maps.getOrCreate(fittedFonts, ch, padding).getGlyph(ch);
         } finally {
             lock.readLock().unlock();
         }
-        int base = charsPerPage * (ch / charsPerPage);
-        int top = Math.min(base + charsPerPage, Character.MAX_VALUE + 1);
-        GlyphMap map = new GlyphMap(this.fittedFonts, (char) base, (char) top, padding);
-        lock.writeLock().lock();
-        try {
-            map.generate();
-            maps.add(map);
-        } finally {
-            lock.writeLock().unlock();
-        }
-        return map.getGlyph(ch);
     }
 
     @Override
     public void close() {
         lock.writeLock().lock();
         try {
-            for (GlyphMap m : maps) m.destroy();
             maps.clear();
             initialized = false;
         } finally {

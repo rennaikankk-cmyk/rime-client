@@ -4,19 +4,23 @@ import dev.guizhou.event.impl.network.DisconnectEvent;
 import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.Feature;
+import dev.guizhou.util.models.TickRateWindow;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
+import net.minecraft.world.entity.PositionMoveRotation;
+
+import java.util.concurrent.atomic.AtomicLong;
 
 public class TPSCounterService extends Feature {
-    /** A server teleport this far from our client position is a rubberband. */
     private static final double RUBBERBAND_DIST_SQ = 9.0;
-    private static final long RUBBERBAND_QUIET_MS = 400L;
+    private static final long RUBBERBAND_QUIET_NS = 400_000_000L;
 
-    private final float[] tickRates = new float[20];
-    private int nextIndex = 0;
-    private int countTick = 0;
-    private long lastTimeUpdate = -1;
-    private long lastRubberbandMs = Long.MIN_VALUE;
+    private final TickRateWindow window = new TickRateWindow(20);
+    private final AtomicLong sessionGeneration = new AtomicLong();
+    private volatile TickRateWindow.Snapshot rates = TickRateWindow.DEFAULT;
+    private volatile long lastRubberbandNs = Long.MIN_VALUE;
+    private ClientPacketListener sampledConnection;
 
     public void init() {
         EVENT_BUS.register(this);
@@ -24,71 +28,62 @@ public class TPSCounterService extends Feature {
 
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
-        nextIndex = 0;
-        countTick = 0;
-        lastTimeUpdate = -1;
-        lastRubberbandMs = Long.MIN_VALUE;
+        long generation = sessionGeneration.incrementAndGet();
+        mc.execute(() -> {
+            if (sessionGeneration.get() != generation) return;
+            resetSamples(null);
+        });
     }
 
     @Subscribe
     public void onPacketReceive(PacketEvent.Receive event) {
-        if (!(event.getPacket() instanceof ClientboundSetTimePacket)) {
-            if (event.getPacket() instanceof ClientboundPlayerPositionPacket teleport
-                    && mc.player != null) {
-                var serverPos = teleport.change().position();
-                if (mc.player.position().distanceToSqr(serverPos) > RUBBERBAND_DIST_SQ) {
-                    lastRubberbandMs = System.currentTimeMillis();
-                }
-            }
-            return;
+        if (!(event.getPacket() instanceof ClientboundSetTimePacket packet)) return;
+        long arrivalNanos = System.nanoTime();
+        long serverTick = packet.gameTime();
+        ClientPacketListener connection = mc.getConnection();
+        long generation = sessionGeneration.get();
+        if (connection == null) return;
+        mc.execute(() -> {
+            if (sessionGeneration.get() != generation || mc.getConnection() != connection) return;
+            if (sampledConnection != connection) resetSamples(connection);
+            rates = window.add(serverTick, arrivalNanos);
+        });
+    }
+
+    /** Called on the client thread immediately before vanilla applies a correction. */
+    public double onPlayerCorrection(ClientboundPlayerPositionPacket packet) {
+        if (!mc.isSameThread()) throw new IllegalStateException("Player corrections require the client thread");
+        if (mc.player == null) return 0.0;
+        ClientPacketListener connection = mc.getConnection();
+        if (sampledConnection != connection) resetSamples(connection);
+        double distanceSquared = correctionDistanceSquared(PositionMoveRotation.of(mc.player), packet);
+        if (Double.isFinite(distanceSquared) && distanceSquared > RUBBERBAND_DIST_SQ) {
+            lastRubberbandNs = System.nanoTime();
         }
+        return distanceSquared;
+    }
 
-        long now = System.currentTimeMillis();
+    static double correctionDistanceSquared(PositionMoveRotation before, ClientboundPlayerPositionPacket packet) {
+        PositionMoveRotation absolute = PositionMoveRotation.calculateAbsolute(before, packet.change(), packet.relatives());
+        return before.position().distanceToSqr(absolute.position());
+    }
 
-        if (lastTimeUpdate != -1) {
-            float elapsed = (now - lastTimeUpdate) / 1000.0f;
-            float tps = 20.0f / elapsed;
-            tickRates[nextIndex % tickRates.length] = Math.min(Math.max(tps, 0.0f), 20.0f);
-            nextIndex++;
-            countTick = Math.min(countTick + 1, tickRates.length);
-        }
-
-        lastTimeUpdate = now;
+    private void resetSamples(ClientPacketListener connection) {
+        sampledConnection = connection;
+        rates = window.reset();
+        lastRubberbandNs = Long.MIN_VALUE;
     }
 
     public float getAverageTPS() {
-        if (countTick == 0) return 20.0f;
-
-        float sum = 0.0f;
-        int valid = 0;
-        for (int i = 0; i < countTick; i++) {
-            float t = tickRates[i];
-            if (t > 0.0f) {
-                sum += t;
-                valid++;
-            }
-        }
-        return valid == 0 ? 20.0f : Math.min(Math.max(sum / valid, 0.0f), 20.0f);
+        return rates.average();
     }
 
     public float getLatestTPS() {
-        if (countTick == 0) return 20.0f;
-
-        int last = (nextIndex - 1 + tickRates.length) % tickRates.length;
-        return Math.min(Math.max(tickRates[last], 0.0f), 20.0f);
+        return rates.latest();
     }
 
     public float getMinTPS() {
-        if (countTick == 0) return 20.0f;
-
-        float min = 20.0f;
-        for (int i = 0; i < countTick; i++) {
-            float t = tickRates[i];
-            if (t > 0.0f && t < min) {
-                min = t;
-            }
-        }
-        return Math.min(Math.max(min, 0.0f), 20.0f);
+        return rates.minimum();
     }
 
     /**
@@ -101,9 +96,9 @@ public class TPSCounterService extends Feature {
         return Math.min(4.0f, 20.0f / tps);
     }
 
-    /** True within {@link #RUBBERBAND_QUIET_MS} of a server rubberband — placements should pause. */
+    /** True for 400 milliseconds after a correction larger than three blocks. */
     public boolean isRubberbandRecent() {
-        return lastRubberbandMs != Long.MIN_VALUE
-                && System.currentTimeMillis() - lastRubberbandMs < RUBBERBAND_QUIET_MS;
+        long last = lastRubberbandNs;
+        return last != Long.MIN_VALUE && System.nanoTime() - last < RUBBERBAND_QUIET_NS;
     }
 }

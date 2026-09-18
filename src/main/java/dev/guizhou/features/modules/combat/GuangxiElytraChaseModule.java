@@ -1,1363 +1,1539 @@
 package dev.guizhou.features.modules.combat;
 
 import dev.guizhou.GuizhouWare;
-import dev.guizhou.event.impl.entity.TotemPopEvent;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
+import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.features.modules.movement.GuangxiElytraModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.MathUtil;
+import dev.guizhou.util.elytra.AerialCombatPolicy;
+import dev.guizhou.util.elytra.AerialIntercept;
+import dev.guizhou.util.elytra.AerialDuelPredictor;
+import dev.guizhou.util.elytra.AsyncFlightRoute;
+import dev.guizhou.util.elytra.CombatHitWindow;
+import dev.guizhou.util.elytra.ElytraWeaponController;
 import dev.guizhou.util.elytra.ElytraPhysics;
-import dev.guizhou.util.inventory.InventoryUtil;
-import dev.guizhou.util.inventory.Result;
-import dev.guizhou.util.inventory.ResultType;
-import dev.guizhou.util.inventory.SwapMode;
-import dev.guizhou.util.inventory.SwapPriority;
-import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
+import dev.guizhou.util.elytra.FlightVelocity;
+import dev.guizhou.util.elytra.FlightRoutePlanner;
+import dev.guizhou.util.elytra.FlightPlanningTask;
+import dev.guizhou.util.elytra.MaceDiveController;
+import dev.guizhou.util.elytra.MaceDiveState;
+import dev.guizhou.util.elytra.MacePassTracker;
+import dev.guizhou.util.elytra.SpearCombat;
+import dev.guizhou.util.elytra.TargetMotionTracker;
+import dev.guizhou.util.player.EatUtil;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.protocol.game.ClientboundDamageEventPacket;
+import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.projectile.Projectile;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.MaceItem;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
-import java.util.ArrayDeque;
-import java.util.Iterator;
-
-import static dev.guizhou.util.inventory.InventoryUtil.FULL_SCOPE;
+import java.util.List;
 
 /**
- * Elytra pursuit bot ported from rennaikanksmp ElytraBotV2 (FOLLOW + MACE).
+ * Elytra pursuit movement and mace attack timing.
  *
- * Drives GuangxiElytra's velocity instead of WASD while a target is held:
- * - FOLLOW: terrain-aware chase with an intercept course (cut off a runner
- *   instead of tail-chasing) and convergence braking near the target
- * - MACE: a pull-up / follow / hover / down-attack state machine — bank
- *   height, dive on the strike window, mace damage scales with fall distance
+ * Four modes:
+ * - FOLLOW: fly straight at the target (heading length = distance → natural
+ *   far-fast / near-slow convergence)
+ * - MACE: pull up above the target, dive through with mace timing
+ *   (state machine None → PullUp → Follow → WaitAttack; hit feedback re-pulls)
+ * - SPEAR: approach to spear distance, sidestep charged-spear raycasts
+ *   (anti-spear), pull over and reset
+ * - MXS: confirmed mace hit, then a bounded spear pass before returning to mace
  *
- * Target intelligence: totem awareness (pop packet opens a kill window with
- * relaxed attack gates) and pearl awareness (track a thrown pearl, simulate
- * its landing, intercept there instead of chasing the stale position).
+ * Speed seam: GuangxiElytra calls {@link #onElytra} every movement tick with
+ * a FlightVelocity; the active behaviour may overwrite the vector. Its LENGTH
+ * is the desired speed — a short vector means slow down.
  */
 public class GuangxiElytraChaseModule extends Module {
 
-    public static final String ID = "GuangxiElytraChase";
+    public enum Mode { FOLLOW, MACE, SPEAR, MXS }
+    public enum ThreatMode { ALL_PLAYERS, ADAPTIVE }
 
-    private static final int ROTATION_PRIORITY = 6;
+    /** Observed motion for the status display, not a player classification. */
+    public enum MotionClass { RUSHING, FLEEING, UNKNOWN, NORMAL, STILL }
 
-    public enum Mode {
-        FOLLOW, MACE, SPEAR
-    }
+    private static GuangxiElytraChaseModule INSTANCE;
 
-    private enum Action {
-        AFK, SLOW_SPEED, CIRCLING, TOWARDS, ESCAPING, PEARL_ESCAPE
-    }
+    // ---- General ----
+    private final Setting<Mode> mode = mode("Mode", Mode.FOLLOW).setPage("General");
+    private final Setting<Integer> range = num("Range", 80, 8, 256).setPage("General");
+    private final Setting<Boolean> playerOnly = bool("PlayerOnly", true).setPage("General");
+    private final Setting<Boolean> dynamicTarget = bool("DynamicTarget", false).setPage("General");
+    private final Setting<Boolean> autoControlElytra = bool("AutoControlElytra", true).setPage("General");
+    private final Setting<Boolean> autoWeapon = bool("AutoWeapon", true).setPage("General");
+    private final Setting<Boolean> autoSpearUse = bool("AutoSpearUse", true).setPage("General");
+    private final Setting<Boolean> adaptiveCombat = bool("AdaptiveCombat", true).setPage("General");
+    private final Setting<ThreatMode> threatMode = mode("ThreatMode", ThreatMode.ALL_PLAYERS).setPage("General");
+    private final Setting<Boolean> avoidObstacles = bool("AvoidObstacles", true).setPage("General");
+    private final Setting<Boolean> onlyWhenNoWasd = bool("OnlyWhenNoWasd", false).setPage("General");
+    private final Setting<Double> combatRange = num("CombatRange", 10.0, 1.0, 64.0).setPage("General");
+    private final Setting<Double> spearRange = num("SpearRange", 11.0, 1.0, 64.0).setPage("General");
+    private final Setting<Double> followGroundHeightExtra = num("FollowGroundHeightExtra", 2.0, 0.0, 10.0).setPage("General");
 
-    private final Setting<Mode> mode = mode("Mode", Mode.FOLLOW);
+    // ---- Advanced ----
+    private final Setting<Boolean> maceUseExtraAttack = bool("MaceUseExtraAttack", true).setPage("Advanced");
+    private final Setting<Boolean> autoMaceDive = bool("AutoMaceDive", false).setPage("Advanced");
+    private final Setting<Double> maceHeight = num("MaceHeight", 10.0, 1.0, 64.0).setPage("Advanced");
+    private final Setting<Double> maceMinFallDistance = num("MaceMinFallDistance", 1.5, 0.0, 20.0).setPage("Advanced");
+    private final Setting<Double> maceCustomPullUpAngle = num("MaceCustomPullUpAngle", 0.0, 0.0, 89.0).setPage("Advanced");
+    private final Setting<Double> spearAttackDistance = num("SpearAttackDistance", 8.0, 1.0, 64.0).setPage("Advanced");
+    private final Setting<Double> spearPullOverDistance = num("SpearPullOverDistance", 8.0, 1.0, 64.0).setPage("Advanced");
+    private final Setting<Double> spearNoEntryDistance = num("SpearNoEntryDistance", 0.0, 0.0, 20.0).setPage("Advanced");
+    private final Setting<Boolean> spearAntiSpear = bool("SpearAntiSpear", true).setPage("Advanced");
+    private final Setting<Double> spearAntiSpearExtraDistance = num("SpearAntiSpearExtraDistance", 0.0, 0.0, 10.0).setPage("Advanced");
+    private final Setting<Double> flyAntiSpear = num("FlyAntiSpear", 1.0, 0.0, 5.0).setPage("Advanced");
+    private final Setting<Integer> mxsMaceHitWaitTicks = num("MxsMaceHitWaitTicks", 1, 0, 40).setPage("Advanced");
+    private final Setting<Double> mxsSpearSwitchMaceHeight = num("MxsSpearSwitchMaceHeight", 0.0, 0.0, 64.0).setPage("Advanced");
+    private final Setting<Integer> mxsSpearRunTicks = num("MxsSpearRunTicks", 60, 10, 200).setPage("Advanced");
 
-    private final Setting<Double> targetRange = num("TargetRange", 80.0, 16.0, 256.0);
-    private final Setting<Boolean> playerOnly = bool("PlayersOnly", true);
-    private final Setting<Boolean> dynamicTarget = bool("DynamicTarget", true);
-
-    // attack execution
-    private final Setting<Double> attackRange = num("AttackRange", 3.2, 1.0, 6.0);
-    private final Setting<Double> combatRange = num("CombatRange", 10.0, 2.0, 32.0);
-    private final Setting<Double> attackCadence = num("AttackCadence", 0.9, 0.2, 1.0);
-    private final Setting<Integer> attackMinInterval = num("AttackMinInterval", 3, 1, 20);
-    private final Setting<Boolean> useMace = bool("UseMace", true);
-
-    // totem intelligence
-    private final Setting<Boolean> totemAware = bool("TotemAware", true);
-    private final Setting<Integer> killWindowTicks = num("KillWindowTicks", 60, 10, 200);
-    private final Setting<Boolean> totemHover = bool("TotemHover", false);
-    private final Setting<Double> totemHoverHeight = num("TotemHoverHeight", 14.0, 4.0, 40.0);
-
-    // pearl intelligence
-    private final Setting<Boolean> pearlAware = bool("PearlAware", true);
-    private final Setting<Integer> pearlSimTicks = num("PearlSimTicks", 80, 20, 200);
-
-    // pursuit
-    private final Setting<Boolean> intercept = bool("Intercept", true);
-    private final Setting<Double> interceptLead = num("InterceptLead", 1.0, 0.0, 1.0);
-    private final Setting<Boolean> terrainAware = bool("TerrainAware", true);
-    private final Setting<Double> terrainLookahead = num("TerrainLookahead", 8.0, 2.0, 32.0);
-    private final Setting<Integer> lostTargetTicks = num("LostTargetTicks", 40, 5, 200);
-    private final Setting<Boolean> converge = bool("Converge", true);
-    private final Setting<Double> groundFollowHeight = num("GroundFollowHeight", 2.0, 0.0, 8.0);
-
-    // mace behaviour
-    private final Setting<Double> maceHeight = num("MaceHeight", 10.0, 2.0, 64.0);
-    private final Setting<Double> maceHeightGround = num("MaceHeightGround", 10.0, 2.0, 64.0);
-    private final Setting<Integer> maceMaxPullUpTick = num("MaceMaxPullUpTicks", 40, 5, 200);
-    private final Setting<Double> maceFollowMinHeight = num("MaceFollowMinHeight", 1.5, 0.0, 16.0);
-    private final Setting<Boolean> maceDownAttack = bool("MaceDownAttack", true);
-    private final Setting<Boolean> maceAngleOptimize = bool("MaceAngleOptimize", true);
-    private final Setting<Double> maceAngleRange = num("MaceAngleRange", 16.0, 4.0, 64.0);
-
-    private final Setting<Boolean> autoTakeoff = bool("AutoTakeoff", true);
-
-    // spear behaviour (ported SpearV2)
-    private final Setting<Double> combatSpearRange = num("SpearRange", 11.0, 2.0, 32.0);
-    private final Setting<Boolean> spearPullOver = bool("SpearPullOver", true);
-    private final Setting<Boolean> autoSpearCharge = bool("AutoSpearCharge", true);
-    private final Setting<Double> spearChargeMinFall = num("SpearChargeMinFall", 1.5, 0.0, 16.0);
-    private final Setting<Integer> spearChargeTicks = num("SpearChargeTicks", 8, 1, 40);
-    private final Setting<Boolean> spearMaxDamage = bool("SpearMaxDamage", true);
-    private final Setting<Double> spearStabMinSpeed = num("SpearStabMinSpeed", 1.1, 0.1, 5.0);
-    private final Setting<Boolean> relativeSpeedGate = bool("RelativeSpeedGate", true);
-    private final Setting<Double> dodgeIntensity = num("DodgeIntensity", 1.0, 0.1, 3.0);
-    private final Setting<Integer> dodgeCycleTicks = num("DodgeCycleTicks", 8, 2, 40);
-
-    // ---------------------------------------------------------------
-    // runtime state
-    // ---------------------------------------------------------------
-
-    private static GuangxiElytraChaseModule instance;
-
-    private int tick;
-    private Player target;
-
-    private Vec3 movementDirection;
-    private double speedMultiplier = 1.0;
-
-    private boolean attackFlag;
-
-    private int totemPopTick = Integer.MIN_VALUE;
-
-    private Entity trackedPearl;
-    private Vec3 pearlLanding;
-    private int pearlGraceTick = Integer.MIN_VALUE;
-
-    private Action action = Action.CIRCLING;
-    private boolean targetOnGround;
-    private boolean inCombatRange;
-
-    // last-sighting memory (ghost course after losing the target)
-    private Vec3 lastSeenPos;
-    private Vec3 lastSeenVel = Vec3.ZERO;
-    private int lastSeenTick = Integer.MIN_VALUE;
-
-    // target position ring buffer for velocity estimate + action classification
-    private final ArrayDeque<Integer> posTicks = new ArrayDeque<>();
-    private final ArrayDeque<Vec3> posRing = new ArrayDeque<>();
-
-    // opponent pressure meter: their main-hand swings in the recent window
-    private final ArrayDeque<Integer> targetSwings = new ArrayDeque<>();
-    private static final int PRESSURE_WINDOW = 40;
-    private static final int PRESSURE_THRESHOLD = 3;
-
-    // mace state machine
-    private static final int STATE_NONE = 0;
-    private static final int STATE_PULL_UP = 1;
-    private static final int STATE_FOLLOW = 2;
-    private static final int STATE_WAIT_ATTACK = 3;
-    private static final int STATE_HOVER = 4;
-    private static final int STATE_DOWN_ATTACK = 5;
-
-    private int maceState = STATE_NONE;
-    private int startPullUpTick;
-    private int downAttackTicks;
-    private int waitAttackTicks;
-    private double hoverAngle;
-    private double lastFallDistance;
+    // target state
+    private volatile Entity target;
+    private Entity lastTarget;
+    private MotionClass targetMotion = MotionClass.NORMAL;
+    private boolean targetGrounded;
+    private final TargetMotionTracker targetHistory = new TargetMotionTracker();
+    private ClientLevel trackedLevel;
+    private LocalPlayer trackedPlayer;
+    private volatile long session;
+    private int latencyTicks = 1;
+    private int confirmationTicks = 6;
     private int lastAttackTick = Integer.MIN_VALUE / 2;
+    private final CombatHitWindow maceFeedback = new CombatHitWindow();
+    private final ElytraWeaponController weapons = new ElytraWeaponController();
+    private final FlightRoutePlanner flightRoute = new FlightRoutePlanner();
+    private final AsyncFlightRoute parallelRoute = new AsyncFlightRoute();
+    private final FlightPlanningTask<DuelRequest, AerialDuelPredictor.Output> duelPlanner =
+            new FlightPlanningTask<>(request -> AerialDuelPredictor.predict(request.input()));
+    private AerialDuelPredictor.Output duelPrediction;
+    private long predictionPhase;
+    private boolean planningEnabled;
+    private RouteContext routeContext;
+    private boolean routeAvoiding;
+    private final MaceDiveController maceDive = new MaceDiveController();
+    private volatile boolean sendingAttack;
+    private PacketEvent.Send pendingAttack;
+    private PacketEvent.Send pendingRotation;
+    private float sentYaw;
+    private float sentPitch;
+    private boolean sentRotationKnown;
+    private volatile long attackGeneration;
+    private volatile long combatPhase;
+    private boolean weaponControlActive;
+    private boolean controllingFlight;
+    private TargetsModule targetRules;
+    private final AerialCombatPolicy tactics = new AerialCombatPolicy();
+    private AerialCombatPolicy.Action combatAction = AerialCombatPolicy.Action.CHASE;
+    private Vec3 defensiveHeading = Vec3.ZERO;
+    private long targetSinceTick;
+    private long lastTargetSearchTick = Long.MIN_VALUE / 2;
+    private long evadeSideUntil;
+    private double evadeSide = 1.0;
 
-    // spear state machine (ported SpearV2)
-    private static final int S_ORBIT = 0;
-    private static final int S_ENGAGE = 1;
-    private static final int S_DODGE = 2;
-    private static final int S_PULL_OVER = 3;
-    private int spearState = S_ORBIT;
-    private double orbitAngle;
-    private int dodgeTicksLeft;
-    private int dodgeCooldownUntil = Integer.MIN_VALUE / 2;
-    private int feintSign = 1;
-    private int nextFeintFlip;
-    private int engageUntil = Integer.MIN_VALUE / 2;
-    private int reengageCooldownUntil = Integer.MIN_VALUE / 2;
-    private int pullOverTicks;
-    private boolean wasTargetUsingSpear;
+    private record DuelRequest(long session, long phase, int tick, int targetId, Pose pose,
+                               boolean wings, boolean gliding, AerialDuelPredictor.Input input) {
+    }
 
-    // auto spear charge state
-    private int spearPrevSlot = -1;
+    private record RouteContext(long phase, Pose pose, boolean wings, boolean gliding, boolean parallel,
+                                double width, double height, double depth) {
+    }
+
+    // behaviour machinery
+    private Behavior behavior;
+    private Mode behaviorMode;
 
     public GuangxiElytraChaseModule() {
-        super("GuangxiElytraChase", "Elytra pursuit bot: intercept-course chase and mace dive with totem/pearl awareness.", Category.COMBAT);
-        totemHoverHeight.setVisibility(v -> totemHover.getValue() && mode.getValue() == Mode.MACE);
-        maceHeight.setVisibility(v -> mode.getValue() == Mode.MACE);
-        maceHeightGround.setVisibility(v -> mode.getValue() == Mode.MACE);
-        maceMaxPullUpTick.setVisibility(v -> mode.getValue() == Mode.MACE);
-        maceFollowMinHeight.setVisibility(v -> mode.getValue() == Mode.MACE);
-        maceDownAttack.setVisibility(v -> mode.getValue() == Mode.MACE);
-        maceAngleOptimize.setVisibility(v -> mode.getValue() == Mode.MACE);
-        maceAngleRange.setVisibility(v -> maceAngleOptimize.getValue() && mode.getValue() == Mode.MACE);
-        instance = this;
+        super("GuangxiElytraChase", "Elytra pursuit bot: FOLLOW / MACE / SPEAR / MXS (rennaikanksmp ElytraBot port).", Category.COMBAT);
+        INSTANCE = this;
+    }
+
+    public static boolean isUsingSpear(Player player) {
+        return player.isUsingItem() && SpearCombat.isSpear(player.getUseItem());
+    }
+
+    public static boolean shouldKeepUsingSpear() {
+        GuangxiElytraChaseModule bot = INSTANCE;
+        return bot != null && bot.isEnabled() && bot.autoSpearUse.getValue()
+                && !bot.paused() && bot.isValid(bot.target) && bot.spearPhase()
+                && !bot.maceDive.isActive()
+                && bot.weapons.isHoldingUse();
+    }
+
+    public static boolean isMaceDiveActive() {
+        return INSTANCE != null && INSTANCE.maceDive.isActive();
+    }
+
+    /** Sample only on the game thread; background plans retain the numeric token. */
+    public static long planningPhaseToken() {
+        GuangxiElytraChaseModule bot = INSTANCE;
+        if (bot == null || !bot.isEnabled()) return 0L;
+        Behavior active = bot.behavior instanceof MxsBehavior mxs ? mxs.active : bot.behavior;
+        int state = active instanceof MaceBehavior mace ? 16 + mace.state
+                : active instanceof SpearBehavior spear ? 32 + spear.state : 0;
+        long token = bot.session * 31L + bot.combatPhase;
+        token = token * 31L + (bot.behaviorMode == null ? -1 : bot.behaviorMode.ordinal());
+        token = token * 31L + bot.maceDive.phase().ordinal();
+        return token * 31L + state;
+    }
+
+    public static boolean preservesMaceDescent() {
+        GuangxiElytraChaseModule bot = INSTANCE;
+        if (bot == null || !bot.isEnabled() || bot.paused() || !bot.isValid(bot.target)
+                || bot.combatAction != AerialCombatPolicy.Action.CHASE
+                || !mc.player.getMainHandItem().is(Items.MACE)
+                || mc.player.onGround() || mc.player.getY() <= bot.target.getY() + 0.5) return false;
+        Behavior active = bot.behavior instanceof MxsBehavior mxs ? mxs.active : bot.behavior;
+        return active instanceof MaceBehavior mace && mace.state == MaceBehavior.FOLLOW;
+    }
+
+    public static boolean isWeaponControlActive() {
+        GuangxiElytraChaseModule bot = INSTANCE;
+        return bot != null && bot.isEnabled() && !bot.paused() && bot.isValid(bot.target)
+                && (bot.weaponControlActive || mc.player.tickCount == bot.lastAttackTick);
+    }
+
+    public static boolean blocksCrystalCombat() {
+        GuangxiElytraChaseModule bot = INSTANCE;
+        return bot != null && bot.isEnabled() && !bot.paused() && bot.isValid(bot.target)
+                && (bot.weapons.isHoldingUse() || isUsingSpear(mc.player)
+                || bot.maceDive.isActive()
+                || mc.player.tickCount == bot.lastAttackTick
+                || bot.maceFeedback.pending(bot.target.getId(), mc.player.tickCount));
+    }
+
+    private boolean spearPhase() {
+        return behavior instanceof SpearBehavior
+                || behavior instanceof MxsBehavior mxs && !mxs.usingMace;
+    }
+
+    private boolean paused() {
+        return mc.player == null || mc.player.isDeadOrDying() || mc.screen != null
+                || manualOverride() || GuizhouWare.tpsCounterService.isRubberbandRecent();
+    }
+
+    /** Flight seam: GuangxiElytra calls this every movement tick. */
+    public static void onElytra(FlightVelocity fv) {
+        GuangxiElytraChaseModule m = INSTANCE;
+        if (m == null || !m.isEnabled() || m.behavior == null || !m.isValid(m.target)) return;
+        if (m.paused()) {
+            m.behavior.resetHeading();
+            return;
+        }
+        if (m.combatAction != AerialCombatPolicy.Action.CHASE) {
+            double speed = Math.min(m.defensiveHeading.length(), fv.maxVelocity());
+            fv.set(m.defensiveHeading.normalize().scale(speed));
+        } else {
+            m.behavior.inject(fv);
+            fv.set(m.flankApproachVector(fv.value()));
+        }
+        if (m.avoidObstacles.getValue()) {
+            Vec3 requested = fv.value();
+            Vec3 safe = m.safeFlightVector(requested);
+            if (requested.lengthSqr() > 1.0E-6 && safe.lengthSqr() < 1.0E-9) fv.requestBraking();
+            else if (m.routeAvoiding) fv.requestAvoidance(safe);
+            else fv.set(safe);
+        }
+    }
+
+    /** True when the bot currently owns a heading (flight keeps running for it). */
+    public boolean hasHeading() {
+        return isEnabled() && !paused() && isValid(target)
+                && behavior != null && (behavior.heading.lengthSqr() > 1.0E-9
+                || defensiveHeading.lengthSqr() > 1.0E-9);
+    }
+
+    /** A grounded combat mode can request takeoff before it has a flight heading. */
+    public boolean wantsFlight() {
+        return isEnabled() && autoControlElytra.getValue() && !paused() && isValid(target)
+                && !maceDive.isActive() && !fallingMaceWindow();
+    }
+
+    private boolean fallingMaceWindow() {
+        if (combatAction != AerialCombatPolicy.Action.CHASE) return false;
+        MaceBehavior mace = behavior instanceof MaceBehavior m ? m
+                : behavior instanceof MxsBehavior mxs && mxs.usingMace ? mxs.mace : null;
+        return mace != null && mace.fallingWindow();
+    }
+
+    private boolean manualOverride() {
+        return onlyWhenNoWasd.getValue() && hasWasd();
+    }
+
+    private static boolean hasWasd() {
+        return mc.options.keyUp.isDown() || mc.options.keyDown.isDown()
+                || mc.options.keyLeft.isDown() || mc.options.keyRight.isDown();
     }
 
     @Override
     public void onEnable() {
-        maceState = STATE_NONE;
-        movementDirection = null;
-        attackFlag = false;
-        Module fly = GuizhouWare.moduleManager.getModuleByName(GuangxiElytraModule.ID);
-        if (fly != null && !fly.isEnabled()) {
-            fly.enable();
-        }
+        resetRuntime();
+        syncFlightControl();
     }
 
     @Override
     public void onDisable() {
-        movementDirection = null;
-        attackFlag = false;
-        releaseAutoSpear();
+        maceDive.requestRecovery();
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        if (flight != null) flight.releaseByChase();
+        controllingFlight = false;
+        resetRuntime();
     }
 
-    // ---------------------------------------------------------------
-    // static bridge for GuangxiElytra (its PreTick may run before ours)
-    // ---------------------------------------------------------------
+    private void resetRuntime() {
+        flightRoute.reset();
+        invalidatePlanning();
+        routeAvoiding = false;
+        maceDive.requestRecovery();
+        weapons.release();
+        clearSpearAim();
+        weaponControlActive = false;
+        maceFeedback.clear();
+        attackGeneration++;
+        session++;
+        behavior = null;
+        behaviorMode = null;
+        target = null;
+        lastTarget = null;
+        targetGrounded = false;
+        targetMotion = MotionClass.NORMAL;
+        targetHistory.clear();
+        trackedLevel = null;
+        trackedPlayer = null;
+        lastAttackTick = Integer.MIN_VALUE / 2;
+        latencyTicks = 1;
+        confirmationTicks = 6;
+        pendingAttack = null;
+        pendingRotation = null;
+        sentRotationKnown = false;
+        tactics.reset();
+        combatAction = AerialCombatPolicy.Action.CHASE;
+        defensiveHeading = Vec3.ZERO;
+        targetSinceTick = 0;
+        lastTargetSearchTick = Long.MIN_VALUE / 2;
+        evadeSideUntil = 0;
+    }
 
-    public static Vec3 provideDirection() {
-        GuangxiElytraChaseModule m = instance;
-        if (m == null || !m.isEnabled() || m.target == null || m.movementDirection == null) {
-            return null;
+    private void syncFlightControl() {
+        boolean requested = autoControlElytra.getValue();
+        if (requested == controllingFlight) return;
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        if (flight == null) return;
+        if (requested) flight.enableByChase();
+        else flight.releaseByChase();
+        controllingFlight = requested;
+    }
+
+    private boolean parallelPlanningEnabled() {
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        return flight != null && flight.parallelPlanningEnabled();
+    }
+
+    private void invalidatePlanning() {
+        duelPlanner.invalidate();
+        duelPrediction = null;
+        parallelRoute.reset();
+        routeContext = null;
+    }
+
+    private AerialDuelPredictor.Weapon targetWeapon() {
+        if (!(target instanceof LivingEntity living)) return AerialDuelPredictor.Weapon.NONE;
+        var stack = living.getMainHandItem();
+        if (stack.is(Items.MACE)) return AerialDuelPredictor.Weapon.MACE;
+        if (SpearCombat.isSpear(stack)) return AerialDuelPredictor.Weapon.SPEAR;
+        return stack.is(ItemTags.SWORDS) || stack.is(ItemTags.AXES)
+                ? AerialDuelPredictor.Weapon.MELEE : AerialDuelPredictor.Weapon.NONE;
+    }
+
+    private void updateDuelPlanning() {
+        duelPrediction = null;
+        boolean enabled = parallelPlanningEnabled();
+        if (planningEnabled != enabled) {
+            invalidatePlanning();
+            planningEnabled = enabled;
         }
-        return m.movementDirection;
+        if (!enabled) return;
+        Vec3 measured = targetHistory.predictionVelocity(target.getDeltaMovement());
+        boolean consistent = targetHistory.hasTwoVelocities() && AerialCombatPolicy.coherent(
+                policyVector(measured), policyVector(targetHistory.previousVelocity()));
+        var filtered = AerialCombatPolicy.predictionVelocity(policyVector(measured),
+                policyVector(targetHistory.previousVelocity()), targetHistory.hasTwoVelocities());
+        Vec3 velocity = new Vec3(filtered.x(), filtered.y(), filtered.z());
+        AerialDuelPredictor.Weapon weapon = targetWeapon();
+        boolean attackActive = target instanceof Player player && (weapon == AerialDuelPredictor.Weapon.SPEAR
+                ? isUsingSpear(player) && SpearCombat.isReady(player) : weapon == AerialDuelPredictor.Weapon.MACE
+                || player.swinging && player.swingTime <= 2);
+        double reach = target instanceof Player player
+                ? weapon == AerialDuelPredictor.Weapon.SPEAR
+                ? SpearCombat.maxRange(player, player.getMainHandItem()) : player.entityInteractionRange() : 3.0;
+        long phase = planningPhaseToken();
+        boolean wings = mc.player.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA);
+        var done = duelPlanner.latest();
+        if (done != null) {
+            DuelRequest request = done.input();
+            int age = mc.player.tickCount - request.tick();
+            var input = request.input();
+            if (request.session() == session && request.phase() == phase && request.targetId() == target.getId()
+                    && age >= 0 && age <= 2 && request.pose() == mc.player.getPose()
+                    && request.wings() == wings && request.gliding() == mc.player.isFallFlying()
+                    && input.targetWeapon() == weapon && input.targetOnGround() == target.onGround()
+                    && input.targetGliding() == ((LivingEntity) target).isFallFlying()
+                    && input.targetAttackActive() == attackActive
+                    && input.selfPosition().add(input.selfVelocity().scale(age)).distanceToSqr(mc.player.position()) <= 2.25
+                    && input.targetPosition().add(input.targetVelocity().scale(age)).distanceToSqr(target.position()) <= 2.25
+                    && input.selfVelocity().distanceToSqr(mc.player.getDeltaMovement()) <= 0.36
+                    && input.targetVelocity().distanceToSqr(velocity) <= 0.36
+                    && input.targetLook().dot(target.getLookAngle()) >= 0.85) {
+                duelPrediction = done.output();
+                predictionPhase = phase;
+            }
+        }
+        var input = new AerialDuelPredictor.Input(mc.player.position(), mc.player.getDeltaMovement(),
+                mc.player.getBbWidth(), mc.player.getBbHeight(), target.position(), velocity,
+                target.getEyePosition(), target.getLookAngle(), reach, weapon, target.onGround(),
+                ((LivingEntity) target).isFallFlying(), attackActive, latencyTicks, consistent, List.of(), null);
+        duelPlanner.submit(new DuelRequest(session, phase, mc.player.tickCount, target.getId(),
+                mc.player.getPose(), wings, mc.player.isFallFlying(), input));
     }
 
-    public static double provideSpeedMultiplier() {
-        GuangxiElytraChaseModule m = instance;
-        return m != null && m.isEnabled() ? m.speedMultiplier : 1.0;
-    }
-
-    public static boolean wantsFlightControl() {
-        GuangxiElytraChaseModule m = instance;
-        return m != null && m.isEnabled() && m.autoTakeoff.getValue() && m.target != null;
-    }
-
-    // ---------------------------------------------------------------
-    // main tick
-    // ---------------------------------------------------------------
-
-    @Subscribe
+    @Subscribe(priority = 100)
     private void onPreTick(PreTickEvent event) {
-        if (nullCheck()) return;
-        tick++;
-        speedMultiplier = 1.0;
-
-        refreshTarget();
-        updateIntelligence();
-
-        if (target == null) {
-            movementDirection = null;
-            attackFlag = false;
-            releaseAutoSpear();
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+if (nullCheck() || mc.player == null) {
+            if (trackedLevel != null || trackedPlayer != null) resetRuntime();
             return;
         }
-
-        switch (mode.getValue()) {
-            case MACE -> maceUpdate();
-            case SPEAR -> spearUpdate();
-            default -> followerUpdate();
+        if (trackedLevel != mc.level || trackedPlayer != mc.player) {
+            resetRuntime();
+            trackedLevel = mc.level;
+            trackedPlayer = mc.player;
         }
-        updateSpearCharge();
+        syncFlightControl();
+        latencyTicks = readPingTicks();
 
-        if (attackFlag) {
-            attackFlag = false;
-            tryAttack();
+        if (behavior == null || behaviorMode != mode.getValue()) {
+            maceDive.requestRecovery();
+            weapons.release();
+            clearSpearAim();
+            maceFeedback.clear();
+            session++;
+            behaviorMode = mode.getValue();
+            behavior = switch (behaviorMode) {
+                case FOLLOW -> new FollowBehavior();
+                case MACE -> new MaceBehavior();
+                case SPEAR -> new SpearBehavior();
+                case MXS -> new MxsBehavior();
+            };
+            behavior.enter();
+            tactics.reset();
+            combatAction = AerialCombatPolicy.Action.CHASE;
+            defensiveHeading = Vec3.ZERO;
+        }
+
+        if (!isValid(target)) {
+            target = null;
+        }
+        long tick = mc.player.tickCount;
+        if (target == null || dynamicTarget.getValue() && tick - lastTargetSearchTick >= 4) {
+            Entity candidate = searchTarget();
+            lastTargetSearchTick = tick;
+            if (candidate != null && (target == null || AerialCombatPolicy.shouldSwitchTarget(true,
+                    mc.player.distanceTo(target), mc.player.distanceTo(candidate), tick - targetSinceTick))) {
+                target = candidate;
+            }
+        }
+        if (target != lastTarget) {
+            flightRoute.reset();
+            invalidatePlanning();
+            maceDive.requestRecovery();
+            session++;
+            targetSinceTick = tick;
+            lastTarget = target;
+            targetHistory.clear();
+            weapons.release();
+            clearSpearAim();
+            maceFeedback.clear();
+            behavior.enter();
+        }
+
+        classifyTarget();
+        weaponControlActive = false;
+        if (paused() || target == null) {
+            invalidatePlanning();
+            maceDive.requestRecovery();
+            weapons.release();
+            clearSpearAim();
+            maceFeedback.clear();
+            behavior.enter();
+            defensiveHeading = Vec3.ZERO;
+            combatAction = AerialCombatPolicy.Action.CHASE;
+            tactics.reset();
+            return;
+        }
+        updateDuelPlanning();
+        if (updateDefense()) return;
+        if (maceDive.isActive() && spearPhase()) {
+            maceDive.requestRecovery();
+            weaponControlActive = true;
+            behavior.resetHeading();
+            return;
+        }
+        behavior.tick();
+    }
+
+    private boolean updateDefense() {
+        AerialCombatPolicy.Action next = AerialCombatPolicy.Action.CHASE;
+        boolean maceThreat = false;
+        var prediction = duelPrediction;
+        if (adaptiveCombat.getValue() && behaviorMode != Mode.FOLLOW) {
+            Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
+            maceThreat = fallingMaceThreat(velocity);
+            boolean spearThreat = target instanceof Player player
+                    && SpearCombat.threatens(player, mc.player, spearAntiSpearExtraDistance.getValue(), 0.25);
+            boolean predictedThreat = prediction != null && prediction.severity() >= 0.5
+                    && mc.player.hasLineOfSight(target);
+            boolean urgent = spearThreat || maceThreat && mc.player.distanceToSqr(target) <= 20.25
+                    || predictedThreat && AerialDuelPredictor.shouldInterruptAttack(prediction, true,
+                    mc.player.getHealth(), mc.player.getAbsorptionAmount(), mc.player.getMaxHealth());
+            boolean preserveStrike = realMaceHitWindow() && !urgent;
+            next = tactics.evaluate(new AerialCombatPolicy.ThreatInput(mc.player.tickCount,
+                    policyVector(target.position().subtract(mc.player.position())),
+                    policyVector(mc.player.getDeltaMovement()), policyVector(velocity),
+                    spearThreat, maceThreat, mc.player.getHealth(), mc.player.getAbsorptionAmount(),
+                    mc.player.getMaxHealth(), false, latencyTicks,
+                    threatMode.getValue() == ThreatMode.ALL_PLAYERS && target instanceof Player),
+                    predictedThreat, preserveStrike);
+        } else {
+            tactics.reset();
+        }
+        if (next != combatAction) {
+            invalidatePlanning();
+            maceDive.requestRecovery();
+            combatPhase++;
+            attackGeneration++;
+            maceFeedback.clear();
+            weapons.release();
+            clearSpearAim();
+            behavior.enter();
+            combatAction = next;
+        }
+        defensiveHeading = Vec3.ZERO;
+        if (next == AerialCombatPolicy.Action.CHASE) return false;
+        clearSpearAim();
+        Vec3 away = mc.player.position().subtract(target.position()).multiply(1.0, 0.0, 1.0);
+        if (away.lengthSqr() < 1.0E-6) away = mc.player.getLookAngle().multiply(-1.0, 0.0, -1.0);
+        if (away.lengthSqr() < 1.0E-6) away = new Vec3(1.0, 0.0, 0.0);
+        away = away.normalize();
+        if (next == AerialCombatPolicy.Action.RETREAT) {
+            defensiveHeading = away.add(0.0, maceThreat ? 0.0 : 0.2, 0.0).normalize().scale(10.0);
+        } else {
+            Vec3 side = new Vec3(-away.z, 0.0, away.x);
+            double probe = Math.max(1.0, mc.player.getDeltaMovement().length());
+            if (mc.player.tickCount >= evadeSideUntil) {
+                if (!pathClear(side.scale(evadeSide * probe)) && pathClear(side.scale(-evadeSide * probe))) {
+                    evadeSide = -evadeSide;
+                }
+                evadeSideUntil = (long) mc.player.tickCount + 6;
+            }
+            defensiveHeading = side.scale(evadeSide).add(away.scale(0.35)).normalize().scale(10.0);
+            if (prediction != null && prediction.severity() >= 0.5) {
+                Vec3 preferred = prediction.recommendedDirection();
+                if (preferred.lengthSqr() > 1.0E-6 && pathClear(preferred.scale(probe))) {
+                    defensiveHeading = preferred.normalize().scale(10.0);
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean realMaceHitWindow() {
+        Behavior active = behavior instanceof MxsBehavior mxs ? mxs.active : behavior;
+        if (!(active instanceof MaceBehavior mace) || mace.state != MaceBehavior.FOLLOW
+                || !willUseMaceAttack() || mc.player.isUsingItem() || EatUtil.shouldDefer()
+                || mc.player.getDeltaMovement().y >= -0.05
+                || maceDive.isActive() && !maceDive.canAttack()) return false;
+        double reach = mc.player.entityInteractionRange();
+        return target.getBoundingBox().distanceToSqr(mc.player.getEyePosition()) <= reach * reach
+                && mc.player.hasLineOfSight(target);
+    }
+
+    private boolean fallingMaceThreat(Vec3 velocity) {
+        if (!(target instanceof Player player) || !(player.getMainHandItem().getItem() instanceof MaceItem)
+                || player.isFallFlying() || player.onGround() || velocity.y >= -0.15
+                || player.getY() <= mc.player.getY() + 0.5 || !mc.player.hasLineOfSight(player)) return false;
+        Vec3 offset = player.position().subtract(mc.player.position());
+        Vec3 relative = velocity.subtract(mc.player.getDeltaMovement());
+        if (relative.y >= -0.05) return false;
+        double ticks = offset.y / -relative.y;
+        return ticks > 0.0 && ticks <= 4.0 + latencyTicks
+                && offset.add(relative.scale(ticks)).horizontalDistanceSqr() <= 6.25;
+    }
+
+    private static AerialCombatPolicy.Vector policyVector(Vec3 vector) {
+        return new AerialCombatPolicy.Vector(vector.x, vector.y, vector.z);
+    }
+
+    private boolean pathClear(Vec3 step) {
+        return mc.level.noCollision(mc.player, mc.player.getBoundingBox().deflate(0.01).expandTowards(step));
+    }
+
+    private Vec3 flankApproachVector(Vec3 requested) {
+        if (!adaptiveCombat.getValue() || threatMode.getValue() != ThreatMode.ALL_PLAYERS
+                || !(target instanceof Player) || mc.player.distanceToSqr(target) <= 144.0) return requested;
+        Behavior active = behavior instanceof MxsBehavior mxs ? mxs.active : behavior;
+        boolean approaching = active instanceof MaceBehavior mace && mace.state == MaceBehavior.FOLLOW
+                || active instanceof SpearBehavior spear && spear.state == SpearBehavior.FOLLOW;
+        if (!approaching || requested.lengthSqr() < 1.0E-6) return requested;
+        Vec3 toward = target.position().subtract(mc.player.position()).multiply(1.0, 0.0, 1.0).normalize();
+        if (requested.dot(toward) <= 0.0) return requested;
+        Vec3 side = new Vec3(-toward.z, 0.0, toward.x).scale(0.3 * evadeSide);
+        return requested.normalize().add(side).normalize().scale(requested.length());
+    }
+
+    private Vec3 safeFlightVector(Vec3 requested) {
+        routeAvoiding = false;
+        double speed = requested.length();
+        if (!Double.isFinite(speed) || speed < 1.0E-6) return Vec3.ZERO;
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        if (flight == null) return requested;
+        double probe = flight.navigationLookahead();
+        Vec3 intended = combatAction == AerialCombatPolicy.Action.CHASE ? behavior.heading : defensiveHeading;
+        Vec3 goal = mc.player.position().add(requested.normalize().scale(Math.max(1.0, intended.length())));
+        if (preservesMaceDescent()) {
+            goal = target.getBoundingBox().getCenter().add(predictedTarget().subtract(target.position()));
+        }
+        long phase = planningPhaseToken();
+        AABB body = mc.player.getBoundingBox();
+        RouteContext context = new RouteContext(phase, mc.player.getPose(),
+                mc.player.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA), mc.player.isFallFlying(),
+                flight.parallelPlanningEnabled(), body.getXsize(), body.getYsize(), body.getZsize());
+        if (!context.equals(routeContext)) {
+            parallelRoute.reset();
+            flightRoute.reset();
+            routeContext = context;
+        }
+        var route = flight.parallelPlanningEnabled()
+                ? parallelRoute.routeTo(mc.player.position(), goal, probe, mc.player.tickCount,
+                flight::planningSnapshot, flight::clearNavigationPath)
+                : flightRoute.routeTo(mc.player.position(), goal, probe, mc.player.tickCount,
+                flight::clearNavigationPath);
+        routeAvoiding = route.avoiding() || route.blocked();
+        if (!routeAvoiding) return requested;
+        clearSpearAim();
+        if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("ElytraChase_attack");
+        if (weapons.isHoldingUse()) {
+            weapons.release();
+            weaponControlActive = false;
+        }
+        return route.blocked() ? Vec3.ZERO : route.direction().scale(Math.min(speed, route.distance()));
+    }
+
+    private boolean prepareWeapon(boolean spear) {
+        return prepareWeapon(spear, spear);
+    }
+
+    private boolean prepareWeapon(boolean spear, boolean charge) {
+        if (!spear) clearSpearAim();
+        boolean ready = weapons.update(spear, autoWeapon.getValue(), charge && autoSpearUse.getValue());
+        weaponControlActive = ready && (autoWeapon.getValue() || weapons.isHoldingUse());
+        return ready;
+    }
+
+    private boolean isValid(Entity e) {
+        if (mc.player == null || mc.level == null || !(e instanceof LivingEntity living)
+                || e == mc.player || e.level() != mc.level || e.isRemoved() || !e.isAlive()
+                || living.isDeadOrDying() || e.isSpectator()) return false;
+        if (playerOnly.getValue() && !(e instanceof Player)) return false;
+        double radius = range.getValue();
+        double distance = mc.player.distanceToSqr(e);
+        if (!Double.isFinite(distance) || distance > radius * radius) return false;
+        if (targetRules == null) targetRules = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
+        return targetRules != null && targetRules.isValidTarget(e);
+    }
+
+    private Entity searchTarget() {
+        Entity best = null;
+        double bestDist = range.getValue() * (double) range.getValue();
+        double r = range.getValue();
+        Iterable<? extends Entity> candidates = playerOnly.getValue() ? mc.level.players()
+                : mc.level.getEntities(mc.player, mc.player.getBoundingBox().inflate(r), this::isValid);
+        for (Entity e : candidates) {
+            if (!isValid(e)) continue;
+            double d = mc.player.distanceToSqr(e);
+            if (d < bestDist) {
+                bestDist = d;
+                best = e;
+            }
+        }
+        return best;
+    }
+
+    /** Classify consecutive measured velocities, clearing stale landing/teleport samples. */
+    private void classifyTarget() {
+        if (target == null) {
+            targetHistory.clear();
+            targetGrounded = false;
+            targetMotion = MotionClass.NORMAL;
+            return;
+        }
+        targetGrounded = target.onGround();
+        targetHistory.sample(target.position(), mc.player.tickCount, targetGrounded);
+        if (targetGrounded) {
+            targetMotion = MotionClass.NORMAL;
+            return;
+        }
+        if (!targetHistory.hasTwoVelocities()) {
+            targetMotion = MotionClass.UNKNOWN;
+            return;
+        }
+        Vec3 previous = targetHistory.previousVelocity();
+        Vec3 current = targetHistory.velocity();
+        double previousSq = previous.lengthSqr();
+        double currentSq = current.lengthSqr();
+        if (previousSq < 1.0E-12 && currentSq < 1.0E-12) {
+            targetMotion = MotionClass.STILL;
+        } else if (previousSq < 0.75 * 0.75 && currentSq < 0.75 * 0.75) {
+            targetMotion = MotionClass.NORMAL;
+        } else {
+            double dot = previous.dot(current);
+            if (dot > 0.0 && dot * dot > 0.25 * previousSq * currentSq) {
+                boolean towardMe = current.dot(mc.player.position().subtract(target.position())) > 0.0;
+                targetMotion = towardMe ? MotionClass.RUSHING : MotionClass.FLEEING;
+            } else {
+                targetMotion = MotionClass.UNKNOWN;
+            }
         }
     }
 
-    @Subscribe
-    private void onTotemPop(TotemPopEvent event) {
-        if (target != null && event.getEntity() == target) {
-            totemPopTick = tick;
+    // ---------------------------------------------------------------
+    // behaviour base (rennaikanksmp CombatSubHelperSX)
+    // ---------------------------------------------------------------
+
+    private abstract class Behavior {
+        Vec3 heading = Vec3.ZERO;
+
+        void enter() {
+            heading = Vec3.ZERO;
         }
+
+        /** SX.onElytra semantics: vector length is the desired speed. */
+        void inject(FlightVelocity fv) {
+            if (heading.lengthSqr() > 1.0E-9) {
+                double len = heading.length();
+                double max = Math.min(len, fv.maxVelocity());
+                fv.set(heading.normalize().scale(max));
+            }
+        }
+
+        void resetHeading() {
+            heading = Vec3.ZERO;
+        }
+
+        void onHit(int type) {}
+
+        abstract void tick();
+
+        /** SX.antiSpear: lateral drift perpendicular to the heading. */
+        void antiSpear(double strength) {
+            Vec3 flat = new Vec3(heading.x, 0.0, heading.z);
+            if (flat.lengthSqr() < 0.01) {
+                if (mc.player.position().subtract(target.position()).horizontalDistance() >= 3.0) {
+                    return;
+                }
+                heading = new Vec3(5.0, heading.y, heading.z);
+                flat = new Vec3(heading.x, 0.0, heading.z);
+            }
+            Vec3 side = new Vec3(0.0, 1.0, 0.0).cross(flat).normalize();
+            heading = heading.normalize().add(side.scale(strength)).normalize().scale(10.0);
+        }
+
+        boolean willAntiSpear(double strength, Vec3 targetPos) {
+            return strength > 1.0E-6
+                    && target instanceof Player p
+                    && SpearCombat.threatens(p, mc.player, spearAntiSpearExtraDistance.getValue(), 0.25);
+        }
+
+        boolean flyingOrCreative() {
+            return mc.player.isFallFlying() || mc.player.getAbilities().flying;
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // FOLLOW (CombatSubHelperO)
+    // ---------------------------------------------------------------
+
+    private class FollowBehavior extends Behavior {
+        @Override
+        void tick() {
+            if (!isValid(target)) {
+                heading = Vec3.ZERO;
+                return;
+            }
+            heading = target.position().subtract(mc.player.position());
+            if (targetGrounded && followGroundHeightExtra.getValue() > 0.1) {
+                heading = heading.add(0.0, followGroundHeightExtra.getValue(), 0.0);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // MACE (CombatSubHelperOX + FX state machine)
+    // ---------------------------------------------------------------
+
+    private class MaceBehavior extends Behavior {
+        static final int NONE = 0, PULL_UP = 1, FOLLOW = 2, WAIT_ATTACK = 3;
+        int state = NONE;
+        int lastAttackSentTick = Integer.MIN_VALUE / 2;
+        int naturalFallTicks;
+        boolean wasDiving;
+        final MacePassTracker pass = new MacePassTracker();
+
+        @Override
+        void enter() {
+            super.enter();
+            state = NONE;
+            lastAttackSentTick = Integer.MIN_VALUE / 2;
+            naturalFallTicks = 0;
+            wasDiving = false;
+            pass.reset();
+        }
+
+        @Override
+        void tick() {
+            if (wasDiving && !maceDive.isActive()) {
+                naturalFallTicks = 12;
+                wasDiving = false;
+                if (state != WAIT_ATTACK) state = PULL_UP;
+            }
+            if (!isValid(target) || !flyingOrCreative() && !fallingWindow() && !maceDive.isActive()) {
+                weapons.release();
+                heading = Vec3.ZERO;
+                if (state != WAIT_ATTACK) state = PULL_UP;
+                return;
+            }
+            if (maceDive.isActive()) {
+                wasDiving = true;
+                tickDive();
+                return;
+            }
+            if (flyingOrCreative()) naturalFallTicks = 0;
+            else naturalFallTicks++;
+            boolean armed = prepareWeapon(false);
+            if (!armed) {
+                heading = predictedTarget().add(0.0, maceHeight.getValue(), 0.0).subtract(mc.player.position());
+                state = PULL_UP;
+                return;
+            }
+
+            switch (state) {
+                case NONE -> state = tickNone();
+                case PULL_UP -> state = tickPullUp();
+                case FOLLOW -> state = tickFollow(armed);
+                case WAIT_ATTACK -> state = tickWaitAttack();
+            }
+        }
+
+        boolean fallingWindow() {
+            return mc.player != null && (state == FOLLOW || state == WAIT_ATTACK)
+                    && naturalFallTicks < 12 && !mc.player.isFallFlying() && !mc.player.onGround()
+                    && !mc.player.isInWater() && !mc.player.isInLava() && !mc.player.isPassenger()
+                    && mc.player.getDeltaMovement().y < -0.05;
+        }
+
+        int tickNone() {
+            if (target == null) {
+                heading = Vec3.ZERO;
+                return NONE;
+            }
+            return tickPullUp();
+        }
+
+        /** FX.onStatePullUp: climb to maceHeight above the target, then dive. */
+        int tickPullUp() {
+            if (!isValid(target)) return NONE;
+            boolean headBlocked = blockedInDirection(0.0, 0.1, 0.0);
+            double aboveY = target.getY() + maceHeight.getValue();
+            boolean reached = mc.player.getY() >= aboveY;
+            if (reached || headBlocked) {
+                pass.reset();
+                heading = predictedTarget().subtract(mc.player.position());
+                return FOLLOW;
+            }
+            Vec3 intercept = predictedTarget();
+            heading = new Vec3(intercept.x, aboveY, intercept.z)
+                    .subtract(mc.player.position());
+            if (heading.length() < 5.0) {
+                heading = heading.normalize().scale(5.0);
+            }
+            return PULL_UP;
+        }
+
+        /** Attack during the current reach window, including a brief natural fall after gliding. */
+        int tickFollow(boolean armed) {
+            if (target == null) return NONE;
+            if (armed && shouldStartDive() && maceDive.begin()) {
+                wasDiving = true;
+                naturalFallTicks = 12;
+                clearSpearAim();
+                heading = Vec3.ZERO;
+                return FOLLOW;
+            }
+            double attackRange = target instanceof Player p && isUsingSpear(p)
+                    ? spearRange.getValue() : combatRange.getValue();
+            double distanceSquared = target.getBoundingBox().distanceToSqr(mc.player.getEyePosition());
+            boolean inRange = distanceSquared <= attackRange * attackRange;
+            boolean attackReady = willUseMaceAttack() || maceUseExtraAttack.getValue()
+                    && mc.player.getAttackStrengthScale(0.5F) > 0.95F;
+            if (armed && inRange && attackReady && attack(target)) {
+                lastAttackSentTick = mc.player.tickCount;
+                state = WAIT_ATTACK;
+                resumeAfterPass();
+                return tickWaitAttack();
+            }
+            double reach = mc.player.entityInteractionRange();
+            boolean smashWindow = willUseMaceAttack() && distanceSquared <= reach * reach
+                    && mc.player.getDeltaMovement().y < -0.05;
+            if (pass.shouldPullUp(mc.player.tickCount, Math.sqrt(distanceSquared), reach,
+                    mc.player.getY(), target.getY(), smashWindow)) return restartPass();
+            if (!smashWindow && !targetGrounded && target.getY() > mc.player.getY() + 1.5) {
+                return restartPass();
+            }
+            heading = predictedTarget().subtract(mc.player.position());
+            if (targetGrounded && followGroundHeightExtra.getValue() > 0.1) {
+                heading = heading.add(0.0, followGroundHeightExtra.getValue(), 0.0);
+            }
+            if (heading.length() < 5.0) {
+                heading = heading.normalize().scale(5.0);
+            }
+            if (willAntiSpear(flyAntiSpear.getValue(), target.position())) {
+                antiSpear(flyAntiSpear.getValue());
+            }
+
+            return FOLLOW;
+        }
+
+        private int restartPass() {
+            state = PULL_UP;
+            pass.reset();
+            resumeAfterPass();
+            return tickPullUp();
+        }
+
+        private void resumeAfterPass() {
+            var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+            if (flight != null && !maceDive.isActive()) flight.finishDiveRecovery();
+        }
+
+        private void recoverMissedDive() {
+            // Recovery can synchronously restart gliding, so release descent ownership first.
+            state = PULL_UP;
+            pass.reset();
+            maceDive.requestRecovery();
+            state = tickPullUp();
+        }
+
+        private boolean shouldStartDive() {
+            var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+            if (!autoMaceDive.getValue() || !autoControlElytra.getValue()
+                    || flight == null || !flight.canRecoverDiveFlight()
+                    || !mc.player.isFallFlying() || mc.player.getAbilities().flying
+                    || mc.player.getDeltaMovement().y >= -0.15 || mc.player.getY() < target.getY() + 3.0
+                    || mc.player.distanceToSqr(target) > 196.0 || mc.player.isUsingItem()
+                    || mc.player.hasEffect(MobEffects.SLOW_FALLING) || mc.player.hasEffect(MobEffects.LEVITATION)
+                    || Math.abs(mc.player.getAttributeValue(Attributes.GRAVITY) - 0.08) > 1.0E-5
+                    || !dropPathClear()
+                    || EatUtil.shouldDefer() || !mc.player.hasLineOfSight(target)) return false;
+            Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
+            Vec3 previous = targetHistory.previousVelocity();
+            if (!targetHistory.hasTwoVelocities() || !(velocity.lengthSqr() < 0.01 && previous.lengthSqr() < 0.01)
+                    && !AerialCombatPolicy.coherent(policyVector(velocity), policyVector(previous))) return false;
+            Vec3 standingEye = mc.player.position().add(0.0, mc.player.getEyeHeight(Pose.STANDING), 0.0);
+            return AerialIntercept.canStartDrop(standingEye, mc.player.getDeltaMovement(),
+                    target.getBoundingBox(), velocity, mc.player.entityInteractionRange(), maceMinFallDistance.getValue());
+        }
+
+        private boolean dropPathClear() {
+            Vec3 step = mc.player.getDeltaMovement().scale(2.0).add(0.0, -0.2, 0.0);
+            AABB standing = mc.player.getDimensions(Pose.STANDING).makeBoundingBox(mc.player.position());
+            return mc.level.noCollision(mc.player, standing.deflate(0.01).expandTowards(step));
+        }
+
+        private void tickDive() {
+            heading = Vec3.ZERO;
+            weaponControlActive = true;
+            if (!autoMaceDive.getValue() || EatUtil.shouldDefer() || mc.player.isUsingItem()) {
+                recoverMissedDive();
+                return;
+            }
+            if (maceDive.phase() == MaceDiveState.Phase.DIVING
+                    && maceDive.canAttack() && willUseMaceAttack() && attack(target)) {
+                lastAttackSentTick = mc.player.tickCount;
+                state = WAIT_ATTACK;
+                maceDive.requestRecovery();
+                state = tickWaitAttack();
+                return;
+            }
+            if (mc.player.getY() < target.getY() + 0.5
+                    || !dropPathClear()) {
+                recoverMissedDive();
+            }
+        }
+
+        /** Climb while awaiting one server confirmation, with a bounded retry window. */
+        int tickWaitAttack() {
+            if (target == null) return NONE;
+            long elapsed = (long) mc.player.tickCount - lastAttackSentTick;
+            if (elapsed < 0 || elapsed > confirmationTicks()) {
+                maceFeedback.clear();
+                return tickPullUp();
+            }
+            Vec3 lead = predictedTarget();
+            heading = new Vec3(lead.x, target.getY() + maceHeight.getValue(), lead.z)
+                    .subtract(mc.player.position());
+            return WAIT_ATTACK;
+        }
+
+        @Override
+        void onHit(int type) {
+            if (type == 1) state = PULL_UP;
+        }
+
+        @Override
+        void inject(FlightVelocity fv) {
+            if (heading.lengthSqr() > 1.0E-9) {
+                Vec3 v = heading;
+                if (maceCustomPullUpAngle.getValue() > 0.1 && state == PULL_UP) {
+                    double h = Math.sqrt(v.x * v.x + v.z * v.z);
+                    if (h > 1.0E-6) {
+                        v = new Vec3(v.x, Math.tan(Math.toRadians(maceCustomPullUpAngle.getValue())) * h, v.z);
+                    }
+                }
+                double len = v.length();
+                double max = Math.min(len, fv.maxVelocity());
+                fv.set(v.normalize().scale(max));
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // SPEAR (CombatSubHelperIX state machine)
+    // ---------------------------------------------------------------
+
+    private class SpearBehavior extends Behavior {
+        static final int NONE = 0, FOLLOW = 1, NEAR_FOLLOW = 2, PULL_OVER = 3;
+        int state = NONE;
+        boolean pulledAfterHit;
+        int pullOverTicks;
+        boolean makingChargeRoom;
+
+        @Override
+        void enter() {
+            super.enter();
+            state = NONE;
+            pulledAfterHit = false;
+            pullOverTicks = 0;
+            makingChargeRoom = false;
+        }
+
+        Vec3 targetPos() {
+            Vec3 base = predictedTarget();
+            return targetGrounded
+                    ? new Vec3(base.x, target.getEyeY(), base.z)
+                    : target.getBoundingBox().getCenter().add(base.subtract(target.position()));
+        }
+
+        @Override
+        void tick() {
+            if (!isValid(target) || !flyingOrCreative()) {
+                weapons.release();
+                clearSpearAim();
+                enter();
+                return;
+            }
+            var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+            boolean boostRefresh = flight != null && flight.needsSpearBoostRefresh();
+            double chargeDistance = Math.max(spearRange.getValue(),
+                    SpearCombat.maxRange(mc.player, mc.player.getMainHandItem())
+                            + mc.player.getDeltaMovement().length()
+                            * (SpearCombat.chargeTicks(mc.player.getMainHandItem()) + latencyTicks + 2));
+            boolean charge = state != PULL_OVER && !boostRefresh
+                    && mc.player.distanceToSqr(target) <= chargeDistance * chargeDistance;
+            boolean armed = prepareWeapon(true, charge);
+            makingChargeRoom = false;
+            if (!armed || state != PULL_OVER && !isUsingSpear(mc.player)) {
+                clearSpearAim();
+                state = FOLLOW;
+                Vec3 toward = targetPos().subtract(mc.player.getEyePosition());
+                double distance = toward.length();
+                double standOff = Math.max(spearAttackDistance.getValue(), 6.0);
+                heading = distance < standOff ? escapeHeading(targetPos())
+                        : toward.normalize().scale(Math.max(0.0, distance - standOff));
+                return;
+            }
+            int nextState = switch (state) {
+                case NONE -> tickNone();
+                case FOLLOW -> tickFollow();
+                case NEAR_FOLLOW -> tickNearFollow();
+                case PULL_OVER -> tickPullOver();
+                default -> NONE;
+            };
+            if (nextState != state) {
+                pullOverTicks = 0;
+                pulledAfterHit = false;
+                if (nextState == PULL_OVER) heading = escapeHeading(targetPos());
+            }
+            state = nextState;
+            if (state == PULL_OVER && weapons.isHoldingUse()) prepareWeapon(true, false);
+            if (state != PULL_OVER && !makingChargeRoom && isUsingSpear(mc.player)) aimSpear();
+            else clearSpearAim();
+        }
+
+        int tickNone() {
+            if (target == null) {
+                heading = Vec3.ZERO;
+                return NONE;
+            }
+            return tickFollow();
+        }
+
+        int tickFollow() {
+            Vec3 tp = targetPos();
+            if (mc.player.getEyePosition().distanceToSqr(tp)
+                    < spearAttackDistance.getValue() * spearAttackDistance.getValue()) {
+                return tickNearFollow();
+            }
+            if (tooClose(tp)) return PULL_OVER;
+            heading = toTargetAtLeast(tp, 6.0);
+            tryAntiSpear(tp, false);
+            return FOLLOW;
+        }
+
+        int tickNearFollow() {
+            Vec3 tp = targetPos();
+            if (isUsingSpear(mc.player) && !SpearCombat.isReady(mc.player)
+                    && mc.player.getEyePosition().distanceToSqr(tp)
+                    < Math.pow(SpearCombat.maxRange(mc.player, mc.player.getUseItem()) + 1.0, 2)) {
+                makingChargeRoom = true;
+                heading = escapeHeading(tp);
+                tryAntiSpear(tp, true);
+                return NEAR_FOLLOW;
+            }
+            if (tooClose(tp)) return PULL_OVER;
+            if (mc.player.getEyePosition().distanceToSqr(tp)
+                    > spearRange.getValue() * spearRange.getValue()) {
+                return FOLLOW;
+            }
+            heading = toTargetAtLeast(tp, 6.0);
+            tryAntiSpear(tp, false);
+            return NEAR_FOLLOW;
+        }
+
+        int tickPullOver() {
+            Vec3 tp = targetPos();
+            if (pulledAfterHit) {
+                double distance = spearPullOverDistance.getValue();
+                if (mc.player.getEyePosition().distanceToSqr(tp) >= distance * distance) {
+                    pulledAfterHit = false;
+                    return FOLLOW;
+                }
+            }
+            if (++pullOverTicks > (pulledAfterHit ? 20 : 6)) {
+                return FOLLOW;
+            }
+            heading = escapeHeading(tp);
+            tryAntiSpear(tp, true);
+            return PULL_OVER;
+        }
+
+        Vec3 escapeHeading(Vec3 targetPosition) {
+            Vec3 away = mc.player.getEyePosition().subtract(targetPosition);
+            if (away.lengthSqr() < 1.0E-9) {
+                away = mc.player.getLookAngle().scale(-1.0);
+            }
+            return away.lengthSqr() < 36.0 ? away.normalize().scale(6.0) : away;
+        }
+
+        boolean tooClose(Vec3 tp) {
+            double noEntry = spearNoEntryDistance.getValue();
+            if (isUsingSpear(mc.player)) {
+                noEntry = Math.max(noEntry, SpearCombat.minRange(mc.player, mc.player.getUseItem()) + 0.35);
+            }
+            return noEntry > 0.1 && target.getBoundingBox().distanceToSqr(mc.player.getEyePosition())
+                    < noEntry * noEntry;
+        }
+
+        Vec3 toTargetAtLeast(Vec3 tp, double minLen) {
+            Vec3 v = tp.subtract(mc.player.getEyePosition());
+            if (v.length() < minLen) {
+                v = v.normalize().scale(minLen);
+            }
+            return v;
+        }
+
+        /** IX.adjustMovementForSpear: sidestep when their charged-spear ray hits us. */
+        boolean tryAntiSpear(Vec3 tp, boolean expand) {
+            return spearAntiSpear.getValue() && target instanceof Player p
+                    && SpearCombat.threatens(p, mc.player, spearAntiSpearExtraDistance.getValue(), expand ? 0.85 : 0.1)
+                    && moveAdjust(heading);
+        }
+
+        /** IX.moveAdjust: sidestep perpendicular to the target, collision-checked. */
+        boolean moveAdjust(Vec3 toward) {
+            Vec3 flat = new Vec3(toward.x, 0.0, toward.z);
+            if (flat.lengthSqr() < 1.0E-6) return false;
+            Vec3 side = new Vec3(0.0, 1.0, 0.0).cross(flat).normalize();
+            if (side.lengthSqr() < 1.0E-6) return false;
+            double movement = Math.max(0.5, Math.min(6.0, mc.player.getDeltaMovement().length()));
+            Vec3 drift = toward.normalize().add(side.scale(0.8)).normalize();
+            if (canMove(drift.scale(movement))) {
+                heading = drift.scale(Math.max(6.0, toward.length()));
+                return true;
+            }
+            drift = toward.normalize().subtract(side.scale(0.8)).normalize();
+            if (canMove(drift.scale(movement))) {
+                heading = drift.scale(Math.max(6.0, toward.length()));
+                return true;
+            }
+            return false;
+        }
+
+        boolean canMove(Vec3 step) {
+            AABB next = mc.player.getBoundingBox().expandTowards(step);
+            return mc.level.noCollision(mc.player, next);
+        }
+
+        @Override
+        void onHit(int type) {
+            if (type == 2 || type == 3) {
+                pulledAfterHit = true;
+                pullOverTicks = 0;
+                state = PULL_OVER;
+                heading = escapeHeading(targetPos());
+                clearSpearAim();
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // MXS (CombatSubHelperU): mace until hit, then spear movement
+    // ---------------------------------------------------------------
+
+    private class MxsBehavior extends Behavior {
+        final MaceBehavior mace = new MaceBehavior();
+        final SpearBehavior spear = new SpearBehavior();
+        Behavior active;
+        boolean usingMace = true;
+        int maceHitTick = -1;
+        int maceHitTargetId = -1;
+        int spearStartedTick;
+        int spearPhaseTick;
+        boolean spearArmed;
+        boolean spearHit;
+
+        @Override
+        void enter() {
+            super.enter();
+            mace.enter();
+            spear.enter();
+            active = null;
+            switchTo(true);
+        }
+
+        void switchTo(boolean useMace) {
+            combatPhase++;
+            Behavior next = useMace ? mace : spear;
+            if (active != next || usingMace != useMace) {
+                next.enter();
+            }
+            active = next;
+            usingMace = useMace;
+            heading = active.heading;
+            maceHitTick = -1;
+            maceHitTargetId = -1;
+            spearPhaseTick = mc.player != null ? mc.player.tickCount : 0;
+            spearStartedTick = spearPhaseTick;
+            spearArmed = false;
+            spearHit = false;
+            maceFeedback.clear();
+        }
+
+        @Override
+        void tick() {
+            if (!isValid(target)) {
+                enter();
+                return;
+            }
+            if (active == null) {
+                switchTo(true);
+            }
+            if (target == null || target.getId() != maceHitTargetId) {
+                maceHitTick = -1;
+            }
+            if (usingMace && maceHitTick >= 0
+                    && (long) mc.player.tickCount - maceHitTick >= mxsMaceHitWaitTicks.getValue()) {
+                switchTo(false);
+            } else if (!usingMace) {
+                long elapsed = (long) mc.player.tickCount - spearStartedTick;
+                boolean escaped = spearHit && spear.state == SpearBehavior.FOLLOW;
+                boolean targetAbove = spearArmed && elapsed >= 8 && target.getY() - mc.player.getY()
+                        > Math.max(1.5, mxsSpearSwitchMaceHeight.getValue());
+                boolean timedOut = spearArmed ? elapsed >= mxsSpearRunTicks.getValue()
+                        : (long) mc.player.tickCount - spearPhaseTick >= 40;
+                if (elapsed < 0 || timedOut || escaped || targetAbove) {
+                    switchTo(true);
+                }
+            }
+            active.tick();
+            if (!usingMace && !spearArmed && isUsingSpear(mc.player)) {
+                spearArmed = true;
+                spearStartedTick = mc.player.tickCount;
+            }
+            heading = active.heading;
+        }
+
+        @Override
+        void onHit(int type) {
+            if (active != null) active.onHit(type);
+            if (usingMace && type == 1 && target != null) {
+                maceHitTick = mc.player.tickCount;
+                maceHitTargetId = target.getId();
+            }
+            if (!usingMace && type == 3) spearHit = true;
+        }
+
+        @Override
+        void inject(FlightVelocity fv) {
+            if (active != null) {
+                active.inject(fv);
+                heading = active.heading;
+            }
+        }
+
+        @Override
+        void resetHeading() {
+            super.resetHeading();
+            mace.resetHeading();
+            spear.resetHeading();
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // attack + hit feedback
+    // ---------------------------------------------------------------
+
+    private boolean willUseMaceAttack() {
+        return mc.player.getMainHandItem().is(Items.MACE)
+                && MaceItem.canSmashAttack(mc.player)
+                && mc.player.fallDistance >= maceMinFallDistance.getValue();
+    }
+
+    private boolean attack(Entity entity) {
+        if (mc.gameMode == null || mc.getConnection() == null || !isValid(entity) || entity != target || paused()
+                || EatUtil.shouldDefer() || mc.player.isUsingItem()
+                || !mc.player.getMainHandItem().is(Items.MACE)
+                || lastAttackTick == mc.player.tickCount) return false;
+        double reach = mc.player.entityInteractionRange();
+        Vec3 eye = mc.player.getEyePosition();
+        AABB box = entity.getBoundingBox();
+        if (!Double.isFinite(reach) || reach <= 0.0
+                || box.distanceToSqr(eye) > reach * reach
+                || !mc.player.hasLineOfSight(entity)) return false;
+        if (!willUseMaceAttack() && mc.player.getAttackStrengthScale(0.5F) <= 0.95F) return false;
+        Vec3 aim = new Vec3(Math.clamp(eye.x, box.minX, box.maxX),
+                Math.clamp(eye.y, box.minY, box.maxY), Math.clamp(eye.z, box.minZ, box.maxZ))
+                .lerp(box.getCenter(), 0.05);
+        float[] angles = MathUtil.calcAngle(eye, aim);
+        var rotation = GuizhouWare.rotationManager;
+        rotation.submit(new RotationRequest("ElytraChase_attack", 70, angles[0], angles[1],
+                RotationRequest.Mode.SILENT));
+        acceptPendingRotation();
+        if (!sentRotationKnown) return false;
+        Vec3 actualLook = Vec3.directionFromRotation(sentPitch, sentYaw);
+        if (!box.contains(eye) && box.clip(eye, eye.add(actualLook.scale(reach))).isEmpty()) return false;
+
+        attackGeneration++;
+        maceFeedback.clear();
+        pendingAttack = null;
+        sendingAttack = true;
+        PacketEvent.Send attempt;
+        try {
+            mc.gameMode.attack(mc.player, entity);
+            attempt = pendingAttack;
+        } finally {
+            sendingAttack = false;
+            pendingAttack = null;
+        }
+        if (attempt == null || attempt.isCancelled()) return false;
+        lastAttackTick = mc.player.tickCount;
+        maceFeedback.arm(entity.getId(), lastAttackTick, confirmationTicks());
+        mc.player.swing(InteractionHand.MAIN_HAND);
+        return true;
+    }
+
+    private Vec3 predictedTarget() {
+        if (duelPrediction != null && predictionPhase == planningPhaseToken()) {
+            return target.position().add(duelPrediction.interceptOffset());
+        }
+        Vec3 current = targetHistory.predictionVelocity(target.getDeltaMovement());
+        var previous = policyVector(targetHistory.previousVelocity());
+        var measured = policyVector(current);
+        boolean consistent = targetHistory.hasTwoVelocities() && AerialCombatPolicy.coherent(measured, previous);
+        var velocity = AerialCombatPolicy.predictionVelocity(measured, previous, targetHistory.hasTwoVelocities());
+        double lead = AerialIntercept.leadTicks(target.position().subtract(mc.player.position()),
+                new Vec3(velocity.x(), velocity.y(), velocity.z()),
+                mc.player.getDeltaMovement().length(), latencyTicks, consistent);
+        var offset = AerialCombatPolicy.leadOffset(velocity, lead);
+        return target.position().add(offset.x(), offset.y(), offset.z());
+    }
+
+    private int confirmationTicks() {
+        return confirmationTicks;
+    }
+
+    private void aimSpear() {
+        Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
+        Vec3 aim = target.getBoundingBox().getCenter().add(velocity.scale(Math.min(2.0, latencyTicks * 0.5)));
+        float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), aim);
+        GuizhouWare.rotationManager.submit(new RotationRequest("ElytraChase_spear", 15,
+                angles[0], angles[1], RotationRequest.Mode.MOTION, true, true));
+    }
+
+    private void clearSpearAim() {
+        if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("ElytraChase_spear");
+    }
+
+    private void acceptPendingRotation() {
+        PacketEvent.Send event = pendingRotation;
+        pendingRotation = null;
+        if (event != null && !event.isCancelled() && event.getPacket() instanceof ServerboundMovePlayerPacket move) {
+            sentYaw = move.getYRot(0.0F);
+            sentPitch = move.getXRot(0.0F);
+            sentRotationKnown = Float.isFinite(sentYaw) && Float.isFinite(sentPitch);
+        }
+    }
+
+    @Subscribe(priority = Integer.MIN_VALUE)
+    private void onPacketSend(PacketEvent.Send event) {
+        if (sendingAttack && mc.isSameThread() && event.getPacket() instanceof ServerboundInteractPacket) {
+            pendingAttack = event;
+            return;
+        }
+        long expectedSession = session;
+        if (event.getPacket() instanceof ServerboundMovePlayerPacket move && move.hasRotation()) {
+            mc.execute(() -> {
+                if (session != expectedSession || !isEnabled()) return;
+                acceptPendingRotation();
+                pendingRotation = event;
+            });
+            return;
+        }
+        if (!(event.getPacket() instanceof ServerboundInteractPacket)) return;
+        long expectedAttack = attackGeneration;
+        mc.execute(() -> {
+            if (!event.isCancelled() && session == expectedSession && attackGeneration == expectedAttack) maceFeedback.clear();
+        });
     }
 
     @Subscribe
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (target == null) return;
-        // pressure meter: the target's main-hand swings (attacks and whiffs
-        // both count — a rusher's tempo is the signal)
-        if (event.getPacket() instanceof ClientboundAnimatePacket animate
-                && animate.getAction() == ClientboundAnimatePacket.SWING_MAIN_HAND
-                && animate.getId() == target.getId()) {
-            targetSwings.addLast(tick);
+        var packet = event.getPacket();
+        if (packet instanceof ClientboundPlayerPositionPacket) {
+            long expectedSession = session;
+            mc.execute(() -> {
+                if (session != expectedSession || !isEnabled()) return;
+                pendingRotation = null;
+                sentRotationKnown = false;
+                maceFeedback.clear();
+                maceDive.requestRecovery();
+                invalidatePlanning();
+                attackGeneration++;
+            });
+            return;
         }
-        while (!targetSwings.isEmpty() && tick - targetSwings.peekFirst() > PRESSURE_WINDOW) {
-            targetSwings.pollFirst();
-        }
-    }
-
-    // ---------------------------------------------------------------
-    // targeting + intelligence
-    // ---------------------------------------------------------------
-
-    private void refreshTarget() {
-        boolean invalid = target == null || !target.isAlive()
-                || mc.player.distanceToSqr(target) > targetRange.getValue() * targetRange.getValue();
-        if (dynamicTarget.getValue() || invalid) {
-            Player best = null;
-            double bestDist = Double.MAX_VALUE;
-            for (Player player : mc.level.players()) {
-                if (player == mc.player || player.isSpectator() || !player.isAlive()) continue;
-                if (GuizhouWare.friendManager.isFriend(player)) continue;
-                double dist = mc.player.distanceToSqr(player);
-                if (dist < bestDist) {
-                    best = player;
-                    bestDist = dist;
+        if (!(packet instanceof ClientboundDamageEventPacket)
+                && !(packet instanceof ClientboundEntityEventPacket)) return;
+        long expectedSession = session;
+        long expectedPhase = combatPhase;
+        long expectedAttack = attackGeneration;
+        Entity expectedTarget = target;
+        ClientLevel expectedLevel = mc.level;
+        LocalPlayer expectedPlayer = mc.player;
+        if (expectedTarget == null || expectedLevel == null || expectedPlayer == null) return;
+        mc.execute(() -> {
+            if (expectedSession != session || expectedPhase != combatPhase || !isEnabled() || behavior == null
+                    || mc.level != expectedLevel || mc.player != expectedPlayer
+                    || target != expectedTarget || !isValid(expectedTarget) || paused()
+                    || combatAction != AerialCombatPolicy.Action.CHASE) return;
+            if (packet instanceof ClientboundDamageEventPacket damage) {
+                if (damage.entityId() == mc.player.getId()) {
+                    behavior.onHit(2);
+                } else if (damage.entityId() == expectedTarget.getId()
+                        && damage.sourceDirectId() == mc.player.getId()) {
+                    if ((damage.sourceType().is(DamageTypes.MACE_SMASH)
+                            || damage.sourceType().is(DamageTypes.PLAYER_ATTACK))
+                            && expectedAttack == attackGeneration
+                            && maceFeedback.consume(expectedTarget.getId(), mc.player.tickCount)) {
+                        behavior.onHit(1);
+                    } else if (damage.sourceType().is(DamageTypes.SPEAR) && spearPhase()) {
+                        behavior.onHit(3);
+                    }
                 }
+            } else if (packet instanceof ClientboundEntityEventPacket status
+                    && status.getEventId() == 2 && status.getEntity(mc.level) == mc.player) {
+                behavior.onHit(2);
             }
-        if (invalid) {
-            target = best;
-            onTargetSwitch();
-        } else if (dynamicTarget.getValue() && best != null && best != target) {
-            target = best;
-            onTargetSwitch();
-        }
-    }
+        });
     }
 
-    private void onTargetSwitch() {
-        totemPopTick = Integer.MIN_VALUE;
-        trackedPearl = null;
-        pearlLanding = null;
-        posTicks.clear();
-        posRing.clear();
-        targetSwings.clear();
-        maceState = STATE_NONE;
-    }
-
-    private void updateIntelligence() {
-        if (target != lastTrackedTarget) {
-            lastTrackedTarget = target;
-            onTargetSwitch();
-        }
-        updatePearl();
-        if (target == null) return;
-
-        // position ring buffer (3 ticks back) for velocity + classification
-        posTicks.addLast(tick);
-        posRing.addLast(target.position());
-        while (posRing.size() > 3) {
-            posTicks.pollFirst();
-            posRing.pollFirst();
-        }
-
-        double rangeSq = combatRange.getValue() * combatRange.getValue();
-        inCombatRange = mc.player.distanceToSqr(target) < rangeSq;
-        targetOnGround = target.onGround();
-
-        lastSeenPos = target.position();
-        lastSeenVel = estimateTargetVelocity();
-        lastSeenTick = tick;
-
-        if (pearlActive()) {
-            action = Action.PEARL_ESCAPE;
-            return;
-        }
-        if (targetOnGround) {
-            action = Action.SLOW_SPEED;
-            return;
-        }
-        if (posRing.size() < 3) {
-            action = Action.CIRCLING;
-            return;
-        }
-        Iterator<Vec3> it = posRing.iterator();
-        Vec3 pos0 = it.next();
-        Vec3 pos1 = it.next();
-        Vec3 pos2 = it.next();
-        int oldestTick = posTicks.peekFirst();
-        if (tick - oldestTick > 20) {
-            action = Action.AFK;
-            return;
-        }
-        double dist01 = pos0.distanceTo(pos1);
-        double dist12 = pos1.distanceTo(pos2);
-        if (dist01 < 1.0E-6 && dist12 < 1.0E-6) {
-            action = Action.AFK;
-        } else if (dist01 < 0.75 && dist12 < 0.75) {
-            action = Action.SLOW_SPEED;
-        } else {
-            Vec3 ab = pos1.subtract(pos0);
-            Vec3 bc = pos2.subtract(pos1);
-            double dot = ab.dot(bc);
-            double magAB = ab.length();
-            double magBC = bc.length();
-            double angleDeg = Math.toDegrees(Math.acos(Math.min(1.0, Math.max(-1.0, dot / (magAB * magBC)))));
-            if (angleDeg < 60.0) {
-                Vec3 toPlayer = mc.player.position().subtract(pos2);
-                double moveDot = bc.normalize().dot(toPlayer.normalize());
-                action = moveDot > 0 ? Action.TOWARDS : Action.ESCAPING;
-            } else {
-                action = Action.CIRCLING;
+    /** ping in ticks (1-3) for the high-speed attack range compensation */
+    private int readPingTicks() {
+        if (mc.getConnection() != null && mc.player != null) {
+            PlayerInfo info = mc.getConnection().getPlayerInfo(mc.player.getUUID());
+            if (info != null) {
+                int roundTrip = Math.clamp((info.getLatency() + 49L) / 50L, 1, 20);
+                confirmationTicks = Math.clamp(roundTrip + (int) Math.ceil(
+                        3 * GuizhouWare.tpsCounterService.delayScale()), 4, 24);
+                return Math.min(3, roundTrip);
             }
         }
+        confirmationTicks = 6;
+        return 1;
     }
 
-    private Player lastTrackedTarget;
-
-    /** per-tick velocity of the target from the tracked position ring, falling back to client velocity */
-    private Vec3 estimateTargetVelocity() {
-        if (posRing.size() >= 2) {
-            Vec3 oldest = posRing.peekFirst();
-            Vec3 newest = posRing.peekLast();
-            int oldestTick = posTicks.peekFirst();
-            int newestTick = posTicks.peekLast();
-            int dt = newestTick - oldestTick;
-            if (dt > 0) {
-                return newest.subtract(oldest).scale(1.0 / dt);
-            }
-        }
-        return target.getDeltaMovement();
-    }
-
-    // totem gates (ported v2 semantics)
-    private boolean targetHasTotem() {
-        if (!totemAware.getValue() || target == null) return false;
-        boolean holds = target.getOffhandItem().is(Items.TOTEM_OF_UNDYING)
-                || target.getMainHandItem().is(Items.TOTEM_OF_UNDYING);
-        if (!holds) return false;
-        // the item lingers one equipment sync after the pop: trust the pop packet
-        return tick - totemPopTick > 3;
-    }
-
-    private boolean totemHoverActive() {
-        return totemAware.getValue() && totemHover.getValue() && targetHasTotem();
-    }
-
-    private boolean killWindowOpen() {
-        if (!totemAware.getValue() || totemPopTick == Integer.MIN_VALUE) return false;
-        return tick - totemPopTick < killWindowTicks.getValue();
-    }
-
-    private boolean underHighPressure() {
-        return targetSwings.size() >= PRESSURE_THRESHOLD;
-    }
-
-    // ---------------------------------------------------------------
-    // pearl tracking (ported v2)
-    // ---------------------------------------------------------------
-
-    private void updatePearl() {
-        if (!pearlAware.getValue() || target == null) {
-            trackedPearl = null;
-            pearlLanding = null;
-            return;
-        }
-        Entity best = null;
-        double bestDist = Double.MAX_VALUE;
-        for (Entity entity : mc.level.entitiesForRendering()) {
-            if (entity.getType() != EntityType.ENDER_PEARL) continue;
-            if (entity instanceof Projectile projectile
-                    && projectile.getOwner() != null
-                    && projectile.getOwner() != target) {
-                continue;
-            }
-            double dist = entity.position().distanceToSqr(target.position());
-            if (dist < 36.0 && dist < bestDist) {
-                best = entity;
-                bestDist = dist;
-            }
-        }
-        if (best != null) {
-            if (best != trackedPearl) {
-                trackedPearl = best;
-                pearlLanding = simulatePearlLanding(best.position(), best.getDeltaMovement());
-            }
-            pearlGraceTick = tick;
-        } else if (trackedPearl != null) {
-            // keep the landing spot valid briefly so the intercept vector stays
-            // stable through the teleport frame
-            if (tick - pearlGraceTick > 4) {
-                trackedPearl = null;
-                pearlLanding = null;
-            }
-        }
-    }
-
-    private boolean pearlActive() {
-        return pearlLanding != null;
-    }
-
-    /** thrown item physics: 0.99 drag + 0.03 gravity per tick, block raycast per step */
-    private Vec3 simulatePearlLanding(Vec3 pos, Vec3 velocity) {
-        Vec3 current = pos;
-        Vec3 motion = velocity;
-        for (int i = 0; i < pearlSimTicks.getValue(); i++) {
-            Vec3 next = current.add(motion);
-            BlockHitResult hit = mc.level.clip(new ClipContext(
-                    current, next, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
-            if (hit.getType() != HitResult.Type.MISS) {
-                return hit.getLocation();
-            }
-            current = next;
-            motion = motion.multiply(0.99, 0.99, 0.99).subtract(0, 0.03, 0);
-            if (motion.lengthSqr() < 1.0E-6) break;
-        }
-        return current;
-    }
-
-    /** unified aim point: pearl landing overrides stale position data */
-    private Vec3 predictTargetPos() {
-        if (pearlActive()) {
-            return pearlLanding;
-        }
-        return target.position();
-    }
-
-    // ---------------------------------------------------------------
-    // FOLLOW behaviour (ported FollowerV2)
-    // ---------------------------------------------------------------
-
-    private void followerUpdate() {
-        double cruise = Math.max(0.8, mc.player.getDeltaMovement().length());
-        Vec3 aimPos = approachAim(predictTargetPos());
-        Vec3 direction = aimPos.subtract(mc.player.position());
-        if (targetOnGround) {
-            direction = direction.add(0, groundFollowHeight.getValue(), 0);
-        }
-        if (terrainAware.getValue()) {
-            direction = avoid(direction);
-        }
-        // convergence: inside the brake distance, stop sprinting through the
-        // target and settle into a trailing follow
-        double dist = direction.length();
-        double convergeRadius = Math.max(4.0, cruise * 3.0);
-        if (converge.getValue() && dist < convergeRadius) {
-            double scale = 0.35 + 0.65 * (dist / convergeRadius);
-            direction = direction.normalize().scale(cruise * scale);
-        }
-        movementDirection = direction;
-        // FOLLOW also attacks when it happens to be in range
-        if (inAttackRange() && attackGatesPass()) {
-            attackFlag = true;
-        }
-    }
-
-    // ---------------------------------------------------------------
-    // MACE behaviour (ported MaceV2 state machine)
-    // ---------------------------------------------------------------
-
-    private void maceUpdate() {
-        if (target == null) {
-            Vec3 ghost = lostCourse(Math.max(0.8, mc.player.getDeltaMovement().length()));
-            movementDirection = ghost;
-            return;
-        }
-        switch (maceState) {
-            case STATE_NONE -> maceState = stateNone();
-            case STATE_PULL_UP -> maceState = statePullUp();
-            case STATE_FOLLOW -> maceState = stateFollow();
-            case STATE_WAIT_ATTACK -> maceState = stateWaitAttack();
-            case STATE_HOVER -> maceState = stateHover();
-            case STATE_DOWN_ATTACK -> maceState = stateDownAttack();
-            default -> maceState = STATE_NONE;
-        }
-    }
-
-    private int stateNone() {
-        double fall = GuizhouWare.positionManager.getFallDistance();
-        if (fall > 4 && mc.player.getY() > target.getY() + 4.0) {
-            return STATE_FOLLOW;
-        }
-        return STATE_PULL_UP;
-    }
-
-    private int statePullUp() {
-        if (startPullUpTick == 0) {
-            startPullUpTick = tick;
-        }
-        // climb-out is also the long approach: intercept a runner's course
-        // (XZ only — altitude stays owned by the pull-up state machine)
-        Vec3 predictor = approachAimHorizontal(predictTargetPos());
-        if (headBlocked()) {
-            // cannot pull up here: follow out sideways first
-            return transitionTo(STATE_FOLLOW);
-        }
-        // head-on closing: inside ~12 blocks while they press or trade, bank
-        // 10 blocks of height over them first, then drop the mace; mace
-        // damage scales with fall distance
-        if (maceDownAttack.getValue()
-                && (inCombatRange || action == Action.TOWARDS)
-                && mc.player.distanceToSqr(target) < 150.0) {
-            return transitionTo(STATE_DOWN_ATTACK);
-        }
-        double targetY = target.getY() + (targetOnGround ? maceHeightGround.getValue() : maceHeight.getValue());
-        boolean mayFollow = mc.player.getY() >= targetY
-                || tick > startPullUpTick + maceMaxPullUpTick.getValue();
-        if (mayFollow) {
-            // conservative play only: hover while their totem is up (off by
-            // default — a totem is one extra life, breaking it IS progress)
-            if (totemHoverActive()) {
-                return transitionTo(STATE_HOVER);
-            }
-            return transitionTo(STATE_FOLLOW);
-        }
-        setTargetToPlayerUpper(predictor);
-        return STATE_PULL_UP;
-    }
-
-    private int stateDownAttack() {
-        if (downAttackTicks < 3 && (inCombatRange || action == Action.TOWARDS)) {
-            downAttackTicks++;
-            // climb at the point 10 above the target, braking on the steep
-            // share so the 3-tick bank actually converts to height
-            movementDirection = target.position().add(0, 10.0, 0).subtract(mc.player.position());
-            Vec3 look = movementDirection.normalize();
-            if (look.y < 0.0) {
-                speedMultiplier = Math.min(1.0, 0.75 / Math.abs(look.y));
-            }
-            return STATE_DOWN_ATTACK;
-        }
-        if (inAttackRange()) {
-            setTargetToPlayer(target.position().add(0, target.getBbHeight() * 0.5, 0));
-            attackFlag = true;
-            return transitionTo(STATE_WAIT_ATTACK);
-        }
-        // height banked or the window closed: hand over to the dive
-        return transitionTo(STATE_FOLLOW);
-    }
-
-    private int stateHover() {
-        if (!totemHoverActive()) {
-            // totem gone (popped or never there): dive window
-            return transitionTo(STATE_FOLLOW);
-        }
-        if (action == Action.ESCAPING || action == Action.PEARL_ESCAPE) {
-            // target running: cut the orbit and reposition on its course
-            setTargetToPlayerUpper(approachAimHorizontal(predictTargetPos()));
-            return STATE_HOVER;
-        }
-        hoverAngle += (2 * Math.PI) / 40.0;
-        double radius = combatRange.getValue() + 2.0;
-        Vec3 orbitPoint = target.position().add(
-                Math.cos(hoverAngle) * radius, totemHoverHeight.getValue(), Math.sin(hoverAngle) * radius);
-        movementDirection = avoid(orbitPoint.subtract(mc.player.position()));
-        if (movementDirection.length() < 5) {
-            movementDirection = movementDirection.normalize().scale(5);
-        }
-        return STATE_HOVER;
-    }
-
-    private int stateFollow() {
-        double fall = GuizhouWare.positionManager.getFallDistance();
-        if (fall < 1.0E-6 && lastFallDistance > 1.0E-6) {
-            // fall distance reset mid-chase: regain height first
-            return transitionTo(STATE_PULL_UP);
-        }
-        lastFallDistance = fall;
-
-        // conservative play only: abort the dive when they re-totemed
-        if (totemHoverActive() && !inCombatRange && mc.player.getY() > target.getY() + 6.0) {
-            return transitionTo(STATE_HOVER);
-        }
-        Vec3 targetPos = predictTargetPos();
-        // terminal guidance: inside the strike window the aim snaps from the
-        // predicted point to the live hitbox center — a sidestepping target
-        // cannot slip the final ticks of the dive
-        double strikeDist = mc.player.position().distanceTo(target.position());
-        if (strikeDist < attackRange.getValue() * 1.6) {
-            targetPos = target.position().add(0, target.getBbHeight() * 0.5, 0);
-        }
-        boolean inRange = inAttackRange();
-        if (inRange && attackGatesPass()) {
-            setTargetToPlayer(targetPos);
-            attackFlag = true;
-            return transitionTo(STATE_WAIT_ATTACK);
-        }
-        boolean feetBlocked = feetBlocked();
-        // kill window: stay glued to the target, tolerate a bigger height
-        // deficit before giving up the dive
-        double followTolerance = maceFollowMinHeight.getValue() + (killWindowOpen() ? 3.0 : 0.0);
-        boolean needPullUp = feetBlocked || target.getY() > mc.player.getY() + followTolerance;
-        if (needPullUp) {
-            if (inRange && attackGatesPass()) {
-                setTargetToPlayer(targetPos);
-                attackFlag = true;
-                return transitionTo(STATE_WAIT_ATTACK);
-            }
-            return transitionTo(STATE_PULL_UP);
-        }
-        setTargetToPlayer(targetPos);
-        // dive-speed shaping: the steeper the dive the harder we brake — more
-        // ticks spent inside the strike window instead of blowing through it
-        double verticalShare = 0.0;
-        if (movementDirection.lengthSqr() > 1.0E-9) {
-            verticalShare = Math.abs(movementDirection.normalize().y);
-        }
-        speedMultiplier = verticalShare > 0.75 ? Math.min(1.0, 0.75 / verticalShare) : 1.0;
-        return STATE_FOLLOW;
-    }
-
-    private int stateWaitAttack() {
-        if (action != Action.AFK && action != Action.SLOW_SPEED) {
-            return transitionTo(STATE_PULL_UP);
-        }
-        if (++waitAttackTicks > 1) {
-            if (targetOnGround) {
-                return transitionTo(STATE_NONE);
-            }
-            return transitionTo(STATE_FOLLOW);
-        }
-        Vec3 targetPos = predictTargetPos();
-        targetPos = new Vec3(targetPos.x, target.getY(), targetPos.z);
-        setTargetToPlayer(targetPos);
-        return STATE_WAIT_ATTACK;
-    }
-
-    private int transitionTo(int state) {
-        if (state == STATE_PULL_UP) {
-            startPullUpTick = tick;
-        } else if (state == STATE_DOWN_ATTACK) {
-            downAttackTicks = 0;
-        } else if (state == STATE_WAIT_ATTACK) {
-            waitAttackTicks = 0;
-        }
-        return state;
-    }
-
-    private void setTargetToPlayerUpper(Vec3 predictor) {
-        Vec3 movement = new Vec3(predictor.x, predictor.y + maceHeight.getValue(), predictor.z)
-                .subtract(mc.player.position());
-        if (movement.length() < 5) {
-            movement = movement.normalize().scale(5);
-        }
-        movement = clampApproachAngle(movement, predictor);
-        movementDirection = avoid(movement);
-    }
-
-    private void setTargetToPlayer(Vec3 targetPos) {
-        Vec3 movement = targetPos.subtract(mc.player.position()).normalize();
-        if (targetOnGround) {
-            movement = movement.add(0, groundFollowHeight.getValue(), 0);
-        } else if (targetPos.y > mc.player.getY()) {
-            // never chase upward in a mace dive: keep the height advantage
-            movement = new Vec3(movement.x, 0, movement.z);
-        }
-        movement = clampApproachAngle(movement, targetPos);
-        // v2 feint: alternate lateral drift while they aim a spear at us
-        if (isTargetUsingSpear()) {
-            movement = movement.add(lateralDodge(movement, dodgeIntensity.getValue() * 0.8)).normalize();
-        }
-        if (movement.length() < 5) {
-            movement = movement.normalize().scale(5);
-        }
-        movementDirection = movement;
-    }
-
-    /**
-     * angle clamp: far from the target, cap the climb/dive at 45° so the
-     * horizontal speed — the thing that feeds elytra lift and closing rate —
-     * survives the approach
-     */
-    private Vec3 clampApproachAngle(Vec3 movement, Vec3 aimPos) {
-        if (!maceAngleOptimize.getValue() || targetOnGround) {
-            return movement;
-        }
-        Vec3 flat = new Vec3(movement.x, 0, movement.z);
-        double horizontalToTarget = mc.player.position().subtract(aimPos).horizontalDistance();
-        if (horizontalToTarget <= maceAngleRange.getValue()) {
-            return movement;
-        }
-        double horizontalDir = Math.max(Math.abs(movement.x), Math.abs(movement.z));
-        if (horizontalDir < 0.1) {
-            return movement;
-        }
-        if (movement.y > horizontalDir) {
-            return new Vec3(movement.x, horizontalDir, movement.z);
-        }
-        if (movement.y < -horizontalDir) {
-            return new Vec3(movement.x, -horizontalDir, movement.z);
-        }
-        return movement;
-    }
-
-    // ---------------------------------------------------------------
-    // SPEAR behaviour (ported SpearV2): orbit outside their spear range,
-    // engage on their spend / totem pop / our charged stab window
-    // ---------------------------------------------------------------
-
-    private static boolean isSpearItem(ItemStack stack) {
-        return stack.is(Items.WOODEN_SPEAR) || stack.is(Items.STONE_SPEAR)
-                || stack.is(Items.COPPER_SPEAR) || stack.is(Items.IRON_SPEAR)
-                || stack.is(Items.GOLDEN_SPEAR) || stack.is(Items.DIAMOND_SPEAR)
-                || stack.is(Items.NETHERITE_SPEAR);
-    }
-
-    public static boolean isUsingSpear(Player player) {
-        return player != null && player.isUsingItem() && isSpearItem(player.getUseItem());
-    }
-
-    /** kinetic window: held long enough for charged (kinetic) damage */
-    public boolean kineticReady(Player player) {
-        return isUsingSpear(player) && player.getTicksUsingItem() >= spearChargeTicks.getValue();
-    }
-
-    public boolean isTargetUsingSpear() {
-        return target != null && isUsingSpear(target);
-    }
-
-    /** impact speed for the kinetic gate: our speed plus their oncoming component */
-    private double stabImpactSpeed() {
-        double vel = mc.player.getDeltaMovement().length();
-        if (relativeSpeedGate.getValue() && target != null) {
-            Vec3 toTarget = target.position().subtract(mc.player.position());
-            if (toTarget.lengthSqr() > 1.0E-4) {
-                double closing = -target.getDeltaMovement().dot(toTarget.normalize());
-                if (closing > 0) {
-                    vel += closing;
-                }
-            }
-        }
-        return vel;
-    }
-
-    /** max-damage gate: stab only at speed peaks (kinetic damage ~ speed) */
-    private boolean spearStabReady() {
-        if (!spearMaxDamage.getValue()) {
-            return true;
-        }
-        double minSpeed = spearStabMinSpeed.getValue();
-        if (killWindowOpen()) {
-            minSpeed *= 0.8;
-        } else if (underHighPressure()) {
-            minSpeed *= 0.85;
-        }
-        return stabImpactSpeed() >= minSpeed;
-    }
-
-    /** charged spear inside its range, aimed at our hemisphere */
-    private boolean spearThreatens() {
-        if (target == null || !kineticReady(target)) return false;
-        double distance = mc.player.position().distanceTo(target.position());
-        if (distance > combatSpearRange.getValue() + 3.0) return false;
-        // actually aimed at us: a charged spear staring away threatens nobody
-        Vec3 toUs = mc.player.position().subtract(target.position()).normalize();
-        return target.getLookAngle().dot(toUs) > 0.25;
-    }
-
-    private void flipFeint() {
-        feintSign = -feintSign;
-    }
-
-    /** lateral dodge relative to our current heading, sign alternates (feint) */
-    private Vec3 lateralDodge(Vec3 heading, double magnitude) {
-        Vec3 horizontal = new Vec3(heading.x, 0, heading.z);
-        if (horizontal.lengthSqr() < 1.0E-4) {
-            horizontal = new Vec3(1, 0, 0);
-        }
-        Vec3 side = new Vec3(0, 1, 0).cross(horizontal.normalize());
-        return side.scale(magnitude);
-    }
-
-    private void spearUpdate() {
-        if (target == null) {
-            Vec3 ghost = lostCourse(Math.max(0.8, mc.player.getDeltaMovement().length()));
-            movementDirection = ghost;
-            return;
-        }
-        switch (spearState) {
-            case S_ORBIT -> spearState = spearOrbit();
-            case S_ENGAGE -> spearState = spearEngage();
-            case S_DODGE -> spearState = spearDodge();
-            case S_PULL_OVER -> spearState = spearPullOver();
-            default -> spearState = S_ORBIT;
-        }
-    }
-
-    private int spearOrbit() {
-        // their spear was spent (or swapped away): strike window
-        boolean spearDropped = wasTargetUsingSpear && !isTargetUsingSpear();
-        wasTargetUsingSpear = isTargetUsingSpear();
-        if (spearDropped || tick < engageUntil) {
-            if (spearDropped) {
-                engageUntil = tick + 40;
-            }
-            // their spear is spent — engage regardless of totem
-            return S_ENGAGE;
-        }
-        // kill window: their totem just popped, dive in immediately
-        if (killWindowOpen()) {
-            return S_ENGAGE;
-        }
-        if (tick >= dodgeCooldownUntil && isTargetUsingSpear() && spearThreatens()) {
-            dodgeTicksLeft = 5;
-            dodgeCooldownUntil = tick + 20;
-            flipFeint();
-            return S_DODGE;
-        }
-        // proactive strike: our spear is charged and the impact gate is open
-        if (tick >= reengageCooldownUntil
-                && isUsingSpear(mc.player)
-                && kineticReady(mc.player)
-                && spearStabReady()
-                && attackGatesPass()) {
-            engageUntil = tick + 40;
-            reengageCooldownUntil = engageUntil + 20;
-            return S_ENGAGE;
-        }
-        movementDirection = avoid(spearOrbitHeading());
-        return S_ORBIT;
-    }
-
-    private int spearDodge() {
-        if (--dodgeTicksLeft <= 0) {
-            return S_ORBIT;
-        }
-        Vec3 away = mc.player.position().subtract(target.position());
-        Vec3 horizontalAway = new Vec3(away.x, 0, away.z).normalize();
-        if (horizontalAway.lengthSqr() < 1.0E-4) {
-            horizontalAway = new Vec3(1, 0, 0);
-        }
-        movementDirection = horizontalAway
-                .scale(4.0 * dodgeIntensity.getValue())
-                .add(lateralDodge(horizontalAway, 8.0 * dodgeIntensity.getValue() * feintSign))
-                .add(0, 1.0, 0);
-        return S_DODGE;
-    }
-
-    private int spearEngage() {
-        if (tick >= dodgeCooldownUntil && isTargetUsingSpear() && spearThreatens()) {
-            dodgeTicksLeft = 5;
-            dodgeCooldownUntil = tick + 20;
-            flipFeint();
-            return S_DODGE;
-        }
-        if (tick >= engageUntil) {
-            return S_ORBIT;
-        }
-        Vec3 targetPos = predictTargetPos();
-        double range = combatSpearRange.getValue();
-        boolean farApproach = mc.player.position().distanceTo(target.position()) > range + 8.0;
-        if (farApproach) {
-            // still closing in: cut the course, steer around terrain; the
-            // final dive keeps the raw predicted point for accuracy
-            targetPos = approachAimHorizontal(targetPos, interceptLead.getValue() * 0.7);
-        }
-        setTargetToPlayer(targetPos);
-        if (farApproach) {
-            movementDirection = avoid(movementDirection);
-        }
-        if (inAttackRange() && attackGatesPass()) {
-            boolean charged = isUsingSpear(mc.player);
-            if (!charged || (kineticReady(mc.player) && spearStabReady())) {
-                attackFlag = true;
-                // poke and retreat: strike thrown, peel off at 45° while the
-                // cooldown recovers instead of hovering in their spear range
-                if (spearPullOver.getValue()) {
-                    pullOverTicks = 0;
-                    return S_PULL_OVER;
-                }
-            }
-        }
-        return S_ENGAGE;
-    }
-
-    private int spearPullOver() {
-        if (++pullOverTicks > 15) {
-            return S_ORBIT;
-        }
-        // target fled hard mid-retreat: cut it short and re-press
-        if (action == Action.ESCAPING
-                && mc.player.position().distanceTo(target.position()) > combatSpearRange.getValue() + 6.0) {
-            return S_ORBIT;
-        }
-        Vec3 away = mc.player.position().subtract(target.position());
-        Vec3 flat = new Vec3(away.x, 0, away.z);
-        if (flat.lengthSqr() < 1.0E-4) {
-            flat = new Vec3(1, 0, 0);
-        }
-        double cruise = Math.max(0.8, mc.player.getDeltaMovement().length());
-        // peel away level-or-up at 45° — keeps speed and banks a little
-        // height for the next pass
-        movementDirection = flat.normalize().add(0, 1.0, 0).normalize().scale(cruise);
-        return S_PULL_OVER;
-    }
-
-    private Vec3 spearOrbitHeading() {
-        if (tick >= nextFeintFlip) {
-            flipFeint();
-            nextFeintFlip = tick + dodgeCycleTicks.getValue();
-        }
-        // chasing: a runner is not pressed by an orbit — cut across its
-        // course until we are in spear range
-        boolean chasing = action == Action.ESCAPING
-                || mc.player.position().subtract(target.position()).horizontalDistance()
-                        > combatSpearRange.getValue() * 2.5;
-        Vec3 heading;
-        if (chasing) {
-            Vec3 aim = approachAimHorizontal(predictTargetPos(), interceptLead.getValue());
-            heading = aim.subtract(mc.player.position());
-        } else {
-            orbitAngle += (2 * Math.PI) / 36.0;
-            double radius = combatSpearRange.getValue() + 2.0;
-            // wave the orbit up/down: the periodic dip banks spear-charge
-            // fall distance, so a full charge is available to press with
-            double bob = 3.0 * Math.sin(2.0 * orbitAngle);
-            Vec3 orbitPoint = target.position().add(
-                    Math.cos(orbitAngle) * radius, 6.0 + bob, Math.sin(orbitAngle) * radius);
-            heading = orbitPoint.subtract(mc.player.position());
-        }
-        if (isTargetUsingSpear()) {
-            // feint: persistent small lateral drift that flips on a cycle
-            heading = heading.add(lateralDodge(heading, 0.5 * dodgeIntensity.getValue() * feintSign));
-        }
-        if (heading.length() < 5) {
-            heading = heading.normalize().scale(5);
-        }
-        return heading;
-    }
-
-    // ---------------------------------------------------------------
-    // auto spear charge: hold use on the spear during the dive window so
-    // kinetic (charged) hits actually deal damage
-    // ---------------------------------------------------------------
-
-    private void updateSpearCharge() {
-        boolean diving = autoSpearCharge.getValue()
-                && mode.getValue() != Mode.FOLLOW
-                && mc.player.isFallFlying()
-                && target != null
-                && GuizhouWare.positionManager.getFallDistance() >= spearChargeMinFall.getValue();
-        if (!diving) {
-            releaseAutoSpear();
-            return;
-        }
-        if (isUsingSpear(mc.player)) {
-            return; // charging continues automatically while use is held
-        }
-        int spearSlot = findHotbarSlot(this::isSpearItemStack);
-        if (spearSlot != -1) {
-            if (spearPrevSlot == -1) {
-                spearPrevSlot = mc.player.getInventory().getSelectedSlot();
-            }
-            if (mc.player.getInventory().getSelectedSlot() != spearSlot) {
-                mc.player.getInventory().setSelectedSlot(spearSlot);
-            }
-            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-        }
-    }
-
-    private boolean isSpearItemStack(ItemStack stack) {
-        return isSpearItem(stack);
-    }
-
-    private void releaseAutoSpear() {
-        if (mc.player != null && mc.player.isUsingItem() && isUsingSpear(mc.player)) {
-            mc.player.stopUsingItem();
-        }
-        if (spearPrevSlot != -1 && mc.player != null) {
-            mc.player.getInventory().setSelectedSlot(spearPrevSlot);
-            spearPrevSlot = -1;
-        }
-    }
-
-    private int findHotbarSlot(java.util.function.Predicate<ItemStack> predicate) {
-        for (int slot = 0; slot < 9; slot++) {
-            if (predicate.test(mc.player.getInventory().getItem(slot))) {
-                return slot;
-            }
-        }
-        return -1;
-    }
-
-    // ---------------------------------------------------------------
-    // pursuit helpers (ported PursuitUtils)
-    // ---------------------------------------------------------------
-
-    /** ghost course after losing the target: extrapolate the last sighting */
-    private Vec3 lostCourse(double cruise) {
-        if (lastSeenPos == null || tick - lastSeenTick >= lostTargetTicks.getValue()) {
-            return null;
-        }
-        int dt = tick - lastSeenTick;
-        Vec3 ghost = lastSeenPos.add(lastSeenVel.scale(Math.min(dt, 10)));
-        Vec3 heading = ghost.subtract(mc.player.position());
-        if (heading.lengthSqr() < 1.0E-9) {
-            return null;
-        }
-        return heading.normalize().scale(cruise);
-    }
-
-    /** intercept course on the moving target; falls back to the given aim */
-    private Vec3 approachAim(Vec3 fallbackAim) {
-        return approachAim(fallbackAim, interceptLead.getValue());
-    }
-
-    private Vec3 approachAim(Vec3 fallbackAim, double leadScale) {
-        if (!intercept.getValue() || pearlActive()) {
-            return fallbackAim;
-        }
-        double cruise = Math.max(0.8, mc.player.getDeltaMovement().length());
-        return interceptPoint(mc.player.position(), cruise,
-                target.position(), estimateTargetVelocity(), leadScale, 40);
-    }
-
-    private Vec3 approachAimHorizontal(Vec3 fallbackAim) {
-        return approachAimHorizontal(fallbackAim, interceptLead.getValue());
-    }
-
-    private Vec3 approachAimHorizontal(Vec3 fallbackAim, double leadScale) {
-        Vec3 aim = approachAim(fallbackAim, leadScale);
-        if (aim == fallbackAim) {
-            return fallbackAim;
-        }
-        return new Vec3(aim.x, fallbackAim.y, aim.z);
-    }
-
-    /**
-     * rendezvous point: solve |T + Vt*t - P| = Vp*t for the smallest positive
-     * t; fallback is a lead point at t = |T-P|/Vp, capped so stale velocity
-     * cannot project the target across the world
-     */
-    private static Vec3 interceptPoint(Vec3 playerPos, double playerSpeed,
-            Vec3 targetPos, Vec3 targetVel, double leadScale, double maxLeadTicks) {
-        double scale = Math.max(0.0, Math.min(1.0, leadScale));
-        Vec3 vel = targetVel.scale(scale);
-        Vec3 rel = targetPos.subtract(playerPos);
-        double a = vel.dot(vel) - playerSpeed * playerSpeed;
-        double b = 2.0 * rel.dot(vel);
-        double c = rel.dot(rel);
-        double t = -1.0;
-        if (Math.abs(a) < 1.0E-9) {
-            if (b < -1.0E-9) {
-                t = -c / b;
-            }
-        } else {
-            double disc = b * b - 4.0 * a * c;
-            if (disc >= 0.0) {
-                double sq = Math.sqrt(disc);
-                double t1 = (-b - sq) / (2.0 * a);
-                double t2 = (-b + sq) / (2.0 * a);
-                if (t1 > 0.0 && t2 > 0.0) {
-                    t = Math.min(t1, t2);
-                } else {
-                    t = Math.max(t1, t2);
-                }
-            }
-        }
-        if (t < 0.0) {
-            t = playerSpeed > 1.0E-6 ? rel.length() / playerSpeed : 0.0;
-        }
-        t = Math.max(0.0, Math.min(maxLeadTicks, t));
-        return targetPos.add(vel.scale(t));
-    }
-
-    private boolean headBlocked() {
-        Vec3 from = mc.player.position();
-        BlockHitResult hit = mc.level.clip(new ClipContext(
-                from, from.add(0, 1.0, 0), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
-        return hit.getType() != HitResult.Type.MISS;
-    }
-
-    private boolean feetBlocked() {
-        Vec3 from = mc.player.position();
-        BlockHitResult hit = mc.level.clip(new ClipContext(
-                from, from.add(0, -1.0, 0), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
-        return hit.getType() != HitResult.Type.MISS;
-    }
-
-    /** candidate heading offsets {yaw, pitch} in degrees, ordered by turn cost */
-    private static final double[][] FAN_CANDIDATES = {
-            {14, 0}, {-14, 0},
-            {30, 0}, {-30, 0},
-            {48, 0}, {-48, 0},
-            {0, -15}, {0, 15},
-            {30, -15}, {-30, -15},
-    };
-
-    private static final double BLOCKED_COST = 4.0;
-
-    /**
-     * terrain avoidance by fan sampling: raycast each candidate heading, keep
-     * the cheapest clear one (smallest turn) so we side-step ridges at speed
-     * instead of ballooning straight up
-     */
-    private Vec3 avoid(Vec3 desired) {
-        if (!terrainAware.getValue()) return desired;
-        double len = desired.length();
-        if (len < 1.0E-6) return desired;
-        Vec3 dir = desired.normalize();
-        Vec3 eye = mc.player.getEyePosition();
-        BlockHitResult centerHit = raycast(eye, dir, terrainLookahead.getValue());
-        if (centerHit.getType() == HitResult.Type.MISS) {
-            return desired;
-        }
-        double baseYaw = Math.atan2(-dir.x, dir.z);
-        double basePitch = -Math.asin(Math.max(-1.0, Math.min(1.0, dir.y)));
-        Vec3 best = null;
-        double bestCost = Double.MAX_VALUE;
-        for (double[] off : FAN_CANDIDATES) {
-            Vec3 cand = fromYawPitch(baseYaw + Math.toRadians(off[0]), basePitch + Math.toRadians(off[1]));
-            BlockHitResult hit = raycast(eye, cand, terrainLookahead.getValue());
-            double cost;
-            if (hit.getType() == HitResult.Type.MISS) {
-                cost = Math.abs(off[0]) / 48.0 + Math.abs(off[1]) / 30.0;
-            } else {
-                double dist = eye.distanceTo(hit.getLocation());
-                cost = BLOCKED_COST + (1.0 - dist / terrainLookahead.getValue()) * 2.0;
-            }
-            if (cost < bestCost) {
-                bestCost = cost;
-                best = cand;
-            }
-        }
-        if (bestCost < BLOCKED_COST) {
-            return best.scale(len);
-        }
-        // everything sampled is blocked: slide along the wall face; climbing
-        // harder here is how you get stuck under a nether ceiling
-        return slideAlongFace(centerHit, dir, len);
-    }
-
-    private Vec3 slideAlongFace(BlockHitResult hit, Vec3 dir, double len) {
-        Direction face = hit.getDirection();
-        Vec3 horizontal = new Vec3(dir.x, 0, dir.z);
-        if (horizontal.lengthSqr() < 1.0E-4) {
-            horizontal = new Vec3(1, 0, 0);
-        }
-        Vec3 slide;
-        if (face == Direction.DOWN) {
-            // ceiling: press down and away
-            slide = horizontal.normalize().add(0, -0.2, 0);
-        } else if (face == Direction.UP) {
-            // floor: lift off gently
-            slide = horizontal.normalize().add(0, 0.4, 0);
-        } else {
-            Vec3 n = new Vec3(face.getStepX(), 0, face.getStepZ());
-            Vec3 tangent = new Vec3(0, 1, 0).cross(n).normalize();
-            if (tangent.dot(horizontal) < 0) {
-                tangent = tangent.scale(-1);
-            }
-            // hug the wall sideways with a slight lift to peel off
-            slide = tangent.add(0, 0.25, 0);
-        }
-        return slide.normalize().scale(len);
-    }
-
-    private BlockHitResult raycast(Vec3 eye, Vec3 dir, double lookahead) {
-        return mc.level.clip(new ClipContext(
-                eye, eye.add(dir.scale(lookahead)),
-                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
-    }
-
-    /** MC convention: yaw around Y, pitch positive down */
-    private static Vec3 fromYawPitch(double yaw, double pitch) {
-        double cp = Math.cos(pitch);
-        return new Vec3(-Math.sin(yaw) * cp, -Math.sin(pitch), Math.cos(yaw) * cp);
-    }
-
-    // ---------------------------------------------------------------
-    // attack execution (house style: silent rotation + LOS + swap)
-    // ---------------------------------------------------------------
-
-    private boolean inAttackRange() {
-        if (target == null) return false;
-        double rangeSq = attackRange.getValue() * attackRange.getValue();
-        return target.getBoundingBox().distanceToSqr(mc.player.position()) <= rangeSq;
-    }
-
-    /** attack cadence: cooldown progress + min interval, relaxed in the kill window / under pressure */
-    private boolean attackGatesPass() {
-        boolean killWindow = killWindowOpen();
-        boolean pressure = !killWindow && underHighPressure();
-        double threshold = attackCadence.getValue();
-        if (killWindow) {
-            threshold = Math.min(0.7, threshold * 0.8);
-        } else if (pressure) {
-            threshold = Math.min(0.75, threshold * 0.85);
-        }
-        if (mc.player.getAttackStrengthScale(0.5F) < threshold) {
-            return false;
-        }
-        int interval = attackMinInterval.getValue();
-        if (killWindow || pressure) {
-            interval = Math.max(1, interval - 1);
-        }
-        return tick - lastAttackTick >= interval;
-    }
-
-    private void tryAttack() {
-        if (target == null || !target.isAlive()) return;
-
-        Vec3 eyePos = mc.player.getEyePosition(1.0F);
-        AABB box = target.getBoundingBox();
-        Vec3 aimPoint = new Vec3(
-                net.minecraft.util.Mth.clamp(eyePos.x, box.minX, box.maxX),
-                net.minecraft.util.Mth.clamp(eyePos.y, box.minY, box.maxY),
-                net.minecraft.util.Mth.clamp(eyePos.z, box.minZ, box.maxZ));
-        float[] angles = MathUtil.calcAngle(eyePos, aimPoint);
-        GuizhouWare.rotationManager.submit(new RotationRequest(
-                ID, ROTATION_PRIORITY, angles[0], angles[1], RotationRequest.Mode.SILENT));
-
-        float serverYaw = GuizhouWare.rotationManager.getServerYaw();
-        float serverPitch = GuizhouWare.rotationManager.getServerPitch();
-        if (!box.contains(eyePos)) {
-            Vec3 lookVec = ElytraPhysics.pitchYawToRotation(serverPitch, serverYaw);
-            Vec3 reachEnd = eyePos.add(lookVec.scale(attackRange.getValue()));
-            if (box.clip(eyePos, reachEnd).isEmpty()) {
-                return; // server-side look does not touch the hitbox yet
-            }
-        }
-
-        lastAttackTick = tick;
-
-        // charged spear stab: this IS the kinetic damage path, never swap out
-        if (isUsingSpear(mc.player)) {
-            mc.gameMode.attack(mc.player, target);
-            mc.player.swing(InteractionHand.MAIN_HAND);
-            return;
-        }
-
-        double fall = GuizhouWare.positionManager.getFallDistance();
-        if (useMace.getValue() && fall > 1.5) {
-            Result mace = findHotbar(Items.MACE);
-            if (mace != null) {
-                GuizhouWare.swapManager.withSwap(mace, SwapMode.SILENT, SwapPriority.WEAPON,
-                        () -> {
-                            mc.gameMode.attack(mc.player, target);
-                            mc.player.swing(InteractionHand.MAIN_HAND);
-                        });
-                return;
-            }
-        }
-        mc.gameMode.attack(mc.player, target);
-        mc.player.swing(InteractionHand.MAIN_HAND);
-    }
-
-    private Result findHotbar(net.minecraft.world.item.Item item) {
-        for (int slot = 0; slot < 9; slot++) {
-            ItemStack stack = mc.player.getInventory().getItem(slot);
-            if (stack.is(item)) {
-                return new Result(slot, stack, ResultType.HOTBAR);
-            }
-        }
-        return null;
+    private boolean blockedInDirection(double dx, double dy, double dz) {
+        AABB next = mc.player.getBoundingBox().move(dx, dy, dz);
+        return !mc.level.noCollision(mc.player, next);
     }
 
     @Override
     public String getDisplayInfo() {
-        if (target == null) return null;
-        String base = switch (mode.getValue()) {
-            case MACE -> "Mace";
-            case SPEAR -> "Spear";
-            default -> "Follow";
-        };
-        if (killWindowOpen()) return base + "·KillWindow";
-        if (pearlActive()) return base + "·Pearl";
-        if (isUsingSpear(mc.player)) return base + "·Charged";
-        return base;
+        if (maceDive.isActive()) return "Dive/" + maceDive.phase();
+        if (combatAction != AerialCombatPolicy.Action.CHASE) return combatAction.name();
+        Behavior b = behavior;
+        if (b instanceof MxsBehavior mxs && mxs.active != null) {
+            return (mxs.usingMace ? "M" : "S") + "/" + targetMotion;
+        }
+        return targetMotion.name();
     }
 }

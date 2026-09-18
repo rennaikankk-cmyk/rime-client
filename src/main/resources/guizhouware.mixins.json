@@ -14,6 +14,7 @@
     "client.MixinChatComponent",
     "client.MixinFont",
     "client.MixinGuiGraphics",
+    "client.MixinMinecraftSpearUse",
     "client.MixinOptions",
     "client.MixinPlayerTabOverlay",
     "client.OptionInstanceAccessor",

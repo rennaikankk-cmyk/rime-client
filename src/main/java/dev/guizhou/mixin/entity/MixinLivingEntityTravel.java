@@ -2,6 +2,7 @@ package dev.guizhou.mixin.entity;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import dev.guizhou.GuizhouWare;
+import dev.guizhou.features.modules.movement.GuangxiElytraModule;
 import dev.guizhou.manager.RotationManager;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.Blocks;
@@ -18,6 +19,18 @@ import static dev.guizhou.util.traits.Util.mc;
 public class MixinLivingEntityTravel {
     @Unique private float guizhouware$origYaw, guizhouware$origPitch;
     @Unique private boolean guizhouware$applied;
+
+    @ModifyExpressionValue(
+            method = "travelFallFlying(Lnet/minecraft/world/phys/Vec3;)V",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;updateFallFlyingMovement(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;"),
+            require = 1)
+    private Vec3 guizhouware$flightVelocity(Vec3 vanillaVelocity) {
+        LivingEntity self = (LivingEntity) (Object) this;
+        if (self != mc.player || GuizhouWare.moduleManager == null) return vanillaVelocity;
+        GuangxiElytraModule module = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        if (module == null || !module.isEnabled()) return vanillaVelocity;
+        return module.applyFlightVelocity(vanillaVelocity, self.getDeltaMovement(), self.getLookAngle());
+    }
 
     @Inject(method = "travel", at = @At("HEAD"))
     private void guizhouware$travelHead(Vec3 movementInput, CallbackInfo ci) {

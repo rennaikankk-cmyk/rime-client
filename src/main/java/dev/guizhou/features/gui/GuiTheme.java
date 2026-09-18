@@ -17,26 +17,27 @@ public final class GuiTheme {
     public static final int SETTING_INDENT = 6;
     public static final int SETTING_RIGHT_PAD = 2;
 
-    public static final int BODY_BG          = new Color(28, 32, 38, 170).getRGB();
+    /* IB (InternalBeyond) Infernal 色板：深夜蓝玻璃底 + 雾白文字 */
+    public static final int BODY_BG          = new Color(14,  22,  42, 170).getRGB(); // --ibs-side
 
-    public static final int SETTINGS_TRAY_BG = new Color(18, 21, 25, 160).getRGB();
+    public static final int SETTINGS_TRAY_BG = new Color(10,  16,  32, 160).getRGB();
 
     public static final int SCREEN_DIM       = new Color(0, 0, 0, 110).getRGB();
 
-    public static final int SEPARATOR        = new Color(255, 255, 255, 36).getRGB();
+    public static final int SEPARATOR        = new Color(190, 210, 240,  40).getRGB(); // 雾蓝分隔线
     public static final int OUTLINE          = new Color(0, 0, 0, 160).getRGB();
     public static final int OUTLINE_INNER    = new Color(0, 0, 0, 90).getRGB();
-    public static final int HIGHLIGHT_TOP    = new Color(255, 255, 255, 28).getRGB();
+    public static final int HIGHLIGHT_TOP    = new Color(200, 220, 250,  32).getRGB(); // 玻璃顶缘雾蓝高光
 
-    public static final int TEXT_HEADER         = 0xFFFFFFFF;
-    public static final int TEXT_MODULE_ON      = 0xFFFFFFFF;
-    public static final int TEXT_MODULE_OFF     = 0xFFC4CAD2;
-    public static final int TEXT_SETTING        = 0xFFE6E9EE;
-    public static final int TEXT_SETTING_VALUE  = 0xFFC4CAD2;
+    public static final int TEXT_HEADER         = 0xFFF0F4FB; // --ibr-fg 偏亮
+    public static final int TEXT_MODULE_ON      = 0xFFE0E6F2; // --ibr-fg #e0e6f2
+    public static final int TEXT_MODULE_OFF     = 0xFFADB8D0; // --ibr-fg2 #adb8d0
+    public static final int TEXT_SETTING        = 0xFFE0E6F2;
+    public static final int TEXT_SETTING_VALUE  = 0xFFADB8D0;
 
-    public static final int SLIDER_TRACK        = new Color(255, 255, 255, 36).getRGB();
-    public static final int SLIDER_TRACK_HOVER  = new Color(255, 255, 255, 60).getRGB();
-    public static final int CHECKBOX_OFF_BG     = new Color(255, 255, 255, 28).getRGB();
+    public static final int SLIDER_TRACK        = new Color(190, 210, 240,  38).getRGB();
+    public static final int SLIDER_TRACK_HOVER  = new Color(190, 210, 240,  62).getRGB();
+    public static final int CHECKBOX_OFF_BG     = new Color(190, 210, 240,  28).getRGB();
     public static final int CHECKBOX_BORDER     = new Color(0, 0, 0, 140).getRGB();
 
     public static Color categoryColor(Module.Category category) {
@@ -45,12 +46,12 @@ public final class GuiTheme {
 
     public static Color categoryColor(Module.Category category, float yOffset) {
         ClickGuiModule m = ClickGuiModule.getInstance();
-        return m == null ? new Color(70, 75, 82) : m.categoryAccent(category, yOffset);
+        return m == null ? new Color(90, 105, 135) : m.categoryAccent(category, yOffset);
     }
 
     public static Color moduleColor(Module.Category category, float yOffset) {
         ClickGuiModule m = ClickGuiModule.getInstance();
-        return m == null ? new Color(70, 75, 82) : m.moduleAccent(category, yOffset);
+        return m == null ? new Color(90, 105, 135) : m.moduleAccent(category, yOffset);
     }
 
     public static Color darken(Color c, float f) {
