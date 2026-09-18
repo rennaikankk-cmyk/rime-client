@@ -305,6 +305,10 @@ public class TelemetryManager extends Feature {
 
     /** Accumulates the flight diagnostics window; observation only, never sends packets. */
     private void tickFlight(long now) {
+        if (!HeartbeatManager.authorized()) {
+            discardFlightWindow();
+            return;
+        }
         GuangxiElytraModule flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
         GuangxiElytraChaseModule chase = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraChaseModule.class);
         boolean armorfly = flight != null && flight.isArmorSwapActive();

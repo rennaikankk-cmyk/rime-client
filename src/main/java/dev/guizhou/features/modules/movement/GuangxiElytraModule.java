@@ -289,6 +289,8 @@ public class GuangxiElytraModule extends Module {
     }
 
     private void resetFlightState() {
+        lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
+        lastAppliedTick = Integer.MIN_VALUE;
         clearFlightRotation();
         restoreNoGravity();
         lastApplied = null;

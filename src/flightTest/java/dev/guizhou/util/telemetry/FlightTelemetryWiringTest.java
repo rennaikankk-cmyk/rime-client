@@ -31,6 +31,7 @@ public final class FlightTelemetryWiringTest {
         enqueueGuard(telemetry);
         fourHundredHandling(telemetry);
         tickScopedRocketBlock();
+        invalidatedFlightObservations(telemetry);
         System.out.println("FlightTelemetryWiringTest passed: " + checks + " checks");
     }
 
@@ -130,6 +131,29 @@ public final class FlightTelemetryWiringTest {
         if (firstTickWork < 0) firstTickWork = preTick.call(FLIGHT, "buildInputDirection");
         check(firstTickWork < 0 || clear < firstTickWork,
                 "The per-tick clear must happen before any rocket or flight work of the tick");
+    }
+
+    /** Denied flight and module/session resets cannot keep reporting previous observations. */
+    private static void invalidatedFlightObservations(Map<String, Trace> telemetry) throws IOException {
+        Trace tick = method(telemetry, "tickFlight");
+        int authorized = tick.call("dev/guizhou/manager/HeartbeatManager", "authorized");
+        check(authorized >= 0, "Flight observations must stop when the flight authorization gate closes");
+        Step branch = tick.steps.get(authorized + 1);
+        check(branch.opcode == Opcodes.IFNE,
+                "Authorized flight must branch past the observation discard path");
+        int permitted = tick.target(branch);
+        int discard = tick.callAfter(TELEMETRY, "discardFlightWindow", authorized);
+        check(discard > authorized && discard < permitted
+                        && tick.steps.get(discard + 1).opcode == Opcodes.RETURN,
+                "Denied flight must discard its window and return before sampling");
+
+        Trace reset = method(read(FLIGHT), "resetFlightState");
+        int block = reset.field("lastRocketBlock", Opcodes.PUTFIELD, -1);
+        check(block > 0 && reset.steps.get(block - 1).opcode == Opcodes.ICONST_0,
+                "Module/session reset must clear old rocket-gate observations");
+        int stamp = reset.field("lastAppliedTick", Opcodes.PUTFIELD, -1);
+        check(stamp > 0 && Integer.valueOf(Integer.MIN_VALUE).equals(reset.steps.get(stamp - 1).constant),
+                "Module/session reset must invalidate old velocity sample stamps");
     }
 
     // --- minimal ASM reader in the house style ---
