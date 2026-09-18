@@ -22,7 +22,7 @@
 
 - **服务端**（已上线生产）：`POST http://62.234.117.226/authapi/api/heartbeat`，body `{token, hwid}`。
   - token = jar 内 `META-INF/gzwx-telemetry.json` 的 `token`（HMAC 签发，≤90 天）
-  - hwid = OSHI 因子哈希（`gzwx.v1|CPU+主板(BaseBoard)+0号盘+MachineGuid`）。**mod 链与登录器 exe 链是两条独立链**（2026-09-18 实锤分叉：exe 的算法与 launcher-rs 工作区源码不一致且 ComputerSystem(Type1) 字符串当日漂移过）——服务端已加 `modHwid` 双绑定（首次心跳绑定+24h 重绑窗口），两条链各校验各的
+  - hwid = OSHI 因子哈希（`gzwx.v1|CPU+主板(BaseBoard)+0号盘+MachineGuid`）。**2026-09-18 三方已对齐同一条链**：登录器 hwid.rs 的 WMI 结构体名修正为 `Win32_Processor/Win32_BaseBoard/Win32_DiskDrive`（原名缺前缀=wmi crate 查询永远 INVALID_CLASS→静默降级成 MachineGuid 单因子哈希，历史绑定全是降级值，已全量 reset 迁移）；exe 修复版（f3ca3bc8）与 mod 的 HwidFingerprint 输出逐字节一致。服务端 modHwid 双绑定保留作安全网（首次心跳绑定+24h 重绑窗口）
   - 验证链：格式 regex → HMAC 验签 → producer 反查账号 → banned/expired/hwid 三查（hwid 查=ac.hwid 或 ac.modHwid 任一命中）
   - 响应 data 按键排序 `k=v&` 拼接后 Ed25519 验签，公钥 SPKI hex：
     `302a300506032b6570032100719ab622d39f27f096a5955ec72f5d6868948ee3838dddbc42db5ff650c25bcd`
