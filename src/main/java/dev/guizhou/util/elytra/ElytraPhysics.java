@@ -130,6 +130,13 @@ public final class ElytraPhysics {
     public static Vec3 clampToGrimEnvelope(Vec3 motion, Vec3 lastVel, Vec3 lastSimVel,
             Vec3 lookNow, Vec3 lookLast, double rescaleAmount, boolean cornerClimb,
             double yCap, double zeroPointThree) {
+        return clampToGrimEnvelope(motion, lastVel, lastSimVel, lookNow, lookLast,
+                rescaleAmount, cornerClimb, yCap, zeroPointThree, false);
+    }
+
+    public static Vec3 clampToGrimEnvelope(Vec3 motion, Vec3 lastVel, Vec3 lastSimVel,
+            Vec3 lookNow, Vec3 lookLast, double rescaleAmount, boolean cornerClimb,
+            double yCap, double zeroPointThree, boolean precision) {
         if (!isFinite(motion) || !isFinite(lastVel) || !isFinite(lastSimVel)
                 || !isFinite(lookNow) || !isFinite(lookLast)) return Vec3.ZERO;
         if (motion.lengthSqr() < 1.0E-6) return capVertical(motion, yCap);
@@ -173,7 +180,7 @@ public final class ElytraPhysics {
         }
 
         return projectToEnvelope(motion, new Vec3(uMinX, uMinY, uMinZ),
-                new Vec3(uMaxX, uMaxY, uMaxZ), cornerClimb, yCap);
+                new Vec3(uMaxX, uMaxY, uMaxZ), cornerClimb, yCap, precision);
     }
 
     /**
@@ -191,6 +198,11 @@ public final class ElytraPhysics {
     }
 
     static Vec3 projectToEnvelope(Vec3 motion, Vec3 envelopeMin, Vec3 envelopeMax, boolean cornerClimb, double yCap) {
+        return projectToEnvelope(motion, envelopeMin, envelopeMax, cornerClimb, yCap, false);
+    }
+
+    static Vec3 projectToEnvelope(Vec3 motion, Vec3 envelopeMin, Vec3 envelopeMax,
+                                  boolean cornerClimb, double yCap, boolean precision) {
         if (!isFinite(motion) || !validBounds(envelopeMin, envelopeMax)) return Vec3.ZERO;
         Vec3 min = capVertical(envelopeMin, yCap);
         Vec3 max = capVertical(envelopeMax, yCap);
@@ -214,11 +226,13 @@ public final class ElytraPhysics {
         }
         Vec3 projected = motion;
         if (enter <= exit && Double.isFinite(exit)) {
-            Vec3 scaled = motion.scale(exit);
+            // An intercept may intentionally request a short vector. Keep it when the
+            // box permits; if momentum requires more speed, stay on the nearest edge.
+            Vec3 scaled = motion.scale(precision ? Math.clamp(1.0, enter, exit) : exit);
             if (isFinite(scaled)) projected = scaled;
         }
         projected = clampComponents(projected, min, max);
-        return cornerClimb ? cornerFill(projected, motion, min, max, yCap) : projected;
+        return cornerClimb && !precision ? cornerFill(projected, motion, min, max, yCap) : projected;
     }
 
     private static double pick(double d, double lo, double hi, double keep) {

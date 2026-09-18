@@ -1,6 +1,6 @@
 package dev.guizhou.util.elytra;
 
-/** Orders an owned equipment pair around one observed glide restart. */
+/** Orders an owned equipment pair around every movement window; gliding restarts only after an observed end. */
 public final class ArmorSwapCycle {
     public interface Access {
         boolean intact();
@@ -36,7 +36,8 @@ public final class ArmorSwapCycle {
             return;
         }
         if (!access.wearingWings()) {
-            if (access.gliding()) return;
+            // The movement window must observe the owned wings even while an earlier
+            // glide flag is still running; a window click never toggles the glide flag.
             if (!swapTo(true)) return;
         }
         // A repeated START while already gliding makes the vanilla server stop flight.

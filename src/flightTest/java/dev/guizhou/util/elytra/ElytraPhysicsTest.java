@@ -13,6 +13,7 @@ public final class ElytraPhysicsTest {
         overspeedFromRest();
         modernVerticalClimb();
         projectionCases();
+        preciseIntercept();
         cornerAndVerticalCaps();
         invalidInputs();
         randomizedBounds();
@@ -79,6 +80,22 @@ public final class ElytraPhysicsTest {
         Vec3 applied = ElytraPhysics.clampToGrimEnvelope(new Vec3(0, 6, 0), Vec3.ZERO,
                 simulated, look, look, 1.0, true, 8.0, 0.0);
         near(0.9216, applied.y, 1.0E-8, "disabled legacy expansion uses only actual tick headroom");
+    }
+
+    private static void preciseIntercept() {
+        Vec3 request = new Vec3(0.4, -0.6, 0.02);
+        Vec3 min = new Vec3(-2, -3, -4), max = new Vec3(2, 3, 4);
+        vectorNear(request, ElytraPhysics.projectToEnvelope(request, min, max, true, 8, true),
+                "terminal intent must retain speed and heading instead of filling all box corners");
+        vectorNear(new Vec3(1, 0, 0), ElytraPhysics.projectToEnvelope(new Vec3(0.2, 0, 0),
+                new Vec3(1, -1, -1), new Vec3(2, 1, 1), true, 8, true),
+                "precision cannot brake below the momentum envelope");
+        vectorNear(new Vec3(2, 0, 0), ElytraPhysics.projectToEnvelope(new Vec3(8, 0, 0),
+                min, max, true, 8, true), "precision still clips excessive requested speed");
+        FlightVelocity intent = new FlightVelocity(request, 2);
+        intent.requestPrecision();
+        intent.set(request.scale(0.5));
+        if (!intent.isPrecise()) throw new AssertionError("Route rewrites must not erase terminal precision");
     }
 
     private static void cornerAndVerticalCaps() {

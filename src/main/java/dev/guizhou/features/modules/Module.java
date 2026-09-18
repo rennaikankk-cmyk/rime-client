@@ -158,13 +158,6 @@ public class Module extends Feature implements Jsonable, Toggleable {
     public void fromJson(JsonElement element) {
         if (element == null || element.isJsonNull()) return;
         JsonObject object = element.getAsJsonObject();
-        if (object.has("Enabled")) {
-            try {
-                if (Boolean.parseBoolean(object.get("Enabled").getAsString())) toggle();
-            } catch (Throwable e) {
-                GuizhouWare.LOGGER.error("Failed to toggle module {} during load", getName(), e);
-            }
-        }
         for (Setting<?> setting : getSettings()) {
             if (setting == enabled) continue;
             try {
@@ -174,6 +167,19 @@ public class Module extends Feature implements Jsonable, Toggleable {
                 }
             } catch (Throwable throwable) {
                 GuizhouWare.LOGGER.error("Failed to load from JSON", throwable);
+            }
+        }
+        // Preset loading is assignment, not a toggle. Apply settings first so onEnable
+        // sees the requested mode and values; loading the same profile twice is idempotent.
+        if (object.has("Enabled") && !object.get("Enabled").isJsonNull()) {
+            try {
+                boolean requested = object.get("Enabled").getAsBoolean();
+                if (requested != isEnabled()) {
+                    if (requested) enable();
+                    else disable();
+                }
+            } catch (Throwable e) {
+                GuizhouWare.LOGGER.error("Failed to restore module {} state during load", getName(), e);
             }
         }
     }

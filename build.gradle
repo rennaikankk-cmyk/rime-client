@@ -133,10 +133,14 @@ tasks.register('elytraHookTest', JavaExec) {
 
 def clientRegressionTests = [
         eventBusTest: 'dev.guizhou.event.system.EventBusTest',
+        configFilesTest: 'dev.guizhou.util.ConfigFilesTest',
+        autoUseWhitelistTest: 'dev.guizhou.util.player.AutoUseWhitelistTest',
+        itemUseOwnershipTest: 'dev.guizhou.util.player.ItemUseOwnershipTest',
         fontPageTest: 'dev.guizhou.util.render.font.FontPageTest',
         targetMotionTrackerTest: 'dev.guizhou.util.elytra.TargetMotionTrackerTest',
         aerialCombatPolicyTest: 'dev.guizhou.util.elytra.AerialCombatPolicyTest',
         aerialInterceptTest: 'dev.guizhou.util.elytra.AerialInterceptTest',
+        maceApproachTest: 'dev.guizhou.util.elytra.MaceApproachTest',
         aerialDuelPredictorTest: 'dev.guizhou.util.elytra.AerialDuelPredictorTest',
         flightPlanningTaskTest: 'dev.guizhou.util.elytra.FlightPlanningTaskTest',
         flightCollisionSnapshotTest: 'dev.guizhou.util.elytra.FlightCollisionSnapshotTest',
@@ -170,7 +174,7 @@ clientRegressionTests.each { taskName, entryPoint ->
         classpath = sourceSets.flightTest.runtimeClasspath
         mainClass = entryPoint
         systemProperty 'java.awt.headless', 'true'
-        // a task whose entry class is absent from this tree (present in the other build tree) skips instead of failing
+        // Preserve compatibility with the parallel source tree's optional test entries.
         onlyIf { sourceSets.flightTest.allJava.srcDirs.any { d -> new File(d, entryPoint.replace('.', '/') + '.java').exists() } }
     }
 }
@@ -235,11 +239,9 @@ tasks.register('obfuscateJar', proguard.gradle.ProGuardTask) {
     // Minecraft itself (intermediary names): without it ProGuard cannot see that
     // GuizhouWareGui extends class_437 (Screen), so the render/init/onClose overrides
     // look like unreferenced methods, get renamed, and the ClickGUI renders nothing.
-    def mcIntermediary = new File(new File(System.getProperty('user.home'),
-            '.gradle/caches/fabric-loom/minecraftMaven/net/minecraft/minecraft-merged-intermediary/' +
-            '1.21.11-loom.mappings.1_21_11.layered+hash.2198-v2'),
-            'minecraft-merged-intermediary-1.21.11-loom.mappings.1_21_11.layered+hash.2198-v2.jar')
-    if (mcIntermediary.exists()) libraryjars files(mcIntermediary)
+    // Resolve the actual Loom artifact, including custom GRADLE_USER_HOME/CI caches.
+    // Missing libraries must fail the build instead of silently stripping GUI overrides.
+    libraryjars loom.getMinecraftJarsCollection(net.fabricmc.loom.api.mappings.layered.MappingsNamespace.INTERMEDIARY)
     injars obfuscationInput.get().asFile
     outjars obfuscationOutput.get().asFile
     printmapping obfuscationMapping.get().asFile

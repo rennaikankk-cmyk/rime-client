@@ -14,6 +14,8 @@ public final class FlightVelocity {
     private final double maxVelocity;
     private boolean braking;
     private boolean avoiding;
+    private boolean precision;
+    private boolean directional;
 
     public FlightVelocity(Vec3 vec, double maxVelocity) {
         this(vec.x, vec.y, vec.z, maxVelocity);
@@ -32,6 +34,24 @@ public final class FlightVelocity {
 
     public double maxVelocity() {
         return maxVelocity;
+    }
+
+    /** Preserve direction and requested speed at a narrow combat intercept. */
+    public void requestPrecision() {
+        precision = true;
+        directional = true;
+    }
+
+    public boolean isPrecise() {
+        return precision;
+    }
+
+    public void preserveDirection() {
+        directional = true;
+    }
+
+    public boolean isDirectional() {
+        return directional;
     }
 
     public void set(Vec3 vec) {

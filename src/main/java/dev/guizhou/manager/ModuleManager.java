@@ -83,6 +83,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new AutoPortalModule());
         register(new FastPortalModule());
         register(new FastuseModule());
+        register(new AutoUseModule());
         register(new BlockHighlightModule());
         register(new BreadcrumbsModule());
         register(new BreakIndicatorsModule());

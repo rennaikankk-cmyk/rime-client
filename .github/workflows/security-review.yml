@@ -3,11 +3,9 @@ name: Security Review
 on:
   push:
     branches: [main]
-    paths-ignore: ['**/*.md', 'LICENSE']
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
-    paths-ignore: ['**/*.md', 'LICENSE']
   workflow_dispatch:
 
 concurrency:
@@ -52,12 +50,12 @@ jobs:
 
   dependency-review:
     name: Dependency Review (PR)
-    if: github.event_name == 'pull_request'
+    # Private repositories must opt in after enabling GitHub dependency review.
+    if: github.event_name == 'pull_request' && (github.event.repository.private == false || vars.ENABLE_DEPENDENCY_REVIEW == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,6 +69,8 @@ jobs:
 
   codeql:
     name: CodeQL Analysis
+    # An Actions variable does not activate GitHub Code Security by itself.
+    if: github.event.repository.private == false || vars.ENABLE_CODEQL == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -84,9 +84,10 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: java-kotlin
+          build-mode: manual
           queries: security-and-quality
 
       - name: Set up JDK 21
@@ -98,11 +99,11 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+      - name: Build for CodeQL
+        run: ./gradlew clean build --no-daemon
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
 
   secret-scan:
     name: Secret Scan
@@ -110,6 +111,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -121,3 +123,51 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+
+  security-summary:
+    name: Security Coverage
+    if: always()
+    needs: [secure-build, dependency-review, codeql, secret-scan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report results and enforce required checks
+        env:
+          BUILD_RESULT: ${{ needs.secure-build.result }}
+          SECRET_RESULT: ${{ needs.secret-scan.result }}
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+          DEPENDENCY_RESULT: ${{ needs.dependency-review.result }}
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+          CODEQL_OPT_IN: ${{ vars.ENABLE_CODEQL }}
+          DEPENDENCY_OPT_IN: ${{ vars.ENABLE_DEPENDENCY_REVIEW }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          {
+            echo "## Security coverage"
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            echo "| Wrapper validation and clean build | $BUILD_RESULT |"
+            echo "| Gitleaks secret scan | $SECRET_RESULT |"
+            echo "| CodeQL | $CODEQL_RESULT |"
+            echo "| Dependency review | $DEPENDENCY_RESULT |"
+            echo ""
+            if [[ "$REPOSITORY_PRIVATE" == "true" && "$CODEQL_OPT_IN" != "true" ]]; then
+              echo "CodeQL was not run: private repository without ENABLE_CODEQL=true."
+              echo "Enable GitHub code scanning before setting this Actions variable."
+            fi
+            if [[ "$EVENT_NAME" != "pull_request" ]]; then
+              echo "Dependency review only runs on pull requests."
+            elif [[ "$REPOSITORY_PRIVATE" == "true" && "$DEPENDENCY_OPT_IN" != "true" ]]; then
+              echo "Dependency review was not run: private repository without ENABLE_DEPENDENCY_REVIEW=true."
+              echo "Enable GitHub dependency review before setting this Actions variable."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          [[ "$BUILD_RESULT" == "success" && "$SECRET_RESULT" == "success" ]] || exit 1
+          if [[ "$REPOSITORY_PRIVATE" == "false" || "$CODEQL_OPT_IN" == "true" ]]; then
+            [[ "$CODEQL_RESULT" == "success" ]] || exit 1
+          fi
+          if [[ "$EVENT_NAME" == "pull_request" && ( "$REPOSITORY_PRIVATE" == "false" || "$DEPENDENCY_OPT_IN" == "true" ) ]]; then
+            [[ "$DEPENDENCY_RESULT" == "success" ]] || exit 1
+          fi

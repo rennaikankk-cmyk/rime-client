@@ -8,7 +8,9 @@ public final class ArmorSwapCycleTest {
 
     public static void main(String[] args) {
         continuousExchange();
-        observedGlideMustEndBeforeRestart();
+        delayedServerClearKeepsWingsOnEveryMove();
+        ownershipLostDuringDelayedClearAbandons();
+        explicitDiveHandoverDuringDelayedClear();
         interruptionBetweenMovementHooks();
         stopDefersAllEquipmentCallbacks();
         failedEquipmentExchange();
@@ -43,25 +45,70 @@ public final class ArmorSwapCycleTest {
         check(player.restorations == 0, "An ongoing cycle must not release equipment ownership");
     }
 
-    private static void observedGlideMustEndBeforeRestart() {
+    private static void delayedServerClearKeepsWingsOnEveryMove() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        cycle.beforeMovement(true, true, true);
+        player.move();
+        cycle.afterMovement(true, true, true);
+        for (int tick = 0; tick < 8; tick++) {
+            player.newTick(false);
+            cycle.beforeMovement(true, true, true);
+            check(player.chest == player.wings, "A delayed server clear must not postpone the movement wing swap on tick " + tick);
+            check(player.gliding, "The still-running glide must be ridden, not restarted, on tick " + tick);
+            player.move();
+            check(player.events.equals(List.of("SWAP_WINGS", "MOVE_WINGS")),
+                    "A delayed-clear tick exchanges wings for movement without any START on tick " + tick);
+            cycle.afterMovement(true, true, true);
+            check(player.chest == player.armor && player.reserve == player.wings,
+                    "Armor returns after each delayed-clear movement on tick " + tick);
+            player.assertTickBounds();
+        }
+        check(player.duplicateStarts == 0 && player.startsThisTick == 0,
+                "Persistent wing exchanges must never toggle the glide flag");
+        player.newTick(true);
+        cycle.beforeMovement(true, true, true);
+        check(player.events.equals(List.of("SWAP_WINGS", "START")),
+                "Restart exactly once after the server finally clears the glide");
+        check(player.gliding && player.duplicateStarts == 0, "The observed restart must leave the player gliding");
+        player.move();
+        cycle.afterMovement(true, true, true);
+        check(player.events.equals(List.of("SWAP_WINGS", "START", "MOVE_WINGS", "SWAP_ARMOR")),
+                "The restarted glide resumes the regular per-movement exchange");
+        player.assertTickBounds();
+    }
+
+    private static void ownershipLostDuringDelayedClearAbandons() {
         Model player = new Model();
         ArmorSwapCycle cycle = begin(player);
         cycle.beforeMovement(true, true, true);
         cycle.afterMovement(true, true, true);
-        for (int tick = 0; tick < 5; tick++) {
-            player.newTick(false);
-            cycle.beforeMovement(true, true, true);
-            cycle.afterMovement(true, true, true);
-            check(player.events.isEmpty(), "A delayed server glide clear must not send another START or swap");
-            check(player.chest == player.armor && player.gliding,
-                    "Wait with the current chestplate until the observed glide ends");
-            player.assertTickBounds();
-        }
-        player.newTick(true);
+        player.newTick(false);
+        player.chest = new Object();
         cycle.beforeMovement(true, true, true);
-        check(player.events.equals(List.of("SWAP_WINGS", "START")),
-                "Restart only after the server clears glide while wearing armor");
-        check(player.gliding && player.duplicateStarts == 0, "Observed restart must leave the player gliding");
+        cycle.afterMovement(true, true, true);
+        cycle.stop(true);
+        check(player.events.isEmpty() && player.restorations == 0 && !cycle.active(),
+                "Losing the pair inside a delayed-clear window abandons without any swap or restore");
+    }
+
+    private static void explicitDiveHandoverDuringDelayedClear() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        cycle.beforeMovement(true, true, true);
+        player.move();
+        cycle.afterMovement(true, true, true);
+        player.newTick(false);
+        cycle.beforeMovement(true, true, true);
+        check(player.chest == player.wings && player.events.equals(List.of("SWAP_WINGS")),
+                "Wings are equipped for movement when the dive owner takes over");
+        cycle.abandon();
+        player.move();
+        cycle.afterMovement(true, true, true);
+        cycle.stop(true);
+        check(player.events.equals(List.of("SWAP_WINGS", "MOVE_WINGS")),
+                "A dive handover keeps the dive's wings and never returns armor");
+        check(player.restorations == 0 && !cycle.active(), "The dive owns the pair without a stale restore callback");
     }
 
     private static void interruptionBetweenMovementHooks() {
@@ -98,12 +145,14 @@ public final class ArmorSwapCycleTest {
         cycle.afterMovement(true, true, true);
         player.newTick(false);
         cycle.beforeMovement(true, true, true);
+        check(player.events.equals(List.of("SWAP_WINGS")),
+                "A delayed clear still restores wings before the movement window");
         cycle.afterMovement(false, false, false);
-        check(player.chest == player.armor && player.events.isEmpty(),
-                "GUI and landing while waiting for glide clear must defer the actual wing swap");
+        check(player.chest == player.wings && player.events.equals(List.of("SWAP_WINGS")),
+                "GUI and landing after the wing swap defer both the armor return and the restore callback");
         cycle.beforeMovement(false, true, false);
         check(player.events.equals(List.of("SWAP_WINGS", "RESTORED")),
-                "Safe recovery after landing restores wings without trying to fly");
+                "Safe recovery after landing restores ownership without trying to fly");
         check(player.restorations == 1 && !cycle.active(), "Delayed recovery must finish exactly once");
     }
 

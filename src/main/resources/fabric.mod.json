@@ -25,6 +25,7 @@
     "guizhouware.mixins.json"
   ],
   "depends": {
+    "java": ">=21",
     "fabricloader": ">=${loader_version}",
     "fabric": "*",
     "minecraft": "${minecraft_version}"

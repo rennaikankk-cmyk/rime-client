@@ -106,6 +106,7 @@ public final class ElytraWeaponControllerTest {
         List<String> targets = new ArrayList<>();
         int[] required = {-1};
         int[] ownershipChecks = {0};
+        int[] autoUseChecks = {0};
         int[] originalCalls = {0};
         read("dev/guizhou/mixin/client/MixinMinecraftSpearUse").accept(new ClassVisitor(Opcodes.ASM9) {
             @Override
@@ -155,6 +156,8 @@ public final class ElytraWeaponControllerTest {
                                                 String descriptor, boolean isInterface) {
                         if (owner.equals("dev/guizhou/features/modules/combat/GuangxiElytraChaseModule")
                                 && name.equals("shouldKeepUsingSpear")) ownershipChecks[0]++;
+                        if (owner.equals("dev/guizhou/features/modules/player/AutoUseModule")
+                                && name.equals("shouldKeepUsing")) autoUseChecks[0]++;
                         if (owner.equals("com/llamalad7/mixinextras/injector/wrapoperation/Operation")
                                 && name.equals("call")) originalCalls[0]++;
                         check(!(owner.equals("net/minecraft/client/KeyMapping") && name.equals("setDown")),
@@ -168,6 +171,7 @@ public final class ElytraWeaponControllerTest {
                 "The mixin must wrap the verified Minecraft release signature");
         check(required[0] == 1 && ownershipChecks[0] == 1 && originalCalls[0] == 1,
                 "The required hook must preserve unowned vanilla item release");
+        check(autoUseChecks[0] == 1, "Standalone auto-use must participate in the release hook");
         try (InputStream stream = ElytraWeaponControllerTest.class.getClassLoader()
                 .getResourceAsStream("guizhouware.mixins.json")) {
             if (stream == null) throw new IOException("Missing mixin configuration");

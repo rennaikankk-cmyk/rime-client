@@ -3,12 +3,12 @@ package dev.guizhou.manager;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
 import dev.guizhou.features.Feature;
 import dev.guizhou.features.settings.Bind;
 import dev.guizhou.features.settings.EnumConverter;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.traits.Jsonable;
+import dev.guizhou.util.ConfigFiles;
 import net.fabricmc.loader.api.FabricLoader;
 import org.joml.Vector2f;
 import org.slf4j.Logger;
@@ -35,8 +35,8 @@ public class ConfigManager {
         mkdirs();
         for (Jsonable jsonable : jsonables) {
             try {
-                String read = Files.readString(OYVEY_PATH.resolve(jsonable.getFileName()));
-                jsonable.fromJson(JsonParser.parseString(read));
+                JsonElement read = ConfigFiles.read(OYVEY_PATH.resolve(jsonable.getFileName()));
+                if (read != null) jsonable.fromJson(read);
             } catch (Throwable e) {
                 LOGGER.error("Failed to load", e);
             }
@@ -48,7 +48,7 @@ public class ConfigManager {
         for (Jsonable jsonable : jsonables) {
             try {
                 JsonElement json = jsonable.toJson();
-                Files.writeString(OYVEY_PATH.resolve(jsonable.getFileName()), GSON.toJson(json));
+                ConfigFiles.write(OYVEY_PATH.resolve(jsonable.getFileName()), GSON.toJson(json));
             } catch (Throwable e) {
                 LOGGER.error("Failed to write to file", e);
             }
@@ -69,7 +69,7 @@ public class ConfigManager {
             Files.createDirectories(dir);
             for (Jsonable jsonable : jsonables) {
                 JsonElement json = jsonable.toJson();
-                Files.writeString(dir.resolve(jsonable.getFileName()), GSON.toJson(json));
+                ConfigFiles.write(dir.resolve(jsonable.getFileName()), GSON.toJson(json));
             }
             return true;
         } catch (Throwable e) {
@@ -83,16 +83,18 @@ public class ConfigManager {
         if (!NAME_PATTERN.matcher(name).matches()) return false;
         Path dir = CONFIGS_DIR.resolve(name);
         if (!Files.isDirectory(dir)) return false;
+        boolean complete = true;
         for (Jsonable jsonable : jsonables) {
             try {
                 Path file = dir.resolve(jsonable.getFileName());
-                if (!Files.exists(file)) continue;
-                jsonable.fromJson(JsonParser.parseString(Files.readString(file)));
+                JsonElement read = ConfigFiles.read(file);
+                if (read != null) jsonable.fromJson(read);
             } catch (Throwable e) {
+                complete = false;
                 LOGGER.error("Failed to load config '{}' part '{}'", name, jsonable.getFileName(), e);
             }
         }
-        return true;
+        return complete;
     }
 
     public List<String> listNamed() {
@@ -142,7 +144,7 @@ public class ConfigManager {
             case "Double" -> setting.setValue(element.getAsDouble());
             case "Float" -> setting.setValue(element.getAsFloat());
             case "Integer" -> setting.setValue(element.getAsInt());
-            case "String" -> setting.setValue(element.getAsString().replace("_", " "));
+            case "String" -> setting.setValue(element.getAsString());
             case "Bind" -> setting.setValue(new Bind(element.getAsInt()));
             case "Color" -> {
                 try {

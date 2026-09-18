@@ -171,6 +171,8 @@ public class GuangxiElytraModule extends Module {
     private boolean awaitingLanding;
     private boolean safetySteering;
     private boolean pendingSafetySteering;
+    private boolean pendingPrecision;
+    private boolean pendingDirectional;
     private boolean safetyRocketReady;
     private int safetyHoldTicks;
     private boolean landingDanger;
@@ -492,6 +494,8 @@ clearFlightRotation();
 
         pendingMotion = realVector;
         pendingSafetySteering = safetySteering;
+        pendingPrecision = fv.isPrecise();
+        pendingDirectional = fv.isDirectional();
     }
 
     /** Called after vanilla glide acceleration, immediately before movement. */
@@ -509,8 +513,9 @@ clearFlightRotation();
             scanAttachedBoosts();
             applied = attachedBoost && !pendingSafetySteering
                     ? ElytraPhysics.clampToGrimEnvelope(request, incomingVelocity, vanillaVelocity,
-                            actualLook, previousLook, rescaleAmount.getValue(), cornerClimb.getValue(),
-                            yCap.getValue(), legacyVerticalBoost.getValue() ? zeroPointThree.getValue() : 0.0)
+                            actualLook, previousLook, rescaleAmount.getValue(), cornerClimb.getValue() && !pendingDirectional,
+                            yCap.getValue(), legacyVerticalBoost.getValue() ? zeroPointThree.getValue() : 0.0,
+                            pendingPrecision)
                     : vanillaVelocity;
         }
         if (!Double.isFinite(applied.x) || !Double.isFinite(applied.y) || !Double.isFinite(applied.z)) {

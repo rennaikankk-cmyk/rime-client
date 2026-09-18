@@ -51,6 +51,7 @@ public final class ObfuscatedJarTest {
             int reflected = verifyPureEnums(outputPath, before, after, mapping);
             verifyResources(input, output);
             verifyEntrypointAndMixins(before, after, mapping);
+            verifyGuiOverrides(before, after, mapping);
             verifyHeartbeat(before, after, mapping);
             System.out.println("ObfuscatedJarTest passed: " + checks + " checks; "
                     + enumCount + " enums audited, " + reflected + " isolated reflection checks, "
@@ -226,6 +227,24 @@ public final class ObfuscatedJarTest {
         check(mixins > 0, "No mixins checked");
     }
 
+    private static void verifyGuiOverrides(Map<String, ClassInfo> before,
+                                           Map<String, ClassInfo> after, Mapping mapping) {
+        String gui = "dev/guizhou/features/gui/GuizhouWareGui";
+        ClassInfo source = required(before, gui);
+        ClassInfo result = required(after, mapping.requiredClass(gui));
+        check(source.superName.equals(result.superName), "ClickGUI lost its Minecraft Screen superclass");
+        int overrides = 0;
+        for (MethodInfo method : source.methods.values()) {
+            if (!method.name.startsWith("method_")) continue;
+            overrides++;
+            check(result.methods.containsKey(method.name + method.descriptor),
+                    "ClickGUI override removed/renamed: " + method.name + method.descriptor);
+        }
+        check(overrides >= 8, "ClickGUI override coverage unexpectedly small");
+        check(result.methods.keySet().stream().anyMatch(key -> key.startsWith("method_25394(")),
+                "ClickGUI render override missing");
+    }
+
     private static void verifyHeartbeat(Map<String, ClassInfo> before,
                                          Map<String, ClassInfo> after, Mapping mapping) {
         ClassInfo original = required(before, HEARTBEAT);
@@ -249,27 +268,32 @@ public final class ObfuscatedJarTest {
         requiredMethod(heartbeat, authorized + "()Z");
         requiredMethod(heartbeat, denied + "()V");
         for (String simpleName : List.of("GuangxiCrystalModule", "GuangxiElytraChaseModule",
-                "GuangxiBedModule", "GuangxiElytraModule", "GuangxiMineModule")) {
+                "GuangxiBedModule", "GuangxiElytraModule", "GuangxiMineModule", "AutoUseModule")) {
             List<ClassInfo> matches = before.values().stream()
                     .filter(info -> info.name.endsWith("/" + simpleName)).toList();
             check(matches.size() == 1, "Expected one protected module: " + simpleName);
             ClassInfo source = matches.getFirst();
             ClassInfo result = required(after, mapping.requiredClass(source.name));
             List<MethodInfo> sourceTicks = source.methods.values().stream()
+                    .filter(method -> method.descriptor.startsWith("(Ldev/guizhou/event/")
+                            && method.descriptor.endsWith(";)V"))
                     .filter(method -> method.steps.stream().anyMatch(step ->
                             member(step, Opcodes.INVOKESTATIC, HEARTBEAT, "authorized", "()Z"))).toList();
-            check(sourceTicks.size() == 1, "Expected one input authorization checkpoint: " + simpleName);
-            String tickName = sourceTicks.getFirst().name;
-            List<MethodInfo> tickMethods = result.methods.values().stream()
-                    .filter(method -> method.name.equals(tickName)).toList();
-            check(tickMethods.size() == 1, "Protected tick method changed/lost: " + simpleName);
-            List<Step> steps = executable(tickMethods.getFirst());
-            check(steps.size() >= 5, "Authorization prefix missing: " + simpleName);
-            check(member(steps.get(0), Opcodes.INVOKESTATIC, owner, authorized, "()Z")
-                            && steps.get(1).opcode == Opcodes.IFNE
-                            && member(steps.get(2), Opcodes.INVOKESTATIC, owner, denied, "()V")
-                            && steps.get(3).opcode == Opcodes.RETURN,
-                    "Authorization must precede module work: " + simpleName);
+            int expectedCheckpoints = simpleName.equals("GuangxiElytraChaseModule") ? 2 : 1;
+            check(sourceTicks.size() == expectedCheckpoints, "Input authorization checkpoint count: " + simpleName);
+            for (MethodInfo sourceTick : sourceTicks) {
+                String tickName = sourceTick.name;
+                List<MethodInfo> tickMethods = result.methods.values().stream()
+                        .filter(method -> method.name.equals(tickName)).toList();
+                check(tickMethods.size() == 1, "Protected tick method changed/lost: " + simpleName);
+                List<Step> steps = executable(tickMethods.getFirst());
+                check(steps.size() >= 5, "Authorization prefix missing: " + simpleName);
+                check(member(steps.get(0), Opcodes.INVOKESTATIC, owner, authorized, "()Z")
+                                && steps.get(1).opcode == Opcodes.IFNE
+                                && member(steps.get(2), Opcodes.INVOKESTATIC, owner, denied, "()V")
+                                && steps.get(3).opcode == Opcodes.RETURN,
+                        "Authorization must precede module work: " + simpleName);
+            }
         }
     }
 

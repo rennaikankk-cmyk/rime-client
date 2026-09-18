@@ -43,7 +43,7 @@ public class ConfigsCommand extends Command {
                                 .executes((ctx) -> {
                                     String name = StringArgumentType.getString(ctx, "name");
                                     if (!GuizhouWare.configManager.loadNamed(name)) {
-                                        return success("{red} No config named '%s'", name);
+                                        return success("{red} Could not fully load config '%s'; check its name and the log for invalid files.", name);
                                     }
                                     return success("Loaded config {green} %s", name);
                                 })))

@@ -1,0 +1,47 @@
+{
+  "GuangxiElytra": {
+    "Enabled": false,
+    "FlightMode": "ROTATION",
+    "MotionMode": "FIREWORKS",
+    "Speed": 1.67,
+    "MotionLerp": 1.0,
+    "AutoRescale": true,
+    "RescaleAmount": 1.7,
+    "YCap": 8.0,
+    "TakeoffTicks": 2,
+    "MinBoostTicks": 3,
+    "ArmorFly": true,
+    "AutoEquip": true,
+    "AutoFly": false,
+    "PullupAngle": 0.0,
+    "LegacyVerticalBoost": false,
+    "GrimBoost": false,
+    "TerrainGuard": true,
+    "SafeLanding": true
+  },
+  "GuangxiElytraChase": {
+    "Enabled": false,
+    "Mode": "MACE",
+    "Range": 150,
+    "PlayerOnly": true,
+    "AutoControlElytra": true,
+    "AutoWeapon": true,
+    "OnlyWhenNoWasd": true,
+    "AvoidObstacles": true,
+    "CombatRange": 10.0,
+    "MaceHeight": 10.0,
+    "MaceMinFallDistance": 1.5,
+    "MaceCustomPullUpAngle": 0.0,
+    "MaceAdaptive": true,
+    "MaceTerminal": true,
+    "AutoMaceDive": true,
+    "MaceUseExtraAttack": false
+  },
+  "AutoUse": {
+    "Enabled": false,
+    "Items": "^(.*spear|.*sword|shield)$",
+    "OnlyWhenEnemyNear": false,
+    "EnemyRange": 12.0,
+    "UseFood": false
+  }
+}

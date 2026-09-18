@@ -207,19 +207,27 @@ public final class ElytraCombatHookTest {
             }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
         }
         Trace follow = method(read(CHASE + "$MaceBehavior"), "tickFollow");
-        int attack = follow.call(CHASE, "attack");
-        int wait = follow.callAfter(CHASE + "$MaceBehavior", "tickWaitAttack", attack);
+        Trace attempt = method(read(CHASE + "$MaceBehavior"), "tryAttack");
+        int attack = attempt.call(CHASE, "attack");
+        int wait = attempt.callAfter(CHASE + "$MaceBehavior", "tickWaitAttack", attack);
         check(attack < wait, "Mace follow must attempt attack in the current tick before waiting");
-        check(follow.steps.stream().anyMatch(step -> step.opcode == Opcodes.PUTFIELD
+        check(attempt.steps.stream().anyMatch(step -> step.opcode == Opcodes.PUTFIELD
                         && "lastAttackSentTick".equals(step.name)),
                 "The confirmation timeout must begin at the actual attack attempt");
-        int resumed = follow.callAfter(CHASE + "$MaceBehavior", "resumeAfterPass", attack);
-        int waitState = follow.field(CHASE + "$MaceBehavior", "state", Opcodes.PUTFIELD);
+        int resumed = attempt.callAfter(CHASE + "$MaceBehavior", "resumeAfterPass", attack);
+        int waitState = attempt.field(CHASE + "$MaceBehavior", "state", Opcodes.PUTFIELD);
         check(attack < waitState && waitState < resumed && resumed < wait,
                 "A natural fall hit must release FOLLOW ownership and resume flight before computing its next climb");
         int missedPass = follow.call("dev/guizhou/util/elytra/MacePassTracker", "shouldPullUp");
-        check(attack < missedPass && !canReach(follow, attack + 2, missedPass, -1, new HashSet<>()),
+        int tryAttack = follow.call(CHASE + "$MaceBehavior", "tryAttack");
+        check(tryAttack < missedPass && !canReach(follow, tryAttack + 2, missedPass, -1, new HashSet<>()),
                 "A current successful attack must win over exhausted-pass recovery");
+        Trace post = method(read(CHASE), "onPostMovement");
+        check(post.hasCall(CHASE + "$MaceBehavior", "tryAttack")
+                        && post.hasCall("dev/guizhou/event/impl/entity/player/UpdateWalkingPlayerEvent", "getStage")
+                        && post.hasCall("dev/guizhou/manager/HeartbeatManager", "authorized")
+                        && post.hasCall(CHASE, "paused"),
+                "Post-movement reach checks share the guarded attack transaction");
         Trace restart = method(read(CHASE + "$MaceBehavior"), "restartPass");
         int pullUpState = restart.field(CHASE + "$MaceBehavior", "state", Opcodes.PUTFIELD);
         int resumedMiss = restart.call(CHASE + "$MaceBehavior", "resumeAfterPass");
@@ -385,11 +393,15 @@ public final class ElytraCombatHookTest {
                         && !canReach(missedDive, 0, restoreWings, releasedDescent, new HashSet<>()),
                 "A missed dive must release FOLLOW before synchronous wing recovery and create a climb in the same tick");
         Trace waiting = method(mace, "tickWaitAttack");
-        int height = waiting.field(CHASE, "maceHeight", Opcodes.GETFIELD);
-        int heading = waiting.field(CHASE + "$MaceBehavior", "heading", Opcodes.PUTFIELD);
-        check(height < heading && waiting.hasCall(CHASE, "predictedTarget")
-                        && waiting.hasCall("net/minecraft/world/phys/Vec3", "subtract"),
-                "The hit-confirmation state must already aim above the target using the configured next-hit height");
+        Trace next = method(mace, "aimNextClimb");
+        Trace climb = method(mace, "climbPlan");
+        check(waiting.hasCall(CHASE + "$MaceBehavior", "aimNextClimb")
+                        && next.call(CHASE + "$MaceBehavior", "climbPlan")
+                        < next.field(CHASE + "$MaceBehavior", "heading", Opcodes.PUTFIELD)
+                        && next.hasCall("java/lang/Math", "max")
+                        && climb.field(CHASE, "maceHeight", Opcodes.GETFIELD) >= 0
+                        && climb.hasCall("dev/guizhou/util/elytra/MaceApproach", "climb"),
+                "Waiting must plan the configured next climb immediately and never start a premature descent");
         Trace state = method(read(CHASE), "isMaceDiveActive");
         check(!state.hasCall(CHASE, "isEnabled"), "Equipment restoration must survive disabling Chase");
         Trace controllerTick = method(read(controller), "onPreTick");

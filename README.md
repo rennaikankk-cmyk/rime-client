@@ -4,26 +4,14 @@
 
 <h1 align="center">GuizhouWare</h1>
 
-### Join our discord: https://discord.gg/yMD5mhmNEc
+[![Java CI with Gradle](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/gradle-upload.yml/badge.svg?branch=main)](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/gradle-upload.yml)
+[![Security Review](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/security-review.yml/badge.svg?branch=main)](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/security-review.yml)
 
-<p align="center">
-  <a href="https://github.com/leonetics/guizhouware-public/releases">
-    <img src="https://img.shields.io/github/downloads/leonetics/guizhouware-public/total?color=green&label=Total%20Downloads" alt="Total Downloads" />
-  </a>
-  <a href="https://github.com/leonetics/guizhouware-public/commits">
-    <img src="https://img.shields.io/github/commit-activity/m/leonetics/guizhouware-public?label=Commits%20(last%20month)&color=yellow" alt="month" />
-  </a>
-  <a href="https://github.com/leonetics/guizhouware-public/releases">
-    <img src="https://img.shields.io/github/v/release/leonetics/guizhouware-public?color=blue&label=Latest%20Release" alt="Latest Release" />
-  </a>
-  <a href="https://discord.gg/yMD5mhmNEc">
-    <img src="https://img.shields.io/discord/1481831852950950043?color=7289DB&label=Discord" alt="Discord" />
-  </a>
-</p>
+**GuizhouWare** (贵州客户端) is a Minecraft 1.21.11 Fabric PvP client maintained by **renna**.
+It is a fork of **Homovore**, originally developed by **Leonetic and WiderThanEurasia**,
+with AutoCrystal enhancements ported from **AlienV4**.
 
-**GuizhouWare** is a 2b2t PVP client, written by Leonetic and WiderThanEurasia.
-
-This project is a clean and open-source yet modern alternative aiming to be transparent and easy to extend without relying on unsafe third-party clients.
+This repository contains the GuizhouWare fork and its build configuration. See [LICENSE](LICENSE) for the AGPL license.
 
 ---
 
@@ -45,7 +33,7 @@ This project is a clean and open-source yet modern alternative aiming to be tran
 <details>
 <summary>How do I open the ClickGUI?</summary>
 
-The default keybind is **Right Shift**. You can rebind it in Minecraft's Controls menu (look for the GuizhouWare category) or from the ClickGUI module itself.
+The default keybind is **Right Shift**. You can rebind it from the ClickGUI module's bind setting or with the `.bind` command.
 
 </details>
 
@@ -73,7 +61,8 @@ Open the ClickGUI, right-click a module to expand its settings, and use the bind
 <details>
 <summary>Where are my settings saved?</summary>
 
-Configs are stored in your Minecraft instance directory under the GuizhouWare folder and persist between sessions.
+Configs are stored in your Minecraft instance directory under `guizhouware/` and persist between sessions.
+Named presets are stored in `guizhouware/configs/<name>/`; use `.configs save <name>`, `.configs load <name>`, `.configs list`, or `.configs delete <name>`.
 
 </details>
 
@@ -81,42 +70,86 @@ Configs are stored in your Minecraft instance directory under the GuizhouWare fo
 
 ## Requirements
 
-- Java 21
-- Gradle 8+
-- Minecraft 1.21.11
-- Fabric loader, API
+- **JDK 21** for building; use Java 21 to launch the game.
+- Minecraft **1.21.11**, Fabric Loader **0.18.4 or newer**, and the matching Fabric API.
+- Git for cloning and embedding commit metadata in the build.
+- The checked-in **Gradle Wrapper (9.2.0)**; a separate Gradle installation is not needed.
 
----
+Dependency versions are defined in [gradle.properties](gradle.properties). The build uses official Mojang mappings.
+The first build downloads Gradle and the dependencies, so it requires network access.
+Set `JAVA_HOME` to your JDK 21 directory and check `java -version` if the build selects an older Java installation.
 
 ## How to Build
 
-1. Clone the repository:
-
-    ```bash
-    git clone https://github.com/leonetics/guizhouware-public.git
-    cd guizhouware-public
-    ```
-
-2. Build with Gradle:
-
-    ```bash
-    ./gradlew build
-    ```
-
-The compiled JAR will be located at:
-`build/libs/guizhouware-<version>.jar`
-
-To run in a dev environment:
+Clone this repository using a GitHub account with access if it is private:
 
 ```bash
-./gradlew runClient
+git clone https://github.com/rennaikankk-cmyk/guizhouware.git
+cd guizhouware
 ```
+
+On Linux or macOS:
+
+```bash
+./gradlew clean build --no-daemon
+```
+
+On Windows PowerShell:
+
+```powershell
+.\gradlew.bat clean build --no-daemon
+```
+
+Build outputs are written to `build/libs/`:
+
+- `guizhouware-<commit>-<version>-obfuscated.jar`: the verified release candidate. Production use requires the existing licensed launcher/credential process.
+- `guizhouware-<commit>-<version>.jar`: the internal, unobfuscated mod JAR; do not distribute it as the release.
+- `guizhouware-<commit>-<version>-sources.jar`: sources for development; do not install this as the mod.
+
+The build runs regression checks, remapping, ProGuard and `verifyObfuscatedJar`.
+Keep `build/proguard-map.txt` internal. Follow [AGENTS.md](AGENTS.md) for release protection and runtime validation.
+Install the matching Fabric API separately alongside the mod.
+
+To launch the development client, run `./gradlew runClient` or `.\gradlew.bat runClient` on Windows.
+
+## Build and Security Checks
+
+[Java CI with Gradle](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/gradle-upload.yml)
+builds on Linux and Windows for every push and for pull requests targeting `main`, and supports manual runs.
+Download the `guizhouware-<runner OS>-<commit>` artifacts from a successful run.
+
+[Security Review](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/security-review.yml)
+runs Gradle Wrapper validation, a clean Java 21 build, and Gitleaks secret scanning.
+Its summary reports which optional checks were skipped. A green workflow does not mean a skipped check ran.
+
+CodeQL and dependency review run automatically for public repositories.
+For private repositories, first enable the required GitHub security features, then set the relevant
+**repository Actions variable** under **Settings → Secrets and variables → Actions → Variables**:
+
+| Variable | Value | Enables |
+| --- | --- | --- |
+| `ENABLE_CODEQL` | `true` | CodeQL analysis and upload to GitHub code scanning |
+| `ENABLE_DEPENDENCY_REVIEW` | `true` | Dependency review on pull requests |
+
+These variables do not activate a GitHub subscription or enable the repository feature themselves.
+Without the opt-in, private repositories skip those jobs explicitly; build and secret checks still run.
+Once opted in, scan or upload failures fail the job instead of being ignored.
+
+See GitHub's [private-repository CodeQL requirements](https://docs.github.com/en/code-security/reference/code-scanning/troubleshoot-analysis-errors/private-repository-enablement)
+and the [Dependency Review Action requirements](https://github.com/actions/dependency-review-action#installation).
+
+Deterministic checks in `src/flightTest` cover flight, combat timing, item ownership and build invariants;
+they run through `check` and `build`. They do not replace a real gameplay or server compatibility test.
+Before releasing gameplay changes, launch
+`runClient` and verify startup, ClickGUI, config save/load, and the affected modules in a test world.
 
 ---
 
 ## Project layout
 
-- `src/main/java/dev/leonetic/` — mod source
+The 1.21.11 flight candidate, legacy parameter comparison and opt-in profile are documented in [flight-1.21.11-rc.md](docs/flight-1.21.11-rc.md).
+
+- `src/main/java/dev/guizhou/` — mod source
   - `features/modules/` — modules grouped by category (combat, movement, render, …)
   - `manager/` — core managers (modules, rotations, placement, swapping, …)
   - `event/` — the event bus and event definitions

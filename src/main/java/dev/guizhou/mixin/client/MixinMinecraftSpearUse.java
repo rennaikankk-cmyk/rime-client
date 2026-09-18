@@ -3,6 +3,7 @@ package dev.guizhou.mixin.client;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.guizhou.features.modules.combat.GuangxiElytraChaseModule;
+import dev.guizhou.features.modules.player.AutoUseModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.world.entity.player.Player;
@@ -16,6 +17,8 @@ public class MixinMinecraftSpearUse {
             require = 1)
     private void guizhouware$keepOwnedSpearUse(MultiPlayerGameMode gameMode, Player player,
                                             Operation<Void> original) {
-        if (!GuangxiElytraChaseModule.shouldKeepUsingSpear()) original.call(gameMode, player);
+        if (!GuangxiElytraChaseModule.shouldKeepUsingSpear() && !AutoUseModule.shouldKeepUsing()) {
+            original.call(gameMode, player);
+        }
     }
 }
