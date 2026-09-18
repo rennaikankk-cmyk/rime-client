@@ -165,7 +165,8 @@ def clientRegressionTests = [
         packetApplicationHookTest: 'dev.guizhou.manager.PacketApplicationHookTest',
         tpsCounterServiceTest: 'dev.guizhou.manager.TPSCounterServiceTest',
         telemetryTest: 'dev.guizhou.util.telemetry.TelemetryTest',
-        flightSummaryTest: 'dev.guizhou.util.telemetry.FlightSummaryTest'
+        flightSummaryTest: 'dev.guizhou.util.telemetry.FlightSummaryTest',
+        flightTelemetryWiringTest: 'dev.guizhou.util.telemetry.FlightTelemetryWiringTest'
 ]
 clientRegressionTests.each { taskName, entryPoint ->
     tasks.register(taskName, JavaExec) {

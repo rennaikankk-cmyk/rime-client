@@ -12,6 +12,7 @@ public final class TelemetryTest {
         capabilities();
         queueBounds();
         priorityRetention();
+        rejectedTypePurgedSelectively();
         System.out.println("Telemetry checks passed: privacy allowlist, capability parsing/expiry, byte bounds, priority retention.");
     }
 
@@ -94,6 +95,21 @@ public final class TelemetryTest {
         String json = batch.toString();
         check(json.contains("important") && json.contains("session_end") && json.contains("window"),
                 "Combat burst discarded correction, session close or flight summary");
+    }
+
+    /** A rejected event type is purged selectively; older events survive untouched. */
+    private static void rejectedTypePurgedSelectively() {
+        TelemetryBuffer queue = new TelemetryBuffer();
+        queue.offer(event("flight_summary", "first"));
+        queue.offer(event("movement_sample", "kept"));
+        queue.offer(event("flight_summary", "second"));
+        queue.offer(event("correction", "kept-priority"));
+        int removed = queue.removeType("flight_summary");
+        check(removed == 2 && queue.count() == 2, "Only the rejected type leaves the queue");
+        String json = queue.batch(new JsonObject()).toString();
+        check(json.contains("kept") && json.contains("kept-priority") && !json.contains("first") && !json.contains("second"),
+                "Purged summaries must not reach a later batch while old events do");
+        check(queue.removeType("flight_summary") == 0, "A second purge is a no-op");
     }
 
     private static JsonObject event(String type, String text) {

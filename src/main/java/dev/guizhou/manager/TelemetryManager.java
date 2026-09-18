@@ -22,7 +22,9 @@ import dev.guizhou.util.telemetry.FlightSummary;
 import dev.guizhou.util.telemetry.TelemetryBuffer;
 import dev.guizhou.util.telemetry.TelemetryCapability;
 import dev.guizhou.util.telemetry.TelemetryPrivacy;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.protocol.game.ClientboundDamageEventPacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
@@ -106,6 +108,8 @@ public class TelemetryManager extends Feature {
     private Vec3 flightLastPos;
     private boolean flightHasLastPos;
     private volatile boolean flightSummaryBlocked;
+    private LocalPlayer flightPlayer;
+    private ClientLevel flightLevel;
 
     private record PendingPacket(String session, PacketEvent event) {}
     private record Sample(long nanos, JsonObject data) {}
@@ -295,6 +299,8 @@ public class TelemetryManager extends Feature {
         flightLastPos = null;
         flightHasLastPos = false;
         flightSummaryBlocked = false;
+        flightPlayer = null;
+        flightLevel = null;
     }
 
     /** Accumulates the flight diagnostics window; observation only, never sends packets. */
@@ -305,15 +311,32 @@ public class TelemetryManager extends Feature {
         boolean chaseActive = chase != null && chase.isEnabled() && chase.hasHeading();
         boolean dive = GuangxiElytraChaseModule.isMaceDiveActive();
         if (!armorfly && !chaseActive && !dive) {
-            if (flightWindow != null && now - flightLastActive >= SECOND) settleFlight(now, false);
+            if (flightWindow != null) {
+                // Cut the sampling interval immediately; the idle gap is never averaged in,
+                // but the window itself survives a short inactivity stretch.
+                flightWindow.pause();
+                flightLastPos = null;
+                flightHasLastPos = false;
+                if (now - flightLastActive >= SECOND) settleFlight(now, false);
+            }
             return;
         }
         flightLastActive = now;
+        if (flightWindow != null && (flightPlayer != mc.player || flightLevel != mc.level)) {
+            // A replaced player or world within one connection invalidates the window;
+            // identities stay in memory only and never reach the wire.
+            discardFlightWindow();
+        }
+        String tag = flightConfig() + "|" + flightChaseMode();
         if (flightWindow == null) {
-            openFlightWindow(now);
+            openFlightWindow(now, tag);
+        } else if (!tag.equals(flightWindowTag)) {
+            // Mid-window configuration changes are discarded even when they revert (A→B→A).
+            settleFlight(now, false);
+            openFlightWindow(now, tag);
         } else if (flightWindow.shouldFlush(now) || now - flightWindowStart >= FlightSummary.MAX_WINDOW_NANOS) {
             settleFlight(now, false);
-            openFlightWindow(now);
+            openFlightWindow(now, tag);
         }
         Vec3 position = mc.player.position();
         double dx = 0, dy = 0, dz = 0;
@@ -333,27 +356,39 @@ public class TelemetryManager extends Feature {
         flightWindow.tick(now, dx, dy, dz, gliding, armorfly, chaseActive, dive,
                 flight != null && flight.isBoostAttached(),
                 mc.player.getDeltaMovement().horizontalDistance() * 20,
-                requested, applied, flight == null ? FlightSummary.BLOCK_NONE : flight.lastRocketBlock());
+                requested, applied,
+                flight == null || !flight.isEnabled() ? FlightSummary.BLOCK_NONE : flight.lastRocketBlock());
     }
 
-    private void openFlightWindow(long now) {
+    private void openFlightWindow(long now, String tag) {
         flightWindow = new FlightSummary();
         flightWindowConfig = flightConfig();
         flightWindowMode = flightChaseMode();
-        flightWindowTag = flightWindowConfig + "|" + flightWindowMode;
+        flightWindowTag = tag;
         flightWindowStart = now;
         flightHasLastPos = false;
+        flightPlayer = mc.player;
+        flightLevel = mc.level;
     }
 
-    /** Closes the window; uploaded only when still valid and its configuration is unchanged. */
+    /** Closes the window; uploaded only when valid, unchanged and not degraded. */
     private void settleFlight(long now, boolean forceUpload) {
         if (flightWindow == null) return;
         FlightSummary.Window window = flightWindow.close(now);
         String tag = flightConfig() + "|" + flightChaseMode();
-        boolean uploadable = window != null && tag.equals(flightWindowTag);
+        boolean uploadable = window != null && !flightSummaryBlocked && tag.equals(flightWindowTag);
         if (uploadable && (forceUpload || canUpload())) {
             enqueue("flight_summary", FlightSummary.render(window, flightWindowMode, flightWindowConfig));
         }
+        clearFlightWindow();
+    }
+
+    /** Drops the window without uploading; used for identity changes and receiver degradation. */
+    private void discardFlightWindow() {
+        clearFlightWindow();
+    }
+
+    private void clearFlightWindow() {
         flightWindow = null;
         flightWindowConfig = null;
         flightWindowTag = null;
@@ -361,6 +396,8 @@ public class TelemetryManager extends Feature {
         flightWindowStart = 0;
         flightLastPos = null;
         flightHasLastPos = false;
+        flightPlayer = null;
+        flightLevel = null;
     }
 
     private String flightChaseMode() {
@@ -676,6 +713,8 @@ public class TelemetryManager extends Feature {
 
     private void enqueue(String type, JsonObject data, long at) {
         if (!canUpload() || sessionId == null) return;
+        // Second line of defence: a receiver that rejected this event type must not see more.
+        if ("flight_summary".equals(type) && flightSummaryBlocked) return;
         JsonObject event = new JsonObject();
         event.addProperty("type", type);
         event.addProperty("t", at);
@@ -695,6 +734,7 @@ public class TelemetryManager extends Feature {
         envelope.addProperty("build", BuildConfig.VERSION + "-" + BuildConfig.HASH + "-"
                 + BuildConfig.BUILD_TIME.replaceAll("[^A-Za-z0-9]", ""));
         envelope.addProperty("sent_at", System.currentTimeMillis());
+        String sessionAtSend = sessionId;
         String body = queue.batch(envelope).toString();
         try {
             var pending = HTTP.sendAsync(HttpRequest.newBuilder(URI.create(ENDPOINT))
@@ -710,9 +750,16 @@ public class TelemetryManager extends Feature {
                             failures = Math.min(6, failures + 1);
                             long seconds = Math.min(1800, 30L << failures);
                             if (response != null && response.statusCode() == 400) {
-                                // A strict receiver that does not know flight_summary rejects the
-                                // whole batch; stop producing them until the next session.
-                                flightSummaryBlocked = true;
+                                // A strict receiver that rejects flight_summary fails the whole
+                                // batch. Only the sending session may degrade, and the queue and
+                                // window state belong to the game thread.
+                                String degraded = sessionAtSend;
+                                mc.execute(() -> {
+                                    if (degraded == null || !degraded.equals(sessionId)) return;
+                                    flightSummaryBlocked = true;
+                                    discardFlightWindow();
+                                    queue.removeType("flight_summary");
+                                });
                             }
                             if (response != null && response.statusCode() == 429) {
                                 try {

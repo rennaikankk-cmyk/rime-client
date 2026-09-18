@@ -341,6 +341,8 @@ public class GuangxiElytraModule extends Module {
     @Subscribe(priority = -100)
     private void onPreTick(PreTickEvent event) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        // Observation lifetime: a rocket-gate result is only valid for the tick that produced it.
+        lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
 clearFlightRotation();
         checkFlightSession();
         pendingMotion = null;

@@ -56,6 +56,20 @@ public final class TelemetryBuffer {
     public synchronized boolean isEmpty() { return entries.isEmpty(); }
     public synchronized int bytes() { return bytes; }
     public synchronized int count() { return entries.size(); }
+
+    /** Drops every queued event of one type; used when a receiver rejects that type. */
+    public synchronized int removeType(String type) {
+        int removed = 0;
+        var iterator = entries.iterator();
+        while (iterator.hasNext()) {
+            Entry entry = iterator.next();
+            if (!entry.value().has("type") || !type.equals(entry.value().get("type").getAsString())) continue;
+            iterator.remove();
+            bytes -= entry.bytes();
+            removed++;
+        }
+        return removed;
+    }
     public static int size(JsonObject object) {
         return object.toString().getBytes(StandardCharsets.UTF_8).length;
     }

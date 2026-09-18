@@ -22,6 +22,7 @@ public final class FlightSummaryTest {
         levelAndClimbSpeed();
         gapAndJumpInvalidation();
         correctionSegmentsDisplacement();
+        inactivePauseCutsUnobservedTime();
         smallWindowsDiscarded();
         flushBoundary();
         fireworkCoverage();
@@ -30,6 +31,34 @@ public final class FlightSummaryTest {
         rendererContract();
         if (args.length > 0) writeFixture(Path.of(args[0]));
         System.out.println("FlightSummaryTest passed: " + checks + " checks");
+    }
+
+    /** A short inactivity stretch must not be averaged in, even below the gap threshold. */
+    private static void inactivePauseCutsUnobservedTime() {
+        FlightSummary window = new FlightSummary();
+        for (int tick = 0; tick <= 12; tick++) {
+            window.tick(tick * 50L * MS, 1, 0, 0, true, true, false, false, true, 20, 1, 1, FlightSummary.BLOCK_NONE);
+        }
+        // 450ms inactive below the 1.5s gap threshold, then one resuming sample.
+        window.pause();
+        window.tick(1_050 * MS, 1, 0, 0, true, true, false, false, true, 20, 1, 1, FlightSummary.BLOCK_NONE);
+        FlightSummary.Window result = window.close(1_100 * MS);
+        check(result != null, "The window survives a short pause");
+        check(result.observedMs() == 600 && result.armorflyMs() == 600,
+                "Idle time is excluded from observed and state coverage");
+        check(result.gaps() == 0, "A pause cuts the interval without inventing a data gap");
+        check(Math.abs(result.horizontalBlocks() - 12) < 1e-9,
+                "Displacement across the pause is dropped");
+
+        FlightSummary resumed = new FlightSummary();
+        for (int tick = 0; tick <= 12; tick++) {
+            resumed.tick(tick * 50L * MS, 1, 0, 0, true, true, false, false, true, 20, 1, 1, FlightSummary.BLOCK_NONE);
+        }
+        resumed.pause();
+        resumed.tick(2_000 * MS, 1, 0, 0, true, true, false, false, true, 20, 1, 1, FlightSummary.BLOCK_USING_ITEM);
+        FlightSummary.Window after = resumed.close(2_050 * MS);
+        check(after != null && after.rocketBlocks()[FlightSummary.BLOCK_USING_ITEM] == 1,
+                "A fresh reason after a pause is counted exactly once");
     }
 
     private static void levelAndClimbSpeed() {

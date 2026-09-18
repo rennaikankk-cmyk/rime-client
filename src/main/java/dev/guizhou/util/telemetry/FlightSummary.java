@@ -103,6 +103,11 @@ public final class FlightSummary {
         lastSampleNanos = Long.MIN_VALUE;
     }
 
+    /** An inactive tick ends the current interval; unobserved time is never averaged in. */
+    public void pause() {
+        lastSampleNanos = Long.MIN_VALUE;
+    }
+
     public boolean shouldFlush(long nanos) {
         return firstTickNanos != Long.MIN_VALUE && nanos - firstTickNanos >= WINDOW_NANOS;
     }
