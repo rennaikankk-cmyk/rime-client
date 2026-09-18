@@ -45,11 +45,17 @@ public final class MaceApproach {
         for (int step = 0; step <= 12; step++) {
             double candidate = height - (height - floor) * step / 12.0;
             Vec3 apex = observed.add(0.0, candidate, 0.0);
-            // Once already above the apex there is no additional climb to purchase.
-            double remainingDrop = Math.max(0.0, candidate);
-            double time = interceptTime(apex.subtract(self), velocity, speed, remainingDrop);
+            // Meet the moving apex at the end of the climb. During the descent,
+            // matching horizontal target motion leaves this vertical speed budget.
+            // Leading the apex by the full round trip counts target motion twice
+            // and sends a rising-target pursuit above its actual rendezvous.
+            double climbTime = interceptTime(apex.subtract(self), velocity, speed, 0.0);
+            double verticalBudgetSq = speed * speed - velocity.horizontalDistanceSqr();
+            double closingDown = verticalBudgetSq > 0.0 ? Math.sqrt(verticalBudgetSq) + velocity.y : 0.0;
+            double dropTime = closingDown > 1.0E-6 ? candidate / closingDown : Double.POSITIVE_INFINITY;
+            double time = climbTime + dropTime;
             if (time <= budget) {
-                return new Plan(apex.add(velocity.scale(time)), candidate, time, true);
+                return new Plan(apex.add(velocity.scale(climbTime)), candidate, time, true);
             }
         }
         // Preserve horizontal closing speed. Follow a rising target only as much as necessary;

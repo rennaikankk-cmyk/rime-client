@@ -569,7 +569,7 @@ clearFlightRotation();
                 && (!clearRelativePath(Vec3.ZERO, applied)
                 || !FlightTerrainSafety.trajectoryClear(applied, actualLook,
                 mc.player.getAttributeValue(Attributes.GRAVITY),
-                dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent() ? 1 : 4,
+                dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.hasMaceDescentIntent() ? 1 : 4,
                 attachedBoost, this::clearRelativePath))) {
             applied = vanillaVelocity;
             safetyHoldTicks = 6;
@@ -833,7 +833,7 @@ clearFlightRotation();
         Vec3 velocity = mc.player.getDeltaMovement();
         Vec3 look = intent.isBraking() || intent.value().lengthSqr() < 1.0E-6
                 ? lastLook != null ? lastLook : viewAnchor.direction() : intent.value().normalize();
-        boolean attackDescent = dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent();
+        boolean attackDescent = dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.hasMaceDescentIntent();
         boolean landing = !attackDescent && needsLandingRecovery();
         boolean momentumBlocked = terrainGuard.getValue() && !FlightTerrainSafety.trajectoryClear(
                 velocity, look, mc.player.getAttributeValue(Attributes.GRAVITY), attackDescent ? 1 : 8,

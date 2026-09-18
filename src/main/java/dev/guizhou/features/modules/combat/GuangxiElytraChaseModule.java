@@ -204,6 +204,12 @@ public class GuangxiElytraChaseModule extends Module {
     }
 
     public static boolean preservesMaceDescent() {
+        // FOLLOW starts while powered flight is still braking or approaching.
+        // Only an actual unpowered fall owns the no-restart/no-rocket barrier.
+        return hasMaceDescentIntent() && !mc.player.isFallFlying();
+    }
+
+    public static boolean hasMaceDescentIntent() {
         GuangxiElytraChaseModule bot = INSTANCE;
         if (bot == null || !bot.isEnabled() || bot.paused() || !bot.isValid(bot.target)
                 || bot.combatAction != AerialCombatPolicy.Action.CHASE
@@ -604,7 +610,7 @@ if (nullCheck() || mc.player == null) {
                 || mc.player.getDeltaMovement().y >= -0.05
                 || maceDive.isActive() && !maceDive.canAttack()) return false;
         double reach = mc.player.entityInteractionRange();
-        return target.getBoundingBox().distanceToSqr(mc.player.getEyePosition()) <= reach * reach
+        return observedTargetBox().distanceToSqr(mc.player.getEyePosition()) <= reach * reach
                 && mc.player.hasLineOfSight(target);
     }
 
@@ -661,7 +667,7 @@ if (nullCheck() || mc.player == null) {
             double toTarget = mc.player.getEyePosition().distanceTo(target.getEyePosition());
             goal = mc.player.position().add(requested.normalize().scale(Math.min(intended.length(), toTarget)));
         }
-        if (preservesMaceDescent()) {
+        if (hasMaceDescentIntent()) {
             Behavior active = behavior instanceof MxsBehavior mxs ? mxs.active : behavior;
             Vec3 aim = active instanceof MaceBehavior mace ? mace.strikePlan().aim()
                     : target.getBoundingBox().getCenter();
@@ -962,14 +968,15 @@ if (nullCheck() || mc.player == null) {
                 aimDiveExit();
                 return FOLLOW;
             }
-            double distanceSquared = target.getBoundingBox().distanceToSqr(mc.player.getEyePosition());
+            AABB observedBox = observedTargetBox();
+            double distanceSquared = observedBox.distanceToSqr(mc.player.getEyePosition());
             if (tryAttack(armed)) return WAIT_ATTACK;
             double reach = mc.player.entityInteractionRange();
             boolean smashWindow = willUseMaceAttack() && distanceSquared <= reach * reach
                     && mc.player.getDeltaMovement().y < -0.05;
             if (pass.shouldPullUp(mc.player.tickCount, Math.sqrt(distanceSquared), reach,
-                    mc.player.getY(), target.getY(), smashWindow)) return restartPass();
-            if (!smashWindow && !targetGrounded && target.getY() > mc.player.getY() + 1.5) {
+                    mc.player.getY(), observedBox.minY, smashWindow)) return restartPass();
+            if (!smashWindow && !targetGrounded && observedBox.minY > mc.player.getY() + 1.5) {
                 return restartPass();
             }
             MaceApproach.Plan strike = strikePlan();
@@ -1022,11 +1029,11 @@ if (nullCheck() || mc.player == null) {
 
         private MaceApproach.Plan strikePlan() {
             if (!maceAdaptive.getValue()) {
-                Vec3 aim = target.getBoundingBox().getCenter().add(predictedTarget().subtract(target.position()));
+                Vec3 aim = observedTargetBox().getCenter().add(predictedTarget().subtract(target.position()));
                 return new MaceApproach.Plan(aim, 0.0, 0.0, true);
             }
             Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
-            return MaceApproach.intercept(mc.player.getEyePosition(), target.getBoundingBox().getCenter(),
+            return MaceApproach.intercept(mc.player.getEyePosition(), observedTargetBox().getCenter(),
                     velocity, planningSpeed(), latencyTicks,
                     MaceApproach.stable(velocity, targetHistory.previousVelocity(), targetHistory.hasTwoVelocities()));
         }
@@ -1038,7 +1045,7 @@ if (nullCheck() || mc.player == null) {
             boolean smash = willUseMaceAttack();
             boolean ready = smash || maceUseExtraAttack.getValue()
                     && mc.player.getAttackStrengthScale(0.5F) > 0.95F;
-            if (!ready || target.getBoundingBox().distanceToSqr(mc.player.getEyePosition())
+            if (!ready || observedTargetBox().distanceToSqr(mc.player.getEyePosition())
                     > configuredRange * configuredRange || !attack(target)) return false;
             if (!smash) return false; // An optional ordinary hit does not complete a smash pass.
             lastAttackSentTick = mc.player.tickCount;
@@ -1074,22 +1081,25 @@ if (nullCheck() || mc.player == null) {
 
         private boolean shouldStartDive() {
             var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+            Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
+            double approachRange = AerialIntercept.dropApproachRange(mc.player.getDeltaMovement(),
+                    velocity, mc.player.entityInteractionRange());
             if (!autoMaceDive.getValue() || !autoControlElytra.getValue()
                     || flight == null || !flight.canRecoverDiveFlight()
                     || !mc.player.isFallFlying() || mc.player.getAbilities().flying
-                    || mc.player.getDeltaMovement().y >= -0.15 || mc.player.getY() < target.getY() + 3.0
-                    || mc.player.distanceToSqr(target) > 196.0 || mc.player.isUsingItem()
+                    || mc.player.getDeltaMovement().y >= -0.15 || mc.player.getY() < observedTargetBox().minY + 3.0
+                    || observedTargetBox().distanceToSqr(mc.player.position()) > approachRange * approachRange
+                    || mc.player.isUsingItem()
                     || mc.player.hasEffect(MobEffects.SLOW_FALLING) || mc.player.hasEffect(MobEffects.LEVITATION)
                     || Math.abs(mc.player.getAttributeValue(Attributes.GRAVITY) - 0.08) > 1.0E-5
                     || !dropPathClear()
                     || EatUtil.shouldDefer() || !mc.player.hasLineOfSight(target)) return false;
-            Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
             Vec3 previous = targetHistory.previousVelocity();
             if (!targetHistory.hasTwoVelocities() || !(velocity.lengthSqr() < 0.01 && previous.lengthSqr() < 0.01)
                     && !AerialCombatPolicy.coherent(policyVector(velocity), policyVector(previous))) return false;
             Vec3 standingEye = mc.player.position().add(0.0, mc.player.getEyeHeight(Pose.STANDING), 0.0);
             return AerialIntercept.canStartDrop(standingEye, mc.player.getDeltaMovement(),
-                    target.getBoundingBox(), velocity, mc.player.entityInteractionRange(), maceMinFallDistance.getValue());
+                    observedTargetBox(), velocity, mc.player.entityInteractionRange(), maceMinFallDistance.getValue());
         }
 
         private boolean dropPathClear() {
@@ -1115,7 +1125,7 @@ if (nullCheck() || mc.player == null) {
                 state = tickWaitAttack();
                 return;
             }
-            if (mc.player.getY() < target.getY() + 0.5
+            if (mc.player.getY() < observedTargetBox().minY + 0.5
                     || !dropPathClear()) {
                 recoverMissedDive();
             }
@@ -1194,7 +1204,7 @@ if (nullCheck() || mc.player == null) {
         }
 
         Vec3 targetPos() {
-            Vec3 base = predictedTarget().add(spearPacketOffset());
+            Vec3 base = predictedTarget().add(targetPacketOffset());
             return targetGrounded
                     ? new Vec3(base.x, target.getEyeY(), base.z)
                     : target.getBoundingBox().getCenter().add(base.subtract(target.position()));
@@ -1331,7 +1341,7 @@ if (nullCheck() || mc.player == null) {
             if (isUsingSpear(mc.player)) {
                 noEntry = Math.max(noEntry, SpearCombat.minRange(mc.player, mc.player.getUseItem()) + 0.35);
             }
-            AABB interceptBox = target.getBoundingBox().move(spearPacketOffset());
+            AABB interceptBox = target.getBoundingBox().move(targetPacketOffset());
             return noEntry > 0.1 && interceptBox.distanceToSqr(mc.player.getEyePosition())
                     < noEntry * noEntry;
         }
@@ -1523,7 +1533,7 @@ if (nullCheck() || mc.player == null) {
                 || lastAttackTick == mc.player.tickCount) return false;
         double reach = mc.player.entityInteractionRange();
         Vec3 eye = mc.player.getEyePosition();
-        AABB box = entity.getBoundingBox();
+        AABB box = observedTargetBox();
         if (!Double.isFinite(reach) || reach <= 0.0
                 || box.distanceToSqr(eye) > reach * reach
                 || !mc.player.hasLineOfSight(entity)) return false;
@@ -1586,14 +1596,18 @@ if (nullCheck() || mc.player == null) {
 
     private void aimSpear() {
         Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
-        Vec3 aim = target.getBoundingBox().getCenter().add(spearPacketOffset())
+        Vec3 aim = target.getBoundingBox().getCenter().add(targetPacketOffset())
                 .add(velocity.scale(Math.min(3.0, 1.0 + latencyTicks * 0.5)));
         float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), aim);
         GuizhouWare.rotationManager.submit(new RotationRequest("ElytraChase_spear", 15,
                 angles[0], angles[1], RotationRequest.Mode.MOTION, true, true));
     }
 
-    private Vec3 spearPacketOffset() {
+    private AABB observedTargetBox() {
+        return target.getBoundingBox().move(targetPacketOffset());
+    }
+
+    private Vec3 targetPacketOffset() {
         var interpolation = target.getInterpolation();
         if (interpolation == null || !interpolation.hasActiveInterpolation()) return Vec3.ZERO;
         Vec3 offset = interpolation.position().subtract(target.position());

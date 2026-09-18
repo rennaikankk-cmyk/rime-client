@@ -75,11 +75,19 @@ public final class ElytraCombatHookTest {
         check(method(spear, "toTargetAtLeast").hasCall(CHASE + "$SpearBehavior", "approachHeading"),
                 "Ground approaches must pass through the shallow-lane planner");
         for (String name : List.of("targetPos", "tooClose")) {
-            check(method(spear, name).hasCall(CHASE, "spearPacketOffset"),
+            check(method(spear, name).hasCall(CHASE, "targetPacketOffset"),
                     "Spear steering and retreat must not use a stale rendered target position");
         }
-        check(method(chase, "aimSpear").hasCall(CHASE, "spearPacketOffset"),
+        check(method(chase, "aimSpear").hasCall(CHASE, "targetPacketOffset"),
                 "Spear aim must include the same packet position as navigation");
+        for (String name : List.of("tickFollow", "strikePlan", "tryAttack", "shouldStartDive", "tickDive")) {
+            check(method(mace, name).hasCall(CHASE, "observedTargetBox"),
+                    "Mace approach, attack and recovery must agree on the latest received target box: " + name);
+        }
+        check(method(chase, "attack").hasCall(CHASE, "observedTargetBox"),
+                "Final reach and accepted-rotation ray must test the observed box used by the approach");
+        check(method(mace, "shouldStartDive").hasCall("dev/guizhou/util/elytra/AerialIntercept", "dropApproachRange"),
+                "Fast opposing passes need a speed-aware glide-exit approach gate");
         Trace standalone = method(read(FLIGHT), "serviceIndependentArmorFly");
         for (String forbidden : List.of("enable", "alignLook", "applyFlightVelocity", "buildSetbackTrigger")) {
             check(!standalone.hasCall(FLIGHT, forbidden), "Independent armor must not take direction or exploit ownership");
@@ -602,6 +610,11 @@ public final class ElytraCombatHookTest {
     private static void verifyMaceDescentOwnership() throws IOException {
         Map<String, Trace> chase = read(CHASE);
         Trace ownership = method(chase, "preservesMaceDescent");
+        check(ownership.steps.stream().anyMatch(step -> "isFallFlying".equals(step.name)),
+                "A powered mace approach must not suppress armor cycling and rocket refresh before glide ends");
+        check(ownership.hasCall(CHASE, "hasMaceDescentIntent"),
+                "Natural-fall ownership must also retain every mace intent gate");
+        ownership = method(chase, "hasMaceDescentIntent");
         for (String gate : List.of("isEnabled", "paused", "isValid")) {
             check(ownership.hasCall(CHASE, gate), "Mace descent ownership must check " + gate);
         }
@@ -634,7 +647,7 @@ public final class ElytraCombatHookTest {
                 "Automatic rocket use cannot interrupt the natural mace descent");
 
         Trace safety = method(movement, "applyTerrainSafety");
-        int preserve = safety.call(CHASE, "preservesMaceDescent");
+        int preserve = safety.call(CHASE, "hasMaceDescentIntent");
         Step savedDescent = safety.steps.get(preserve + 1);
         check(savedDescent.opcode == Opcodes.ISTORE, "Terrain safety must retain the current attack-descent decision");
         int landing = safety.call(FLIGHT, "needsLandingRecovery");

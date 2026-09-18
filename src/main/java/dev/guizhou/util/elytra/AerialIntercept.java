@@ -70,6 +70,12 @@ public final class AerialIntercept {
         return true;
     }
 
+    /** Leave enough approach distance for the two-tick glide-exit barrier at closing speed. */
+    public static double dropApproachRange(Vec3 velocity, Vec3 targetVelocity, double reach) {
+        if (!finite(velocity) || !finite(targetVelocity) || !Double.isFinite(reach) || reach <= 0) return 0;
+        return Math.clamp(velocity.subtract(targetVelocity).length() * 3.0 + reach + 3.0, 14.0, 64.0);
+    }
+
     private static boolean finite(Vec3 vector) {
         return vector != null && Double.isFinite(vector.x) && Double.isFinite(vector.y)
                 && Double.isFinite(vector.z) && vector.lengthSqr() < 1.0E12;

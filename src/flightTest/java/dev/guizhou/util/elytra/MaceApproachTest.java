@@ -8,6 +8,12 @@ public final class MaceApproachTest {
 
     public static void main(String[] args) {
         stationaryRecovery();
+        var verticalMeeting = MaceApproach.climb(Vec3.ZERO, new Vec3(0, 8, 0),
+                new Vec3(0, 1, 0), 3, 6, 1.5, 0, true);
+        close(21.0, verticalMeeting.aim().y,
+                "Rising target apex uses climb arrival time, not the end of the entire pass");
+        close(8.5, verticalMeeting.ticks(),
+                "Seven ticks up plus one and a half down includes target rise during descent");
         close(3.0, time(new Vec3(6, 0, 0), Vec3.ZERO, 2, 0), "stationary");
         close(6.0, time(new Vec3(6, 0, 0), new Vec3(1, 0, 0), 2, 0), "fleeing");
         close(1.5, time(new Vec3(6, 0, 0), new Vec3(-2, 0, 0), 2, 0), "equal-speed meeting");
@@ -25,7 +31,10 @@ public final class MaceApproachTest {
                 2, 10, 1.5, 0, true);
         check(plan.reachable() && plan.height() < 10 && plan.height() >= 3,
                 "a fleeing target gets an affordable lower apex");
-        close(plan.aim().length() + plan.height(), plan.ticks() * 2, "round-trip budget closes");
+        double climbTime = plan.aim().length() / 2;
+        double descentTime = plan.height() / Math.sqrt(4 - 0.8 * 0.8);
+        close(climbTime + descentTime, plan.ticks(), "both legs fit the round-trip budget");
+        close(6 + 0.8 * climbTime, plan.aim().x, "apex meets the target at climb arrival");
         var impossible = MaceApproach.climb(Vec3.ZERO, new Vec3(10, 0, 0), new Vec3(3, 0, 0),
                 2, 40, 1.5, 0, true);
         check(!impossible.reachable() && impossible.aim().y == 0 && impossible.aim().x > 10,

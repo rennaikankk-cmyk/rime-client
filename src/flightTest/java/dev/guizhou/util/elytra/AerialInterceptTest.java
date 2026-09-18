@@ -36,6 +36,17 @@ public final class AerialInterceptTest {
                 Vec3.ZERO, 3, 1.5), "Aligned drop tolerates glide-exit delay");
         check(!AerialIntercept.canStartDrop(new Vec3(0, 4.62, 0), new Vec3(0, -3, 0), target,
                 Vec3.ZERO, 3, 1.5), "Very brief low-height pass cannot tolerate delayed glide exit");
+        Vec3 fastDrop = new Vec3(0, -6, 0), rising = new Vec3(0, 3, 0);
+        check(AerialIntercept.canStartDrop(new Vec3(0, 30, 0), fastDrop, target, rising, 3, 4),
+                "A fast head-on pass has an earlier feasible glide-exit window");
+        check(!AerialIntercept.canStartDrop(new Vec3(0, 14, 0), fastDrop, target, rising, 3, 4),
+                "Waiting for fourteen blocks misses that same fast pass");
+        check(AerialIntercept.dropApproachRange(fastDrop, rising, 3) >= 30,
+                "Approach gate must admit the earlier proven drop window");
+        close(14, AerialIntercept.dropApproachRange(new Vec3(0, -0.6, 0), Vec3.ZERO, 3),
+                "Slow drop retains the existing approach range");
+        close(64, AerialIntercept.dropApproachRange(new Vec3(0, -20, 0), new Vec3(0, 20, 0), 3),
+                "Approach range remains bounded");
         for (int i = 1; i <= 1000; i++) {
             double t = lead(new Vec3(i * 0.03, i % 3, 1), new Vec3((i % 7) * 0.1, 0, 0), 1.5);
             check(Double.isFinite(t) && t >= 0.0 && t <= 4.0, "Prediction stays finite and bounded");
