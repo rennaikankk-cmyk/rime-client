@@ -10,7 +10,7 @@
 | 1 | 水印威慑文案 | 官网 download.html 安装段 | 已上线 |
 | 2 | 心跳校验 | 服务端 /api/heartbeat + 本仓库 HeartbeatManager | 服务端已上线；mod 侧待合并进发行构建 |
 | 3 | 持续更新节奏 | 发版流程（GPT 高频构建 + 三处分发同步） | 流程执行中 |
-| 4 | ProGuard 混淆 | build.gradle obfuscateJar 任务 | **已修复回链（04:07）**：jmod+libraryjars 修好 stackmap/接口/枚举三损，产物 49a49b0d 三验全过（ASM 枚举审计+结构验证+Knot 真实启动到完整初始化）；**已发布（04:12）**：线上=49a49b0d，五道防线全部随版生效 |
+| 4 | ProGuard 混淆 | build.gradle obfuscateJar 任务 | **已修复并发布（2026-09-18，343b5e57）**：枚举 values()/valueOf() 保留规则 + verifyObfuscatedJar 产物检查进 build 链；候选经 31 项回归 + 46 枚举审计 + Microsoft 21.0.7/Temurin 21.0.12.1 双 JDK 真实 Knot 初始化渲染验证，经管理通道发布（manifest uploaded_by=admin）；回滚件 9237a6ea 字节存 `Desktop/mods/guizhouware-9237a6ea-rollback.jar.bak`（服务器 release 目录已被 prune） |
 | 5 | AI 守卫提示层 | jar 内 5 文件 + MANIFEST + 代码常量 | 已进构建 |
 
 ## 1. 水印威慑（明面声明）
@@ -41,11 +41,15 @@
 
 ## 4. ProGuard 混淆
 
-`build.gradle` 的 `obfuscateJar` 任务（`build.finalizedBy`）：混淆+repackage 到根包。
+`build.gradle` 的 `obfuscateJar` 任务：混淆+repackage 到根包；`build -> verifyObfuscatedJar -> obfuscateJar -> check + prepareObfuscationInput`，回归失败不得生成通过验收的混淆包。
 - **必须 keep**（动了游戏起不来或功能失效）：`dev.guizhou.mixin.**`、`dev.guizhou.GuizhouWare`、`dev.guizhou.features.settings.**`、`@Subscribe` 注解方法、keepattributes（Annotation/Signature/Record 等）
 - 模块类可以混淆：注册走编译期引用 + displayName 字符串，配置键与类名无关
 - Gradle 9 约束：`buildscript {}` 块必须在 `plugins {}` 之前
 - injars 用 `buildDir` staging 拷贝（配置期求值陷阱）
+- 枚举必须保留 `public static **[] values()` 与 `public static ** valueOf(java.lang.String)`；仅保留 ACC_ENUM / Enum 父类不够，JDK 反射依赖 values 方法原名。
+- `HeartbeatManager.status()` 必须保留，允许改名但不能裁剪，确保 AI_GUARD_NOTICE 假引用留在最终产物。
+- 混淆包独立输出 `build/libs/*-obfuscated.jar`；原始 remap jar 不覆盖；`build/proguard-map.txt` 是内部诊断文件，不随公开包分发。部署必须明确选择已验收的混淆文件与 SHA256，禁止以通配符误选原包、sources 或旧构建。
+- `verifyObfuscatedJar` 检查最终产物枚举反射/EnumSet 与保护项。真实启动必须出现 `Initialized GuizhouWare in ...ms` 和纹理图集创建、后续稳定运行，检查完整 stdout/stderr/latest.log 的异常；`Pre-initializing` 不算成功。至少覆盖 Microsoft 21.0.7 与较新 JDK，同一候选 SHA256。
 - 验证任务：`clientRegressionTests` 各任务带 `onlyIf`（入口类缺失跳过——两棵源码树兼容）
 
 ## 5. AI 守卫提示层

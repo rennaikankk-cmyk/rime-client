@@ -248,6 +248,9 @@ tasks.register('obfuscateJar', proguard.gradle.ProGuardTask) {
     keepclassmembers 'class * { @dev.guizhou.event.system.Subscribe <methods>; }'
     // Class.getEnumConstants, EnumSet and settings resolve these by name at runtime.
     keepclassmembers 'enum * { public static **[] values(); public static ** valueOf(java.lang.String); }'
+    // Preserve the deliberate AI_GUARD_NOTICE reference even while status() has no caller.
+    // Names may still be obfuscated; only shrinking this protection anchor is forbidden.
+    keepclassmembers allowobfuscation: true, 'class dev.guizhou.manager.HeartbeatManager { public java.lang.String status(); }'
     // fabric entrypoints referenced by string in fabric.mod.json
     renamesourcefileattribute 'SourceFile'
     repackageclasses ''
