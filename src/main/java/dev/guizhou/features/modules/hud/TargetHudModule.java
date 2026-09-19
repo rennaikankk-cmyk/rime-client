@@ -41,7 +41,7 @@ public class TargetHudModule extends HudModule {
     private static final int GHOST = 0x59FFFFFF;
 
     private static final int PANEL_W = 204;
-    private static final int TARGET_H = 124;
+    private static final int TARGET_H = 142;
     private static final int FLIGHT_H = 84;
     private static final float HALF_LIFE = 140f;
 
@@ -138,60 +138,99 @@ public class TargetHudModule extends HudModule {
 
         panel(ctx, x, y, PANEL_W, TARGET_H, alpha);
 
-        // head: color chip, name, intent badge
+        // head: chip, name+distance, intent badge
         int chip = target instanceof Player ? ACCENT : WARN;
-        ctx.fill(x + 8, y + 7, x + 21, y + 20, chip);
-        String name = target.getName().getString();
-        trim(ctx, name, 96);
-        Fonts.drawString(ctx, name, x + 26, y + 8, fg(alpha));
-        Fonts.drawString(ctx, String.format("%.1f 格", dist), x + 26, y + 18, muted(alpha));
-        badge(ctx, x + PANEL_W - 8 - badgeWidth(intent()), y + 8, intent(), intentColor(), alpha);
+        ctx.fill(x + 8, y + 7, x + 20, y + 19, chip);
+        Fonts.drawString(ctx, target.getName().getString(), x + 25, y + 6, fg(alpha));
+        Fonts.drawString(ctx, String.format("%.1f 格", dist), x + 25, y + 17, muted(alpha));
+        badge(ctx, x + PANEL_W - 10 - badgeWidth(intent()), y + 8, intent(), intentColor(), alpha);
 
-        // radar disc
-        int cx = x + 8 + 30, cy = y + 44 + 30;
-        disc(ctx, cx, cy, 29, alpha);
-        double[] p = TargetHudMath.radarProject(bearing, dist, 27, 20);
+        // radar disc: dark square backing + true circle rings
+        int r = 27, cx = x + 8 + r + 1, cy = y + 34 + r + 1;
+        ctx.fill(cx - r - 2, cy - r - 2, cx + r + 3, cy + r + 3, mulAlpha(TRACK, alpha));
+        ring(ctx, cx, cy, r, 2, BORDER, alpha);
+        dashedRing(ctx, cx, cy, r - 9, 20, 10, BORDER, alpha);
+        line(ctx, cx - r, cy, cx + r, cy, mulAlpha(TRACK, alpha));
+        line(ctx, cx, cy - r, cx, cy + r, mulAlpha(TRACK, alpha));
+        double[] p = TargetHudMath.radarProject(bearing, dist, r - 2, 20);
         int tx = cx + (int) Math.round(p[0]), ty = cy + (int) Math.round(p[1]);
         ctx.fill(cx - 1, cy - 1, cx + 2, cy + 2, ACCENT);
         ctx.fill(tx - 2, ty - 2, tx + 3, ty + 3, HP);
-        ctx.fill(cx - 1, ty, cx, ty + 1, GHOST);
-        Fonts.drawString(ctx, String.format("%.0f° %+.0f", bearing, relAlt), x + 8, y + 44 + 62, muted(alpha));
+        line(ctx, cx, cy, tx, ty, GHOST);
+        Fonts.drawString(ctx, String.format("%.0f° %+.0f", bearing, relAlt), x + 8, y + 34 + 2 * r + 5, muted(alpha));
 
-        // right column rows
-        int rx = x + 76, rowY = y + 30, rowH = 13;
-        Fonts.drawString(ctx, "接近率", rx, rowY, muted(alpha));
-        drawValue(ctx, String.format("%+.1f", closure), rx + 40, rowY, closure >= 0 ? accent(alpha) : hp(alpha));
-        rowY += rowH;
-        Fonts.drawString(ctx, "拦截", rx, rowY, muted(alpha));
+        // right column: label fixed column, value right-aligned to a common edge
+        int rx = x + 72, labelX = rx, valueRight = x + PANEL_W - 10;
+        int rowY = y + 30, rowH = 13;
+        row(ctx, labelX, rowY, "接近率", String.format("%+.1f", closure), valueRight, closure >= 0 ? accent(alpha) : hp(alpha), alpha); rowY += rowH;
         double t = TargetHudMath.interceptTicks(dist, closure, 0.05);
-        String intercept = t < 0 ? "无解 平追" : String.format("T−%.0f", t);
-        Fonts.drawString(ctx, intercept, rx + 40, rowY, t < 0 ? muted(alpha) : fg(alpha));
-        rowY += rowH;
-        Fonts.drawString(ctx, "能量", rx, rowY, muted(alpha));
-        bar(ctx, rx + 40, rowY + 2, 44, 4, energy / 200f + 0.5f, energy >= 0 ? ACCENT : HP, alpha);
-        Fonts.drawString(ctx, String.format("%+.0f", energy), rx + 88, rowY, energy >= 0 ? accent(alpha) : hp(alpha));
-        rowY += rowH;
-        Fonts.drawString(ctx, "砸落", rx, rowY, muted(alpha));
-        bar(ctx, rx + 40, rowY + 2, 44, 4, smash, smash >= 0.999f ? ACCENT : MUTED, alpha);
-        Fonts.drawString(ctx, smash >= 0.999f ? "READY" : String.format("%.0f%%", smash * 100),
-                rx + 88, rowY, smash >= 0.999f ? accent(alpha) : muted(alpha));
-        rowY += rowH;
-        Fonts.drawString(ctx, "包络", rx, rowY, muted(alpha));
-        bar(ctx, rx + 40, rowY + 2, 44, 4, Math.min(1f, myVel / 8f), ACCENT, alpha);
-        ctx.fill(rx + 40, rowY + 1, rx + 40 + (int) (44 * Math.min(1f, reqVel / 8f)), rowY + 2, GHOST);
-        Fonts.drawString(ctx, String.format("%.1f→%.1f", reqVel, myVel), rx + 88, rowY, muted(alpha));
+        row(ctx, labelX, rowY, "拦截", t < 0 ? "无解 平追" : String.format("T−%.0f", t), valueRight, t < 0 ? muted(alpha) : fg(alpha), alpha); rowY += rowH;
+        Fonts.drawString(ctx, "能量", labelX, rowY, muted(alpha));
+        bar(ctx, valueRight - 58, rowY + 2, 30, 4, energy / 200f + 0.5f, energy >= 0 ? ACCENT : HP, alpha);
+        drawRight(ctx, String.format("%+.0f", energy), valueRight, rowY, energy >= 0 ? accent(alpha) : hp(alpha)); rowY += rowH;
+        Fonts.drawString(ctx, "砸落", labelX, rowY, muted(alpha));
+        bar(ctx, valueRight - 58, rowY + 2, 30, 4, smash, smash >= 0.999f ? ACCENT : MUTED, alpha);
+        drawRight(ctx, smash >= 0.999f ? "READY" : String.format("%.0f%%", smash * 100), valueRight, rowY, smash >= 0.999f ? accent(alpha) : muted(alpha)); rowY += rowH;
+        Fonts.drawString(ctx, "包络", labelX, rowY, muted(alpha));
+        bar(ctx, valueRight - 58, rowY + 2, 30, 4, Math.min(1f, myVel / 8f), ACCENT, alpha);
+        ctx.fill(valueRight - 58, rowY + 1, valueRight - 58 + (int) (30 * Math.min(1f, reqVel / 8f)), rowY + 2, GHOST);
+        drawRight(ctx, String.format("%.1f→%.1f", reqVel, myVel), valueRight, rowY, muted(alpha));
 
-        // bottom: hp / armor bars + totems
-        int by = y + TARGET_H - 20;
+        // bottom: hp / armor with clean columns
+        int by = y + TARGET_H - 32;
         Fonts.drawString(ctx, "♥", x + 8, by, hp(alpha));
-        bar(ctx, x + 18, by + 2, 66, 5, target.getHealth() / Math.max(1f, target.getMaxHealth()), HP, alpha);
-        Fonts.drawString(ctx, String.format("%.0f", target.getHealth()), x + 88, by, muted(alpha));
-        Fonts.drawString(ctx, "甲", x + 104, by, muted(alpha));
-        bar(ctx, x + 116, by + 2, 42, 5, target.getArmorValue() / 20f, ARMOR, alpha);
-        Fonts.drawString(ctx, String.format("%d", target.getArmorValue()), x + 162, by, muted(alpha));
-        int totems = totems(target);
-        Fonts.drawString(ctx, String.format("图腾×%d", totems), x + 8, by + 11, muted(alpha));
-        Fonts.drawString(ctx, String.format("敌速%.1f", tgtVel), x + 60, by + 11, muted(alpha));
+        bar(ctx, x + 18, by + 2, 58, 5, target.getHealth() / Math.max(1f, target.getMaxHealth()), HP, alpha);
+        drawRight(ctx, String.format("%.0f", target.getHealth()), x + 88, by, muted(alpha));
+        Fonts.drawString(ctx, "甲", x + 96, by, muted(alpha));
+        bar(ctx, x + 106, by + 2, 40, 5, target.getArmorValue() / 20f, ARMOR, alpha);
+        drawRight(ctx, String.format("%d", target.getArmorValue()), x + 156, by, muted(alpha));
+
+        int fy = by + 12;
+        Fonts.drawString(ctx, String.format("图腾×%d", totems(target)), x + 8, fy, muted(alpha));
+        Fonts.drawString(ctx, String.format("敌速 %.1f", tgtVel), x + 60, fy, muted(alpha));
+    }
+
+    private void row(GuiGraphics ctx, int labelX, int y, String label, String value, int valueRight, int color, float alpha) {
+        Fonts.drawString(ctx, label, labelX, y, muted(alpha));
+        drawRight(ctx, value, valueRight, y, color);
+    }
+
+    private void drawRight(GuiGraphics ctx, String text, int xRight, int y, int color) {
+        Fonts.drawString(ctx, text, xRight - Fonts.width(text), y, color);
+    }
+
+    /** Approximate circle ring via fill segments. */
+    private void ring(GuiGraphics ctx, int cx, int cy, int r, int thickness, int color, float alpha) {
+        int c = mulAlpha(color, alpha);
+        int segments = 40;
+        for (int i = 0; i < segments; i++) {
+            double a0 = 2 * Math.PI * i / segments;
+            int px = cx + (int) Math.round(r * Math.cos(a0));
+            int py = cy + (int) Math.round(r * Math.sin(a0));
+            ctx.fill(px, py, px + thickness, py + thickness, c);
+        }
+    }
+
+    private void dashedRing(GuiGraphics ctx, int cx, int cy, int r, int segments, int dashLen, int color, float alpha) {
+        int c = mulAlpha(color, alpha);
+        for (int i = 0; i < segments; i += 2) {
+            for (int d = 0; d < dashLen && i * dashLen + d < segments * dashLen; d++) {
+                double a = 2 * Math.PI * (i * dashLen + d) / (double) (segments * dashLen);
+                int px = cx + (int) Math.round(r * Math.cos(a));
+                int py = cy + (int) Math.round(r * Math.sin(a));
+                ctx.fill(px, py, px + 1, py + 1, c);
+            }
+        }
+    }
+
+    private void line(GuiGraphics ctx, int x0, int y0, int x1, int y1, int color) {
+        int steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+        if (steps == 0) { ctx.fill(x0, y0, x0 + 1, y0 + 1, color); return; }
+        for (int s = 0; s <= steps; s++) {
+            int px = x0 + (x1 - x0) * s / steps;
+            int py = y0 + (y1 - y0) * s / steps;
+            ctx.fill(px, py, px + 1, py + 1, color);
+        }
     }
 
     // ---------------------------------------------------------------- flight
