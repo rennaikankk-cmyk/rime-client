@@ -161,6 +161,7 @@ def clientRegressionTests = [
         spearCombatTest: 'dev.guizhou.util.elytra.SpearCombatTest',
         elytraWeaponControllerTest: 'dev.guizhou.util.elytra.ElytraWeaponControllerTest',
         elytraCombatHookTest: 'dev.guizhou.util.elytra.ElytraCombatHookTest',
+        spearAimSweepTest: 'dev.guizhou.util.elytra.SpearAimSweepTest',
         crystalSelectionPolicyTest: 'dev.guizhou.util.combat.CrystalSelectionPolicyTest',
         crystalAttackWindowTest: 'dev.guizhou.util.combat.CrystalAttackWindowTest',
         crystalAttackHookTest: 'dev.guizhou.util.combat.CrystalAttackHookTest',

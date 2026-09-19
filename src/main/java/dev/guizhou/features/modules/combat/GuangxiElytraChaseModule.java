@@ -26,6 +26,7 @@ import dev.guizhou.util.elytra.MaceDiveController;
 import dev.guizhou.util.elytra.MaceDiveState;
 import dev.guizhou.util.elytra.MacePassTracker;
 import dev.guizhou.util.elytra.MaceApproach;
+import dev.guizhou.util.elytra.SpearAimSweep;
 import dev.guizhou.util.elytra.SpearCombat;
 import dev.guizhou.util.elytra.TargetMotionTracker;
 import dev.guizhou.util.player.EatUtil;
@@ -125,6 +126,7 @@ public class GuangxiElytraChaseModule extends Module {
     private volatile long session;
     private int latencyTicks = 1;
     private int confirmationTicks = 6;
+    private int spearSweepPhase;
     private int lastAttackTick = Integer.MIN_VALUE / 2;
     private final CombatHitWindow maceFeedback = new CombatHitWindow();
     private final ElytraWeaponController weapons = new ElytraWeaponController();
@@ -1219,6 +1221,7 @@ if (nullCheck() || mc.player == null) {
             pulledAfterHit = false;
             pullOverTicks = 0;
             makingChargeRoom = false;
+            spearSweepPhase = 0;
         }
 
         Vec3 targetPos() {
@@ -1612,10 +1615,16 @@ if (nullCheck() || mc.player == null) {
     }
 
     private void aimSpear() {
-        Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
-        Vec3 aim = target.getBoundingBox().getCenter().add(targetPacketOffset())
-                .add(velocity.scale(Math.min(3.0, 1.0 + latencyTicks * 0.5)));
+        // The packet offset alone is the best calibrated predictor of the server-side
+        // query position (median 2.37 blocks); adding the velocity lead measured worse.
+        Vec3 aim = target.getBoundingBox().getCenter().add(targetPacketOffset());
         float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), aim);
+        if (SpearCombat.isReady(mc.player)) {
+            // Kinetic damage is a per-tick server ray query along the sent look; the
+            // residual prediction error exceeds the target box at spear range, so sweep
+            // the yaw across the uncertainty cone instead of parking on a ghost point.
+            angles[0] = SpearAimSweep.applySweep(angles[0], spearSweepPhase++);
+        }
         GuizhouWare.rotationManager.submit(new RotationRequest("ElytraChase_spear", 15,
                 angles[0], angles[1], RotationRequest.Mode.MOTION, true, true));
     }
@@ -1633,6 +1642,7 @@ if (nullCheck() || mc.player == null) {
     }
 
     private void clearSpearAim() {
+        spearSweepPhase = 0;
         if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("ElytraChase_spear");
     }
 
