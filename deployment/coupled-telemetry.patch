@@ -1,0 +1,90 @@
+diff --git a/telemetry_service.py b/telemetry_service.py
+index 9d86891..3c07809 100644
+--- a/telemetry_service.py
++++ b/telemetry_service.py
+@@ -148,9 +148,28 @@ FLIGHT_CONFIG_FIELDS = {
+ }
+ 
+ 
++COUPLED_CONFIG_FIELDS = {
++    "auto_fly": boolean,
++    "pitch": number(-89.5, 89.5),
++    "climb_pitch": number(-89.5, 0),
++    "descent_pitch": number(0, 89.5),
++    "smart_climb": boolean,
++    "descent_floor": number(-20, 0),
++    "porpoise": boolean,
++    "height_window": number(1, 256),
++    "speed_cap": number(0.05, 15),
++    "box_cap": number(0.01, 5),
++    "inset": number(0, 0.1),
++}
++
++
++def coupled_config(value):
++    return object_fields(value, COUPLED_CONFIG_FIELDS, tuple(COUPLED_CONFIG_FIELDS))
++
++
+ def flight_config(value):
+-    # Complete whitelist snapshot: a missing key means a client bug, not a variant.
+-    return object_fields(value, FLIGHT_CONFIG_FIELDS, tuple(FLIGHT_CONFIG_FIELDS))
++    # Legacy clients omit coupled. If supplied, the extension is complete and strict.
++    return object_fields(value, {**FLIGHT_CONFIG_FIELDS, "coupled": coupled_config}, tuple(FLIGHT_CONFIG_FIELDS))
+ 
+ 
+ def rocket_blocks(value):
+diff --git a/test_telemetry_service.py b/test_telemetry_service.py
+index 5d94aa1..5b01574 100644
+--- a/test_telemetry_service.py
++++ b/test_telemetry_service.py
+@@ -363,6 +363,29 @@ class CollectorTests(unittest.TestCase):
+         self.assertTrue(all(row["event"]["data"]["config"]["chase_mode"] in ("MACE", "SPEAR") for row in rows))
+         self.assertTrue(all(row["event"]["data"]["applied_samples"] > 0 for row in rows))
+ 
++    def test_coupled_client_fixture_and_strict_extension(self):
++        path = Path(__file__).with_name("coupled_summary_fixture.ndjson")
++        event = json.loads(path.read_text().strip())
++        data = event["data"]
++        coupled = data["config"]["coupled"]
++        self.assertEqual(set(coupled), set(telemetry.COUPLED_CONFIG_FIELDS))
++        self.assertEqual(self.post(batch("flight_summary", data)).status_code, 202)
++        rows = self.exported("?type=flight_summary")
++        self.assertEqual(rows[0]["event"]["data"]["config"]["coupled"], coupled)
++        for key in coupled:
++            broken = copy.deepcopy(data)
++            del broken["config"]["coupled"][key]
++            with self.subTest(missing=key):
++                self.assertEqual(self.post(batch("flight_summary", broken)).status_code, 400)
++        for key, value in (("pitch", 90), ("climb_pitch", 1), ("descent_pitch", -1),
++                           ("descent_floor", 1), ("height_window", 0), ("speed_cap", 16),
++                           ("box_cap", 0), ("inset", -0.1), ("smart_climb", 1),
++                           ("porpoise", "true"), ("auto_fly", "false"), ("unknown", 1)):
++            broken = copy.deepcopy(data)
++            broken["config"]["coupled"][key] = value
++            with self.subTest(invalid=key):
++                self.assertEqual(self.post(batch("flight_summary", broken)).status_code, 400)
++
+     def test_export_concurrency_slots_released_on_disconnect(self):
+         self.assertEqual(self.post().status_code, 202)
+         first = self.client.get("/internal/export", buffered=False)
+diff --git a/admin.html b/admin.html
+index 8de6dc6..b64939c 100644
+--- a/admin.html
++++ b/admin.html
+@@ -372,6 +372,10 @@ tr:hover td{background:var(--glass)}
+         + '｜名义 ' + telemetryNum(d.nominal_bps, 1) + ' 格/秒'
+         + '｜请求/应用 ' + telemetryNum(d.requested_bpt, 2) + '/' + telemetryNum(d.applied_bpt, 2) + ' 格/tick'
+         + '｜甲飞 ' + telemetryMs(d.armorfly_ms) + '｜追击 ' + telemetryMs(d.chase_ms) + '｜' + (d.chase_mode || '–');
++      if (cfg.coupled) {
++        line += '｜耦合巡航设置' + (cfg.coupled.porpoise ? '（高度脉动）' : '')
++          + ' 上限 ' + telemetryNum(cfg.coupled.speed_cap, 2) + ' 格/tick';
++      }
+       if (attached != null && detached != null && attached + detached > 0) {
+         line += '｜烟花附着 ' + Math.round(100 * attached / (attached + detached)) + '%';
+       } else {
+diff --git a/coupled_summary_fixture.ndjson b/coupled_summary_fixture.ndjson
+new file mode 100644
+--- /dev/null
++++ b/coupled_summary_fixture.ndjson
+@@ -0,0 +1,1 @@
++{"type":"flight_summary","t":1700000000000,"data":{"wall_ms":10050,"observed_ms":10000,"ticks":201,"gaps":0,"gliding_ms":10000,"armorfly_ms":10000,"chase_ms":0,"mace_dive_ms":1000,"chase_mode":"OFF","horizontal_blocks":240.83189157584573,"ascent_blocks":39.59999999999992,"descent_blocks":10.09999999999998,"horizontal_bps":24.083189157584574,"vertical_bps":2.9499999999999944,"ascent_bps":7.999999999999984,"nominal_bps":21.49004975124378,"requested_bpt":1.6999999999999937,"applied_bpt":1.4499999999999946,"applied_samples":201,"boost_attached_ms":6700,"boost_detached_ms":3300,"rocket_blocks":{"not_enabled":0,"using_item":0,"mace_descent":0,"speed_gate":0,"refire":29,"useful_boost":0,"no_rocket":0,"trajectory":0},"corrections":0,"config":{"flight_mode":"ROTATION","motion_mode":"FIREWORKS","speed":1.67,"auto_rescale":true,"rescale_amount":1.7,"y_cap":8.0,"corner_climb":true,"armor_fly":true,"grim_boost":false,"pullup_angle":0.0,"chase_mode":"MACE","mace_adaptive":true,"mace_terminal":true,"mace_height":10.0,"mace_min_fall":1.5,"auto_mace_dive":true,"combat_range":10.0,"coupled":{"auto_fly":true,"pitch":15.0,"climb_pitch":-45.0,"descent_pitch":30.0,"smart_climb":true,"descent_floor":-1.7,"porpoise":false,"height_window":60.0,"speed_cap":15.0,"box_cap":1.7,"inset":0.002}}}}

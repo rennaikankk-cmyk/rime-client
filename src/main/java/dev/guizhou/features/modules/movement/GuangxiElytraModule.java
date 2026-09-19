@@ -10,6 +10,7 @@ import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.mixin.entity.FireworkRocketEntityAccessor;
 import dev.guizhou.util.elytra.ElytraPhysics;
+import dev.guizhou.util.elytra.CoupledCruise;
 import dev.guizhou.util.elytra.ArmorSwapController;
 import dev.guizhou.util.elytra.FlightTerrainSafety;
 import dev.guizhou.util.elytra.FlightRoutePlanner;
@@ -96,6 +97,20 @@ public class GuangxiElytraModule extends Module {
     private final Setting<Double> zeroPointThree = num("ZeroPointThree", 0.3, 0.0, 1.0).setPage("Rescale");
     private final Setting<Boolean> legacyVerticalBoost = bool("LegacyVerticalBoost", false).setPage("Rescale");
 
+    // Single-look cruise uses its own envelope; combat keeps its existing controller.
+    private final Setting<Boolean> coupledCruise = bool("CoupledCruise", false).setPage("CoupledCruise");
+    private final Setting<Double> cruisePitch = num("CruisePitch", 15.0, -89.5, 89.5).setPage("CoupledCruise");
+    private final Setting<Double> cruiseClimbPitch = num("CruiseClimbPitch", -45.0, -89.5, 0.0).setPage("CoupledCruise");
+    private final Setting<Double> cruiseDescentPitch = num("CruiseDescentPitch", 30.0, 0.0, 89.5).setPage("CoupledCruise");
+    private final Setting<Boolean> cruiseSmartClimb = bool("CruiseSmartClimb", true).setPage("CoupledCruise");
+    private final Setting<Double> cruiseDescentFloor = num("CruiseDescentFloor", -1.7, -20.0, 0.0).setPage("CoupledCruise");
+    private final Setting<Boolean> cruisePorpoise = bool("CruisePorpoise", false).setPage("CoupledCruise");
+    private final Setting<Double> cruiseHeightWindow = num("CruiseHeightWindow", 60.0, 1.0, 256.0).setPage("CoupledCruise");
+    private final Setting<Double> cruiseSpeedCap = num("CruiseSpeedCap", 15.0, 0.05, 15.0).setPage("CoupledCruise");
+    private final Setting<Double> cruiseBoxCap = num("CruiseBoxCap", 1.7, 0.01, 5.0).setPage("CoupledCruise");
+    private final Setting<Double> cruiseInset = num("CruiseInset", 0.002, 0.0, 0.1).setPage("CoupledCruise");
+    private final Setting<Boolean> cruiseSpeedLog = bool("CruiseSpeedLog", false).setPage("CoupledCruise");
+
     // ---- Fireworks ----
     private final Setting<Integer> minBoostTicks = num("MinBoostTicks", 3, 0, 20).setPage("Fireworks");
     private final Setting<Boolean> velFilter = bool("VelFilter", true).setPage("Fireworks");
@@ -124,6 +139,10 @@ public class GuangxiElytraModule extends Module {
     private Vec3 lastLook = null;
     private final FlightViewAnchor viewAnchor = new FlightViewAnchor();
     private Vec3 pendingMotion;
+    private final CoupledCruise cruiseController = new CoupledCruise();
+    private CoupledCruise.Selection pendingCruise;
+    private CoupledCruise.Config pendingCruiseConfig;
+    private boolean cruiseTickActive;
     private boolean noGravitySet;
     private boolean wasFlying;
     private int holdJumpTicks;
@@ -203,6 +222,11 @@ public class GuangxiElytraModule extends Module {
         downwardAngle.setVisibility(v -> flightMode.getValue() == FlightMode.CONTROL);
         zeroPointThree.setVisibility(v -> legacyVerticalBoost.getValue());
         horizontalNoGravity.setVisibility(v -> motionMode.getValue() == MotionMode.VOID);
+        for (Setting<?> setting : new Setting<?>[]{cruisePitch, cruiseClimbPitch, cruiseDescentPitch,
+                cruiseSmartClimb, cruiseDescentFloor, cruisePorpoise, cruiseHeightWindow,
+                cruiseSpeedCap, cruiseBoxCap, cruiseInset, cruiseSpeedLog}) {
+            setting.setVisibility(v -> coupledCruise.getValue());
+        }
     }
 
     public void enableByChase() {
@@ -323,6 +347,7 @@ public class GuangxiElytraModule extends Module {
     }
 
     private void resetFlightState() {
+        resetCruise();
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
         lastAppliedTick = Integer.MIN_VALUE;
         clearFlightRotation();
@@ -379,14 +404,18 @@ public class GuangxiElytraModule extends Module {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
         // Observation lifetime: a rocket-gate result is only valid for the tick that produced it.
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
-clearFlightRotation();
+        clearFlightRotation();
         checkFlightSession();
         pendingMotion = null;
+        pendingCruise = null;
+        pendingCruiseConfig = null;
+        cruiseTickActive = false;
         pendingSafetySteering = false;
         safetySteering = false;
         safetyRocketReady = false;
         boostTickActive = false;
         if (nullCheck() || mc.player == null || mc.gameMode == null) {
+            resetCruise();
             invalidatePlanning();
             return;
         }
@@ -398,6 +427,7 @@ clearFlightRotation();
         }
         scanAttachedBoosts();
         syncPlanningContext();
+        if (!cruiseEligible()) resetCruise();
         if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive()) {
             invalidatePlanning();
             restoreNoGravity();
@@ -486,9 +516,28 @@ clearFlightRotation();
         }
 
         // ---- behaviour seam: the chase bot may overwrite vector & speed ----
+        if (cruiseEligible()) {
+            CoupledCruise.Config config = cruiseConfig();
+            CoupledCruise.Selection selection = cruiseController.select(config, cruiseInput(),
+                    viewAnchor.yaw(), mc.player.getY());
+            if (selection.active()) {
+                pendingCruise = selection;
+                pendingCruiseConfig = config;
+                // Preview only for terrain planning. The movement hook uses the actual
+                // vanilla calculation, after rotation arbitration, to apply the envelope.
+                Vec3 incoming = mc.player.getDeltaMovement();
+                Vec3 simulated = ElytraPhysics.simulateGlide(incoming, selection.look(),
+                        mc.player.getAttributeValue(Attributes.GRAVITY));
+                CoupledCruise.Result preview = cruiseController.apply(config, selection, incoming, simulated,
+                        selection.look(), lastLook == null ? selection.look() : lastLook);
+                realVector = preview.feasible() ? preview.velocity() : simulated;
+                amount = config.speedCap();
+            }
+        }
         FlightVelocity fv = new FlightVelocity(realVector, amount);
         if (!coolingDown) dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.onElytra(fv);
         applyTerrainSafety(fv);
+        if (safetySteering || fv.isAvoiding() || fv.isPrecise() || fv.isDirectional()) resetCruise();
         if (coolingDown) {
             restoreNoGravity();
             if (safetySteering) alignLook(fv.isBraking() ? brakingLook() : fv.value());
@@ -530,9 +579,9 @@ clearFlightRotation();
         }
 
         if (motionMode.getValue() == MotionMode.FIREWORKS) {
-            alignLook(realVector);
+            alignLook(pendingCruise != null ? pendingCruise.look() : realVector);
             if (!safetySteering || safetyRocketReady) {
-                tryRocket(autoRescale.getValue() ? Double.MAX_VALUE : speed.getValue() * 0.5);
+                tryRocket(pendingCruise != null || autoRescale.getValue() ? Double.MAX_VALUE : speed.getValue() * 0.5);
             }
         }
 
@@ -540,19 +589,31 @@ clearFlightRotation();
         pendingSafetySteering = safetySteering;
         pendingPrecision = fv.isPrecise();
         pendingDirectional = fv.isDirectional();
+        cruiseTickActive = pendingCruise != null;
     }
 
     /** Called after vanilla glide acceleration, immediately before movement. */
     public Vec3 applyFlightVelocity(Vec3 vanillaVelocity, Vec3 incomingVelocity, Vec3 actualLook) {
         Vec3 request = pendingMotion;
         pendingMotion = null;
+        CoupledCruise.Selection cruise = pendingCruise;
+        CoupledCruise.Config config = pendingCruiseConfig;
+        pendingCruise = null;
+        pendingCruiseConfig = null;
         Vec3 previousLook = lastLook != null ? lastLook : actualLook;
         lastLook = actualLook;
         if (request == null || !isEnabled() || correctionPending.get()
                 || mc.player == null || mc.player.tickCount < boostRetryTick) return vanillaVelocity;
 
         Vec3 applied = request;
-        if (motionMode.getValue() == MotionMode.FIREWORKS && autoRescale.getValue()) {
+        CoupledCruise.Result cruiseResult = null;
+        if (cruise != null) {
+            scanAttachedBoosts();
+            if (attachedBoost && !pendingSafetySteering && cruiseEligible()) {
+                cruiseResult = cruiseController.apply(config, cruise, incomingVelocity, vanillaVelocity, actualLook, previousLook);
+            }
+            applied = cruiseResult != null && cruiseResult.feasible() ? cruiseResult.velocity() : vanillaVelocity;
+        } else if (motionMode.getValue() == MotionMode.FIREWORKS && autoRescale.getValue()) {
             // The expansion models a rocket; without an attached rocket only glide is available.
             scanAttachedBoosts();
             applied = attachedBoost && !pendingSafetySteering
@@ -575,11 +636,56 @@ clearFlightRotation();
             safetyHoldTicks = 6;
         }
         lastApplied = applied;
-        lastRequestedBpt = request.length();
+        lastRequestedBpt = cruiseResult != null ? cruiseResult.velocity().length() : request.length();
         lastAppliedBpt = applied.length();
         lastAppliedTick = mc.player.tickCount;
+        if (cruise != null && cruiseSpeedLog.getValue() && mc.player.tickCount % 20 == 0) {
+            String phase = switch (cruise.phase()) {
+                case LEVEL -> cruise.vertical() > 0 ? "手动拉升" : cruise.vertical() < 0 ? "手动下降" : "巡航";
+                case DESCEND -> "脉动下降";
+                case CLIMB -> "脉动爬升";
+            };
+            String limit = cruiseResult == null ? " 等待烟花/交接" : !cruiseResult.feasible() ? " 约束冲突，保留滑翔"
+                    : cruiseResult.descentUnmet() ? " 下降目标未达" : cruiseResult.speedLimited() ? " 已限速" : "";
+            dev.guizhou.features.commands.Command.sendMessage(String.format(java.util.Locale.ROOT,
+                    "[耦合巡航] %s | 应用速度 %.2f b/t | 垂直 %.2f b/t%s", phase, applied.length(), applied.y, limit));
+        }
         return applied;
     }
+
+    private boolean cruiseEligible() {
+        return coupledCruise.getValue() && motionMode.getValue() == MotionMode.FIREWORKS && !grimBoost.getValue()
+                && mc.player != null && mc.player.isFallFlying() && !mc.player.onGround()
+                && !mc.player.isInWater() && !mc.player.isInLava() && !groundHop.getValue()
+                && mc.player.tickCount >= boostRetryTick && !correctionPending.get()
+                && !needsLandingRecovery() && !chaseActive() && !chaseWantsFlight()
+                && !dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive()
+                && !dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent();
+    }
+
+    private CoupledCruise.Intent cruiseInput() {
+        double strafe = (mc.options.keyLeft.isDown() ? 1 : 0) - (mc.options.keyRight.isDown() ? 1 : 0);
+        double forward = (mc.options.keyUp.isDown() ? 1 : 0) - (mc.options.keyDown.isDown() ? 1 : 0);
+        double vertical = (mc.options.keyJump.isDown() ? 1 : 0) - (mc.options.keyShift.isDown() ? 1 : 0);
+        Vec3 horizontal = ElytraPhysics.movementInputToVelocity(new Vec3(strafe, 0, forward), 1, viewAnchor.yaw());
+        return new CoupledCruise.Intent(horizontal, vertical, autoFly.getValue());
+    }
+
+    private CoupledCruise.Config cruiseConfig() {
+        return new CoupledCruise.Config(cruisePitch.getValue(), cruiseClimbPitch.getValue(), cruiseDescentPitch.getValue(),
+                cruiseSmartClimb.getValue(), cruiseDescentFloor.getValue(), cruisePorpoise.getValue(),
+                cruiseHeightWindow.getValue(), cruiseSpeedCap.getValue(), cruiseBoxCap.getValue(), cruiseInset.getValue());
+    }
+
+    private void resetCruise() {
+        cruiseController.reset();
+        pendingCruise = null;
+        pendingCruiseConfig = null;
+        cruiseTickActive = false;
+    }
+
+    /** Passive diagnostics; never drives movement or rocket decisions. */
+    public boolean isCruiseActive() { return isEnabled() && coupledCruise.getValue() && cruiseTickActive; }
 
     /** Observation-only accessors for the flight diagnostics window. */
     public boolean isBoostAttached() {

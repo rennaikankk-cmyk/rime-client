@@ -6,6 +6,8 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.md text eol=lf
+# Unified diffs require a leading space on blank context lines.
+deployment/*.patch text eol=lf whitespace=-blank-at-eol
 *.sh text eol=lf
 gradlew text eol=lf
 *.bat text eol=crlf

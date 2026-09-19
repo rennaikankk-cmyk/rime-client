@@ -32,6 +32,8 @@ public final class FlightTelemetryWiringTest {
         fourHundredHandling(telemetry);
         tickScopedRocketBlock();
         invalidatedFlightObservations(telemetry);
+        coupledSnapshot(telemetry);
+        coupledMovementBoundaries();
         System.out.println("FlightTelemetryWiringTest passed: " + checks + " checks");
     }
 
@@ -154,6 +156,43 @@ public final class FlightTelemetryWiringTest {
         int stamp = reset.field("lastAppliedTick", Opcodes.PUTFIELD, -1);
         check(stamp > 0 && Integer.valueOf(Integer.MIN_VALUE).equals(reset.steps.get(stamp - 1).constant),
                 "Module/session reset must invalidate old velocity sample stamps");
+    }
+
+    private static void coupledSnapshot(Map<String, Trace> telemetry) {
+        Trace tick = method(telemetry, "tickFlight");
+        check(tick.hasCall(FLIGHT, "isCruiseActive"), "Standalone cruise participates in flight observation windows");
+        Trace config = method(telemetry, "flightConfig");
+        java.util.Set<Object> keys = new java.util.HashSet<>();
+        for (Step step : config.steps) if (step.opcode == Opcodes.LDC) keys.add(step.constant);
+        check(keys.containsAll(java.util.Set.of("CoupledCruise", "coupled", "auto_fly", "pitch", "climb_pitch",
+                "descent_pitch", "smart_climb", "descent_floor", "porpoise", "height_window", "speed_cap", "box_cap", "inset")),
+                "The actual snapshot includes the complete bounded cruise whitelist");
+    }
+
+    private static void coupledMovementBoundaries() throws IOException {
+        Map<String, Trace> methods = read(FLIGHT);
+        Trace constructor = method(methods, "<init>");
+        boolean off = false;
+        for (int i = 0; i + 1 < constructor.steps.size(); i++) {
+            if ("CoupledCruise".equals(constructor.steps.get(i).constant)
+                    && constructor.steps.get(i + 1).opcode == Opcodes.ICONST_0) off = true;
+        }
+        check(off, "Cruise is opt-in; existing flight and combat defaults remain unchanged");
+        Trace eligible = method(methods, "cruiseEligible");
+        String chase = "dev/guizhou/features/modules/combat/GuangxiElytraChaseModule";
+        check(eligible.hasCall(chase, "isMaceDiveActive") && eligible.hasCall(chase, "preservesMaceDescent")
+                        && eligible.hasCall(FLIGHT, "chaseWantsFlight") && eligible.hasCall(FLIGHT, "chaseActive")
+                        && eligible.hasCall(FLIGHT, "needsLandingRecovery"),
+                "Cruise gate excludes combat ownership, natural mace falls and landing recovery");
+        Trace apply = method(methods, "applyFlightVelocity");
+        int consumption = apply.field("pendingCruise", Opcodes.PUTFIELD, -1);
+        int project = apply.call("dev/guizhou/util/elytra/CoupledCruise", "apply");
+        check(consumption > 0 && apply.steps.get(consumption - 1).opcode == Opcodes.ACONST_NULL
+                        && project > consumption, "Pending cruise is consumed once by the movement hook");
+        check(apply.field("attachedBoost", Opcodes.GETFIELD, -1) < project
+                        && apply.hasCall(FLIGHT, "cruiseEligible"), "Cruise rechecks rocket and ownership before applying");
+        check(method(methods, "resetFlightState").hasCall(FLIGHT, "resetCruise"),
+                "Shared player/world/correction reset clears cruise state");
     }
 
     // --- minimal ASM reader in the house style ---

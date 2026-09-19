@@ -1,4 +1,6 @@
-# 原版服重锤对打配置
+# 飞行和原版服重锤配置
+
+`manual-coupled-cruise` 是独立手动耦合巡航预设，包含甲飞、速度日志和地形防护，关闭追击与 AutoFly。复制整个文件夹到 `guizhouware/configs/`，保存原配置后执行 `.configs load manual-coupled-cruise`，再手动开启飞行。参数和控制权说明见 `docs/coupled-cruise.md`。此预设不替换下面已对打验证的重锤配置，也没有新增空战胜率结论。
 
 `vanilla-mace` 对应 2026-09-19 在本机无反作弊 1.21.11 服务器上验证的直控设置：速度 6、自适应拉升高度 20、最低自然下落 1.5。对用户指定原始 `.jar.disabled` 加 `729.nbt` 的三次重锤对打获胜，其中一次交换起点。装备与低延迟条件见 `docs/aerial-duel-rework.md`。它不是烟花模式或 Grim 服务器的验收结果。
 

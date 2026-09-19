@@ -1,0 +1,691 @@
+[
+  {
+    "tag": "sep19-level-1",
+    "clientTicks": 1108,
+    "serverTicks": 1107,
+    "boostedGlidingTicks": 1088,
+    "cruiseTicks": 1107,
+    "confirmedPositions": 1087,
+    "tailSamples": 100,
+    "tailHorizontalBpt": 1.704249133999999,
+    "tailVerticalBpt": 0,
+    "tailMinY": 100.3317993,
+    "tailMaxY": 100.3317993,
+    "tailMaxHorizontalBpt": 1.71085345,
+    "tailMaxAppliedBpt": 1.71085345,
+    "safetyTicks": 0,
+    "transitions": []
+  },
+  {
+    "tag": "sep19-up-1",
+    "clientTicks": 562,
+    "serverTicks": 562,
+    "boostedGlidingTicks": 542,
+    "cruiseTicks": 561,
+    "confirmedPositions": 542,
+    "tailSamples": 100,
+    "tailHorizontalBpt": 1.6496153064000014,
+    "tailVerticalBpt": 1.7312361470000015,
+    "tailMinY": 940.72851506,
+    "tailMaxY": 1112.11431003,
+    "tailMaxHorizontalBpt": 1.65510176,
+    "tailMaxAppliedBpt": 2.39461243,
+    "safetyTicks": 0,
+    "transitions": []
+  },
+  {
+    "tag": "sep19-vertical-1",
+    "clientTicks": 240,
+    "serverTicks": 241,
+    "boostedGlidingTicks": 220,
+    "cruiseTicks": 239,
+    "confirmedPositions": 220,
+    "tailSamples": 100,
+    "tailHorizontalBpt": 0,
+    "tailVerticalBpt": 1.5865581488,
+    "tailMinY": 322.422706,
+    "tailMaxY": 479.49178839,
+    "tailMaxHorizontalBpt": 0,
+    "tailMaxAppliedBpt": 1.58673834,
+    "safetyTicks": 0,
+    "transitions": []
+  },
+  {
+    "tag": "sep19-pulse-1",
+    "clientTicks": 360,
+    "serverTicks": 361,
+    "boostedGlidingTicks": 340,
+    "cruiseTicks": 359,
+    "confirmedPositions": 340,
+    "tailSamples": 100,
+    "tailHorizontalBpt": 1.702354189300001,
+    "tailVerticalBpt": 0.03016245750000002,
+    "tailMinY": 156.16199067,
+    "tailMaxY": 177.42890679,
+    "tailMaxHorizontalBpt": 1.7675501,
+    "tailMaxAppliedBpt": 2.39882793,
+    "safetyTicks": 0,
+    "transitions": [
+      {
+        "tick": 1,
+        "y": 145.55776009,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 12,
+        "y": 133.90580327,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 20,
+        "y": 145.07205352,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 28,
+        "y": 135.39810321,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 36,
+        "y": 146.52429498,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 44,
+        "y": 136.91974629,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 52,
+        "y": 148.02588531,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 60,
+        "y": 138.42133662,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 68,
+        "y": 149.52870677,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 76,
+        "y": 139.92409429,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 84,
+        "y": 151.09034455,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 92,
+        "y": 141.39488341,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 100,
+        "y": 152.56113233,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 108,
+        "y": 142.92209497,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 116,
+        "y": 154.08834389,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 124,
+        "y": 144.4837952,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 132,
+        "y": 155.62992753,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 140,
+        "y": 146.02537884,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 148,
+        "y": 157.13274899,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 156,
+        "y": 147.52483215,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 164,
+        "y": 158.6910824,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 172,
+        "y": 149.08319746,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 180,
+        "y": 160.24944771,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 188,
+        "y": 150.5754974,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 196,
+        "y": 161.66169371,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 204,
+        "y": 152.05714502,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 212,
+        "y": 163.08409854,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 220,
+        "y": 153.47948607,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 228,
+        "y": 164.58685622,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 236,
+        "y": 154.96114712,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 244,
+        "y": 166.12739737,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 252,
+        "y": 156.39702306,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 260,
+        "y": 167.54321041,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 268,
+        "y": 157.8692601,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 276,
+        "y": 168.99545187,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 284,
+        "y": 159.39090318,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 292,
+        "y": 170.47704448,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 300,
+        "y": 160.87249579,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 308,
+        "y": 171.97986594,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 316,
+        "y": 162.37525346,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 324,
+        "y": 173.54150372,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 332,
+        "y": 163.81112941,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 340,
+        "y": 174.95731675,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 348,
+        "y": 165.28336644,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 356,
+        "y": 176.42955379,
+        "phase": "DESCEND"
+      }
+    ]
+  },
+  {
+    "tag": "sep19-pulse-fixed-1",
+    "clientTicks": 601,
+    "serverTicks": 601,
+    "boostedGlidingTicks": 581,
+    "cruiseTicks": 600,
+    "confirmedPositions": 474,
+    "tailSamples": 100,
+    "tailHorizontalBpt": 1.705644563500001,
+    "tailVerticalBpt": -0.04068302520000001,
+    "tailMinY": 95.17557589,
+    "tailMaxY": 109.65776901,
+    "tailMaxHorizontalBpt": 1.76755011,
+    "tailMaxAppliedBpt": 2.39882793,
+    "safetyTicks": 0,
+    "transitions": [
+      {
+        "tick": 1,
+        "y": 106.24195144,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 9,
+        "y": 96.51400959,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 17,
+        "y": 107.68025984,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 26,
+        "y": 96.40934733,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 34,
+        "y": 107.49554364,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 43,
+        "y": 96.27657115,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 51,
+        "y": 107.36271244,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 59,
+        "y": 97.75816376,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 67,
+        "y": 108.86473713,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 76,
+        "y": 97.64576493,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 84,
+        "y": 108.77313282,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 93,
+        "y": 97.49808478,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 101,
+        "y": 108.66566318,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 110,
+        "y": 97.42553256,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 118,
+        "y": 108.59178282,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 127,
+        "y": 97.3033728,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 135,
+        "y": 108.4696231,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 144,
+        "y": 97.18124893,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 152,
+        "y": 108.22745841,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 161,
+        "y": 96.99199129,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 169,
+        "y": 108.05818327,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 178,
+        "y": 96.83921077,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 186,
+        "y": 107.94658092,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 195,
+        "y": 96.70644802,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 203,
+        "y": 107.85381141,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 212,
+        "y": 96.57876333,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 220,
+        "y": 107.74501358,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 229,
+        "y": 96.45662854,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 237,
+        "y": 107.62287745,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 246,
+        "y": 96.35196494,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 254,
+        "y": 107.3777453,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 262,
+        "y": 97.77318768,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 270,
+        "y": 108.8001412,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 279,
+        "y": 97.58110493,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 287,
+        "y": 108.66847736,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 296,
+        "y": 97.41089085,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 304,
+        "y": 108.53825874,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 313,
+        "y": 97.2632107,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 321,
+        "y": 108.42946094,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 330,
+        "y": 97.15444552,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 338,
+        "y": 108.32069578,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 347,
+        "y": 97.08465047,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 355,
+        "y": 108.25090071,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 364,
+        "y": 96.97889756,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 372,
+        "y": 108.14517313,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 381,
+        "y": 96.90970573,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 389,
+        "y": 108.01589332,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 398,
+        "y": 96.79692083,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 406,
+        "y": 107.96317108,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 415,
+        "y": 96.7441986,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 423,
+        "y": 107.85156874,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 432,
+        "y": 96.5415955,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 440,
+        "y": 107.68895896,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 449,
+        "y": 96.39644967,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 457,
+        "y": 107.56269991,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 465,
+        "y": 97.83573807,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 472,
+        "y": 107.2441054,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 480,
+        "y": 97.60506423,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 488,
+        "y": 108.73125617,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 497,
+        "y": 97.51228368,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 505,
+        "y": 108.658416,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 514,
+        "y": 97.43944351,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 522,
+        "y": 108.52558778,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 531,
+        "y": 97.30660636,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 539,
+        "y": 108.45396975,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 548,
+        "y": 97.2349334,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 556,
+        "y": 108.40118365,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 565,
+        "y": 97.14362977,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 573,
+        "y": 108.30988001,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 582,
+        "y": 96.98658179,
+        "phase": "CLIMB"
+      },
+      {
+        "tick": 590,
+        "y": 108.15294206,
+        "phase": "DESCEND"
+      },
+      {
+        "tick": 599,
+        "y": 96.89948084,
+        "phase": "CLIMB"
+      }
+    ]
+  },
+  {
+    "tag": "sep19-off-1",
+    "clientTicks": 161,
+    "serverTicks": 161,
+    "boostedGlidingTicks": 141,
+    "cruiseTicks": 0,
+    "confirmedPositions": 119,
+    "tailSamples": 100,
+    "tailHorizontalBpt": 1.674053350599999,
+    "tailVerticalBpt": 0,
+    "tailMinY": 108.80801305,
+    "tailMaxY": 108.80801305,
+    "tailMaxHorizontalBpt": 1.67977676,
+    "tailMaxAppliedBpt": 1.67977676,
+    "safetyTicks": 0,
+    "transitions": []
+  }
+]

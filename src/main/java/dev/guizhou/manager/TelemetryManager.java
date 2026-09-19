@@ -314,7 +314,8 @@ public class TelemetryManager extends Feature {
         boolean armorfly = flight != null && flight.isArmorSwapActive();
         boolean chaseActive = chase != null && chase.isEnabled() && chase.hasHeading();
         boolean dive = GuangxiElytraChaseModule.isMaceDiveActive();
-        if (!armorfly && !chaseActive && !dive) {
+        boolean cruiseActive = flight != null && flight.isCruiseActive();
+        if (!armorfly && !chaseActive && !dive && !cruiseActive) {
             if (flightWindow != null) {
                 // Cut the sampling interval immediately; the idle gap is never averaged in,
                 // but the window itself survives a short inactivity stretch.
@@ -428,6 +429,25 @@ public class TelemetryManager extends Feature {
             config.addProperty("armor_fly", flight.armorFlyRequested());
             putSetting(config, flight, "GrimBoost", "grim_boost");
             putSetting(config, flight, "PullupAngle", "pullup_angle");
+            // Optional extension: absent when disabled, preserving the original receiver contract.
+            // Its complete whitelist joins the per-tick tag, so changing cruise settings
+            // cannot blend two configurations into one flight window.
+            var cruise = flight.getSettingByName("CoupledCruise");
+            if (cruise != null && Boolean.TRUE.equals(cruise.getValue())) {
+                JsonObject coupled = new JsonObject();
+                putSetting(coupled, flight, "AutoFly", "auto_fly");
+                putSetting(coupled, flight, "CruisePitch", "pitch");
+                putSetting(coupled, flight, "CruiseClimbPitch", "climb_pitch");
+                putSetting(coupled, flight, "CruiseDescentPitch", "descent_pitch");
+                putSetting(coupled, flight, "CruiseSmartClimb", "smart_climb");
+                putSetting(coupled, flight, "CruiseDescentFloor", "descent_floor");
+                putSetting(coupled, flight, "CruisePorpoise", "porpoise");
+                putSetting(coupled, flight, "CruiseHeightWindow", "height_window");
+                putSetting(coupled, flight, "CruiseSpeedCap", "speed_cap");
+                putSetting(coupled, flight, "CruiseBoxCap", "box_cap");
+                putSetting(coupled, flight, "CruiseInset", "inset");
+                config.add("coupled", coupled);
+            }
         }
         if (chase != null) {
             putSetting(config, chase, "Mode", "chase_mode");

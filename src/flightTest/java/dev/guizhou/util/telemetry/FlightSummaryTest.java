@@ -30,6 +30,7 @@ public final class FlightSummaryTest {
         rocketBlockAccounting();
         rendererContract();
         if (args.length > 0) writeFixture(Path.of(args[0]));
+        if (args.length > 1) writeCoupledFixture(Path.of(args[1]));
         System.out.println("FlightSummaryTest passed: " + checks + " checks");
     }
 
@@ -251,6 +252,29 @@ public final class FlightSummaryTest {
         }
         Files.writeString(path, lines.toString(), StandardCharsets.UTF_8);
         System.out.println("FlightSummaryTest fixture written: " + path);
+    }
+
+    private static void writeCoupledFixture(Path path) throws Exception {
+        writeFixture(path);
+        JsonObject event = com.google.gson.JsonParser.parseString(Files.readAllLines(path).getFirst()).getAsJsonObject();
+        JsonObject data = event.getAsJsonObject("data");
+        data.addProperty("chase_mode", "OFF");
+        var cfg = dev.guizhou.util.elytra.CoupledCruise.Config.defaults();
+        JsonObject coupled = new JsonObject();
+        coupled.addProperty("auto_fly", true);
+        coupled.addProperty("pitch", cfg.cruisePitch());
+        coupled.addProperty("climb_pitch", cfg.climbPitch());
+        coupled.addProperty("descent_pitch", cfg.descentPitch());
+        coupled.addProperty("smart_climb", cfg.smartClimb());
+        coupled.addProperty("descent_floor", cfg.descentFloor());
+        coupled.addProperty("porpoise", cfg.porpoise());
+        coupled.addProperty("height_window", cfg.heightWindow());
+        coupled.addProperty("speed_cap", cfg.speedCap());
+        coupled.addProperty("box_cap", cfg.boxCap());
+        coupled.addProperty("inset", cfg.inset());
+        data.getAsJsonObject("config").add("coupled", coupled);
+        Files.writeString(path, event + "\n", StandardCharsets.UTF_8);
+        System.out.println("Coupled fixture written: " + path);
     }
 
     private static void check(boolean condition, String message) {
