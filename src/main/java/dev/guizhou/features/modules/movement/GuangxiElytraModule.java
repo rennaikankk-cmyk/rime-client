@@ -7,10 +7,12 @@ import dev.guizhou.event.impl.network.DisconnectEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
+import dev.guizhou.manager.RotationManager;
 import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.mixin.entity.FireworkRocketEntityAccessor;
 import dev.guizhou.util.elytra.ElytraPhysics;
 import dev.guizhou.util.elytra.CoupledCruise;
+import dev.guizhou.util.elytra.DualViewSupport;
 import dev.guizhou.util.elytra.ArmorSwapController;
 import dev.guizhou.util.elytra.FlightTerrainSafety;
 import dev.guizhou.util.elytra.FlightRoutePlanner;
@@ -109,6 +111,9 @@ public class GuangxiElytraModule extends Module {
     private final Setting<Double> cruiseSpeedCap = num("CruiseSpeedCap", 15.0, 0.05, 15.0).setPage("CoupledCruise");
     private final Setting<Double> cruiseBoxCap = num("CruiseBoxCap", 1.7, 0.01, 5.0).setPage("CoupledCruise");
     private final Setting<Double> cruiseInset = num("CruiseInset", 0.002, 0.0, 0.1).setPage("CoupledCruise");
+    private final Setting<Boolean> cruiseDualLook = bool("CruiseDualLook", true).setPage("CoupledCruise");
+    private final Setting<Double> cruiseDualClimbAngle = num("CruiseDualClimbAngle", 0.0, 0.0, 89.5).setPage("CoupledCruise");
+    private final Setting<Double> cruiseDualDiveAngle = num("CruiseDualDiveAngle", 0.0, 0.0, 30.0).setPage("CoupledCruise");
     private final Setting<Boolean> cruiseSpeedLog = bool("CruiseSpeedLog", false).setPage("CoupledCruise");
 
     // ---- Fireworks ----
@@ -143,6 +148,11 @@ public class GuangxiElytraModule extends Module {
     private CoupledCruise.Selection pendingCruise;
     private CoupledCruise.Config pendingCruiseConfig;
     private boolean cruiseTickActive;
+    // Dual view: the rotation of the last duplicate-rotation packet (NaN = none
+    // pending) and the once-per-session capability warning flag.
+    private float dualSnapYaw = Float.NaN;
+    private float dualSnapPitch = Float.NaN;
+    private boolean dualViewWarned;
     private boolean noGravitySet;
     private boolean wasFlying;
     private int holdJumpTicks;
@@ -224,8 +234,11 @@ public class GuangxiElytraModule extends Module {
         horizontalNoGravity.setVisibility(v -> motionMode.getValue() == MotionMode.VOID);
         for (Setting<?> setting : new Setting<?>[]{cruisePitch, cruiseClimbPitch, cruiseDescentPitch,
                 cruiseSmartClimb, cruiseDescentFloor, cruisePorpoise, cruiseHeightWindow,
-                cruiseSpeedCap, cruiseBoxCap, cruiseInset, cruiseSpeedLog}) {
+                cruiseSpeedCap, cruiseBoxCap, cruiseInset, cruiseDualLook, cruiseSpeedLog}) {
             setting.setVisibility(v -> coupledCruise.getValue());
+        }
+        for (Setting<?> setting : new Setting<?>[]{cruiseDualClimbAngle, cruiseDualDiveAngle}) {
+            setting.setVisibility(v -> coupledCruise.getValue() && cruiseDualLook.getValue());
         }
     }
 
@@ -388,6 +401,9 @@ public class GuangxiElytraModule extends Module {
         weEquipped = false;
         stowedChestSlot = -1;
         stowedChest = ItemStack.EMPTY;
+        dualSnapYaw = Float.NaN;
+        dualSnapPitch = Float.NaN;
+        dualViewWarned = false;
     }
 
     @Subscribe
@@ -404,6 +420,7 @@ public class GuangxiElytraModule extends Module {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
         // Observation lifetime: a rocket-gate result is only valid for the tick that produced it.
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
+        resyncDualViewRotation();
         clearFlightRotation();
         checkFlightSession();
         pendingMotion = null;
@@ -419,6 +436,7 @@ public class GuangxiElytraModule extends Module {
             invalidatePlanning();
             return;
         }
+        warnDualViewOnce();
         updateViewAnchor();
         if (ticksSinceRocket < Integer.MAX_VALUE) ticksSinceRocket++;
         if (correctionPending.getAndSet(false)) {
@@ -519,7 +537,7 @@ public class GuangxiElytraModule extends Module {
         if (cruiseEligible()) {
             CoupledCruise.Config config = cruiseConfig();
             CoupledCruise.Selection selection = cruiseController.select(config, cruiseInput(),
-                    viewAnchor.yaw(), mc.player.getY());
+                    viewAnchor.yaw(), mc.player.getY(), dualViewAvailable());
             if (selection.active()) {
                 pendingCruise = selection;
                 pendingCruiseConfig = config;
@@ -613,6 +631,9 @@ public class GuangxiElytraModule extends Module {
                 cruiseResult = cruiseController.apply(config, cruise, incomingVelocity, vanillaVelocity, actualLook, previousLook);
             }
             applied = cruiseResult != null && cruiseResult.feasible() ? cruiseResult.velocity() : vanillaVelocity;
+            // Report the box look ahead of this tick's movement packet so the widened
+            // envelope stays consistent with a rotation the server actually saw.
+            if (cruise.dualActive() && mc.getConnection() != null) sendDualViewSnap(cruise);
         } else if (motionMode.getValue() == MotionMode.FIREWORKS && autoRescale.getValue()) {
             // The expansion models a rocket; without an attached rocket only glide is available.
             scanAttachedBoosts();
@@ -647,6 +668,10 @@ public class GuangxiElytraModule extends Module {
             };
             String limit = cruiseResult == null ? " 等待烟花/交接" : !cruiseResult.feasible() ? " 约束冲突，保留滑翔"
                     : cruiseResult.descentUnmet() ? " 下降目标未达" : cruiseResult.speedLimited() ? " 已限速" : "";
+            if (cruise.dualActive() && cruise.boxLook() != null) {
+                limit += String.format(java.util.Locale.ROOT, " | 双视角β%.0f°",
+                        Math.toDegrees(-Math.asin(cruise.boxLook().y)));
+            }
             dev.guizhou.features.commands.Command.sendMessage(String.format(java.util.Locale.ROOT,
                     "[耦合巡航] %s | 应用速度 %.2f b/t | 垂直 %.2f b/t%s", phase, applied.length(), applied.y, limit));
         }
@@ -674,7 +699,67 @@ public class GuangxiElytraModule extends Module {
     private CoupledCruise.Config cruiseConfig() {
         return new CoupledCruise.Config(cruisePitch.getValue(), cruiseClimbPitch.getValue(), cruiseDescentPitch.getValue(),
                 cruiseSmartClimb.getValue(), cruiseDescentFloor.getValue(), cruisePorpoise.getValue(),
-                cruiseHeightWindow.getValue(), cruiseSpeedCap.getValue(), cruiseBoxCap.getValue(), cruiseInset.getValue());
+                cruiseHeightWindow.getValue(), cruiseSpeedCap.getValue(), cruiseBoxCap.getValue(), cruiseInset.getValue(),
+                cruiseDualClimbAngle.getValue(), cruiseDualDiveAngle.getValue());
+    }
+
+    /** Dual view runs only where duplicate rotation packets are accepted (Via target ≤ 1.20.7). */
+    private boolean dualViewAvailable() {
+        return cruiseDualLook.getValue() && DualViewSupport.isDupRotSupported();
+    }
+
+    /** Once per session: tell the customer why dual view fell back to single view. */
+    private void warnDualViewOnce() {
+        if (dualViewWarned || !coupledCruise.getValue() || !cruiseDualLook.getValue()
+                || mc.player == null || mc.getConnection() == null) return;
+        DualViewSupport.Status status = DualViewSupport.status();
+        if (status == DualViewSupport.Status.SUPPORTED || status == DualViewSupport.Status.OFFLINE) return;
+        dualViewWarned = true;
+        dev.guizhou.features.commands.Command.sendMessage("[耦合巡航] 双视角不可用（"
+                + DualViewSupport.describe(status)
+                + "）。请安装 ViaFabricPlus 并通过 Via 连接 1.20.7 及以下版本服务器；已自动回退单视角。");
+    }
+
+    /** Same-position rotation packet carrying the box look, sent before the movement packet. */
+    private void sendDualViewSnap(CoupledCruise.Selection cruise) {
+        Vec3 boxLook = cruise.boxLook();
+        if (boxLook == null || !Double.isFinite(boxLook.x) || !Double.isFinite(boxLook.y)
+                || !Double.isFinite(boxLook.z) || mc.player == null) return;
+        float yaw = ElytraPhysics.rotationToYaw(boxLook);
+        float pitch = ElytraPhysics.rotationToPitch(boxLook);
+        sendRotationPacket(yaw, pitch);
+        dualSnapYaw = yaw;
+        dualSnapPitch = pitch;
+    }
+
+    /**
+     * After a dual-view tick the server's last rotation is the box look, while
+     * vanilla bookkeeping holds the motion view. Restore the bookkeeping view
+     * before this tick's movement packet; the dual logic re-snaps later if it
+     * stays active (reference-client resyncSnap order).
+     */
+    private void resyncDualViewRotation() {
+        if (Float.isNaN(dualSnapYaw) || mc.player == null || mc.getConnection() == null) return;
+        float yaw, pitch;
+        RotationManager rm = GuizhouWare.rotationManager;
+        if (rm != null && rm.isRotating()) {
+            yaw = rm.getServerYaw();
+            pitch = rm.getServerPitch();
+        } else {
+            yaw = mc.player.getYRot();
+            pitch = mc.player.getXRot();
+        }
+        float snapYaw = dualSnapYaw, snapPitch = dualSnapPitch;
+        dualSnapYaw = Float.NaN;
+        dualSnapPitch = Float.NaN;
+        if (Math.abs(yaw - snapYaw) < 1e-4 && Math.abs(pitch - snapPitch) < 1e-4) return;
+        sendRotationPacket(yaw, pitch);
+    }
+
+    private void sendRotationPacket(float yaw, float pitch) {
+        mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
+                mc.player.getX(), mc.player.getY(), mc.player.getZ(),
+                yaw, pitch, mc.player.onGround(), mc.player.horizontalCollision));
     }
 
     private void resetCruise() {

@@ -16,7 +16,71 @@ public final class CoupledCruiseTest {
         numericalBoundaries();
         realGlideCycle();
         randomizedConstraints();
+        dualViewSelection();
         System.out.println("CoupledCruiseTest passed: " + checks + " checks");
+    }
+
+    private static void dualViewSelection() {
+        CoupledCruise c = new CoupledCruise();
+        Config cfg = Config.defaults();
+        check(!c.select(cfg, new Intent(NORTH, 1, false), 0, 200, false).dualActive(),
+                "dualView off keeps the single view");
+        check(c.select(cfg, new Intent(NORTH, 1, false), 0, 200, false).boxLook() == null,
+                "single view carries no box look");
+        check(!c.select(cfg, new Intent(NORTH, 0, false), 0, 200, true).dualActive(),
+                "level cruise never goes dual");
+        check(!c.select(cfg, new Intent(Vec3.ZERO, 1, false), 0, 200, true).dualActive(),
+                "pure vertical never goes dual");
+
+        // climb: auto angle formula (reference parity), level box look on the cruise yaw
+        Selection axial = c.select(cfg, new Intent(NORTH, 1, false), 0, 200, true);
+        check(axial.dualActive() && axial.boxLook() != null, "cardinal climb goes dual");
+        near(pitch(axial.look()), -89.25, "cardinal auto dual climb angle");
+        near(axial.boxLook().y, 0, "climb box look is level");
+        check(axial.boxLook().z > 0.99, "climb box look keeps the cruise yaw");
+        Selection diagonal = c.select(cfg, new Intent(new Vec3(1, 0, 1), 1, false), 0, 200, true);
+        near(pitch(diagonal.look()), -(Math.toDegrees(Math.acos(Math.min(1, Math.sqrt(2) - 1))) - 0.75),
+                "diagonal auto dual climb angle");
+        Config fixed = new Config(15, -45, 30, true, -1.7, false, 60, 15, 1.7, .002, 70, 0);
+        near(pitch(c.select(fixed, new Intent(NORTH, 1, false), 0, 200, true).look()), -70,
+                "fixed dual climb angle overrides the formula");
+        for (double deg = 0; deg <= 360; deg += 17) {
+            Vec3 wish = new Vec3(-Math.sin(Math.toRadians(deg)), 0, Math.cos(Math.toRadians(deg)));
+            Selection climb = c.select(cfg, new Intent(wish, 1, false), 0, 200, true);
+            double p = pitch(climb.look());
+            check(climb.dualActive() && p >= -89.5 - 1e-9 && p <= -30 + 1e-9,
+                    "climb dual pitch in range @ " + deg);
+            check(climb.dualActive() && Math.abs(climb.boxLook().y) < 1e-9,
+                    "climb box look level @ " + deg);
+        }
+
+        // dive: solved pair, both pitches positive-down, box look steeper than motion
+        Selection dive = c.select(cfg, new Intent(NORTH, -1, false), 0, 200, true);
+        check(dive.dualActive(), "cardinal dive goes dual");
+        double[] pair = CoupledCruise.solveDivePair(0, 1.0);
+        near(pitch(dive.look()), pair[0], "dive motion pitch from solver");
+        near(pitch(dive.boxLook()), pair[1], "dive box pitch from solver");
+        check(pair[1] > pair[0] && pair[0] > 0, "dive pair spans downward looks");
+        for (double deg = 0; deg <= 360; deg += 23) {
+            Vec3 wish = new Vec3(-Math.sin(Math.toRadians(deg)), 0, Math.cos(Math.toRadians(deg)));
+            Selection d = c.select(cfg, new Intent(wish, -1, false), 0, 200, true);
+            check(d.dualActive() && pitch(d.look()) > 0 && pitch(d.boxLook()) > pitch(d.look())
+                    && pitch(d.boxLook()) <= 90 + 1e-9, "dive pair bounds @ " + deg);
+        }
+
+        // the box look is the envelope's second view: steep climb keeps horizontal headroom
+        Vec3 prev = new Vec3(0, 0, 0.3), sim = new Vec3(0.01, 0.4, 0.305);
+        Envelope dualBox = CoupledCruise.envelope(cfg, prev, sim, axial.look(), axial.boxLook());
+        Envelope singleBox = CoupledCruise.envelope(cfg, prev, sim, axial.look(), axial.look());
+        check(dualBox.max().z > singleBox.max().z + 1.0, "dual view widens the horizontal envelope");
+        Result dual = c.apply(cfg, axial, prev, sim, axial.look(), axial.look());
+        check(dual.feasible() && dual.velocity().z > 1.0, "dual apply grows horizontal speed on a steep climb");
+        Config steepSingle = new Config(15, -89.25, 30, false, -1.7, false, 60, 15, 1.7, .002);
+        Selection steep = c.select(steepSingle, new Intent(NORTH, 1, false), 0, 200, false);
+        check(!steep.dualActive(), "unsupported selection stays single view");
+        Result throttled = c.apply(steepSingle, steep, prev, sim, steep.look(), steep.look());
+        check(throttled.feasible() && throttled.velocity().z < 0.5,
+                "single-view steep climb throttles horizontal growth");
     }
 
     private static void inputAndHeading() {

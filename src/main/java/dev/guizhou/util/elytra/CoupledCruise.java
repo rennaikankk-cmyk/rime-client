@@ -3,14 +3,24 @@ package dev.guizhou.util.elytra;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Single-look manual/AutoFly cruise. Select a look before vanilla glide, then
- * apply its envelope to that completed glide calculation. No packets or entities.
+ * Manual/AutoFly cruise. Select a look before vanilla glide, then apply its
+ * envelope to that completed glide calculation. No packets or entities.
  * The local envelope is a heuristic, not evidence of server acceptance.
+ *
+ * Dual view (reference-client parity): when the caller passes dualView=true
+ * and the vertical intent is nonzero, the selection also carries a decoupled
+ * box look (level on climb, a solved dive pair on descent). apply() then
+ * anchors the envelope's second view on the box look instead of the previous
+ * tick's real look. The box look is only legitimate when the caller reported
+ * it to the server with a duplicate rotation packet on a Via target protocol
+ * of the 1.20.7 family or below — the caller owns that capability gate
+ * (DualViewSupport) and the extra packet.
  */
 public final class CoupledCruise {
     public record Config(double cruisePitch, double climbPitch, double descentPitch,
                          boolean smartClimb, double descentFloor, boolean porpoise,
-                         double heightWindow, double speedCap, double boxCap, double inset) {
+                         double heightWindow, double speedCap, double boxCap, double inset,
+                         double dualClimbAngle, double dualDiveAngle) {
         public Config {
             cruisePitch = bounded(cruisePitch, -89.5, 89.5, 15);
             climbPitch = bounded(climbPitch, -89.5, 0, -45);
@@ -20,6 +30,15 @@ public final class CoupledCruise {
             speedCap = bounded(speedCap, 0.05, 15, 15);
             boxCap = bounded(boxCap, 0.01, 5, 1.7);
             inset = bounded(inset, 0, 0.1, 0.002);
+            dualClimbAngle = bounded(dualClimbAngle, 0, 89.5, 0);
+            dualDiveAngle = bounded(dualDiveAngle, 0, 30, 0);
+        }
+
+        public Config(double cruisePitch, double climbPitch, double descentPitch,
+                      boolean smartClimb, double descentFloor, boolean porpoise,
+                      double heightWindow, double speedCap, double boxCap, double inset) {
+            this(cruisePitch, climbPitch, descentPitch, smartClimb, descentFloor, porpoise,
+                    heightWindow, speedCap, boxCap, inset, 0, 0);
         }
 
         public static Config defaults() {
@@ -32,8 +51,12 @@ public final class CoupledCruise {
     /** Vertical means manual jump/sneak; horizontal is the world-space WASD wish. */
     public record Intent(Vec3 horizontal, double vertical, boolean autoFly) {}
 
-    public record Selection(Vec3 look, Phase phase, int vertical, boolean pureVertical, boolean active) {
-        private static Selection idle() { return new Selection(Vec3.ZERO, Phase.LEVEL, 0, false, false); }
+    /** boxLook is the decoupled second view; null unless dualActive. */
+    public record Selection(Vec3 look, Phase phase, int vertical, boolean pureVertical, boolean active,
+                            boolean dualActive, Vec3 boxLook) {
+        private static Selection idle() {
+            return new Selection(Vec3.ZERO, Phase.LEVEL, 0, false, false, false, null);
+        }
     }
 
     /** Invalid/infeasible results are never applied; the caller keeps vanilla glide. */
@@ -63,6 +86,16 @@ public final class CoupledCruise {
 
     /** headingYaw is in degrees; NaN means the caller has no heading. */
     public Selection select(Config config, Intent intent, double headingYaw, double playerY) {
+        return select(config, intent, headingYaw, playerY, false);
+    }
+
+    /**
+     * dualView requests the reference client's dual-look pair on climb/dive.
+     * The caller must have verified the connection accepts duplicate rotation
+     * packets (DualViewSupport) and must report selection.boxLook() to the
+     * server ahead of the movement packet.
+     */
+    public Selection select(Config config, Intent intent, double headingYaw, double playerY, boolean dualView) {
         if (config == null || intent == null || !finite(intent.horizontal())
                 || !Double.isFinite(intent.vertical()) || !Double.isFinite(playerY)) {
             reset();
@@ -96,7 +129,7 @@ public final class CoupledCruise {
             phase = Phase.LEVEL;
         }
         // Preserve pure vertical explicitly; cos(89.5 degrees) is not zero.
-        if (pureVertical) return new Selection(new Vec3(0, vertical, 0), phase, vertical, true, true);
+        if (pureVertical) return new Selection(new Vec3(0, vertical, 0), phase, vertical, true, true, false, null);
         double yaw = horizontal ? Math.atan2(-intent.horizontal().x, intent.horizontal().z)
                 : Math.toRadians(headingYaw % 360);
         double pitch = vertical > 0 ? config.climbPitch() : vertical < 0
@@ -105,10 +138,67 @@ public final class CoupledCruise {
             double axis = Math.max(Math.abs(Math.sin(yaw)), Math.abs(Math.cos(yaw)));
             pitch = -Math.toDegrees(Math.acos(Math.min(1, 1 / (2 * axis))));
         }
-        double radians = Math.toRadians(pitch);
-        Vec3 look = new Vec3(-Math.sin(yaw) * Math.cos(radians), -Math.sin(radians),
-                Math.cos(yaw) * Math.cos(radians));
-        return new Selection(look, phase, vertical, false, true);
+        boolean dualActive = false;
+        Vec3 boxLook = null;
+        if (dualView && vertical != 0) {
+            double axisX = Math.abs(Math.sin(yaw)), axisZ = Math.abs(Math.cos(yaw));
+            double aMax = Math.max(axisX, axisZ);
+            if (vertical > 0) {
+                pitch = dualClimbAngle(config.dualClimbAngle(), aMax);
+                boxLook = lookAt(0, yaw);
+                dualActive = true;
+            } else {
+                double aMin = axisX > 1e-6 && axisZ > 1e-6 ? Math.min(axisX, axisZ) : 1.0;
+                double[] pair = solveDivePair(config.dualDiveAngle(), aMin);
+                if (pair == null && aMin < aMax) pair = solveDivePair(config.dualDiveAngle(), aMax);
+                if (pair != null) {
+                    pitch = pair[0];
+                    boxLook = lookAt(pair[1], yaw);
+                    dualActive = true;
+                }
+            }
+        }
+        Vec3 look = lookAt(pitch, yaw);
+        return new Selection(look, phase, vertical, false, true, dualActive, boxLook);
+    }
+
+    private static Vec3 lookAt(double pitchDeg, double yawRad) {
+        double radians = Math.toRadians(pitchDeg);
+        return new Vec3(-Math.sin(yawRad) * Math.cos(radians), -Math.sin(radians),
+                Math.cos(yawRad) * Math.cos(radians));
+    }
+
+    /** Reference-client dual climb angle: fixed override, or auto-solved from the axis budget. */
+    private static double dualClimbAngle(double fixedDeg, double aMax) {
+        double alpha = fixedDeg > 0 ? -fixedDeg
+                : -(Math.toDegrees(Math.acos(Math.min(1, 1 / aMax - 1))) - 0.75);
+        alpha = Math.max(-89.5, Math.min(-30.0, alpha));
+        if (aMax * (Math.cos(Math.toRadians(alpha)) + 1) < 1) {
+            alpha = -(Math.toDegrees(Math.acos(Math.min(1, 1 / aMax - 1))) - 0.75);
+        }
+        return alpha;
+    }
+
+    /** Dive pair [motion pitch, box pitch]; null when unsolvable. */
+    static double[] solveDivePair(double fixedAlphaDeg, double aMin) {
+        if (fixedAlphaDeg > 0) {
+            double beta = solveDiveBeta(fixedAlphaDeg, aMin);
+            return Double.isNaN(beta) ? null : new double[]{fixedAlphaDeg, beta};
+        }
+        for (double alpha = 1.0; alpha <= 30.0; alpha += 0.5) {
+            double beta = solveDiveBeta(alpha, aMin);
+            if (!Double.isNaN(beta)) return new double[]{alpha, beta};
+        }
+        return null;
+    }
+
+    private static double solveDiveBeta(double alphaDeg, double aMin) {
+        double ar = Math.toRadians(alphaDeg);
+        double betaLo = Math.toDegrees(Math.asin(Math.min(1, 1 - Math.sin(ar)))) + 1;
+        double cosBound = 1 / aMin - Math.cos(ar);
+        if (cosBound > 1 || cosBound < -1) return Double.NaN;
+        double betaHi = Math.toDegrees(Math.acos(cosBound)) - 1;
+        return betaLo > betaHi ? Double.NaN : (betaLo + betaHi) / 2;
     }
 
     /**
@@ -123,7 +213,11 @@ public final class CoupledCruise {
         Vec3 look = unit(actualLook);
         if (look == null || unit(selection.look()) == null
                 || look.dot(unit(selection.look())) < 0.99999) return rejected();
-        Envelope box = envelope(config, previousVelocity, simulatedVelocity, look, previousLook);
+        // The box's second view is the previous real look, or the dual-view box
+        // look the caller reported with a duplicate rotation packet.
+        Vec3 secondView = selection.dualActive() && finite(selection.boxLook())
+                ? selection.boxLook() : previousLook;
+        Envelope box = envelope(config, previousVelocity, simulatedVelocity, look, secondView);
         if (box == null) return rejected();
         double x = selection.pureVertical() ? clamp(0, box.min.x, box.max.x)
                 : edge(selection.look().x, box.min.x, box.max.x);
@@ -162,7 +256,11 @@ public final class CoupledCruise {
         return selection.vertical() < 0 && !selection.pureVertical() && result.y < config.descentFloor() - 1e-9;
     }
 
-    /** The two look samples are consecutive single-look ticks, never duplicate rotation packets. */
+    /**
+     * The two look samples are the current motion view and the second reported
+     * view: normally the previous tick's real look; with dual view, the box
+     * look the caller sent as a duplicate rotation packet this tick.
+     */
     public static Envelope envelope(Config config, Vec3 previous, Vec3 simulated, Vec3 look, Vec3 lastLook) {
         if (config == null || !validMotion(previous) || !validMotion(simulated)) return null;
         Vec3 current = unit(look), last = unit(lastLook);
