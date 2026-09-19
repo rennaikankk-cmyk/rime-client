@@ -1022,7 +1022,13 @@ if (nullCheck() || mc.player == null) {
         }
 
         private double planningSpeed() {
-            return Math.clamp(mc.player.getDeltaMovement().length(), 0.5, 6.0);
+            // Reachability is judged against the speed the flight controller is about to
+            // request; the envelope-clamped instantaneous speed (measured 1.4-2.4 b/t in
+            // firework duels) sits below the reachable threshold (~2.5) and would keep
+            // every pass in the flat-pursuit fallback.
+            var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+            double requested = flight != null ? flight.lastRequestedBpt() : 0.0;
+            return Math.clamp(Math.max(mc.player.getDeltaMovement().length(), requested), 0.5, 6.0);
         }
 
         private MaceApproach.Plan climbPlan() {

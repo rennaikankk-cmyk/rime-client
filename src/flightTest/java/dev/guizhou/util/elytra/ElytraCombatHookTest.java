@@ -52,7 +52,20 @@ public final class ElytraCombatHookTest {
         verifyDiveIntegration();
         verifyMaceDescentOwnership();
         verifyCombatRegressionWiring();
+        verifyPlanningSpeedWiring();
         System.out.println("ElytraCombatHookTest passed: " + checks + " checks");
+    }
+
+    private static void verifyPlanningSpeedWiring() throws IOException {
+        // Reachability must be evaluated against the speed the flight controller is
+        // about to request, not the envelope-clamped instantaneous speed (measured
+        // applied 1.4-2.4 b/t vs the ~2.5 reachable threshold -> climb never commits).
+        Map<String, Trace> mace = read(CHASE + "$MaceBehavior");
+        Trace planning = method(mace, "planningSpeed");
+        check(planning.hasCall("dev/guizhou/features/modules/movement/GuangxiElytraModule", "lastRequestedBpt"),
+                "planningSpeed must consider the requested cruise speed, not just the clamped instantaneous one");
+        check(planning.hasCall("java/lang/Math", "max"),
+                "planningSpeed must take the larger of requested and instantaneous speed");
     }
 
     private static void verifyCombatRegressionWiring() throws IOException {
