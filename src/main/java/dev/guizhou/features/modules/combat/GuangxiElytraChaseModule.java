@@ -569,14 +569,14 @@ if (nullCheck() || mc.player == null) {
             combatPhase++;
             attackGeneration++;
             maceFeedback.clear();
-            weapons.release();
+            resetDefenseBehavior();
             clearSpearAim();
-            behavior.enter();
             combatAction = next;
         }
         defensiveHeading = Vec3.ZERO;
         if (next == AerialCombatPolicy.Action.CHASE) return false;
         clearSpearAim();
+        maintainDefensiveSpearUse();
         Vec3 away = mc.player.position().subtract(target.position()).multiply(1.0, 0.0, 1.0);
         if (away.lengthSqr() < 1.0E-6) away = mc.player.getLookAngle().multiply(-1.0, 0.0, -1.0);
         if (away.lengthSqr() < 1.0E-6) away = new Vec3(1.0, 0.0, 0.0);
@@ -601,6 +601,27 @@ if (nullCheck() || mc.player == null) {
             }
         }
         return true;
+    }
+
+    private void resetDefenseBehavior() {
+        if (spearPhase()) {
+            // A heading change does not invalidate the held spear. Keep the MXS weapon
+            // phase too; restarting the entire MXS behavior would select its mace phase.
+            behavior.resetHeading();
+            if (behavior instanceof MxsBehavior mxs) mxs.spear.enter();
+            else behavior.enter();
+            return;
+        }
+        weapons.release();
+        behavior.enter();
+    }
+
+    private void maintainDefensiveSpearUse() {
+        if (!spearPhase() || !weapons.isHoldingUse()) return;
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        // Maintain only a charge we already own, including its normal expiry/manual-use
+        // checks. Defense may release it for a rocket, but must not acquire a new weapon.
+        prepareWeapon(true, flight == null || !flight.needsSpearBoostRefresh());
     }
 
     private boolean realMaceHitWindow() {
@@ -1221,8 +1242,8 @@ if (nullCheck() || mc.player == null) {
                     SpearCombat.maxRange(mc.player, mc.player.getMainHandItem())
                             + mc.player.getDeltaMovement().length()
                             * (SpearCombat.chargeTicks(mc.player.getMainHandItem()) + latencyTicks + 2));
-            boolean charge = state != PULL_OVER && !boostRefresh
-                    && mc.player.distanceToSqr(target) <= chargeDistance * chargeDistance;
+            boolean charge = !boostRefresh && (weapons.isHoldingUse()
+                    || mc.player.distanceToSqr(target) <= chargeDistance * chargeDistance);
             boolean armed = prepareWeapon(true, charge);
             makingChargeRoom = false;
             if (!armed || state != PULL_OVER && !isUsingSpear(mc.player)) {
@@ -1248,7 +1269,6 @@ if (nullCheck() || mc.player == null) {
                 if (nextState == PULL_OVER) heading = escapeHeading(targetPos());
             }
             state = nextState;
-            if (state == PULL_OVER && weapons.isHoldingUse()) prepareWeapon(true, false);
             if (state != PULL_OVER && !makingChargeRoom && isUsingSpear(mc.player)
                     && (!targetGrounded || mc.player.getEyeY() <= targetPos().y + 2.5)
                     && mc.player.getEyePosition().distanceTo(target.getBoundingBox().getCenter())

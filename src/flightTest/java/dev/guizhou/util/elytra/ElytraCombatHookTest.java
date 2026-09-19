@@ -48,6 +48,7 @@ public final class ElytraCombatHookTest {
         verifyDamageFeedback();
         verifyImmediateAttack();
         verifyDefenseIntegration();
+        verifySpearChargeContinuity();
         verifyDiveIntegration();
         verifyMaceDescentOwnership();
         verifyCombatRegressionWiring();
@@ -435,6 +436,47 @@ public final class ElytraCombatHookTest {
         check(owned.opcode == Opcodes.IFNE
                         && !canReach(resume, resume.target(owned), restartFlight, -1, new HashSet<>()),
                 "Natural-pass flight recovery must not double-restart an owned equipment dive");
+    }
+
+    private static void verifySpearChargeContinuity() throws IOException {
+        String weapon = "dev/guizhou/util/elytra/ElytraWeaponController";
+        String spear = CHASE + "$SpearBehavior";
+        Map<String, Trace> methods = read(CHASE);
+        Trace tick = method(read(spear), "tick");
+        long preparations = tick.steps.stream().filter(step -> CHASE.equals(step.owner)
+                && "prepareWeapon".equals(step.name)).count();
+        check(preparations == 1, "Pull-over must not perform a second preparation that releases spear charge");
+        int prepare = tick.call(CHASE, "prepareWeapon");
+        check(tick.call(weapon, "isHoldingUse") < prepare,
+                "An existing owned charge must survive crossing the charge-start distance");
+        check(tick.field(spear, "state", Opcodes.GETFIELD) > prepare,
+                "Movement state must not disqualify an otherwise valid spear charge");
+        check(tick.call(FLIGHT, "needsSpearBoostRefresh") < prepare,
+                "Required firework refresh must retain its charge-release opportunity");
+
+        Trace reset = method(methods, "resetDefenseBehavior");
+        int phase = reset.call(CHASE, "spearPhase");
+        int release = reset.call(weapon, "release");
+        Step branch = reset.steps.get(phase + 1);
+        check(branch.opcode == Opcodes.IFEQ, "Defense reset must branch on the active spear phase");
+        check(!canReach(reset, phase + 2, release, -1, new HashSet<>()),
+                "Defense movement changes must preserve the current spear use and visible slot");
+        check(canReach(reset, reset.target(branch), release, -1, new HashSet<>()),
+                "Non-spear defense changes must still release weapon ownership");
+        check(reset.hasCall(CHASE + "$Behavior", "resetHeading") && reset.hasCall(spear, "enter"),
+                "Preserving MXS spear phase must still reset movement state and heading");
+        Trace upkeep = method(methods, "maintainDefensiveSpearUse");
+        check(upkeep.hasCall(CHASE, "spearPhase") && upkeep.hasCall(weapon, "isHoldingUse")
+                        && upkeep.hasCall(FLIGHT, "needsSpearBoostRefresh")
+                        && upkeep.hasCall(CHASE, "prepareWeapon"),
+                "Defense may maintain only an owned spear, respecting expiry and firework refresh");
+        check(!upkeep.hasCall(CHASE, "aimSpear") && !upkeep.hasCall(CHASE, "attack"),
+                "Defensive use upkeep must not add an attack or stale aim");
+        Trace defense = method(methods, "updateDefense");
+        check(defense.hasCall(CHASE, "resetDefenseBehavior")
+                        && defense.hasCall(CHASE, "maintainDefensiveSpearUse")
+                        && defense.hasCall(CHASE, "clearSpearAim"),
+                "The real defense path must preserve use while discarding offensive rotation");
     }
 
     private static void verifyDefenseIntegration() throws IOException {

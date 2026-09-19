@@ -158,9 +158,22 @@ public final class ArmorSwapController {
     private boolean safeInventory() {
         return mc.isSameThread() && sameSession() && mc.gameMode != null && mc.getConnection() != null
                 && mc.screen == null && !player.isDeadOrDying() && !player.isSpectator()
-                && !player.isUsingItem() && (!cycle.active() || armorSlot != InventoryUtil.selected())
+                && canSwapWhileUsing() && (!cycle.active() || armorSlot != InventoryUtil.selected())
                 && player.containerMenu == player.inventoryMenu && player.containerMenu.getCarried().isEmpty()
                 && (GuizhouWare.swapManager == null || !GuizhouWare.swapManager.isLatched());
+    }
+
+    private boolean canSwapWhileUsing() {
+        boolean using = player.isUsingItem();
+        ItemStack used = player.getUseItem();
+        return preservesHeldUse(using, used.has(DataComponents.KINETIC_WEAPON), used,
+                using ? player.getItemInHand(player.getUsedItemHand()) : ItemStack.EMPTY);
+    }
+
+    static boolean preservesHeldUse(boolean using, boolean kinetic, Object used, Object held) {
+        // This controller swaps only the chest and a non-selected hotbar slot. Neither hand
+        // changes, so an intact spear charge can continue while the owned armor pair cycles.
+        return !using || kinetic && used != null && used == held;
     }
 
     private boolean canGlide() {
