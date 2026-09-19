@@ -22,11 +22,13 @@ import net.minecraft.world.entity.monster.skeleton.*;
 import net.minecraft.world.entity.monster.spider.CaveSpider;
 import net.minecraft.world.entity.monster.spider.Spider;
 import net.minecraft.world.entity.monster.zombie.*;
+import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.player.Player;
 
 public class TargetsModule extends Module {
 
     public final Setting<Boolean> players = bool("Players", true);
+    public final Setting<Boolean> armorStands = bool("ArmorStands", false);
     public final Setting<Boolean> hostiles = bool("Hostiles", false);
     public final Setting<Boolean> neutrals = bool("Neutrals", false);
     public final Setting<Boolean> passives = bool("Passives", false);
@@ -58,6 +60,9 @@ public class TargetsModule extends Module {
         if (entity instanceof Player player) {
             return players.getValue() && !GuizhouWare.friendManager.isFriend(player);
         }
+
+        // Training dummies are armor stands; none of the hostility tiers match them.
+        if (armorStands.getValue() && entity instanceof ArmorStand) return true;
 
         if (hostiles.getValue() && isHostile(entity)) return true;
         if (neutrals.getValue() && isNeutral(entity)) return true;
