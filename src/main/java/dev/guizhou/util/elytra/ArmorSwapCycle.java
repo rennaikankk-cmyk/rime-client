@@ -14,9 +14,16 @@ public final class ArmorSwapCycle {
     private Access access;
     private boolean recovering;
     private boolean returnArmor;
+    private boolean restartedThisWindow;
 
     public boolean active() {
         return access != null;
+    }
+
+    /** A local glide flag can outlive the server's armor swap. Couple rockets to a fresh restart. */
+    public boolean rocketWindowOpen() {
+        return access != null && restartedThisWindow && !recovering
+                && access.intact() && access.wearingWings() && access.gliding();
     }
 
     public boolean begin(Access candidate) {
@@ -24,11 +31,13 @@ public final class ArmorSwapCycle {
         access = candidate;
         recovering = false;
         returnArmor = false;
+        restartedThisWindow = false;
         return true;
     }
 
     public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide) {
         returnArmor = false;
+        restartedThisWindow = false;
         if (!validate()) return;
         if (!requested || !inventorySafe || !canGlide) recovering = true;
         if (recovering) {
@@ -41,15 +50,19 @@ public final class ArmorSwapCycle {
             if (!swapTo(true)) return;
         }
         // A repeated START while already gliding makes the vanilla server stop flight.
-        if (!access.gliding() && !access.startGliding()) {
-            recovering = true;
-            recover(inventorySafe);
-            return;
+        if (!access.gliding()) {
+            if (!access.startGliding()) {
+                recovering = true;
+                recover(inventorySafe);
+                return;
+            }
+            restartedThisWindow = true;
         }
         returnArmor = access.gliding();
     }
 
     public void afterMovement(boolean requested, boolean inventorySafe, boolean canGlide) {
+        restartedThisWindow = false;
         if (!validate()) return;
         if (!requested || !inventorySafe || !canGlide) recovering = true;
         if (recovering) {
@@ -75,6 +88,7 @@ public final class ArmorSwapCycle {
         access = null;
         recovering = false;
         returnArmor = false;
+        restartedThisWindow = false;
     }
 
     private boolean validate() {

@@ -95,6 +95,11 @@ public final class ElytraFlightLifecycleTest {
         Trace rocket = methods.get("canUseRocket");
         check(rocket.hasCall("active") && rocket.hasCall("usableElytra"),
                 "Armor-cycle rockets must wait for a worn-wing restart window");
+        Trace use = methods.get("tryRocket");
+        check(use.call("rocketWindowOpen") < use.call("withSwap"),
+                "Actual rocket use must wait for a fresh restart before switching or consuming the item");
+        check(!rocket.hasCall("rocketWindowOpen") && !methods.get("needsSpearBoostRefresh").hasCall("rocketWindowOpen"),
+                "Spear must request hand release before a held-use item permits the armor restart window");
         Trace requested = methods.get("wantsArmorSwap");
         check(requested.hasCall("armorFlyRequested")
                         && requested.fieldAfter(Opcodes.GETFIELD, "correctionPending", -1) >= 0

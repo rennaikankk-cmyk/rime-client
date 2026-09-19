@@ -9,6 +9,7 @@ public final class ArmorSwapCycleTest {
     public static void main(String[] args) {
         continuousExchange();
         delayedServerClearKeepsWingsOnEveryMove();
+        rocketWaitsForRestartWindow();
         ownershipLostDuringDelayedClearAbandons();
         explicitDiveHandoverDuringDelayedClear();
         interruptionBetweenMovementHooks();
@@ -76,6 +77,42 @@ public final class ArmorSwapCycleTest {
         check(player.events.equals(List.of("SWAP_WINGS", "START", "MOVE_WINGS", "SWAP_ARMOR")),
                 "The restarted glide resumes the regular per-movement exchange");
         player.assertTickBounds();
+    }
+
+    private static void rocketWaitsForRestartWindow() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        check(!cycle.rocketWindowOpen(), "Acquiring wings does not prove server-side flight for a rocket");
+        cycle.beforeMovement(true, true, true);
+        check(!cycle.rocketWindowOpen(), "A locally persistent glide flag must not authorize armor-cycle rockets");
+        cycle.afterMovement(true, true, true);
+        for (int i = 0; i < 4; i++) {
+            player.newTick(false);
+            cycle.beforeMovement(true, true, true);
+            check(!cycle.rocketWindowOpen(), "Delayed metadata must defer the rocket without duplicate START");
+            cycle.afterMovement(true, true, true);
+        }
+        player.newTick(true);
+        cycle.beforeMovement(true, true, true);
+        check(cycle.rocketWindowOpen(), "A successful restart must permit the rocket in that movement window");
+        check(player.events.equals(List.of("SWAP_WINGS", "START")), "The rocket window follows wings then START");
+        cycle.afterMovement(true, true, true);
+        check(!cycle.rocketWindowOpen(), "Returning armor closes the rocket window immediately");
+        player.newTick(true);
+        cycle.beforeMovement(true, true, true);
+        check(cycle.rocketWindowOpen(), "A later restart can open another rocket window");
+        cycle.abandon();
+        check(!cycle.rocketWindowOpen(), "A dive or session handover must discard the rocket window");
+        check(player.duplicateStarts == 0, "Deferring rockets must not invent duplicate glide commands");
+
+        player = new Model();
+        cycle = begin(player);
+        cycle.beforeMovement(true, true, true);
+        cycle.afterMovement(true, true, true);
+        player.newTick(true);
+        player.canStart = false;
+        cycle.beforeMovement(true, true, true);
+        check(!cycle.rocketWindowOpen(), "Rejected glide restart must not permit a rocket");
     }
 
     private static void ownershipLostDuringDelayedClearAbandons() {

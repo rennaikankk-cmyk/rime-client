@@ -50,6 +50,10 @@ public final class ArmorSwapController {
         return cycle.active();
     }
 
+    public boolean rocketWindowOpen() {
+        return cycle.rocketWindowOpen();
+    }
+
     public void stop() {
         if (GuangxiElytraChaseModule.isMaceDiveActive()) cycle.abandon();
         else cycle.stop(safeInventory());

@@ -1187,6 +1187,13 @@ clearFlightRotation();
             lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_USING_ITEM;
             return;
         }
+        // Defer the actual use until this armor cycle has restarted gliding.
+        // Keep this out of canUseRocket: spear must be able to release its hand
+        // before the equipment controller can prepare that restart window.
+        if (armorSwap.active() && !armorSwap.rocketWindowOpen()) {
+            lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NOT_ENABLED;
+            return;
+        }
         if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()) {
             lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_MACE_DESCENT;
             return;
