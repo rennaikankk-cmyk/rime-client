@@ -1160,6 +1160,12 @@ if (nullCheck() || mc.player == null) {
 
         private boolean dropPathClear() {
             Vec3 step = mc.player.getDeltaMovement().scale(2.0).add(0.0, -0.2, 0.0);
+            // The drop only needs a clear lane down to the attack plane; the full
+            // velocity lookahead treats the floor under the target as an obstacle
+            // and aborts high-speed passes just above the smash window.
+            double attackPlane = observedTargetBox().minY + 0.5;
+            double lane = MaceApproach.dropStepClamp(step.y, mc.player.getY() - attackPlane);
+            if (lane != step.y) step = new Vec3(step.x, lane, step.z);
             AABB standing = mc.player.getDimensions(Pose.STANDING).makeBoundingBox(mc.player.position());
             return mc.level.noCollision(mc.player, standing.deflate(0.01).expandTowards(step));
         }

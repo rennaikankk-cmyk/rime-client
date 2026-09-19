@@ -22,6 +22,23 @@ public final class MaceApproach {
                 .normalize().scale(intent.length());
     }
 
+    /**
+     * Vertical drop-lane lookahead clamp. The pre-dive/during-dive collision
+     * scan only needs a clear lane down to the attack plane (target box top);
+     * scanning the full velocity lookahead treats the floor under the target
+     * as an obstacle and aborts high-speed passes just above the smash window
+     * ("falls halfway, pauses, falls again").
+     *
+     * @param stepY        requested downward scan extent, negative = down
+     * @param feetToPlane  feet height above the attack plane
+     * @return the scan extent, never scanning past the plane or upward
+     */
+    public static double dropStepClamp(double stepY, double feetToPlane) {
+        double maxDown = Math.max(0.0, feetToPlane);
+        if (stepY < -maxDown) return -maxDown;
+        return Math.min(stepY, 0.0);
+    }
+
     /** Long extrapolation requires both direction and speed to have settled. */
     public static boolean stable(Vec3 current, Vec3 previous, boolean sampled) {
         if (!sampled || !finite(current) || !finite(previous)) return false;
