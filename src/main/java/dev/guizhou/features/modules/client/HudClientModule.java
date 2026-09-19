@@ -10,6 +10,7 @@ import dev.guizhou.features.modules.hud.NotifierHudModule;
 import dev.guizhou.features.modules.hud.PingHudModule;
 import dev.guizhou.features.modules.hud.RadarHudModule;
 import dev.guizhou.features.modules.hud.SpeedHudModule;
+import dev.guizhou.features.modules.hud.TargetHudModule;
 import dev.guizhou.features.modules.hud.TotemsHudModule;
 import dev.guizhou.features.settings.Setting;
 
@@ -49,6 +50,7 @@ public class HudClientModule extends Module {
         activeModulesPosition = mode("ActiveModules Position", HudPosition.CENTER_RIGHT).setPage("Elements");
         register(new NotifierHudModule(), true);
         register(new SpeedHudModule(), false);
+        register(new TargetHudModule(), true);
     }
 
     private void register(HudModule element, boolean defaultOn) {

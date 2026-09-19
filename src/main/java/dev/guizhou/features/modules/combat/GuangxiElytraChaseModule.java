@@ -254,6 +254,20 @@ public class GuangxiElytraChaseModule extends Module {
                 || manualOverride() || GuizhouWare.tpsCounterService.isRubberbandRecent();
     }
 
+    /** HUD seam: current locked target for the air-combat HUD, or null. */
+    public static Entity hudTarget() {
+        GuangxiElytraChaseModule m = INSTANCE;
+        return m != null && m.isEnabled() ? m.target : null;
+    }
+
+    /** HUD seam: one-word intent label from the live behavior state machine. */
+    public static String hudIntent() {
+        GuangxiElytraChaseModule m = INSTANCE;
+        if (m == null || !m.isEnabled() || m.behavior == null || m.target == null) return "OFF";
+        if (m.combatAction != AerialCombatPolicy.Action.CHASE) return "EVADE";
+        return m.behavior.hudLabel();
+    }
+
     /** Flight seam: GuangxiElytra calls this every movement tick. */
     public static void onElytra(FlightVelocity fv) {
         GuangxiElytraChaseModule m = INSTANCE;
@@ -833,6 +847,9 @@ if (nullCheck() || mc.player == null) {
 
         abstract void tick();
 
+        /** One-word HUD label for the current state; defaults to the behavior name. */
+        String hudLabel() { return "CHASE"; }
+
         /** SX.antiSpear: lateral drift perpendicular to the heading. */
         void antiSpear(double strength) {
             Vec3 flat = new Vec3(heading.x, 0.0, heading.z);
@@ -981,6 +998,16 @@ if (nullCheck() || mc.player == null) {
         }
 
         /** Attack during the current reach window, including a brief natural fall after gliding. */
+        @Override
+        String hudLabel() {
+            return switch (state) {
+                case FOLLOW -> maceDive != null && maceDive.isActive() ? "DIVE" : "FOLLOW";
+                case WAIT_ATTACK -> "WAIT";
+                case PULL_UP -> "PULL_UP";
+                default -> "FOLLOW";
+            };
+        }
+
         int tickFollow(boolean armed) {
             if (target == null) return NONE;
             if (armed && shouldStartDive() && maceDive.begin()) {
@@ -1304,6 +1331,16 @@ if (nullCheck() || mc.player == null) {
             heading = toTargetAtLeast(tp, 6.0);
             tryAntiSpear(tp, false);
             return FOLLOW;
+        }
+
+        @Override
+        String hudLabel() {
+            return switch (state) {
+                case FOLLOW -> "FOLLOW";
+                case NEAR_FOLLOW -> "ENGAGE";
+                case PULL_OVER -> "PULL_OVER";
+                default -> "FOLLOW";
+            };
         }
 
         int tickNearFollow() {

@@ -164,6 +164,7 @@ def clientRegressionTests = [
         spearAimSweepTest: 'dev.guizhou.util.elytra.SpearAimSweepTest',
         dualViewSupportTest: 'dev.guizhou.util.elytra.DualViewSupportTest',
         targetsArmorStandHookTest: 'dev.guizhou.features.modules.client.TargetsArmorStandHookTest',
+        targetHudMathTest: 'dev.guizhou.util.render.targethud.TargetHudMathTest',
         crystalSelectionPolicyTest: 'dev.guizhou.util.combat.CrystalSelectionPolicyTest',
         crystalAttackWindowTest: 'dev.guizhou.util.combat.CrystalAttackWindowTest',
         crystalAttackHookTest: 'dev.guizhou.util.combat.CrystalAttackHookTest',
