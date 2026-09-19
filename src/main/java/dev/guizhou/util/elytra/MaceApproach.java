@@ -12,6 +12,16 @@ public final class MaceApproach {
 
     public record Plan(Vec3 aim, double height, double ticks, boolean reachable) {}
 
+    /** Change climb pitch without changing the requested travel distance. */
+    public static Vec3 pullUpIntent(Vec3 intent, double degrees) {
+        if (!finite(intent)) return Vec3.ZERO;
+        if (!Double.isFinite(degrees) || degrees <= 0.1 || degrees >= 90.0) return intent;
+        double horizontal = intent.horizontalDistance();
+        if (horizontal <= 1.0E-6) return intent;
+        return new Vec3(intent.x, Math.tan(Math.toRadians(degrees)) * horizontal, intent.z)
+                .normalize().scale(intent.length());
+    }
+
     /** Long extrapolation requires both direction and speed to have settled. */
     public static boolean stable(Vec3 current, Vec3 previous, boolean sampled) {
         if (!sampled || !finite(current) || !finite(previous)) return false;

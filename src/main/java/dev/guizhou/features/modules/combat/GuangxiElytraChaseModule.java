@@ -1166,10 +1166,7 @@ if (nullCheck() || mc.player == null) {
             if (heading.lengthSqr() > 1.0E-9) {
                 Vec3 v = heading;
                 if (maceCustomPullUpAngle.getValue() > 0.1 && state == PULL_UP && !catchingUp) {
-                    double h = Math.sqrt(v.x * v.x + v.z * v.z);
-                    if (h > 1.0E-6) {
-                        v = new Vec3(v.x, Math.tan(Math.toRadians(maceCustomPullUpAngle.getValue())) * h, v.z);
-                    }
+                    v = MaceApproach.pullUpIntent(v, maceCustomPullUpAngle.getValue());
                 }
                 double len = v.length();
                 // Rescaling can make the measured flight faster than the base setting.

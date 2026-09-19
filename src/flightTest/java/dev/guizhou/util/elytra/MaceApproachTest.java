@@ -8,6 +8,16 @@ public final class MaceApproachTest {
 
     public static void main(String[] args) {
         stationaryRecovery();
+        Vec3 overhead = new Vec3(0.06, 90.0, 0.03);
+        Vec3 angled = MaceApproach.pullUpIntent(overhead, 45.0);
+        close(6.0, Math.min(6.0, angled.length()),
+                "A near-overhead target must not collapse a six-block climb request to horizontal error");
+        close(overhead.length(), angled.length(), "Pitch override preserves requested travel distance");
+        close(angled.y, angled.horizontalDistance(), "45 degree climb has equal vertical and horizontal components");
+        check(MaceApproach.pullUpIntent(new Vec3(0, 5, 0), 45).equals(new Vec3(0, 5, 0)),
+                "An exactly vertical intent keeps its heading when no horizontal direction exists");
+        check(MaceApproach.pullUpIntent(overhead, 0).equals(overhead), "Disabled pitch override preserves intent");
+        check(MaceApproach.pullUpIntent(overhead, Double.NaN).equals(overhead), "Invalid pitch cannot corrupt intent");
         var verticalMeeting = MaceApproach.climb(Vec3.ZERO, new Vec3(0, 8, 0),
                 new Vec3(0, 1, 0), 3, 6, 1.5, 0, true);
         close(21.0, verticalMeeting.aim().y,

@@ -58,6 +58,8 @@ public final class ElytraCombatHookTest {
         Map<String, Trace> chase = read(CHASE);
         Map<String, Trace> mace = read(CHASE + "$MaceBehavior");
         Map<String, Trace> spear = read(CHASE + "$SpearBehavior");
+        check(method(mace, "inject").hasCall("dev/guizhou/util/elytra/MaceApproach", "pullUpIntent"),
+                "Custom climb pitch must use the magnitude-preserving intent transformation");
         for (String name : List.of("tickFollow", "tickDive")) {
             check(method(mace, name).hasCall(CHASE + "$MaceBehavior", "aimDiveExit"),
                     "Glide exit must retain dive steering from entry through flag acknowledgement");

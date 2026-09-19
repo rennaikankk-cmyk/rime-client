@@ -1,0 +1,32 @@
+{
+  "GuangxiElytra": {
+    "Enabled": "false",
+    "FlightMode": "CONTROL",
+    "MotionMode": "VOID",
+    "Speed": "6.0",
+    "MotionLerp": "1.0",
+    "ArmorFly": "true",
+    "Takeoff": "true",
+    "TerrainGuard": "true",
+    "SafeLanding": "true",
+    "LegacyVerticalBoost": "false",
+    "GrimBoost": "false"
+  },
+  "GuangxiElytraChase": {
+    "Enabled": "false",
+    "Mode": "MACE",
+    "Range": "150",
+    "PlayerOnly": "true",
+    "AutoControlElytra": "true",
+    "AutoWeapon": "true",
+    "AdaptiveCombat": "true",
+    "ThreatMode": "ALL_PLAYERS",
+    "AutoMaceDive": "true",
+    "MaceUseExtraAttack": "false",
+    "MaceAdaptive": "true",
+    "MaceTerminal": "true",
+    "MaceHeight": "20.0",
+    "MaceMinFallDistance": "1.5",
+    "MaceCustomPullUpAngle": "0.0"
+  }
+}
