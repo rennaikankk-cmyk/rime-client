@@ -3,6 +3,8 @@ package dev.guizhou.util.elytra;
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.impl.entity.player.TickEvent;
+import dev.guizhou.event.impl.entity.player.UpdateWalkingPlayerEvent;
+import dev.guizhou.event.Stage;
 import dev.guizhou.event.impl.network.DisconnectEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.combat.GuangxiElytraChaseModule;
@@ -88,6 +90,18 @@ public final class ArmorSwapController {
         // Chase runs after preparation and can take ownership of the same pair for a mace dive.
         if (GuangxiElytraChaseModule.isMaceDiveActive()) cycle.abandon();
         else cycle.afterMovement(flight.wantsArmorSwap(), safeInventory(), canGlide());
+        finishMonitoring();
+    }
+
+    /** Close the normal wing window immediately after the movement packet. The
+     * tail listener remains responsible for recovery and windows without a send.
+     * An unsafe early opportunity must not turn a deferred return into recovery. */
+    @Subscribe(priority = Integer.MAX_VALUE)
+    private void onPostMovement(UpdateWalkingPlayerEvent event) {
+        if (event.getStage() != Stage.POST || !cycle.active()
+                || GuangxiElytraChaseModule.isMaceDiveActive()
+                || !flight.wantsArmorSwap() || !safeInventory() || !canGlide()) return;
+        cycle.afterMovement(true, true, true);
         finishMonitoring();
     }
 

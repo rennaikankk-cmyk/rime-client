@@ -8,6 +8,7 @@ public final class ArmorSwapCycleTest {
 
     public static void main(String[] args) {
         continuousExchange();
+        earlyReturnAndTailAreIdempotent();
         delayedServerClearKeepsWingsOnEveryMove();
         rocketWaitsForRestartWindow();
         ownershipLostDuringDelayedClearAbandons();
@@ -44,6 +45,30 @@ public final class ArmorSwapCycleTest {
         }
         check(player.duplicateStarts == 0, "A repeated START must never toggle an existing glide off");
         check(player.restorations == 0, "An ongoing cycle must not release equipment ownership");
+    }
+
+    private static void earlyReturnAndTailAreIdempotent() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        for (int tick = 0; tick < 8; tick++) {
+            player.newTick(true);
+            cycle.beforeMovement(true, true, true);
+            player.move();
+            cycle.afterMovement(true, true, true); // sendPosition POST
+            check(player.chest == player.armor, "Armor must already be back before later tick work");
+            List<String> afterReturn = List.copyOf(player.events);
+            cycle.afterMovement(true, true, true); // tick TAIL fallback
+            check(player.events.equals(afterReturn), "Tail must not repeat the early return swap");
+            check(!cycle.rocketWindowOpen(), "Returned armor must close the rocket window");
+            player.assertTickBounds();
+        }
+        // A late equipment owner must still win over both listeners.
+        player.newTick(true);
+        cycle.beforeMovement(true, true, true);
+        cycle.abandon();
+        List<String> afterHandover = List.copyOf(player.events);
+        cycle.afterMovement(true, true, true);
+        check(player.events.equals(afterHandover), "Dive handover must prevent any stale return");
     }
 
     private static void delayedServerClearKeepsWingsOnEveryMove() {
