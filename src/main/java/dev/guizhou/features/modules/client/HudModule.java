@@ -61,7 +61,7 @@ public abstract class HudModule implements Util {
         boundY = y;
         boundW = w;
         boundH = h;
-        renderedThisFrame = true;
+        renderedThisFrame = w > 0 && h > 0;
     }
 
     public void beginFrame() {
