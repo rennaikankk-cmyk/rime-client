@@ -28,6 +28,7 @@ import dev.guizhou.util.elytra.MacePassTracker;
 import dev.guizhou.util.elytra.MaceApproach;
 import dev.guizhou.util.elytra.SpearAimSweep;
 import dev.guizhou.util.elytra.SpearCombat;
+import dev.guizhou.util.elytra.SpearApproach;
 import dev.guizhou.util.elytra.TargetMotionTracker;
 import dev.guizhou.util.player.EatUtil;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -127,6 +128,7 @@ public class GuangxiElytraChaseModule extends Module {
     private int latencyTicks = 1;
     private int confirmationTicks = 6;
     private int spearSweepPhase;
+    private final SpearApproach.CommitWindow spearCommit = new SpearApproach.CommitWindow();
     private int lastAttackTick = Integer.MIN_VALUE / 2;
     private final CombatHitWindow maceFeedback = new CombatHitWindow();
     private final ElytraWeaponController weapons = new ElytraWeaponController();
@@ -358,6 +360,7 @@ public class GuangxiElytraChaseModule extends Module {
     }
 
     private void resetRuntime() {
+        spearCommit.reset();
         clearDiveAim();
         flightRoute.reset();
         invalidatePlanning();
@@ -574,7 +577,7 @@ if (nullCheck() || mc.player == null) {
             boolean urgent = spearThreat || maceThreat && mc.player.distanceToSqr(target) <= 20.25
                     || predictedThreat && AerialDuelPredictor.shouldInterruptAttack(prediction, true,
                     mc.player.getHealth(), mc.player.getAbsorptionAmount(), mc.player.getMaxHealth());
-            boolean preserveStrike = realMaceHitWindow() && !urgent;
+            boolean preserveStrike = (realMaceHitWindow() || spearApproachWindow()) && !urgent;
             next = tactics.evaluate(new AerialCombatPolicy.ThreatInput(mc.player.tickCount,
                     policyVector(target.position().subtract(mc.player.position())),
                     policyVector(mc.player.getDeltaMovement()), policyVector(velocity),
@@ -655,6 +658,27 @@ if (nullCheck() || mc.player == null) {
         double reach = mc.player.entityInteractionRange();
         return observedTargetBox().distanceToSqr(mc.player.getEyePosition()) <= reach * reach
                 && mc.player.hasLineOfSight(target);
+    }
+
+    private Vec3 spearAttackEye() {
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        return SpearCombat.attackEye(mc.player, flight != null && flight.isArmorSwapActive());
+    }
+
+    /** Preserve only a charged, visible approach against a non-urgent prediction.
+     * This radial opportunity is not a claim of a hit; actual weapon threats still interrupt. */
+    private boolean spearApproachWindow() {
+        Behavior active = behavior instanceof MxsBehavior mxs ? mxs.active : behavior;
+        if (!(active instanceof SpearBehavior spear) || spear.state == SpearBehavior.PULL_OVER
+                || spear.makingChargeRoom || !weapons.isHoldingUse() || !SpearCombat.isReady(mc.player)
+                || EatUtil.shouldDefer() || !mc.player.hasLineOfSight(target)) {
+            spearCommit.reset();
+            return false;
+        }
+        double distance = Math.sqrt(observedTargetBox().distanceToSqr(spearAttackEye()));
+        return spearCommit.admit(mc.player.tickCount, target,
+                distance >= SpearCombat.minRange(mc.player, mc.player.getUseItem()) + 0.35
+                && distance <= SpearCombat.maxRange(mc.player, mc.player.getUseItem()));
     }
 
     private boolean fallingMaceThreat(Vec3 velocity) {
@@ -1259,6 +1283,7 @@ if (nullCheck() || mc.player == null) {
         boolean pulledAfterHit;
         int pullOverTicks;
         boolean makingChargeRoom;
+        boolean preciseApproach;
 
         @Override
         void enter() {
@@ -1267,6 +1292,7 @@ if (nullCheck() || mc.player == null) {
             pulledAfterHit = false;
             pullOverTicks = 0;
             makingChargeRoom = false;
+            preciseApproach = false;
             spearSweepPhase = 0;
         }
 
@@ -1295,11 +1321,12 @@ if (nullCheck() || mc.player == null) {
                     || mc.player.distanceToSqr(target) <= chargeDistance * chargeDistance);
             boolean armed = prepareWeapon(true, charge);
             makingChargeRoom = false;
+            preciseApproach = false;
             if (!armed || state != PULL_OVER && !isUsingSpear(mc.player)) {
                 clearSpearAim();
                 state = FOLLOW;
                 Vec3 toward = approachHeading(targetPos());
-                double distance = mc.player.getEyePosition().distanceTo(targetPos());
+                double distance = spearAttackEye().distanceTo(targetPos());
                 double standOff = Math.max(spearAttackDistance.getValue(), 6.0);
                 heading = distance < standOff ? escapeHeading(targetPos())
                         : toward.normalize().scale(Math.max(0.0, distance - standOff));
@@ -1319,8 +1346,8 @@ if (nullCheck() || mc.player == null) {
             }
             state = nextState;
             if (state != PULL_OVER && !makingChargeRoom && isUsingSpear(mc.player)
-                    && (!targetGrounded || mc.player.getEyeY() <= targetPos().y + 2.5)
-                    && mc.player.getEyePosition().distanceTo(target.getBoundingBox().getCenter())
+                    && (!targetGrounded || spearAttackEye().y <= targetPos().y + 2.5)
+                    && spearAttackEye().distanceTo(target.getBoundingBox().getCenter())
                     <= SpearCombat.maxRange(mc.player, mc.player.getUseItem())
                     + Math.max(1.0, mc.player.getDeltaMovement().length() * 2.0)) aimSpear();
             else clearSpearAim();
@@ -1336,7 +1363,7 @@ if (nullCheck() || mc.player == null) {
 
         int tickFollow() {
             Vec3 tp = targetPos();
-            if (mc.player.getEyePosition().distanceToSqr(tp)
+            if (spearAttackEye().distanceToSqr(tp)
                     < spearAttackDistance.getValue() * spearAttackDistance.getValue()) {
                 return tickNearFollow();
             }
@@ -1359,7 +1386,7 @@ if (nullCheck() || mc.player == null) {
         int tickNearFollow() {
             Vec3 tp = targetPos();
             if (isUsingSpear(mc.player) && !SpearCombat.isReady(mc.player)
-                    && mc.player.getEyePosition().distanceToSqr(tp)
+                    && spearAttackEye().distanceToSqr(tp)
                     < Math.pow(SpearCombat.maxRange(mc.player, mc.player.getUseItem()) + 1.0, 2)) {
                 makingChargeRoom = true;
                 heading = escapeHeading(tp);
@@ -1367,20 +1394,32 @@ if (nullCheck() || mc.player == null) {
                 return NEAR_FOLLOW;
             }
             if (tooClose(tp)) return PULL_OVER;
-            if (mc.player.getEyePosition().distanceToSqr(tp)
+            if (spearAttackEye().distanceToSqr(tp)
                     > spearRange.getValue() * spearRange.getValue()) {
                 return FOLLOW;
             }
             heading = toTargetAtLeast(tp, 6.0);
-            tryAntiSpear(tp, false);
+            if (!tryAntiSpear(tp, false)) limitChargedApproach();
             return NEAR_FOLLOW;
+        }
+
+        void limitChargedApproach() {
+            if (!SpearCombat.isReady(mc.player)) return;
+            Vec3 eye = spearAttackEye();
+            Vec3 limited = SpearApproach.limitStep(heading, observedTargetBox().getCenter().subtract(eye),
+                    targetHistory.predictionVelocity(target.getDeltaMovement()),
+                    Math.sqrt(observedTargetBox().distanceToSqr(eye)),
+                    SpearCombat.minRange(mc.player, mc.player.getUseItem()),
+                    SpearCombat.maxRange(mc.player, mc.player.getUseItem()));
+            preciseApproach = limited.lengthSqr() + 1.0E-6 < heading.lengthSqr();
+            heading = limited;
         }
 
         int tickPullOver() {
             Vec3 tp = targetPos();
             if (pulledAfterHit) {
                 double distance = spearPullOverDistance.getValue();
-                if (mc.player.getEyePosition().distanceToSqr(tp) >= distance * distance) {
+                if (spearAttackEye().distanceToSqr(tp) >= distance * distance) {
                     pulledAfterHit = false;
                     return FOLLOW;
                 }
@@ -1394,7 +1433,7 @@ if (nullCheck() || mc.player == null) {
         }
 
         Vec3 escapeHeading(Vec3 targetPosition) {
-            Vec3 away = mc.player.getEyePosition().subtract(targetPosition);
+            Vec3 away = spearAttackEye().subtract(targetPosition);
             if (targetGrounded) away = new Vec3(away.x, 0.0, away.z);
             if (away.lengthSqr() < 1.0E-9) {
                 away = mc.player.getLookAngle().scale(-1.0);
@@ -1407,6 +1446,7 @@ if (nullCheck() || mc.player == null) {
         @Override
         void inject(FlightVelocity fv) {
             super.inject(fv);
+            if (preciseApproach) fv.requestPrecision();
             // A spear pass needs its intercept direction; filling independent envelope
             // axes can turn a shallow disengagement into a climb over the target.
             fv.preserveDirection();
@@ -1418,7 +1458,7 @@ if (nullCheck() || mc.player == null) {
                 noEntry = Math.max(noEntry, SpearCombat.minRange(mc.player, mc.player.getUseItem()) + 0.35);
             }
             AABB interceptBox = target.getBoundingBox().move(targetPacketOffset());
-            return noEntry > 0.1 && interceptBox.distanceToSqr(mc.player.getEyePosition())
+            return noEntry > 0.1 && interceptBox.distanceToSqr(spearAttackEye())
                     < noEntry * noEntry;
         }
 
@@ -1431,7 +1471,7 @@ if (nullCheck() || mc.player == null) {
         }
 
         Vec3 approachHeading(Vec3 tp) {
-            Vec3 delta = tp.subtract(mc.player.getEyePosition());
+            Vec3 delta = tp.subtract(spearAttackEye());
             if (!targetGrounded || delta.y >= -2.5) return delta;
             // Establish a shallow approach lane before aiming the weapon. A vertical
             // chase over a grounded target otherwise alternates dive and terrain pull-up.
