@@ -58,6 +58,25 @@ public final class Fonts {
         fr.drawString(graphics, text, x, y, color, false);
     }
 
+    /**
+     * HUD card text without the vanilla drop shadow. Uses the bundled renderer
+     * when the hud-pass override (or click-gui font) is active, vanilla otherwise.
+     */
+    public static void drawStringNoShadow(GuiGraphics graphics, String text, float x, float y, int color) {
+        FontRenderer fr = clickGuiOn() || drawOverrideActive() ? renderer() : null;
+        if (fr == null) {
+            graphics.drawString(mc.font, text, (int) x, (int) y, color, false);
+            return;
+        }
+        fr.drawString(graphics, text, x, y, color, false);
+    }
+
+    /** Width matching the path drawStringNoShadow will take. */
+    public static int widthBest(String text) {
+        FontRenderer fr = clickGuiOn() || drawOverrideActive() ? renderer() : null;
+        return fr == null ? mc.font.width(text) : Math.round(fr.getTextWidth(text));
+    }
+
     public static int width(String text) {
         FontRenderer fr = clickGuiOn() ? renderer() : null;
         return fr == null ? mc.font.width(text) : Math.round(fr.getTextWidth(text));

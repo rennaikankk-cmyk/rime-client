@@ -257,7 +257,13 @@ public class GuangxiElytraChaseModule extends Module {
     /** HUD seam: current locked target for the air-combat HUD, or null. */
     public static Entity hudTarget() {
         GuangxiElytraChaseModule m = INSTANCE;
-        return m != null && m.isEnabled() ? m.target : null;
+        return m != null && m.isEnabled() && m.behavior != null ? m.target : null;
+    }
+
+    /** HUD seam: read-only view of the behavior mode (FOLLOW/MACE/SPEAR/MXS). */
+    public static String hudMode() {
+        GuangxiElytraChaseModule m = INSTANCE;
+        return m != null && m.isEnabled() ? m.mode.getValue().name() : "OFF";
     }
 
     /** HUD seam: one-word intent label from the live behavior state machine. */
@@ -1497,6 +1503,11 @@ if (nullCheck() || mc.player == null) {
         int spearPhaseTick;
         boolean spearArmed;
         boolean spearHit;
+
+        @Override
+        String hudLabel() {
+            return active != null ? active.hudLabel() : super.hudLabel();
+        }
 
         @Override
         void enter() {

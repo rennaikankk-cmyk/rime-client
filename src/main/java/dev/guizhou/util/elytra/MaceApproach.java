@@ -24,7 +24,8 @@ public final class MaceApproach {
 
     /**
      * Vertical drop-lane lookahead clamp. The pre-dive/during-dive collision
-     * scan only needs a clear lane down to the attack plane (target box top);
+     * scan only needs a clear lane down to the attack plane (target box minY
+     * + 0.5, the same threshold tickDive uses to abort a missed dive);
      * scanning the full velocity lookahead treats the floor under the target
      * as an obstacle and aborts high-speed passes just above the smash window
      * ("falls halfway, pauses, falls again").

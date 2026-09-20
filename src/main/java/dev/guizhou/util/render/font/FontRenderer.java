@@ -33,6 +33,8 @@ public class FontRenderer implements Closeable {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     private final int padding;
+    /** Glyph bake ascent in GUI px; bigger values bake sharper large text. */
+    private final float targetAscent;
 
     private Font[] baseFonts;
     private Font[] fittedFonts;
@@ -42,16 +44,22 @@ public class FontRenderer implements Closeable {
     private boolean initialized;
 
     public FontRenderer(Font[] fonts) {
-        this(fonts, 256, 4);
+        this(fonts, 256, 4, TARGET_ASCENT);
     }
 
     public FontRenderer(Font[] fonts, int charactersPerPage, int paddingBetweenCharacters) {
+        this(fonts, charactersPerPage, paddingBetweenCharacters, TARGET_ASCENT);
+    }
+
+    public FontRenderer(Font[] fonts, int charactersPerPage, int paddingBetweenCharacters, float targetAscent) {
         if (fonts.length == 0) throw new IllegalArgumentException("fonts.length == 0");
         if (charactersPerPage <= 4) throw new IllegalArgumentException("charactersPerPage too small");
         if (paddingBetweenCharacters < 0) throw new IllegalArgumentException("padding < 0");
+        if (targetAscent <= 0f) throw new IllegalArgumentException("targetAscent <= 0");
 
         this.baseFonts = fonts;
         this.padding = paddingBetweenCharacters;
+        this.targetAscent = targetAscent;
         this.maps = new GlyphMap.PageCache(charactersPerPage);
         init();
     }
@@ -94,7 +102,7 @@ public class FontRenderer implements Closeable {
             });
 
             float blockGui = blockPx / (float) multiplier;
-            float yTop = y + (REF_TEXT_HEIGHT - blockGui) / 2f;
+            float yTop = y + (this.targetAscent + 1f - blockGui) / 2f;
 
             var pose = graphics.pose();
             pose.pushMatrix();
@@ -161,6 +169,13 @@ public class FontRenderer implements Closeable {
         return mc.font.lineHeight;
     }
 
+    /** Natural em height in GUI px (ascent = targetAscent); scale for explicit sizes. */
+    public float emGuiHeight() {
+        rebuildIfScaleChanged();
+        Font[] fitted = this.fittedFonts;
+        return fitted == null || multiplier <= 0 ? targetAscent : fitted[0].getSize2D() / multiplier;
+    }
+
     private void rebuildIfScaleChanged() {
         int current = (int) Math.round(mc.getWindow().getGuiScale());
         if (current != previousGameScale) {
@@ -185,7 +200,7 @@ public class FontRenderer implements Closeable {
             pg.setFont(baseFonts[0].deriveFont(probeSize));
             FontMetrics probeFm = pg.getFontMetrics();
             float ascentRatio = probeFm.getAscent() / probeSize;
-            float fitSize = (TARGET_ASCENT * this.multiplier) / ascentRatio;
+            float fitSize = (this.targetAscent * this.multiplier) / ascentRatio;
 
             Font[] fitted = new Font[baseFonts.length];
             for (int i = 0; i < baseFonts.length; i++) {
