@@ -2,6 +2,7 @@ package dev.guizhou.util.elytra;
 
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.AttackRange;
@@ -55,6 +56,20 @@ public final class SpearCombat {
 
     public static double maxRange(Player player, ItemStack stack) {
         return player == null ? 0.0 : attackRange(player, stack).effectiveMaxRange(player);
+    }
+
+    /** Armor flight keeps a local glide pose across the owned wing/chestplate cycle,
+     * while vanilla evaluates kinetic attacks after the chestplate restores standing
+     * dimensions. Aim from that attack origin; ordinary gliding keeps its real eye. */
+    public static Vec3 attackEye(Player player, boolean armorSwapActive) {
+        return selectAttackEye(player.position(), player.getEyePosition(),
+                player.getEyeHeight(Pose.STANDING), armorSwapActive, player.getPose() == Pose.FALL_FLYING);
+    }
+
+    static Vec3 selectAttackEye(Vec3 position, Vec3 localEye, double standingEyeHeight,
+                               boolean armorSwapActive, boolean localGlidePose) {
+        return armorSwapActive && localGlidePose
+                ? position.add(0.0, standingEyeHeight, 0.0) : localEye;
     }
 
     /** Local threat estimate using the same component conditions and ray cast as kinetic attacks. */

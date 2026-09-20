@@ -41,6 +41,26 @@ public final class SpearCombatTest {
         expect(false, ray(eye, ahead, body, 5.0, 4.5, 0.125), "reversed range");
         expect(false, ray(eye, ahead, body, 2.0, Double.POSITIVE_INFINITY, 0.125), "infinite range");
         expect(false, ray(eye, ahead, body, 2.0, 4.5, -0.1), "negative margin");
+
+        // Reproduce the measured armor-flight pose mismatch. A client aiming from
+        // y+0.4 makes vanilla's y+1.62 ray pass above this standing target.
+        Vec3 position = new Vec3(10.0, 150.0, 20.0);
+        Vec3 glideEye = position.add(0.0, 0.4, 0.0);
+        Vec3 serverEye = position.add(0.0, 1.62, 0.0);
+        AABB standingTarget = new AABB(9.7, 150.0, 22.7, 10.3, 151.8, 23.3);
+        Vec3 targetCenter = standingTarget.getCenter();
+        expect(false, ray(serverEye, targetCenter.subtract(glideEye), standingTarget, 2.0, 4.5, 0.125),
+                "local glide origin makes the actual standing-eye ray miss overhead");
+        Vec3 corrected = SpearCombat.selectAttackEye(position, glideEye, 1.62, true, true);
+        expect(true, corrected.equals(serverEye), "owned armor cycle uses the attack pose eye");
+        expect(true, ray(serverEye, targetCenter.subtract(corrected), standingTarget, 2.0, 4.5, 0.125),
+                "corrected origin crosses the actual target box");
+        expect(true, SpearCombat.selectAttackEye(position, glideEye, 1.62, false, true) == glideEye,
+                "ordinary elytra gliding retains its local eye");
+        expect(true, SpearCombat.selectAttackEye(position, glideEye, 1.62, true, false) == glideEye,
+                "non-gliding poses are not forced to standing");
+        expect(true, SpearCombat.selectAttackEye(position, glideEye, 2.43, true, true)
+                .equals(position.add(0.0, 2.43, 0.0)), "standing height comes from player dimensions, not a constant");
         System.out.println("SpearCombatTest: all checks passed");
     }
 

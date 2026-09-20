@@ -96,6 +96,10 @@ public final class ElytraCombatHookTest {
         }
         check(method(chase, "aimSpear").hasCall(CHASE, "targetPacketOffset"),
                 "Spear aim must include the same packet position as navigation");
+        check(method(chase, "aimSpear").hasCall("dev/guizhou/util/elytra/SpearCombat", "attackEye"),
+                "Spear aim must account for the server eye origin during owned armor flight");
+        check(method(chase, "aimSpear").hasCall(FLIGHT, "isArmorSwapActive"),
+                "Standing-eye compensation must depend on an active owned armor cycle");
         for (String name : List.of("tickFollow", "strikePlan", "tryAttack", "shouldStartDive", "tickDive")) {
             check(method(mace, name).hasCall(CHASE, "observedTargetBox"),
                     "Mace approach, attack and recovery must agree on the latest received target box: " + name);

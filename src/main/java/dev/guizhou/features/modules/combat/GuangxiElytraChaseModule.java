@@ -1667,7 +1667,9 @@ if (nullCheck() || mc.player == null) {
         // The packet offset alone is the best calibrated predictor of the server-side
         // query position (median 2.37 blocks); adding the velocity lead measured worse.
         Vec3 aim = target.getBoundingBox().getCenter().add(targetPacketOffset());
-        float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), aim);
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        Vec3 attackEye = SpearCombat.attackEye(mc.player, flight != null && flight.isArmorSwapActive());
+        float[] angles = MathUtil.calcAngle(attackEye, aim);
         if (SpearCombat.isReady(mc.player)) {
             // Kinetic damage is a per-tick server ray query along the sent look; the
             // residual prediction error exceeds the target box at spear range, so sweep
