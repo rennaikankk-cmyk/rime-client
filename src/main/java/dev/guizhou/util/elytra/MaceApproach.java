@@ -12,6 +12,11 @@ public final class MaceApproach {
 
     public record Plan(Vec3 aim, double height, double ticks, boolean reachable) {}
 
+    /** The preferred apex cannot undercut the existing smash-charge floor. */
+    public static double chargeHeight(double preferredHeight, double minimumFall) {
+        return Math.clamp(Math.max(preferredHeight, Math.max(3.0, minimumFall + 1.5)), 3.0, 64.0);
+    }
+
     /** Change climb pitch without changing the requested travel distance. */
     public static Vec3 pullUpIntent(Vec3 intent, double degrees) {
         if (!finite(intent)) return Vec3.ZERO;
@@ -56,8 +61,9 @@ public final class MaceApproach {
                              double preferredHeight, double minimumFall, double latency, boolean stable) {
         if (!valid(self, target, velocity, speed) || !Double.isFinite(preferredHeight)
                 || !Double.isFinite(minimumFall) || !Double.isFinite(latency)) return invalid(self);
-        double height = Math.clamp(preferredHeight, 1.0, 64.0);
-        double floor = Math.min(height, Math.max(3.0, minimumFall + 1.5));
+        double height = chargeHeight(preferredHeight, minimumFall);
+        double floor = Math.max(3.0, minimumFall + 1.5);
+        if (height < floor) return invalid(self);
         double delay = Math.clamp(latency * 0.5, 0.0, 1.5);
         Vec3 observed = target.add(velocity.scale(delay));
         // A stationary target cannot escape during the climb. Applying the moving-target

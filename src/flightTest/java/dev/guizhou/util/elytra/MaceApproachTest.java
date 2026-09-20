@@ -7,6 +7,7 @@ public final class MaceApproachTest {
     private static int checks;
 
     public static void main(String[] args) {
+        minimumSmashHeight();
         stationaryRecovery();
         Vec3 overhead = new Vec3(0.06, 90.0, 0.03);
         Vec3 angled = MaceApproach.pullUpIntent(overhead, 45.0);
@@ -91,6 +92,28 @@ public final class MaceApproachTest {
                     + legacy + " ticks, adaptive climb " + adaptive + " ticks (not a server benchmark)");
         }
         System.out.println("MaceApproachTest passed: " + checks + " checks");
+    }
+
+    private static void minimumSmashHeight() {
+        // Both sliders accept these combinations. A reachable apex below the
+        // configured fall requirement cannot produce the requested smash.
+        for (double preferred : new double[]{1.0, 2.0, 10.0}) {
+            for (double minimumFall : new double[]{0.0, 1.5, 8.0, 20.0}) {
+                double minimumHeight = Math.max(3.0, minimumFall + 1.5);
+                for (Vec3 velocity : new Vec3[]{Vec3.ZERO, new Vec3(0.25, 0, 0)}) {
+                    var plan = MaceApproach.climb(Vec3.ZERO, new Vec3(3, 0, 0), velocity,
+                            2.0, preferred, minimumFall, 0, true);
+                    check(!plan.reachable() || plan.height() >= minimumHeight,
+                            "A reachable climb must leave room for the configured smash fall: preferred="
+                                    + preferred + " minimumFall=" + minimumFall + " actual=" + plan.height());
+                    if (velocity.equals(Vec3.ZERO)) {
+                        check(plan.reachable(), "A stationary target permits the required charge height");
+                        check(plan.aim().y >= minimumHeight,
+                                "The steering apex must use the same charge floor as the plan metadata");
+                    }
+                }
+            }
+        }
     }
 
     private static void stationaryRecovery() {

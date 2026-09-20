@@ -648,6 +648,8 @@ public final class ElytraCombatHookTest {
         Trace waiting = method(mace, "tickWaitAttack");
         Trace next = method(mace, "aimNextClimb");
         Trace climb = method(mace, "climbPlan");
+        check(climb.hasCall("dev/guizhou/util/elytra/MaceApproach", "chargeHeight"),
+                "Fixed-height passes must share the adaptive planner's minimum smash-charge floor");
         check(waiting.hasCall(CHASE + "$MaceBehavior", "aimNextClimb")
                         && next.call(CHASE + "$MaceBehavior", "climbPlan")
                         < next.field(CHASE + "$MaceBehavior", "heading", Opcodes.PUTFIELD)

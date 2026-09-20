@@ -1067,8 +1067,9 @@ if (nullCheck() || mc.player == null) {
         private MaceApproach.Plan climbPlan() {
             if (!maceAdaptive.getValue()) {
                 Vec3 lead = predictedTarget();
-                return new MaceApproach.Plan(new Vec3(lead.x, target.getY() + maceHeight.getValue(), lead.z),
-                        maceHeight.getValue(), 0.0, true);
+                double height = MaceApproach.chargeHeight(maceHeight.getValue(), maceMinFallDistance.getValue());
+                return new MaceApproach.Plan(new Vec3(lead.x, target.getY() + height, lead.z),
+                        height, 0.0, true);
             }
             Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
             double preferred = Double.isFinite(passHeight) ? Math.min(passHeight, maceHeight.getValue()) : maceHeight.getValue();
