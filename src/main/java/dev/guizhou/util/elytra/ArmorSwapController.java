@@ -43,7 +43,7 @@ public final class ArmorSwapController {
 
     public void monitor() {
         if (!registered) {
-            EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "ArmorSwapController");
             registered = true;
         }
     }

@@ -15,6 +15,14 @@ import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.PacketSendUtil;
 import dev.guizhou.util.combat.AnchorSequence;
+import dev.guizhou.util.combat.BlastStageDiagnostics;
+import dev.guizhou.util.combat.AnchorPlanner;
+import dev.guizhou.util.combat.CombatantSnapshot;
+import dev.guizhou.util.combat.CombatSnapshotService;
+import dev.guizhou.util.combat.CombatSnapshotValidation;
+import dev.guizhou.util.combat.CombatPlanningTask;
+import dev.guizhou.util.combat.CombatTerrainCapture;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.inventory.SwapMode;
 import dev.guizhou.util.inventory.SwapPriority;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -59,6 +67,9 @@ public class AutoAnchorModule extends Module {
     private final Setting<Integer> confirmTicks = num("ConfirmTicks", 8, 2, 40).setPage("General");
     private final Setting<Integer> retries = num("Retries", 2, 1, 5).setPage("General");
     private final Setting<Integer> delay         = num("Delay", 2, 0, 20).setPage("General");
+    private final Setting<Boolean> asyncCompute = bool("AsyncCompute", false).setPage("General");
+    private final Setting<Integer> asyncMaxAge = num("AsyncMaxAge", 2, 1, 5).setPage("General");
+    private final Setting<Double> snapshotBudget = num("SnapshotBudgetMs", 4.0, 1.0, 10.0).setPage("General");
 
     private final Setting<Boolean> damageSync    = bool("DamageSync", false).setPage("General");
     private final Setting<Boolean> render        = bool("Render", true).setPage("Render");
@@ -66,8 +77,19 @@ public class AutoAnchorModule extends Module {
     private final Setting<Color>   fillColor     = color("FillColor", 130, 80, 255, 45).setPage("Render");
     private final Setting<Color>   outlineColor  = color("OutlineColor", 130, 80, 255, 255).setPage("Render");
 
+    private final CombatPlanningTask<AnchorPlanner.Input, AnchorPlanner.Result> planner = new CombatPlanningTask<>(input -> {
+        long timer = ClientDiagnostics.startTimer();
+        try { return AnchorPlanner.plan(input); }
+        finally { ClientDiagnostics.endTimer("combat.AutoAnchor.async.compute", timer); }
+    });
+    private record PlanningTicket(AnchorPlanner.Input input, CombatTerrainCapture.Captured captured, int settings) {}
+    private PlanningTicket planning;
+    private long planningGeneration;
+    private int syncUntilTick;
+    private int capturedTick = Integer.MIN_VALUE;
     private int lastBurstTick = -1;
     private final AnchorSequence sequence = new AnchorSequence();
+    private final BlastStageDiagnostics stageDiagnostics = new BlastStageDiagnostics("AutoAnchor");
     private BlockPos activePos;
     private ClientLevel sessionLevel;
     private LocalPlayer sessionPlayer;
@@ -90,7 +112,13 @@ public class AutoAnchorModule extends Module {
     }
 
     private void resetSession() {
+        stageDiagnostics.reset();
         lastBurstTick = -1;
+        planningGeneration++;
+        planner.invalidate();
+        planning = null;
+        syncUntilTick = 0;
+        capturedTick = Integer.MIN_VALUE;
         lastDamage = 0f;
         renderPos = null;
         activePos = null;
@@ -112,13 +140,18 @@ public class AutoAnchorModule extends Module {
         int tick = mc.player.tickCount;
         if (activePos == null && lastBurstTick >= 0 && tick - lastBurstTick < delay.getValue()) return;
 
+        Candidate freshCandidate = null;
         List<AnchorDamageUtil.Target> targets = null;
         AnchorDamageUtil.Target self = null;
         if (activePos == null) {
             targets = collectTargets();
             self = AnchorDamageUtil.Target.of(mc.player);
-            Candidate best = findBest(targets, self);
+            long scanTimer = ClientDiagnostics.startTimer();
+            Candidate best;
+            try { best = selectCandidate(targets, self); }
+            finally { ClientDiagnostics.endTimer("combat.AutoAnchor.scan", scanTimer); }
             if (best == null) { lastDamage = 0f; return; }
+            freshCandidate = best;
             activePos = best.pos;
             sequence.reset();
         }
@@ -126,6 +159,7 @@ public class AutoAnchorModule extends Module {
         boolean anchor = state.is(Blocks.RESPAWN_ANCHOR);
         AnchorSequence.Action action = sequence.next(anchor, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0,
                 state.canBeReplaced(), tick, confirmTicks.getValue(), retries.getValue());
+        stageDiagnostics.decision(action.name(), tick, confirmTicks.getValue());
         if (action == AnchorSequence.Action.WAIT) return;
         if (action == AnchorSequence.Action.COMPLETE || action == AnchorSequence.Action.ABORT) {
             activePos = null;
@@ -138,11 +172,13 @@ public class AutoAnchorModule extends Module {
         if (self == null) self = AnchorDamageUtil.Target.of(mc.player);
         // Revalidate target damage, health and range at every action, including delayed detonations.
         Vec3 center = Vec3.atCenterOf(activePos);
-        float damage = score(targets, center, activePos);
-        float selfDamage = AnchorDamageUtil.damage(self, center, activePos);
+        float damage = freshCandidate == null ? score(targets, center, activePos) : freshCandidate.damage;
+        float selfDamage = freshCandidate == null ? AnchorDamageUtil.damage(self, center, activePos) : freshCandidate.selfDamage;
         if (targets.isEmpty() || damage <= 0f || damage < minDamage.getValue() || selfDamage > maxSelfDamage.getValue()
                 || selfDamage > 0f && selfDamage + 1.5f >= mc.player.getHealth() + mc.player.getAbsorptionAmount()
                 || mc.player.getEyePosition().distanceToSqr(center) > placeRange.getValue() * placeRange.getValue()) {
+            stageDiagnostics.blocked("safety");
+            stageDiagnostics.reset();
             activePos = null;
             sequence.reset();
             lastDamage = 0f;
@@ -150,15 +186,18 @@ public class AutoAnchorModule extends Module {
         }
         if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, activePos)
                 || !canSupply(action, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)) {
+            stageDiagnostics.blocked("materialOrDimension");
+            stageDiagnostics.reset();
             activePos = null;
             sequence.reset();
             return;
         }
         if (perform(action, activePos)) {
             sequence.sent(action, tick);
+            stageDiagnostics.submitted(action.name(), tick);
             lastDamage = damage;
             if (render.getValue()) { renderPos = activePos; renderStart = System.currentTimeMillis(); }
-        }
+        } else stageDiagnostics.blocked("actionDeferred");
     }
 
     private SwapMode swapMode() {
@@ -266,6 +305,149 @@ public class AutoAnchorModule extends Module {
         return new BlockHitResult(hitVec, face, pos, false);
     }
 
+    private Candidate selectCandidate(List<AnchorDamageUtil.Target> targets, AnchorDamageUtil.Target self) {
+        int tick = mc.player.tickCount;
+        if (!asyncCompute.getValue() || targets.isEmpty()) {
+            if (planning != null) { planner.invalidate(); planning = null; planningGeneration++; }
+            return targets.isEmpty() ? null : findBest(targets, self);
+        }
+        if (planning != null) {
+            PlanningTicket ticket = planning;
+            var completed = planner.poll();
+            if (completed != null && completed.input() == ticket.input()) {
+                planning = null;
+                boolean valid = !completed.failed() && completed.output() != null
+                        && ticket.input().generation() == planningGeneration
+                        && tick >= ticket.input().tick() && tick - ticket.input().tick() <= asyncMaxAge.getValue()
+                        && ticket.settings() == planningSettings()
+                        && ticket.input().difficulty() == mc.level.getDifficulty().getId()
+                        && CombatSnapshotValidation.compatible(ticket.input().self(), CombatSnapshotService.get(mc.player), .75)
+                        && CombatSnapshotValidation.compatibleTargets(ticket.input().targets(), plannerTargets(targets), .75);
+                long validateTimer = ClientDiagnostics.startTimer();
+                try { valid &= valid && ticket.captured().stillValid(snapshotBudgetNanos()); }
+                finally { ClientDiagnostics.endTimer("combat.AutoAnchor.async.validate", validateTimer); }
+                if (valid) {
+                    AnchorPlanner.Result result = completed.output();
+                    ClientDiagnostics.count("combat.AutoAnchor.async.rays", result.rays());
+                    ClientDiagnostics.count("combat.AutoAnchor.async.evaluated", result.evaluated());
+                    if (result.candidate() == null) return null;
+                    var candidate = result.candidate();
+                    BlockPos pos = new BlockPos(candidate.x(), candidate.y(), candidate.z());
+                    // Worker estimates never authorize an action: score the winner again against live terrain.
+                    if (usableCandidate(pos)) {
+                        Vec3 center = Vec3.atCenterOf(pos);
+                        float damage = score(targets, center, pos);
+                        float local = AnchorDamageUtil.damage(self, center, pos);
+                        if (damage > 0 && damage >= minDamage.getValue() && local <= maxSelfDamage.getValue()
+                                && (local <= 0 || local + 1.5f < mc.player.getHealth() + mc.player.getAbsorptionAmount())) {
+                            ClientDiagnostics.count("combat.AutoAnchor.async.applied", 1);
+                            return new Candidate(pos, damage, local);
+                        }
+                    }
+                }
+                discardPlanning(tick);
+                ClientDiagnostics.count("combat.AutoAnchor.async.discard", 1);
+                return findBest(targets, self);
+            }
+            if (tick >= ticket.input().tick() && tick - ticket.input().tick() <= asyncMaxAge.getValue()) {
+                ClientDiagnostics.count("combat.AutoAnchor.async.wait", 1);
+                return null;
+            }
+            discardPlanning(tick);
+            ClientDiagnostics.count("combat.AutoAnchor.async.expired", 1);
+            return findBest(targets, self);
+        }
+        if (tick < syncUntilTick || capturedTick == tick) return findBest(targets, self);
+        capturedTick = tick;
+        long timer = ClientDiagnostics.startTimer();
+        long captureStart = System.nanoTime();
+        try {
+            List<AnchorPlanner.Candidate> candidates = plannerCandidates(captureStart + snapshotBudgetNanos());
+            if (candidates != null && candidates.isEmpty()) return null;
+            List<CombatantSnapshot> snapshots = plannerTargets(targets);
+            if (snapshots.isEmpty()) return null;
+            CombatantSnapshot player = CombatSnapshotService.get(mc.player);
+            long remaining = snapshotBudgetNanos() - (System.nanoTime() - captureStart);
+            var captured = candidates == null || snapshots.size() > 32 || remaining <= 0 ? null
+                    : CombatTerrainCapture.capture(candidates, snapshots, player, remaining);
+            if (captured != null) {
+                AnchorPlanner.Input input = new AnchorPlanner.Input(planningGeneration, tick, mc.level.getDifficulty().getId(),
+                        assumeBestArmor.getValue(), minDamage.getValue(), maxSelfDamage.getValue(), player, snapshots, candidates, captured.terrain());
+                planning = new PlanningTicket(input, captured, planningSettings());
+                planner.submit(input);
+                ClientDiagnostics.count("combat.AutoAnchor.async.submitted", 1);
+                ClientDiagnostics.count("combat.AutoAnchor.async.captureCells", captured.cells());
+                return null;
+            }
+            ClientDiagnostics.count("combat.AutoAnchor.async.captureFallback", 1);
+            syncUntilTick = tick + 20;
+        } finally { ClientDiagnostics.endTimer("combat.AutoAnchor.async.capture", timer); }
+        return findBest(targets, self);
+    }
+
+    private void discardPlanning(int tick) {
+        planning = null;
+        planningGeneration++;
+        planner.invalidate();
+        // Continually moving targets or expensive scenes should not pay capture cost every tick.
+        syncUntilTick = tick + 20;
+    }
+
+    private long snapshotBudgetNanos() { return (long)(snapshotBudget.getValue() * 1_000_000); }
+    private int planningSettings() {
+        return java.util.Objects.hash(placeRange.getValue(), minDamage.getValue(), maxSelfDamage.getValue(),
+                assumeBestArmor.getValue(), damageSync.getValue(), autoSwap.getValue());
+    }
+
+    private List<CombatantSnapshot> plannerTargets(List<AnchorDamageUtil.Target> targets) {
+        List<CombatantSnapshot> out = new ArrayList<>();
+        for (var target : targets) {
+            if (damageSync.getValue() && DamageSyncTracker.shouldHold(target.entity())) continue;
+            out.add(CombatSnapshotService.get(target.entity()));
+        }
+        return List.copyOf(out);
+    }
+
+    private List<AnchorPlanner.Candidate> plannerCandidates(long deadline) {
+        List<AnchorPlanner.Candidate> out = new ArrayList<>();
+        BlockPos origin = mc.player.blockPosition();
+        int range = (int)Math.ceil(placeRange.getValue());
+        Vec3 eye = mc.player.getEyePosition();
+        double rangeSquared = placeRange.getValue() * placeRange.getValue();
+        // Inventory is stable during this main-thread pass; do not rescan every slot per candidate.
+        boolean place = canSupply(AnchorSequence.Action.PLACE, 0);
+        boolean charge = canSupply(AnchorSequence.Action.CHARGE, 0);
+        boolean detonate = canSupply(AnchorSequence.Action.DETONATE, 1);
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        int visited = 0;
+        for (int x = -range; x <= range; x++) for (int y = -range; y <= range; y++) for (int z = -range; z <= range; z++) {
+            if ((++visited & 31) == 0 && System.nanoTime() > deadline) return null;
+            if (x * x + y * y + z * z > range * range) continue;
+            cursor.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
+            if (eye.distanceToSqr(Vec3.atCenterOf(cursor)) > rangeSquared) continue;
+            BlockState state = mc.level.getBlockState(cursor);
+            if (state.is(Blocks.RESPAWN_ANCHOR)) {
+                int charges = state.getValue(RespawnAnchorBlock.CHARGE);
+                if (charges == 0 && !charge || charges > 0 && charges < 4 && !detonate) continue;
+            } else if (!place || !state.canBeReplaced() || !PlaceUtil.canPlace(cursor)) continue;
+            if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, cursor)) continue;
+            out.add(new AnchorPlanner.Candidate(cursor.getX(), cursor.getY(), cursor.getZ()));
+        }
+        ClientDiagnostics.count("combat.AutoAnchor.async.candidates", out.size());
+        return out;
+    }
+
+    private boolean usableCandidate(BlockPos pos) {
+        if (mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) > placeRange.getValue() * placeRange.getValue()
+                || mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, pos)) return false;
+        BlockState state = mc.level.getBlockState(pos);
+        if (state.is(Blocks.RESPAWN_ANCHOR)) {
+            int charges = state.getValue(RespawnAnchorBlock.CHARGE);
+            return canSupply(charges > 0 ? AnchorSequence.Action.DETONATE : AnchorSequence.Action.CHARGE, charges);
+        }
+        return state.canBeReplaced() && canSupply(AnchorSequence.Action.PLACE, 0) && PlaceUtil.canPlace(pos);
+    }
+
     private Candidate findBest(List<AnchorDamageUtil.Target> targets, AnchorDamageUtil.Target selfTarget) {
         if (targets.isEmpty()) return null;
         Vec3 eye = mc.player.getEyePosition(1.0f);
@@ -324,7 +506,7 @@ public class AutoAnchorModule extends Module {
 
                     if (self > 0f && self + 1.5f >= playerHealth) continue;
 
-                    best = new Candidate(pos, total);
+                    best = new Candidate(pos, total, self);
                 }
             }
         }
@@ -380,5 +562,5 @@ public class AutoAnchorModule extends Module {
         return lastDamage > 0 ? String.format("%.1f", lastDamage) : null;
     }
 
-    private record Candidate(BlockPos pos, float damage) {}
+    private record Candidate(BlockPos pos, float damage, float selfDamage) {}
 }

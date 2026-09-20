@@ -31,7 +31,7 @@ public class Module extends Feature implements Jsonable, Toggleable {
 
     public Module(String name, String description, Category category) {
         super(name);
-        this.displayName = str("DisplayName", name).setPage("General");
+        this.displayName = str("DisplayName", ModuleNames.displayName(name)).setPage("General");
         this.description = description;
         this.category = category;
     }
@@ -70,7 +70,7 @@ public class Module extends Feature implements Jsonable, Toggleable {
 
     public void enable() {
         this.enabled.setValue(true);
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, getName());
         EVENT_BUS.post(new ClientEvent(ClientEvent.Type.TOGGLE_MODULE, this));
         this.onToggle();
         this.onEnable();
@@ -169,6 +169,7 @@ public class Module extends Feature implements Jsonable, Toggleable {
                 GuizhouWare.LOGGER.error("Failed to load from JSON", throwable);
             }
         }
+        displayName.setValue(ModuleNames.migrateDisplayName(getName(), displayName.getValue()));
         // Preset loading is assignment, not a toggle. Apply settings first so onEnable
         // sees the requested mode and values; loading the same profile twice is idempotent.
         if (object.has("Enabled") && !object.get("Enabled").isJsonNull()) {

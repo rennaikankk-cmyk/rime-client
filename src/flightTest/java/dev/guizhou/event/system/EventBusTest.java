@@ -1,6 +1,7 @@
 package dev.guizhou.event.system;
 
 import dev.guizhou.event.Event;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +17,8 @@ public final class EventBusTest {
         inheritedPrivateListener();
         priorityAndCancellation();
         failureIsolation();
+        namedNestedScopes();
+        fatalErrorsPropagate();
         concurrentTimings();
         System.out.println("EventBusTest passed: " + checks + " checks");
     }
@@ -111,6 +114,29 @@ public final class EventBusTest {
         }
     }
 
+    private static void namedNestedScopes() {
+        EventBus bus = new EventBus();
+        bus.register(new NestedReceiver(), "StableModuleKey");
+        ClientDiagnostics.start(60);
+        bus.post(new SampleEvent());
+        var timings = ClientDiagnostics.snapshot().timings();
+        var listener = timings.get("listener.StableModuleKey.onSample");
+        var child = timings.get("module.StableModuleKey.tick");
+        check(listener != null && child != null && listener.count() == 1 && child.count() == 1,
+                "Explicit listener names survive class renaming and do not merge with ordinary module scopes");
+        check(listener.totalNanos() >= child.totalNanos(), "Listener elapsed time is inclusive of nested module work");
+        ClientDiagnostics.clear();
+    }
+
+    private static void fatalErrorsPropagate() {
+        EventBus bus = new EventBus();
+        bus.register(new FatalReceiver());
+        boolean propagated = false;
+        try { bus.post(new SampleEvent()); }
+        catch (LinkageError expected) { propagated = true; }
+        check(propagated, "Fatal/linkage Errors are not silently swallowed as recoverable callback exceptions");
+    }
+
     private static void check(boolean value, String message) {
         checks++;
         if (!value) throw new AssertionError(message);
@@ -152,5 +178,16 @@ public final class EventBusTest {
     private static final class CounterReceiver {
         final AtomicInteger calls = new AtomicInteger();
         @Subscribe private void onSample(SampleEvent event) { calls.incrementAndGet(); }
+    }
+
+    private static final class NestedReceiver {
+        @Subscribe private void onSample(SampleEvent event) {
+            long started = ClientDiagnostics.startTimer();
+            ClientDiagnostics.endTimer("module.StableModuleKey.tick", started);
+        }
+    }
+
+    private static final class FatalReceiver {
+        @Subscribe private void onSample(SampleEvent event) { throw new LinkageError("Expected propagation test"); }
     }
 }

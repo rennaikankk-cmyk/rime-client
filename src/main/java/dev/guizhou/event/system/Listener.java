@@ -6,8 +6,13 @@ import java.util.function.Consumer;
 
 public record Listener(Object host, int priority, Consumer<Object> consumer, String timingKey) {
     public static Listener of(Object host, int priority, Method method) {
-        String key = host.getClass().getSimpleName() + "#" + method.getName()
-                + "(" + method.getParameterTypes()[0].getSimpleName() + ")";
+        return of(host, priority, method, host.getClass().getSimpleName());
+    }
+
+    public static Listener of(Object host, int priority, Method method, String stableName) {
+        // Production registrations supply literals or Module.getName(). @Subscribe method names
+        // are kept by ProGuard; class simple names and user-editable display names are not stable.
+        String key = "listener." + stableName + "." + method.getName();
         return new Listener(host, priority, buildLambdaMetafactory(host, method), key);
     }
 

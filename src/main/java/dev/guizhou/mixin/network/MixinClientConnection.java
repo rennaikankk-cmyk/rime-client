@@ -73,6 +73,9 @@ public class MixinClientConnection {
         try {
             if (EVENT_BUS.post(new PacketEvent.Send(packet))) {
                 ci.cancel();
+                dev.guizhou.util.PacketSendUtil.onCancelled(packet);
+            } else {
+                dev.guizhou.util.PacketSendUtil.onSubmitted(packet);
             }
         } catch (Exception ignored) {
         }

@@ -30,6 +30,7 @@ import dev.guizhou.util.elytra.SpearAimSweep;
 import dev.guizhou.util.elytra.SpearCombat;
 import dev.guizhou.util.elytra.SpearApproach;
 import dev.guizhou.util.elytra.TargetMotionTracker;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.player.EatUtil;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -37,6 +38,8 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.game.ClientboundDamageEventPacket;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.tags.ItemTags;
@@ -137,6 +140,7 @@ public class GuangxiElytraChaseModule extends Module {
     private final FlightPlanningTask<DuelRequest, AerialDuelPredictor.Output> duelPlanner =
             new FlightPlanningTask<>(request -> AerialDuelPredictor.predict(request.input()));
     private AerialDuelPredictor.Output duelPrediction;
+    private FlightPlanningTask.Completed<DuelRequest, AerialDuelPredictor.Output> lastCountedPrediction;
     private long predictionPhase;
     private boolean planningEnabled;
     private RouteContext routeContext;
@@ -161,7 +165,7 @@ public class GuangxiElytraChaseModule extends Module {
     private long evadeSideUntil;
     private double evadeSide = 1.0;
 
-    private record DuelRequest(long session, long phase, int tick, int targetId, Pose pose,
+    private record DuelRequest(long session, long phase, long targetMotionRevision, int tick, int targetId, Pose pose,
                                boolean wings, boolean gliding, AerialDuelPredictor.Input input) {
     }
 
@@ -204,6 +208,7 @@ public class GuangxiElytraChaseModule extends Module {
         long token = bot.session * 31L + bot.combatPhase;
         token = token * 31L + (bot.behaviorMode == null ? -1 : bot.behaviorMode.ordinal());
         token = token * 31L + bot.maceDive.phase().ordinal();
+        token = token * 31L + bot.targetHistory.revision();
         return token * 31L + state;
     }
 
@@ -266,6 +271,18 @@ public class GuangxiElytraChaseModule extends Module {
     public static String hudMode() {
         GuangxiElytraChaseModule m = INSTANCE;
         return m != null && m.isEnabled() ? m.mode.getValue().name() : "OFF";
+    }
+
+    /** Observed movement only: ARMOR AIR is not a claim about the target's flight implementation. */
+    public static String hudTargetMotion() {
+        GuangxiElytraChaseModule bot = INSTANCE;
+        return bot != null && bot.isEnabled() && bot.target != null ? bot.targetHistory.mode().label() : "OFF";
+    }
+
+    public static TargetMotionTracker.Snapshot targetMotionSnapshot() {
+        GuangxiElytraChaseModule bot = INSTANCE;
+        return bot != null && bot.isEnabled() && bot.target != null
+                ? bot.targetHistory.snapshot(bot.target.getDeltaMovement()) : null;
     }
 
     /** HUD seam: one-word intent label from the live behavior state machine. */
@@ -413,6 +430,7 @@ public class GuangxiElytraChaseModule extends Module {
     private void invalidatePlanning() {
         duelPlanner.invalidate();
         duelPrediction = null;
+        lastCountedPrediction = null;
         parallelRoute.reset();
         routeContext = null;
     }
@@ -434,12 +452,9 @@ public class GuangxiElytraChaseModule extends Module {
             planningEnabled = enabled;
         }
         if (!enabled) return;
-        Vec3 measured = targetHistory.predictionVelocity(target.getDeltaMovement());
-        boolean consistent = targetHistory.hasTwoVelocities() && AerialCombatPolicy.coherent(
-                policyVector(measured), policyVector(targetHistory.previousVelocity()));
-        var filtered = AerialCombatPolicy.predictionVelocity(policyVector(measured),
-                policyVector(targetHistory.previousVelocity()), targetHistory.hasTwoVelocities());
-        Vec3 velocity = new Vec3(filtered.x(), filtered.y(), filtered.z());
+        TargetMotionTracker.Snapshot motion = targetHistory.snapshot(target.getDeltaMovement());
+        Vec3 velocity = motion.velocity();
+        boolean consistent = motion.confidence() >= 0.6;
         AerialDuelPredictor.Weapon weapon = targetWeapon();
         boolean attackActive = target instanceof Player player && (weapon == AerialDuelPredictor.Weapon.SPEAR
                 ? isUsingSpear(player) && SpearCombat.isReady(player) : weapon == AerialDuelPredictor.Weapon.MACE
@@ -455,6 +470,7 @@ public class GuangxiElytraChaseModule extends Module {
             int age = mc.player.tickCount - request.tick();
             var input = request.input();
             if (request.session() == session && request.phase() == phase && request.targetId() == target.getId()
+                    && request.targetMotionRevision() == motion.revision()
                     && age >= 0 && age <= 2 && request.pose() == mc.player.getPose()
                     && request.wings() == wings && request.gliding() == mc.player.isFallFlying()
                     && input.targetWeapon() == weapon && input.targetOnGround() == target.onGround()
@@ -467,14 +483,25 @@ public class GuangxiElytraChaseModule extends Module {
                     && input.targetLook().dot(target.getLookAngle()) >= 0.85) {
                 duelPrediction = done.output();
                 predictionPhase = phase;
+                countPrediction(done, true);
+            } else {
+                countPrediction(done, false);
             }
         }
         var input = new AerialDuelPredictor.Input(mc.player.position(), mc.player.getDeltaMovement(),
                 mc.player.getBbWidth(), mc.player.getBbHeight(), target.position(), velocity,
                 target.getEyePosition(), target.getLookAngle(), reach, weapon, target.onGround(),
-                ((LivingEntity) target).isFallFlying(), attackActive, latencyTicks, consistent, List.of(), null);
-        duelPlanner.submit(new DuelRequest(session, phase, mc.player.tickCount, target.getId(),
+                ((LivingEntity) target).isFallFlying(), attackActive, latencyTicks, consistent, List.of(), null, motion);
+        duelPlanner.submit(new DuelRequest(session, phase, motion.revision(), mc.player.tickCount, target.getId(),
                 mc.player.getPose(), wings, mc.player.isFallFlying(), input));
+    }
+
+    /** Latest results may be reused for multiple ticks; diagnose each completion's first observation once. */
+    private void countPrediction(FlightPlanningTask.Completed<DuelRequest, AerialDuelPredictor.Output> done,
+                                 boolean accepted) {
+        if (done == lastCountedPrediction) return;
+        lastCountedPrediction = done;
+        ClientDiagnostics.count(accepted ? "air.plan.accept" : "air.plan.stale", 1);
     }
 
     @Subscribe(priority = 100)
@@ -821,7 +848,18 @@ if (nullCheck() || mc.player == null) {
                 && !(target instanceof LivingEntity living && living.isFallFlying())
                 && mc.level.getBlockCollisions(target,
                 target.getBoundingBox().deflate(0.01).move(0.0, -0.08, 0.0)).iterator().hasNext();
-        targetHistory.sample(target.position(), mc.player.tickCount, targetGrounded);
+        long previousRevision = targetHistory.revision();
+        boolean gliding = target instanceof LivingEntity living && living.isFallFlying();
+        var chest = ((LivingEntity) target).getItemBySlot(EquipmentSlot.CHEST);
+        TargetMotionTracker.Equipment equipment = chest.is(Items.ELYTRA) ? TargetMotionTracker.Equipment.ELYTRA
+                : chest.is(ItemTags.CHEST_ARMOR) ? TargetMotionTracker.Equipment.ARMOR : TargetMotionTracker.Equipment.OTHER;
+        targetHistory.sample(target.position(), mc.player.tickCount, targetGrounded, gliding, equipment,
+                BuiltInRegistries.ITEM.getId(chest.getItem()));
+        if (previousRevision != targetHistory.revision()) {
+            invalidatePlanning();
+            flightRoute.reset();
+            ClientDiagnostics.count("air.motion.change", 1);
+        }
         if (targetGrounded) {
             targetMotion = MotionClass.NORMAL;
             return;
@@ -1695,16 +1733,10 @@ if (nullCheck() || mc.player == null) {
         if (duelPrediction != null && predictionPhase == planningPhaseToken()) {
             return target.position().add(duelPrediction.interceptOffset());
         }
-        Vec3 current = targetHistory.predictionVelocity(target.getDeltaMovement());
-        var previous = policyVector(targetHistory.previousVelocity());
-        var measured = policyVector(current);
-        boolean consistent = targetHistory.hasTwoVelocities() && AerialCombatPolicy.coherent(measured, previous);
-        var velocity = AerialCombatPolicy.predictionVelocity(measured, previous, targetHistory.hasTwoVelocities());
+        TargetMotionTracker.Snapshot motion = targetHistory.snapshot(target.getDeltaMovement());
         double lead = AerialIntercept.leadTicks(target.position().subtract(mc.player.position()),
-                new Vec3(velocity.x(), velocity.y(), velocity.z()),
-                mc.player.getDeltaMovement().length(), latencyTicks, consistent);
-        var offset = AerialCombatPolicy.leadOffset(velocity, lead);
-        return target.position().add(offset.x(), offset.y(), offset.z());
+                motion.velocity(), mc.player.getDeltaMovement().length(), latencyTicks, motion.confidence() >= 0.6);
+        return target.position().add(motion.displacement(lead));
     }
 
     private int confirmationTicks() {
@@ -1784,6 +1816,26 @@ if (nullCheck() || mc.player == null) {
     @Subscribe
     private void onPacketReceive(PacketEvent.Receive event) {
         var packet = event.getPacket();
+        if (packet instanceof ClientboundTeleportEntityPacket teleport) {
+            Entity expectedTarget = target;
+            ClientLevel expectedLevel = mc.level;
+            LocalPlayer expectedPlayer = mc.player;
+            long expectedSession = session;
+            if (expectedTarget == null || teleport.id() != expectedTarget.getId()) return;
+            mc.execute(() -> {
+                if (!isEnabled() || session != expectedSession || target != expectedTarget
+                        || mc.level != expectedLevel || mc.player != expectedPlayer) return;
+                targetHistory.clear();
+                invalidatePlanning();
+                flightRoute.reset();
+                spearCommit.reset();
+                clearSpearAim();
+                maceDive.requestRecovery();
+                if (behavior != null) behavior.enter();
+                ClientDiagnostics.count("air.motion.teleport", 1);
+            });
+            return;
+        }
         if (packet instanceof ClientboundPlayerPositionPacket) {
             long expectedSession = session;
             mc.execute(() -> {

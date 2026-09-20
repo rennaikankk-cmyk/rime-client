@@ -11,6 +11,8 @@ import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.AnchorDamageUtil;
 import dev.guizhou.util.PacketSendUtil;
 import dev.guizhou.util.combat.BedSequence;
+import dev.guizhou.util.combat.BlastStageDiagnostics;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.player.EatUtil;
 import dev.guizhou.mixin.client.ClientLevelAccessor;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -93,6 +95,7 @@ public class GuangxiBedModule extends Module {
     private float desiredYaw = 0f;
     private Player pendingTarget;
     private final BedSequence sequence = new BedSequence();
+    private final BlastStageDiagnostics stageDiagnostics = new BlastStageDiagnostics("GuangxiBed");
     private ClientLevel sessionLevel;
     private LocalPlayer sessionPlayer;
     private BlockPos renderHead;
@@ -126,6 +129,7 @@ public class GuangxiBedModule extends Module {
     }
 
     private void clearPending() {
+        stageDiagnostics.reset();
         pendingFoot = null;
         pendingHead = null;
         pendingTarget = null;
@@ -146,22 +150,28 @@ public class GuangxiBedModule extends Module {
         if (!timer.passedMs(bedCooldownMs())) return;
         if (autoCraft.getValue() && tickAutoCraft()) return;
 
-        BedSpot spot = findBestSpot(tpMode.getValue() || rotate.getValue()
-                ? null : facingFromYaw(GuizhouWare.rotationManager.getServerYaw()));
+        long timer = ClientDiagnostics.startTimer();
+        BedSpot spot;
+        try { spot = findBestSpot(tpMode.getValue() || rotate.getValue()
+                ? null : facingFromYaw(GuizhouWare.rotationManager.getServerYaw())); }
+        finally { ClientDiagnostics.endTimer("combat.GuangxiBed.scan", timer); }
         if (spot == null) return;
         pendingFoot = spot.foot();
         pendingHead = spot.head();
         pendingTarget = spot.target();
         desiredYaw = cardinalYaw(spot.dir());
-        tickPending();
+        tickPending(spot);
     }
 
-    private void tickPending() {
+    private void tickPending() { tickPending(null); }
+
+    private void tickPending(BedSpot fresh) {
         boolean existing = matchingBed();
         BedSequence.Action action = sequence.next(existing,
                 mc.level.getBlockState(pendingHead).getBlock() instanceof BedBlock,
                 existing || spotStillValid(pendingFoot, pendingHead), mc.player.tickCount,
                 confirmTicks.getValue(), retries.getValue());
+        stageDiagnostics.decision(action.name(), mc.player.tickCount, confirmTicks.getValue());
         if (action == BedSequence.Action.WAIT) return;
         if (action == BedSequence.Action.COMPLETE || action == BedSequence.Action.ABORT) {
             clearPending();
@@ -172,15 +182,23 @@ public class GuangxiBedModule extends Module {
         if (pendingTarget == null || pendingTarget.isRemoved() || pendingTarget.isDeadOrDying()
                 || targets != null && !targets.isValidPlayerTarget(pendingTarget)
                 || !mc.level.environmentAttributes().getValue(EnvironmentAttributes.BED_RULE, pendingHead).explodes()
-                || !safeDamage(pendingTarget, pendingFoot, pendingHead)) {
+                || !(fresh == null ? safeDamage(pendingTarget, pendingFoot, pendingHead)
+                        : fresh.damage() > 0f && fresh.damage() >= minDamage.getValue() && safeSelfDamage(fresh.selfDamage()))) {
+            stageDiagnostics.blocked("targetOrSafety");
             clearPending();
             return;
         }
         if (action == BedSequence.Action.DETONATE) {
-            if (detonate()) sequence.sent(action, mc.player.tickCount);
+            if (detonate()) {
+                sequence.sent(action, mc.player.tickCount);
+                stageDiagnostics.submitted(action.name(), mc.player.tickCount);
+            } else stageDiagnostics.blocked("actionDeferred");
         } else {
-            if (!hasBed()) { clearPending(); return; }
-            if (placeBed()) sequence.sent(action, mc.player.tickCount);
+            if (!hasBed()) { stageDiagnostics.blocked("material"); clearPending(); return; }
+            if (placeBed()) {
+                sequence.sent(action, mc.player.tickCount);
+                stageDiagnostics.submitted(action.name(), mc.player.tickCount);
+            } else stageDiagnostics.blocked("actionDeferred");
         }
     }
 
@@ -381,7 +399,7 @@ public class GuangxiBedModule extends Module {
         return null;
     }
 
-    private record BedSpot(BlockPos foot, BlockPos head, Direction dir, Vec3 center, float damage, Player target) {}
+    private record BedSpot(BlockPos foot, BlockPos head, Direction dir, Vec3 center, float damage, float selfDamage, Player target) {}
 
     private BedSpot findBestSpot(Direction restrict) {
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
@@ -426,7 +444,7 @@ public class GuangxiBedModule extends Module {
                         float local = existing ? AnchorDamageUtil.damage(self, center, foot, head)
                                 : selfDamage.computeIfAbsent(head.asLong(), k -> AnchorDamageUtil.damage(self, center, foot, head));
                         if (!safeSelfDamage(local)) continue;
-                        best = new BedSpot(foot, head, dir, center, damage, target);
+                        best = new BedSpot(foot, head, dir, center, damage, local, target);
                     }
                 }
             }

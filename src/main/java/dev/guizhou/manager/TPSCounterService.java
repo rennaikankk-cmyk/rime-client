@@ -23,7 +23,7 @@ public class TPSCounterService extends Feature {
     private ClientPacketListener sampledConnection;
 
     public void init() {
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "TPSCounterService");
     }
 
     @Subscribe

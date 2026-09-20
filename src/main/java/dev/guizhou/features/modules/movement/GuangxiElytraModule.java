@@ -1545,7 +1545,7 @@ public class GuangxiElytraModule extends Module {
         if (!mc.player.onGround() && !mc.player.isInWater() && !mc.player.isInLava()) {
             if (!awaitingLanding) {
                 awaitingLanding = true;
-                EVENT_BUS.register(landingRecovery);
+                EVENT_BUS.register(landingRecovery, "LandingRecovery");
             }
             return;
         }

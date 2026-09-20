@@ -15,7 +15,7 @@ public class PositionManager
     private double fallDistance;
 
     public PositionManager() {
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "PositionManager");
     }
 
     @Subscribe

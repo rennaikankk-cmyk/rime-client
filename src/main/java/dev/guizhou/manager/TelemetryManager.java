@@ -16,6 +16,8 @@ import dev.guizhou.features.commands.Command;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.BuildConfig;
+import dev.guizhou.util.PacketSendUtil;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.features.modules.combat.GuangxiElytraChaseModule;
 import dev.guizhou.features.modules.movement.GuangxiElytraModule;
 import dev.guizhou.util.telemetry.FlightSummary;
@@ -64,6 +66,8 @@ public class TelemetryManager extends Feature {
 
     private final TelemetryBuffer queue = new TelemetryBuffer();
     private final ArrayBlockingQueue<PendingPacket> packets = new ArrayBlockingQueue<>(128);
+    // A separate bounded local capture queue works even with remote telemetry OFF.
+    private final ArrayBlockingQueue<LocalDamage> localDamage = new ArrayBlockingQueue<>(128);
     private final ArrayDeque<Sample> history = new ArrayDeque<>(8);
     private final Map<Integer, Long> combatTargets = new HashMap<>();
     private final Map<Integer, Long> deaths = new HashMap<>();
@@ -89,6 +93,7 @@ public class TelemetryManager extends Feature {
     private long combatWindowStart;
     private long lastCombatEvent;
     private int cwAttacks;
+    // Legacy wire names damage_dealt / damage_taken are DAMAGE EVENT COUNTS, never HP amounts.
     private int cwDamageDealt;
     private int cwDamageTaken;
     private int cwKills;
@@ -112,6 +117,12 @@ public class TelemetryManager extends Feature {
     private ClientLevel flightLevel;
 
     private record PendingPacket(String session, PacketEvent event) {}
+    private record LocalDamage(long recordingId, ClientLevel level, LocalPlayer player, PacketEvent.Receive event) {}
+    private static final ServerboundInteractPacket.Handler LOCAL_ATTACK_COUNTER = new ServerboundInteractPacket.Handler() {
+        public void onInteraction(InteractionHand hand) {}
+        public void onInteraction(InteractionHand hand, Vec3 position) {}
+        public void onAttack() { ClientDiagnostics.count("combat.attack_intent.events", 1); }
+    };
     private record Sample(long nanos, JsonObject data) {}
     private static final class PendingCorrection {
         final long nanos;
@@ -127,7 +138,12 @@ public class TelemetryManager extends Feature {
 
     public TelemetryManager() {
         loadPreferences();
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "TelemetryManager");
+        PacketSendUtil.addSubmissionListener(packet -> {
+            if (ClientDiagnostics.isCollecting() && packet instanceof ServerboundInteractPacket interact) {
+                interact.dispatch(LOCAL_ATTACK_COUNTER);
+            }
+        });
     }
 
     private static TelemetryCapability loadToken() {
@@ -204,7 +220,9 @@ public class TelemetryManager extends Feature {
 
     @Subscribe(priority = -1000)
     private void onTick(TickEvent event) {
-        if (!mc.isSameThread() || mc.player == null || mc.level == null || mc.getConnection() == null) return;
+        if (!mc.isSameThread()) return;
+        drainLocalDamage();
+        if (mc.player == null || mc.level == null || mc.getConnection() == null) return;
         if (!noticeShown || noticeUpload != canUpload()) {
             String prefix = GuizhouWare.commandManager.getCommandPrefix();
             Command.sendMessage("[Diagnostics] " + (canUpload() ? "Anonymous combat/correction upload is ON. "
@@ -479,6 +497,13 @@ public class TelemetryManager extends Feature {
 
     @Subscribe(priority = Integer.MIN_VALUE)
     private void onReceive(PacketEvent.Receive event) {
+        if (event.getPacket() instanceof ClientboundDamageEventPacket) {
+            long recording = ClientDiagnostics.recordingId();
+            // Capture references only on the receiving thread; all entity/state reads stay in drainLocalDamage.
+            if (recording != 0 && !localDamage.offer(new LocalDamage(recording, mc.level, mc.player, event))) {
+                ClientDiagnostics.count("combat.damage_queue.dropped", 1);
+            }
+        }
         if (canUpload() && sessionId != null && event.getPacket() instanceof ClientboundDamageEventPacket) {
             packets.offer(new PendingPacket(sessionId, event));
         }
@@ -490,6 +515,9 @@ public class TelemetryManager extends Feature {
             public void onInteraction(InteractionHand hand) {}
             public void onInteraction(InteractionHand hand, Vec3 position) {}
             public void onAttack() {
+                // Count every queued, uncancelled attack, before throttling detailed payloads.
+                cwAttacks++;
+                markCombat();
                 rememberTarget(packet.entityId);
                 if (!allow("attack", SECOND)) return;
                 Entity target = mc.level.getEntity(packet.entityId);
@@ -511,7 +539,8 @@ public class TelemetryManager extends Feature {
         boolean incoming = packet.entityId() == mc.player.getId();
         boolean outgoing = packet.sourceCauseId() == mc.player.getId() || packet.sourceDirectId() == mc.player.getId();
         if (!incoming && !outgoing) return;
-        if (outgoing) cwDamageDealt++; else cwDamageTaken++;
+        if (outgoing) cwDamageDealt++;
+        if (incoming) cwDamageTaken++;
         if (outgoing || incoming) markCombat();
         if (outgoing) rememberTarget(packet.entityId());
         if (!allow(incoming ? "hurt_in" : "hurt_out", SECOND)) return;
@@ -567,7 +596,9 @@ public class TelemetryManager extends Feature {
         lastCombatEvent = now;
     }
 
-    /** Per-engagement aggregate; field set fixed by the server schema. */
+    /** Per-engagement aggregate; field set fixed by the server schema.
+     * damage_dealt/taken remain legacy event counts for wire compatibility. Clear event-unit
+     * keys combat.damage_dealt.events / combat.damage_taken.events are local diagnostics only. */
     private void flushCombatSummary(long now) {
         if (combatWindowStart == 0) return;
         JsonObject data = new JsonObject();
@@ -583,6 +614,26 @@ public class TelemetryManager extends Feature {
         combatWindowStart = 0;
         lastCombatEvent = 0;
         cwAttacks = cwDamageDealt = cwDamageTaken = cwKills = cwDeaths = cwTotems = cwRubberbacks = 0;
+    }
+
+    private void drainLocalDamage() {
+        long recording = ClientDiagnostics.recordingId();
+        if (recording == 0 || mc.player == null || mc.level == null || mc.getConnection() == null) {
+            localDamage.clear();
+            return;
+        }
+        int self = mc.player.getId();
+        for (int i = 0; i < 128; i++) {
+            LocalDamage pending = localDamage.poll();
+            if (pending == null) break;
+            if (pending.recordingId() != recording || pending.level() != mc.level || pending.player() != mc.player
+                    || pending.event().isCancelled()) continue;
+            var damage = (ClientboundDamageEventPacket) pending.event().getPacket();
+            if (damage.sourceCauseId() == self || damage.sourceDirectId() == self) {
+                ClientDiagnostics.count("combat.damage_dealt.events", 1);
+            }
+            if (damage.entityId() == self) ClientDiagnostics.count("combat.damage_taken.events", 1);
+        }
     }
 
     @Subscribe(priority = Integer.MIN_VALUE)
@@ -608,6 +659,7 @@ public class TelemetryManager extends Feature {
 
     @Subscribe
     private void onDisconnect(DisconnectEvent event) {
+        localDamage.clear();
         String expected = sessionId;
         mc.execute(() -> {
             if (expected == null || !expected.equals(sessionId)) return;

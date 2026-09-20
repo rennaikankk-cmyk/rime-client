@@ -59,7 +59,7 @@ public final class MaceDiveController {
         armor = player.getInventory().getItem(armorSlot).copy();
         state.begin(player.tickCount);
         if (!registered) {
-            EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "MaceDiveController");
             registered = true;
         }
         InventoryUtil.click(CHEST_MENU_SLOT, armorSlot, ClickType.SWAP);

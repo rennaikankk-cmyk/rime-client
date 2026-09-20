@@ -12,6 +12,7 @@ import dev.guizhou.util.DamageSyncTracker;
 import dev.guizhou.util.EnchantmentUtil;
 import dev.guizhou.util.PacketSendUtil;
 import dev.guizhou.util.combat.ExplosionDamageModel;
+import dev.guizhou.util.combat.CombatSnapshotService;
 import dev.guizhou.util.combat.CrystalRetryTracker;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
@@ -142,6 +143,7 @@ public class GuangxiPistonModule extends Module {
             sessionPlayer = mc.player;
         }
         if (nullCheck() || mc.player.isDeadOrDying()) return;
+        selfProfile = profileOf(mc.player);
         attacks.expire(System.currentTimeMillis(), 5000);
         renderMap.entrySet().removeIf(e -> mc.player.tickCount - e.getValue() > Math.max(1, (int)(fadeTime.getValue() * 20)));
         if (active != null) {
@@ -599,24 +601,13 @@ public class GuangxiPistonModule extends Module {
             default   -> {}
         }
 
-        ArmorProfile p = target == mc.player ? profileOf(target) : targetProfile;
+        ArmorProfile p = target == mc.player ? (selfProfile == null ? profileOf(target) : selfProfile) : targetProfile;
         return ExplosionDamageModel.reduce(damage, p.armor(), p.toughness(), p.resistanceMul(), p.protPoints());
     }
 
     private ArmorProfile profileOf(LivingEntity target) {
-        float armor = (float) target.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ARMOR);
-        float tough = (float) target.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ARMOR_TOUGHNESS);
-
-        MobEffectInstance res = target.getEffect(MobEffects.RESISTANCE);
-        float resistanceMul = ExplosionDamageModel.resistanceMultiplier(res == null ? -1 : res.getAmplifier());
-        int protPoints = 0;
-        for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
-            var stack = target.getItemBySlot(slot);
-            protPoints += EnchantmentUtil.getLevel(Enchantments.PROTECTION, stack)
-                    + 2 * EnchantmentUtil.getLevel(Enchantments.BLAST_PROTECTION, stack);
-        }
-
-        return new ArmorProfile(armor, tough, resistanceMul, protPoints);
+        var snapshot = CombatSnapshotService.get(target);
+        return new ArmorProfile(snapshot.armor(), snapshot.toughness(), snapshot.resistanceMultiplier(), snapshot.protection());
     }
 
     private Vec3 closestPointOnBox(Vec3 eye, AABB box) {
@@ -695,6 +686,8 @@ public class GuangxiPistonModule extends Module {
                          boolean placeRedstone, boolean placeBase, float damage, int targetId, Vec3 targetOrigin, Vec3 explosion) {}
 
     private record RedstoneSpot(BlockPos pos, boolean place) {}
+
+    private ArmorProfile selfProfile;
 
     private record ArmorProfile(float armor, float toughness, float resistanceMul, int protPoints) {}
 }

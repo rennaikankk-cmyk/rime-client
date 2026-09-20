@@ -22,6 +22,8 @@ public final class AerialDuelPredictorTest {
         sideClearance();
         attackPriority();
         immutableParallelInputs();
+        observedMovementModels();
+        fallingMaceEnvelope();
         System.out.println("AerialDuelPredictorTest passed: " + checks + " checks");
     }
 
@@ -263,9 +265,88 @@ public final class AerialDuelPredictorTest {
         return AerialDuelPredictor.shouldInterruptAttack(output, smash, health, absorption, 20);
     }
 
+    private static void observedMovementModels() {
+        Fixture fixture = new Fixture();
+        fixture.onGround = false;
+        fixture.gliding = true;
+        fixture.selfVelocity = new Vec3(2, 0, 0);
+        fixture.targetPosition = new Vec3(20, 0, 0);
+        fixture.targetVelocity = new Vec3(0.8, -0.1, 0);
+        fixture.motion = new TargetMotionTracker.Snapshot(TargetMotionTracker.Mode.GLIDE, 10,
+                fixture.targetVelocity, Vec3.ZERO, 0, 1, 4);
+        var normal = fixture.predict();
+        close(3.2, normal.interceptOffset().x, "ordinary gliding uses its observed speed");
+        close(-0.4, normal.interceptOffset().y, "ordinary glide follows measured descent");
+        fixture.targetVelocity = new Vec3(1.3, 0, 0);
+        fixture.motion = new TargetMotionTracker.Snapshot(TargetMotionTracker.Mode.GLIDE_ACCELERATING, 11,
+                fixture.targetVelocity, new Vec3(0.2, 0, 0), 0, 1, 3);
+        var boosted = fixture.predict();
+        check(boosted.leadTicks() <= 3 && boosted.interceptOffset().x > fixture.targetVelocity.x * boosted.leadTicks(),
+                "asynchronous predictor consumes measured acceleration and its reliability horizon");
+        fixture.targetVelocity = new Vec3(0.4, 0, 0.2);
+        fixture.gliding = false;
+        fixture.motion = new TargetMotionTracker.Snapshot(TargetMotionTracker.Mode.ARMORED_AIR, 12,
+                fixture.targetVelocity, Vec3.ZERO, 0, 1, 2.5);
+        var armor = fixture.predict();
+        close(0, armor.interceptOffset().y, "armor/non-gliding flight has no invented gravity");
+        close(1.0, armor.interceptOffset().x, "armor observation is not a fixed fast-flight speed");
+        fixture.motion = new TargetMotionTracker.Snapshot(TargetMotionTracker.Mode.GROUND, 13,
+                Vec3.ZERO, Vec3.ZERO, 0, 0, 0);
+        check(fixture.predict().interceptOffset().equals(Vec3.ZERO), "landing/reset snapshot suppresses stale lead");
+
+        fixture.selfVelocity = Vec3.ZERO;
+        fixture.targetPosition = new Vec3(8, 0, 0);
+        fixture.targetVelocity = new Vec3(-1, 0, 0);
+        fixture.weapon = Weapon.SPEAR;
+        fixture.active = true;
+        fixture.motion = new TargetMotionTracker.Snapshot(TargetMotionTracker.Mode.ARMORED_AIR, 14,
+                fixture.targetVelocity, Vec3.ZERO, 0, 0.3, 1);
+        var approaching = fixture.predict();
+        kind(ThreatKind.SPEAR, approaching, "uncertain aim keeps the existing distant spear warning window");
+        check(approaching.leadTicks() <= 1 && approaching.impactTicks() > 1,
+                "aim horizon does not truncate protection lookahead");
+        fixture.weapon = Weapon.MACE;
+        fixture.targetPosition = new Vec3(0, 8, 0);
+        fixture.targetVelocity = new Vec3(0, -1, 0);
+        fixture.motion = new TargetMotionTracker.Snapshot(TargetMotionTracker.Mode.ARMORED_AIR, 15,
+                fixture.targetVelocity, Vec3.ZERO, 0, 0.3, 1);
+        kind(ThreatKind.MACE, fixture.predict(), "descending observed flight retains long-range mace warning");
+        close(-8, fixture.motion.threatDisplacement(8).y, "threat drift does not invent gravity for plugin flight");
+        close(-1, fixture.motion.displacement(8).y, "attack aim remains bounded to measured reliability");
+    }
+
     private static AerialDuelPredictor.Output threat(ThreatKind kind, double urgency, double ticks) {
         return new AerialDuelPredictor.Output(0, Vec3.ZERO, kind, urgency, ticks,
                 Vec3.ZERO, Vec3.ZERO, Vec3.ZERO, true, true);
+    }
+
+    private static void fallingMaceEnvelope() {
+        Fixture fixture = new Fixture();
+        fixture.targetPosition = new Vec3(0, 5, 0);
+        fixture.targetVelocity = new Vec3(0, -0.2, 0);
+        fixture.weapon = Weapon.MACE;
+        fixture.active = true;
+        fixture.onGround = false;
+        fixture.latency = 2;
+        var falling = fixture.predict();
+        kind(ThreatKind.MACE, falling, "ordinary gravity predicts a slowly descending mace before linear drift does");
+        close(6, falling.impactTicks(), "ordinary falling trajectory reaches threat range at tick six");
+        fixture.motion = new TargetMotionTracker.Snapshot(TargetMotionTracker.Mode.ARMORED_AIR, 20,
+                fixture.targetVelocity, Vec3.ZERO, 0, 0.3, 1);
+        var observed = fixture.predict();
+        kind(ThreatKind.MACE, observed, "sparse armored observations retain the ordinary falling risk envelope");
+        close(falling.impactTicks(), observed.impactTicks(), "low-confidence motion cannot delay the existing mace warning");
+        close(-0.2, observed.interceptOffset().y, "defensive gravity never leaks into aim prediction");
+        close(-1.6, fixture.motion.threatDisplacement(8).y, "plugin trajectory remains an independent observed path");
+        fixture.motion = new TargetMotionTracker.Snapshot(TargetMotionTracker.Mode.ARMORED_AIR, 21,
+                fixture.targetVelocity, new Vec3(0, -0.2, 0), 0, 1, 3);
+        check(fixture.predict().impactTicks() < falling.impactTicks(),
+                "a more urgent observed descent also wins over the ordinary falling path");
+        fixture.gliding = true;
+        kind(ThreatKind.NONE, fixture.predict(), "the defensive envelope does not make gliding into a smash");
+        fixture.gliding = false;
+        fixture.onGround = true;
+        kind(ThreatKind.NONE, fixture.predict(), "landing still immediately removes falling mace risk");
     }
 
     private static FlightCollisionSnapshot snapshot(List<AABB> obstacles) {
@@ -315,11 +396,12 @@ public final class AerialDuelPredictorTest {
         boolean consistent = true;
         List<AerialDuelPredictor.Projectile> projectiles = List.of();
         FlightCollisionSnapshot snapshot;
+        TargetMotionTracker.Snapshot motion;
 
         AerialDuelPredictor.Input build() {
             return new AerialDuelPredictor.Input(selfPosition, selfVelocity, width, height, targetPosition,
                     targetVelocity, targetPosition.add(0, 1.62, 0), look, reach, weapon, onGround, gliding,
-                    active, latency, consistent, projectiles, snapshot);
+                    active, latency, consistent, projectiles, snapshot, motion);
         }
 
         AerialDuelPredictor.Output predict() {

@@ -21,7 +21,7 @@ public class BindCommand extends Command {
     public BindCommand() {
         super("bind", "setbind");
         setDescription("Sets a key bind for a module");
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "BindCommand");
     }
 
     @Override

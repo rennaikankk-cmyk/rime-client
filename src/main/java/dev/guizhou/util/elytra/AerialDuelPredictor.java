@@ -23,7 +23,17 @@ public final class AerialDuelPredictor {
                         Vec3 targetPosition, Vec3 targetVelocity, Vec3 targetEye, Vec3 targetLook,
                         double targetReach, Weapon targetWeapon, boolean targetOnGround, boolean targetGliding,
                         boolean targetAttackActive, int latencyTicks, boolean velocityConsistent,
-                        List<Projectile> projectiles, FlightCollisionSnapshot snapshot) {
+                        List<Projectile> projectiles, FlightCollisionSnapshot snapshot,
+                        TargetMotionTracker.Snapshot targetMotion) {
+        public Input(Vec3 selfPosition, Vec3 selfVelocity, double selfWidth, double selfHeight,
+                     Vec3 targetPosition, Vec3 targetVelocity, Vec3 targetEye, Vec3 targetLook,
+                     double targetReach, Weapon targetWeapon, boolean targetOnGround, boolean targetGliding,
+                     boolean targetAttackActive, int latencyTicks, boolean velocityConsistent,
+                     List<Projectile> projectiles, FlightCollisionSnapshot snapshot) {
+            this(selfPosition, selfVelocity, selfWidth, selfHeight, targetPosition, targetVelocity,
+                    targetEye, targetLook, targetReach, targetWeapon, targetOnGround, targetGliding,
+                    targetAttackActive, latencyTicks, velocityConsistent, projectiles, snapshot, null);
+        }
         public Input {
             projectiles = projectiles == null ? List.of()
                     : projectiles.stream().filter(projectile -> projectile != null).limit(MAX_PROJECTILES).toList();
@@ -47,7 +57,9 @@ public final class AerialDuelPredictor {
         Vec3 offset = input.targetPosition.subtract(input.selfPosition);
         double lead = AerialIntercept.leadTicks(offset, input.targetVelocity, input.selfVelocity.length(),
                 Math.clamp(input.latencyTicks, 0, 3), input.velocityConsistent);
-        Vec3 intercept = bounded(input.targetVelocity.scale(lead), MAX_OFFSET);
+        if (input.targetMotion != null) lead = Math.min(lead, input.targetMotion.maxLeadTicks());
+        Vec3 intercept = input.targetMotion == null ? bounded(input.targetVelocity.scale(lead), MAX_OFFSET)
+                : input.targetMotion.displacement(lead);
         AABB body = body(input);
         int horizon = 6 + Math.clamp(input.latencyTicks, 0, 4);
         Threat threat = meleeThreat(input, body, horizon);
@@ -107,11 +119,13 @@ public final class AerialDuelPredictor {
         if (!spear && closing <= 0.05 && body.distanceToSqr(input.targetEye) > square(input.targetReach)) return null;
         Vec3 attackRay = input.targetLook.normalize().scale(input.targetReach);
         for (double tick = 0.0; tick <= Math.min(spear ? horizon : 4, horizon); tick += 0.5) {
-            Vec3 eye = input.targetEye.add(relative.scale(tick));
+            Vec3 targetOffset = input.targetMotion == null ? input.targetVelocity.scale(tick)
+                    : input.targetMotion.threatDisplacement(tick);
+            Vec3 eye = input.targetEye.add(targetOffset).subtract(input.selfVelocity.scale(tick));
             if (segmentHit(body.inflate(0.1), eye, eye.add(attackRay)) >= 0.0) {
                 double severity = spear ? 0.7 + 0.2 * urgency(tick, horizon) : 0.4 + 0.15 * urgency(tick, horizon);
                 return new Threat(spear ? ThreatKind.SPEAR : ThreatKind.MELEE, severity, tick,
-                        input.targetEye.add(input.targetVelocity.scale(tick)), relative);
+                        input.targetEye.add(targetOffset), relative);
             }
         }
         return null;
@@ -121,11 +135,18 @@ public final class AerialDuelPredictor {
         if (input.targetWeapon != Weapon.MACE || !input.targetAttackActive || input.targetOnGround
                 || input.targetGliding || input.targetVelocity.y >= -0.15
                 || input.targetPosition.y <= input.selfPosition.y + 0.5 || input.targetReach <= 0.0) return null;
+        // Defensive envelope only: a short or plugin-like observation must not hide an ordinary falling attacker.
+        Threat falling = maceThreatPath(input, body, horizon, false);
+        return input.targetMotion == null ? falling : stronger(falling, maceThreatPath(input, body, horizon, true));
+    }
+
+    private static Threat maceThreatPath(Input input, AABB body, int horizon, boolean observed) {
         Vec3 position = input.targetEye;
         Vec3 velocity = input.targetVelocity;
         double previousDistance = body.distanceToSqr(position);
         for (int tick = 1; tick <= horizon; tick++) {
-            position = position.add(velocity);
+            position = observed ? input.targetEye.add(input.targetMotion.threatDisplacement(tick))
+                    : position.add(velocity);
             AABB futureBody = body.move(input.selfVelocity.scale(tick));
             double distance = futureBody.distanceToSqr(position);
             if (distance < previousDistance && distance <= square(input.targetReach)) {
@@ -133,7 +154,8 @@ public final class AerialDuelPredictor {
                         velocity.subtract(input.selfVelocity));
             }
             previousDistance = distance;
-            velocity = new Vec3(velocity.x * 0.91, (velocity.y - 0.08) * 0.98, velocity.z * 0.91);
+            if (!observed)
+                velocity = new Vec3(velocity.x * 0.91, (velocity.y - 0.08) * 0.98, velocity.z * 0.91);
         }
         return null;
     }

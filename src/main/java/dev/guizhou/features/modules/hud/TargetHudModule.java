@@ -92,6 +92,7 @@ public class TargetHudModule extends HudModule {
 
     // discrete snapshot — frozen while the target layer fades out
     private String sName = "", sWeapon = "—", sIntent = "OFF", sPing = "—";
+    private String sMotion = "待观察";
     private float sHp, sArmor, sMaxHp = 20;
     private int sTotems;
     private long sElapsedMs;
@@ -188,6 +189,7 @@ public class TargetHudModule extends HudModule {
         sName = "";
         sWeapon = "—";
         sIntent = "OFF";
+        sMotion = "待观察";
         sPing = "—";
         sHp = 0;
         sArmor = 0;
@@ -258,6 +260,7 @@ public class TargetHudModule extends HudModule {
         sName = target.getName().getString();
         sWeapon = GuangxiElytraChaseModule.hudMode();
         sIntent = GuangxiElytraChaseModule.hudIntent();
+        sMotion = FlightMotionLabels.label(GuangxiElytraChaseModule.hudTargetMotion());
         sHp = target.getHealth();
         sMaxHp = Math.max(1f, target.getMaxHealth());
         sArmor = target.getArmorValue();
@@ -339,6 +342,7 @@ public class TargetHudModule extends HudModule {
         float nickAvail = (W - PAD - intentW - 6f - weaponW - 8f) - nickX;
         text(ctx, clip(sName, nickAvail, 15f, HudFonts.SEMI), nickX, 34.3f, 15f, HudFonts.SEMI, c(FG, a), ox, oy, s);
         text(ctx, String.format("%.1f 格", dist), nickX, 57.7f, 12f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        text(ctx, "目标运动 · " + sMotion, PAD, 78f, 10f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
 
         // radar 104x104 at y92 — thin rings + cross, no square backing
         float blockY = 92f;

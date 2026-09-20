@@ -124,7 +124,7 @@ public class PlacementManager extends Feature {
     public void removeListener(PlacementListener listener) { listeners.remove(listener); }
 
     public PlacementManager() {
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "PlacementManager");
     }
 
     // ---------------------------------------------------------------- queue

@@ -66,6 +66,7 @@ public class HudClientModule extends Module {
         register(new NotifierHudModule(), true);
         register(new SpeedHudModule(), false);
         register(new TargetHudModule(), true);
+        register(new dev.guizhou.features.modules.hud.DiagnosticsHudModule(), true);
     }
 
     private void register(HudModule element, boolean defaultOn) {

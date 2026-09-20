@@ -22,7 +22,7 @@ public class GuiMove implements Util {
     private boolean up, down, left, right, jump, shift, sprint;
 
     public void init() {
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "GuiMove");
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (exclusiveInput()) {
                 clearMovement();

@@ -1,15 +1,17 @@
 package dev.guizhou.features.debug;
 
 import dev.guizhou.GuizhouWare;
-import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.client.HudClientModule;
 import dev.guizhou.features.modules.hud.SpeedHudModule;
 import dev.guizhou.util.traits.Util;
+import dev.guizhou.util.PacketSendUtil;
+import dev.guizhou.util.diagnostics.SubmissionRate;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.Packet;
 
 public class MoveLimitDebug implements Util {
     private static final MoveLimitDebug INSTANCE = new MoveLimitDebug();
@@ -20,16 +22,12 @@ public class MoveLimitDebug implements Util {
     private static final int WHITE = 0xFFFFFFFF;
     private static final int GRAY = 0xFFAAAAAA;
 
-    private static final long WINDOW_MS = 1000;
-    private static final int EXPECTED_MOVES_PER_SECOND = 20;
-
-    private boolean enabled = false;
-    private long windowStart = System.currentTimeMillis();
-    private int windowCount = 0;
-    private int lastCount = 0;
+    private volatile boolean enabled = false;
+    private final SubmissionRate rate = new SubmissionRate();
 
     private MoveLimitDebug() {
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "MoveLimitDebug");
+        PacketSendUtil.addSubmissionListener(this::onPacketSubmitted);
     }
 
     public static MoveLimitDebug get() {
@@ -40,22 +38,23 @@ public class MoveLimitDebug implements Util {
         return enabled;
     }
 
-    public void toggle() {
+    public synchronized void toggle() {
         enabled = !enabled;
+        rate.reset(System.nanoTime());
     }
 
-    @Subscribe
-    private void onPacketSend(PacketEvent.Send event) {
-        if (!(event.getPacket() instanceof ServerboundMovePlayerPacket)) return;
-        rollWindow();
-        windowCount++;
+    private void onPacketSubmitted(Packet<?> packet) {
+        if (!enabled || !(packet instanceof ServerboundMovePlayerPacket)) return;
+        synchronized (this) {
+            if (enabled) rate.submitted(System.nanoTime());
+        }
     }
 
     @Subscribe
     private void onRender2D(Render2DEvent event) {
         if (!enabled) return;
         if (mc.options.hideGui) return;
-        rollWindow();
+        long lastCount = rate.perSecond(System.nanoTime());
 
         GuiGraphics ctx = event.getContext();
         int ry = bottomAnchor() - BOTTOM_MARGIN - mc.font.lineHeight;
@@ -66,18 +65,9 @@ public class MoveLimitDebug implements Util {
         }
 
         String value = String.valueOf(lastCount);
-        String label = "/" + EXPECTED_MOVES_PER_SECOND + " move";
+        String label = " move/s (local)";
         ctx.drawString(mc.font, value, LEFT_MARGIN, ry, GRAY);
         ctx.drawString(mc.font, label, LEFT_MARGIN + mc.font.width(value), ry, WHITE);
-    }
-
-    private void rollWindow() {
-        long now = System.currentTimeMillis();
-        if (now - windowStart < WINDOW_MS) return;
-
-        lastCount = windowCount;
-        windowCount = 0;
-        windowStart = now;
     }
 
     private int bottomAnchor() {

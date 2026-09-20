@@ -47,6 +47,7 @@ public class CommandManager extends Feature implements Jsonable {
         register(new FakePlayerCommand());
         register(new DebugLimitsCommand());
         register(new dev.guizhou.features.commands.impl.TimingsCommand());
+        register(new DiagnosticsCommand());
         register(new TelemetryCommand());
         dev.guizhou.features.debug.MoveLimitDebug.get();
 

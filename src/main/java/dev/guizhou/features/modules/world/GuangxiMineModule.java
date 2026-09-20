@@ -12,6 +12,7 @@ import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.InteractionUtil;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PacketSendUtil;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.inventory.SwapMode;
@@ -92,6 +93,10 @@ public class GuangxiMineModule extends Module implements MineApi {
     private int stopCooldown;
 
     private long lastStopMs;
+    // Time from the first locally accepted STOP to observing air; this is not a server ACK.
+    private long primaryStopNanos;
+    private long secondaryStopNanos;
+    private long stopRecordingId;
     private double delayBalance;
 
     private BlockPos rebreakHoldPos;
@@ -247,6 +252,7 @@ public class GuangxiMineModule extends Module implements MineApi {
         GuizhouWare.swapManager.release(primaryToolOwner);
         primaryHeldTicks = 0;
         pos = target.immutable();
+        primaryStopNanos = 0;
         direction = dir;
         ticks = 0;
         progress = 0;
@@ -357,6 +363,8 @@ public class GuangxiMineModule extends Module implements MineApi {
         if (state.isAir()) return false;
         if (!stopBreak(bestSlot(state, pos), false)) return false;
         secondaryPos = pos;
+        secondaryStopNanos = primaryStopNanos;
+        primaryStopNanos = 0;
         secondaryTicks = ticks;
         secondaryHolding = false;
         secondaryHeldTicks = 0;
@@ -462,6 +470,8 @@ public class GuangxiMineModule extends Module implements MineApi {
         retry.tick();
         if (!retry.ready(retryTicks.getValue())) return;
         if (retry.exhausted(retryAttempts.getValue())) {
+            ClientDiagnostics.count("mine.retry.exhausted", 1);
+            primaryStopNanos = 0;
             // Rejected early STOPs must eventually return to a fresh START, not loop forever.
             abortBreak();
             GuizhouWare.swapManager.release(primaryToolOwner);
@@ -472,6 +482,7 @@ public class GuangxiMineModule extends Module implements MineApi {
             return;
         }
         if (stopBreak(bestSlot(state, pos))) {
+            ClientDiagnostics.count("mine.retry.submitted", 1);
             boolean first = retry.age() == 0;
             retry.submitted();
             if (first) fireSubmitted(pos);
@@ -485,6 +496,7 @@ public class GuangxiMineModule extends Module implements MineApi {
         BlockState state = mc.level.getBlockState(secondaryPos);
         if (state.isAir()) {
             BlockPos completed = secondaryPos;
+            recordObservedAir(true);
             clearSecondary();
             fireFinish(completed);
             return;
@@ -529,6 +541,7 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     private void clearSecondary() {
+        secondaryStopNanos = 0;
         GuizhouWare.swapManager.release(secondaryToolOwner);
         secondaryPos = null;
         secondaryTicks = 0;
@@ -607,10 +620,15 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     private boolean stopBreak(int slot, boolean cooldown) {
-        if (paused() || !rotateFor(pos, endRotate.getValue())) return false;
+        if (paused()) { ClientDiagnostics.count("mine.stop.paused", 1); return false; }
+        if (!rotateFor(pos, endRotate.getValue())) {
+            ClientDiagnostics.count("mine.stop.rotationRefused", 1); return false;
+        }
         // A temporary tool switch must not steal a live secondary or another module's hold.
         if (GuizhouWare.swapManager.isLatched() && !GuizhouWare.swapManager.isLatched(primaryToolOwner)) {
-            if (pauseOnEat.getValue() || GuizhouWare.swapManager.isLatched(secondaryToolOwner)) return false;
+            if (pauseOnEat.getValue() || GuizhouWare.swapManager.isLatched(secondaryToolOwner)) {
+                ClientDiagnostics.count("mine.stop.toolBusy", 1); return false;
+            }
         }
 
         ItemStack stack = mc.player.getInventory().getItem(slot);
@@ -694,6 +712,11 @@ public class GuangxiMineModule extends Module implements MineApi {
         boolean sent = PacketSendUtil.send(new ServerboundPlayerActionPacket(action, target, face));
         if (sent && action == ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK) {
             lastStopMs = System.currentTimeMillis();
+            ClientDiagnostics.count("mine.stop.submitted", 1);
+            refreshDiagnosticWindow();
+            if (primaryStopNanos == 0) primaryStopNanos = ClientDiagnostics.startTimer();
+        } else if (!sent) {
+            ClientDiagnostics.count("mine.action.refused", 1);
         }
         return sent;
     }
@@ -715,6 +738,7 @@ public class GuangxiMineModule extends Module implements MineApi {
     private void onBlockObserved(BlockPos target, boolean nowAir) {
         if (!isEnabled() || !mc.isSameThread() || mc.level != sessionLevel || mc.player != sessionPlayer) return;
         if (target.equals(pos) && started && nowAir && !observedAir) {
+            recordObservedAir(false);
             observedAir = true;
             finished = true;
             retry.reset();
@@ -723,6 +747,7 @@ public class GuangxiMineModule extends Module implements MineApi {
             fireFinish(target);
         }
         if (target.equals(secondaryPos) && nowAir) {
+            recordObservedAir(true);
             clearSecondary();
             fireFinish(target);
         }
@@ -741,6 +766,7 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     private void clearMine() {
+        primaryStopNanos = 0;
         GuizhouWare.swapManager.release(primaryToolOwner);
         primaryHeldTicks = 0;
         pos = null;
@@ -754,4 +780,20 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     public enum ToolSwitch { Silent, Visible, Manual }
+
+    private void refreshDiagnosticWindow() {
+        long recordingId = ClientDiagnostics.recordingId();
+        if (recordingId == stopRecordingId) return;
+        stopRecordingId = recordingId;
+        primaryStopNanos = secondaryStopNanos = 0;
+    }
+
+    private void recordObservedAir(boolean secondary) {
+        refreshDiagnosticWindow();
+        ClientDiagnostics.count(secondary ? "mine.airObserved.secondary" : "mine.airObserved.primary", 1);
+        ClientDiagnostics.endTimer(secondary ? "mine.stopToAir.secondary" : "mine.stopToAir.primary",
+                secondary ? secondaryStopNanos : primaryStopNanos);
+        if (secondary) secondaryStopNanos = 0;
+        else primaryStopNanos = 0;
+    }
 }

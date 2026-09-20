@@ -16,6 +16,8 @@ import dev.guizhou.util.combat.CrystalAttackWindow;
 import dev.guizhou.util.combat.CrystalSelectionPolicy;
 import dev.guizhou.util.combat.CrystalRetryTracker;
 import dev.guizhou.util.combat.ExplosionDamageModel;
+import dev.guizhou.util.combat.CombatSnapshotService;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.PredictUtil;
@@ -203,6 +205,9 @@ public class GuangxiCrystalModule extends Module {
     private final CrystalRetryTracker attackRetries = new CrystalRetryTracker();
     private int reactiveTick = Integer.MIN_VALUE;
     private int reactiveScans;
+    private boolean reactiveScheduled;
+    private BlockPos reactivePosition;
+    private int reactiveScheduledTick;
     private List<TargetCache> decisionTargets = List.of();
 
     private int lastCarriedSlot = -1;
@@ -231,6 +236,8 @@ public class GuangxiCrystalModule extends Module {
     private volatile int entitySnapshotTick = -1;
     private record SelfDamageKey(Vec3 center, BlockPos phantomBase) {}
     private final Map<SelfDamageKey, Float> selfDamageCache = new HashMap<>();
+    private record TargetDamageKey(TargetCache target, Vec3 source, BlockPos phantom) {}
+    private final Map<TargetDamageKey, Float> targetDamageCache = new HashMap<>();
     private static final EquipmentSlot[] ARMOR_SLOTS = {
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
@@ -385,6 +392,8 @@ public class GuangxiCrystalModule extends Module {
         attackRetries.clear();
         reactiveTick = Integer.MIN_VALUE;
         reactiveScans = 0;
+        reactiveScheduled = false;
+        reactivePosition = null;
         decisionTargets = List.of();
         placeTimer.reset();
         breakTimer.reset();
@@ -405,6 +414,7 @@ public class GuangxiCrystalModule extends Module {
         entitySnapshot = List.of();
         entitySnapshotTick = -1;
         selfDamageCache.clear();
+        targetDamageCache.clear();
         cachedChunk = null;
         cachedChunkX = cachedChunkZ = Integer.MIN_VALUE;
         seeThrough.clear();
@@ -563,6 +573,8 @@ public class GuangxiCrystalModule extends Module {
 
     private void handleIncomingPacket(net.minecraft.network.protocol.Packet<?> packet) {
         if (packet instanceof ClientboundRemoveEntitiesPacket removed) {
+            entitySnapshotTick = -1;
+            entitySnapshot = List.of();
             for (int id : removed.getEntityIds()) attackRetries.removed(id);
             return;
         }
@@ -586,6 +598,8 @@ public class GuangxiCrystalModule extends Module {
         }
 
         if (packet instanceof ClientboundAddEntityPacket pkt) {
+            entitySnapshotTick = -1;
+            entitySnapshot = List.of();
             attackRetries.removed(pkt.getId());
             if (pkt.getId() > lastMaxEntityId) lastMaxEntityId = pkt.getId();
             instaGates[9]++; // any spawn packet reached this listener
@@ -752,6 +766,31 @@ public class GuangxiCrystalModule extends Module {
     private final int[] instaGates = new int[11];
 
     private void onBlockUpdate(BlockPos pos, boolean nowAir) {
+        if (!nowAir || nullCheck()) return;
+        double range = placeRangeValue() + 2.0;
+        if (mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) > range * range) return;
+        reactivePosition = pos.immutable();
+        if (reactiveScheduled) { ClientDiagnostics.count("combat.GuangxiCrystal.reactive.coalesced", 1); return; }
+        reactiveScheduled = true;
+        reactiveScheduledTick = mc.player.tickCount;
+        long generation = lifecycleGeneration;
+        var level = mc.level;
+        var player = mc.player;
+        // schedule always queues, unlike execute on the client thread. Already queued block updates
+        // therefore merge into one scan; crystal-spawn instant attacks keep their separate direct path.
+        mc.schedule(() -> {
+            if (!isEnabled() || generation != lifecycleGeneration || mc.level != level || mc.player != player) return;
+            BlockPos changed = reactivePosition;
+            reactiveScheduled = false;
+            reactivePosition = null;
+            if (changed == null || mc.player.tickCount - reactiveScheduledTick > 1) return;
+            long timer = ClientDiagnostics.startTimer();
+            try { scanBlockUpdate(changed, true); }
+            finally { ClientDiagnostics.endTimer("combat.GuangxiCrystal.reactive.scan", timer); }
+        });
+    }
+
+    private void scanBlockUpdate(BlockPos pos, boolean nowAir) {
         if (!nowAir) return;
         if (nullCheck() || mc.player.isDeadOrDying()) return;
         ensureSession();
@@ -838,6 +877,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         boolean canBase = basePlace.getValue() && placeReady && canSupplyObsidian();
         if (!canBreak && !canPlace && !canBase && !antiChineseReady) return;
 
+        long calculationTimer = ClientDiagnostics.startTimer();
         long calcStart = System.nanoTime();
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
         double scanRadius = Math.max(breakRangeValue(), placeRangeValue()) + 12.0
@@ -865,6 +905,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 ? findBestBasePlace(findClosestBaseTarget(potentialTargets), potentialTargets) : null;
 
         lastCalcMs = (System.nanoTime() - calcStart) / 1_000_000.0;
+        ClientDiagnostics.endTimer("combat.GuangxiCrystal.scan", calculationTimer);
         if (debug.getValue()) {
             ChatUtil.sendPersistent("autocrystal:calc",
                     Component.literal(String.format("AutoCrystal calc: %.3f ms", lastCalcMs)));
@@ -1523,10 +1564,10 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 tBox = tBox.move(p.x - living.getX(), p.y - living.getY(), p.z - living.getZ());
             }
 
-            float armor     = (float) living.getAttributeValue(Attributes.ARMOR);
-            float toughness = (float) living.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
-
-            int protPoints = protectionPoints(living);
+            var baseSnapshot = CombatSnapshotService.get(living);
+            float armor = baseSnapshot.armor();
+            float toughness = baseSnapshot.toughness();
+            int protPoints = baseSnapshot.protection();
 
             boolean faceEligible = facePlace.getValue() && living instanceof Player p
                     && (living.getHealth() + living.getAbsorptionAmount() <= facePlaceHealth.getValue()
@@ -1534,7 +1575,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
             out.add(new TargetCache(living, tPos, tBox,
                     living.getHealth(), living.getAbsorptionAmount(), armorBroken,
-                    armor, toughness, protPoints, resistanceMultiplier(living), faceEligible));
+                    armor, toughness, protPoints, baseSnapshot.resistanceMultiplier(), faceEligible));
         }
         decisionTargets = out;
         return out;
@@ -1842,8 +1883,15 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     private float calcDamage(TargetCache tc, Vec3 explosionPos, BlockPos phantomObsidianPos) {
         double dist = tc.pos.distanceTo(explosionPos);
         if (dist > 12.0) return 0;
+        TargetDamageKey key = new TargetDamageKey(tc, explosionPos,
+                phantomObsidianPos == null ? null : phantomObsidianPos.immutable());
+        Float cached = targetDamageCache.get(key);
+        if (cached != null) { ClientDiagnostics.count("combat.GuangxiCrystal.damageCache.hit", 1); return cached; }
         double exposure = calcExposure(explosionPos, tc.box, phantomObsidianPos);
-        return targetDamage(tc, dist, exposure);
+        float damage = targetDamage(tc, dist, exposure);
+        targetDamageCache.put(key, damage);
+        ClientDiagnostics.count("combat.GuangxiCrystal.damageCache.miss", 1);
+        return damage;
     }
 
     private float maxDamage(TargetCache tc, Vec3 explosionPos) {
@@ -1908,10 +1956,12 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         cachedChunk = null;
         cachedChunkX = cachedChunkZ = Integer.MIN_VALUE;
         selfDamageCache.clear();
+        targetDamageCache.clear();
 
         float health = mc.player.getHealth() + mc.player.getAbsorptionAmount();
-        float armor = (float) mc.player.getAttributeValue(Attributes.ARMOR);
-        float toughness = (float) mc.player.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
+        var baseSnapshot = CombatSnapshotService.get(mc.player);
+        float armor = baseSnapshot.armor();
+        float toughness = baseSnapshot.toughness();
 
         Vec3 currentPos = mc.player.position();
         AABB currentBox = mc.player.getBoundingBox();
@@ -1923,7 +1973,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             box = box.move(p.x - mc.player.getX(), p.y - mc.player.getY(), p.z - mc.player.getZ());
         }
         selfCache = new SelfCache(pos, box, currentPos, currentBox, health, armor, toughness,
-                protectionPoints(mc.player), resistanceMultiplier(mc.player), mc.level.getDifficulty());
+                baseSnapshot.protection(), baseSnapshot.resistanceMultiplier(), mc.level.getDifficulty());
     }
 
     private static float resistanceMultiplier(LivingEntity entity) {
@@ -2045,6 +2095,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 }
             }
         }
+        ClientDiagnostics.count("combat.GuangxiCrystal.rays", total);
         return total == 0 ? 0 : (double) unblocked / total;
     }
 

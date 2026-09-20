@@ -5,7 +5,6 @@ import com.google.gson.JsonObject;
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.event.impl.render.Render3DEvent;
-import dev.guizhou.features.Feature;
 import dev.guizhou.features.commands.ModuleCommand;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.combat.*;
@@ -48,10 +47,12 @@ import dev.guizhou.features.modules.render.QuadSupremeModule;
 import dev.guizhou.features.modules.render.ViewModelModule;
 import dev.guizhou.util.traits.Jsonable;
 import dev.guizhou.util.traits.Util;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 public class ModuleManager implements Jsonable, Util {
@@ -59,6 +60,9 @@ public class ModuleManager implements Jsonable, Util {
 
     private final Map<Class<? extends Module>, Module> fastRegistry = new HashMap<>();
     private final List<Module> modules = new ArrayList<>();
+    private final Map<Module, TimingKeys> timingKeys = new IdentityHashMap<>();
+    private final Set<String> reportedCallbackFailures = ConcurrentHashMap.newKeySet();
+    private record TimingKeys(String tick, String render2d, String render3d) {}
 
     public void init() {
         register(new HudClientModule());
@@ -139,6 +143,8 @@ public class ModuleManager implements Jsonable, Util {
     public void register(Module module) {
         getModules().add(module);
         fastRegistry.put(module.getClass(), module);
+        String prefix = "module." + module.getName();
+        timingKeys.put(module, new TimingKeys(prefix + ".tick", prefix + ".render2d", prefix + ".render3d"));
     }
 
     public List<Module> getModules() {
@@ -175,20 +181,46 @@ public class ModuleManager implements Jsonable, Util {
     }
 
     public void onTick() {
-        stream().filter(Feature::isEnabled).forEach(Module::onTick);
-        stream().filter(m -> m.isEnabled()
-                && m.getBindMode() == Module.BindMode.HOLD
-                && !m.getBind().isDown())
-                .toList()
-                .forEach(Module::disable);
+        for (Module module : modules) {
+            if (!module.isEnabled()) continue;
+            long started = ClientDiagnostics.startTimer();
+            try { module.onTick(); }
+            catch (RuntimeException failure) { reportCallbackFailure(module, "tick", failure); }
+            finally { if (started != 0) ClientDiagnostics.endTimer(timingKeys.get(module).tick(), started); }
+        }
+        for (Module module : modules) {
+            if (module.isEnabled() && module.getBindMode() == Module.BindMode.HOLD && !module.getBind().isDown()) {
+                module.disable();
+            }
+        }
     }
 
     public void onRender2D(Render2DEvent event) {
-        stream().filter(Feature::isEnabled).forEach(module -> module.onRender2D(event));
+        for (Module module : modules) {
+            if (!module.isEnabled()) continue;
+            long started = ClientDiagnostics.startTimer();
+            try { module.onRender2D(event); }
+            catch (RuntimeException failure) { reportCallbackFailure(module, "render2d", failure); }
+            finally { if (started != 0) ClientDiagnostics.endTimer(timingKeys.get(module).render2d(), started); }
+        }
     }
 
     public void onRender3D(Render3DEvent event) {
-        stream().filter(Feature::isEnabled).forEach(module -> module.onRender3D(event));
+        for (Module module : modules) {
+            if (!module.isEnabled()) continue;
+            long started = ClientDiagnostics.startTimer();
+            try { module.onRender3D(event); }
+            catch (RuntimeException failure) { reportCallbackFailure(module, "render3d", failure); }
+            finally { if (started != 0) ClientDiagnostics.endTimer(timingKeys.get(module).render3d(), started); }
+        }
+    }
+
+    private void reportCallbackFailure(Module module, String callback, RuntimeException failure) {
+        String scope = "module." + module.getName() + "." + callback;
+        ClientDiagnostics.count(scope + ".failures", 1);
+        if (reportedCallbackFailures.add(scope + "." + failure.getClass().getName())) {
+            LOGGER.error("Module {} {} callback failed; later modules will continue", module.getName(), callback, failure);
+        }
     }
 
     public void onUnload() {

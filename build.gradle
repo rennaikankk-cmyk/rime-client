@@ -132,6 +132,13 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        clientDiagnosticsTest: 'dev.guizhou.util.diagnostics.ClientDiagnosticsTest',
+        diagnosticsWiringTest: 'dev.guizhou.util.diagnostics.DiagnosticsWiringTest',
+        combatPlannerTest: 'dev.guizhou.util.combat.CombatPlannerTest',
+        combatPlanningWiringTest: 'dev.guizhou.util.combat.CombatPlanningWiringTest',
+        blastStageDiagnosticsTest: 'dev.guizhou.util.combat.BlastStageDiagnosticsTest',
+        moduleNamesTest: 'dev.guizhou.features.modules.ModuleNamesTest',
+        packetSubmissionHookTest: 'dev.guizhou.util.combat.PacketSubmissionHookTest',
         movementSafetyTest: 'dev.guizhou.util.movement.MovementSafetyTest',
         movementMixinHookTest: 'dev.guizhou.util.movement.MovementMixinHookTest',
         explosionDamageModelTest: 'dev.guizhou.util.combat.ExplosionDamageModelTest',
@@ -258,6 +265,7 @@ tasks.register('obfuscateJar', proguard.gradle.ProGuardTask) {
     // JDK base classes: without this ProGuard strips 'extends java.lang.Enum' from
     // enums (ClassCastException: not an enum) just like it stripped entrypoint interfaces
     libraryjars files("${System.getProperty('java.home')}/jmods/java.base.jmod")
+    libraryjars files("${System.getProperty('java.home')}/jmods/java.management.jmod")
     // Minecraft itself (intermediary names): without it ProGuard cannot see that
     // GuizhouWareGui extends class_437 (Screen), so the render/init/onClose overrides
     // look like unreferenced methods, get renamed, and the ClickGUI renders nothing.

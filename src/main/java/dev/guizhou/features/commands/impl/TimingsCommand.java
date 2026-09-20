@@ -2,17 +2,17 @@ package dev.guizhou.features.commands.impl;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.system.EventBus;
 import dev.guizhou.features.commands.Command;
 import dev.guizhou.manager.CommandManager;
 import dev.guizhou.util.elytra.FlightPlanningTask;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 
 public class TimingsCommand extends Command {
 
     public TimingsCommand() {
         super("timings");
-        setDescription("Listener self-time profile: .timings [topN] | .timings reset");
+        setDescription("Inclusive local timings: .timings [topN] reads retained data; .timings reset starts a fresh 60s window.");
     }
 
     @Override
@@ -20,27 +20,28 @@ public class TimingsCommand extends Command {
         builder.executes(ctx -> report(15))
                 .then(literal("reset")
                         .executes(ctx -> {
-                            EventBus.resetTimings();
-                            return success("Timings reset — play a fight, then .timings");
+                            ClientDiagnostics.start(60);
+                            return success("Fresh local 60s timing window started. Play, then .timings; no upload.");
                         }))
                 .then(argument("topN", IntegerArgumentType.integer(1, 50))
                         .executes(ctx -> report(IntegerArgumentType.getInteger(ctx, "topN"))));
     }
 
     private int report(int n) {
-        // timings only accumulate while a profiling window is open — open one
-        // covering the next minute so ".timings" alone collects fresh data
-        EventBus.openTimingWindow(60);
+        if (ClientDiagnostics.snapshot().startedAtEpochMillis() == 0) {
+            ClientDiagnostics.start(60);
+            return success("Local timing window opened for 60s. Play, then .timings again; no upload.");
+        }
         var flight = FlightPlanningTask.diagnostics();
         sendMessage("Flight workers: " + flight.workers() + ", active: " + flight.active()
                 + ", queued: " + flight.queued() + ", completed runs: " + flight.completedRuns());
         String report = EventBus.timingsReport(n);
         if (report.isEmpty()) {
-            return success("Timing window opened for 60s — play, then .timings again");
+            return success("No timed calls in this capture. .timings reset starts a fresh 60s window.");
         }
         for (String line : report.split("\n")) {
             if (!line.isBlank()) sendMessage(line);
         }
-        return success("(window re-opened 60s — rerun .timings for fresh numbers)");
+        return success("Inclusive elapsed time: listener/module/inner scopes overlap; do not sum them. P95 is approximate. .timings reset restarts capture.");
     }
 }

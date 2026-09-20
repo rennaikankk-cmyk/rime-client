@@ -72,7 +72,7 @@ public class SwapManager extends Feature {
     private int serverSlot = -1;
 
     public void init() {
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "SwapManager");
     }
 
     // ---------------------------------------------------------------- sub-tick swaps

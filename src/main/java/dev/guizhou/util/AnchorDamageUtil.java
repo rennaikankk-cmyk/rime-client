@@ -1,15 +1,11 @@
 package dev.guizhou.util;
 
 import dev.guizhou.util.combat.ExplosionDamageModel;
+import dev.guizhou.util.combat.CombatSnapshotService;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.traits.Util;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -22,8 +18,6 @@ import java.util.function.BiFunction;
 /** Power-five blast model shared by anchors and beds. Call only on the client thread. */
 public final class AnchorDamageUtil implements Util {
     public static final double DIAMETER = 10.0;
-    private static final EquipmentSlot[] ARMOR_SLOTS = {
-            EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
     private AnchorDamageUtil() { throw new AssertionError(); }
 
@@ -32,20 +26,11 @@ public final class AnchorDamageUtil implements Util {
         public static Target of(LivingEntity living) { return of(living, false); }
 
         public static Target of(LivingEntity living, boolean assumeBestArmor) {
-            int protection = 0;
-            for (EquipmentSlot slot : ARMOR_SLOTS) {
-                ItemStack stack = living.getItemBySlot(slot);
-                if (stack.isEmpty()) continue;
-                int actual = EnchantmentUtil.getLevel(Enchantments.PROTECTION, stack)
-                        + 2 * EnchantmentUtil.getLevel(Enchantments.BLAST_PROTECTION, stack);
-                protection += assumeBestArmor && actual == 0 ? 8 : actual;
-            }
-            MobEffectInstance resistance = living.getEffect(MobEffects.RESISTANCE);
-            return new Target(living, living.position(), living.getBoundingBox(),
-                    (float) living.getAttributeValue(Attributes.ARMOR),
-                    (float) living.getAttributeValue(Attributes.ARMOR_TOUGHNESS),
-                    ExplosionDamageModel.resistanceMultiplier(resistance == null ? -1 : resistance.getAmplifier()),
-                    Math.min(20, protection));
+            var snapshot = CombatSnapshotService.get(living);
+            return new Target(living, new Vec3(snapshot.x(), snapshot.y(), snapshot.z()),
+                    new AABB(snapshot.minX(), snapshot.minY(), snapshot.minZ(), snapshot.maxX(), snapshot.maxY(), snapshot.maxZ()),
+                    snapshot.armor(), snapshot.toughness(), snapshot.resistanceMultiplier(),
+                    assumeBestArmor ? snapshot.assumedProtection() : snapshot.protection());
         }
     }
 
@@ -91,6 +76,7 @@ public final class AnchorDamageUtil implements Util {
         if (stepX <= 0 || stepY <= 0 || stepZ <= 0) return 0;
         double offsetX = (1.0 - Math.floor(1.0 / stepX) * stepX) / 2.0;
         double offsetZ = (1.0 - Math.floor(1.0 / stepZ) * stepZ) / 2.0;
+        ClientDiagnostics.count("combat.power5.exposure", 1);
         RayContext context = new RayContext(source);
         BiFunction<RayContext, BlockPos, BlockHitResult> tester = (ray, pos) -> {
             if (pos.equals(removedSource) || pos.equals(removedOther)) return null;
@@ -110,6 +96,7 @@ public final class AnchorDamageUtil implements Util {
                 }
             }
         }
+        ClientDiagnostics.count("combat.power5.rays", total);
         return total == 0 ? 0 : (double) unblocked / total;
     }
 

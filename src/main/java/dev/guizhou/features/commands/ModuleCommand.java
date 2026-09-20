@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.guizhou.features.commands.argument.ColorArgumentType;
 import dev.guizhou.features.modules.Module;
+import dev.guizhou.features.modules.ModuleNames;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.CommandManager;
 
@@ -21,7 +22,7 @@ public class ModuleCommand extends Command {
     private final Module module;
 
     public ModuleCommand(Module module) {
-        super(module.getName().toLowerCase());
+        super(ModuleNames.commandAliases(module.getName()));
         setDescription("Command line configuration implementation for \"" + module.getName() + "\"");
         this.module = module;
     }

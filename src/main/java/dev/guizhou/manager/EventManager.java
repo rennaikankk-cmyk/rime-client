@@ -12,11 +12,12 @@ import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.Feature;
+import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import net.minecraft.world.entity.player.Player;
 
 public class EventManager extends Feature {
     public void init() {
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "EventManager");
     }
 
     public void onUnload() {
@@ -54,6 +55,7 @@ public class EventManager extends Feature {
 
     @Subscribe
     public void onRenderGameOverlayEvent(Render2DEvent event) {
+        ClientDiagnostics.recordFrame();
         GuizhouWare.moduleManager.onRender2D(event);
     }
 

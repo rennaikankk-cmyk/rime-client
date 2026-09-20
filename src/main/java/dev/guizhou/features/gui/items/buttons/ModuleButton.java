@@ -111,7 +111,7 @@ public class ModuleButton extends Button {
 
         boolean hovering = this.isHovering(mouseX, mouseY);
         boolean searching = SearchBar.hasQuery();
-        boolean match = searching && SearchBar.matches(this.getName());
+        boolean match = searching && (SearchBar.matches(module.getName()) || SearchBar.matches(module.getDisplayName()));
         boolean navSelected = GuiNavigator.isSelected(this);
 
         drawRow(context, this.x, this.y, this.x + this.width, this.y + GuiTheme.MODULE_HEIGHT,
@@ -138,7 +138,7 @@ public class ModuleButton extends Button {
         } else {
             textColor = this.getState() ? GuiTheme.TEXT_MODULE_ON : GuiTheme.TEXT_MODULE_OFF;
         }
-        drawScrollableString(this.getName(), this.x + 4f,
+        drawScrollableString(module.getDisplayName(), this.x + 4f,
                 this.y + (GuiTheme.MODULE_HEIGHT - 8) / 2f,
                 textColor, this.width - 16, hovering);
 

@@ -74,7 +74,7 @@ public class RotationManager {
     private boolean returning;
 
     public void init() {
-        EVENT_BUS.register(this);
+        EVENT_BUS.register(this, "RotationManager");
     }
 
     public void submit(RotationRequest request) {
