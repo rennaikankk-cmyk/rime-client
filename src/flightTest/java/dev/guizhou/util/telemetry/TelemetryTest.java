@@ -13,7 +13,9 @@ public final class TelemetryTest {
         queueBounds();
         priorityRetention();
         rejectedTypePurgedSelectively();
-        System.out.println("Telemetry checks passed: privacy allowlist, capability parsing/expiry, byte bounds, priority retention.");
+        receiptStatus();
+        asynchronousReceiptOrder();
+        System.out.println("Telemetry checks passed: privacy, capabilities, queue bounds, priority retention, receiver status and async ordering.");
     }
 
     private static void privacy() {
@@ -82,7 +84,7 @@ public final class TelemetryTest {
         check(!queue.batch(envelope).toString().contains("must_not_appear"), "Producer mutation changed queued data");
         queue.offer(event("attack_intent", "test"));
         queue.clear();
-        check(queue.count() == 0 && queue.bytes() == 0, "Opt-out must clear entire queue");
+        check(queue.count() == 0 && queue.bytes() == 0, "Session reset must clear the entire queue");
     }
 
     private static void priorityRetention() {
@@ -110,6 +112,71 @@ public final class TelemetryTest {
         check(json.contains("kept") && json.contains("kept-priority") && !json.contains("first") && !json.contains("second"),
                 "Purged summaries must not reach a later batch while old events do");
         check(queue.removeType("flight_summary") == 0, "A second purge is a no-op");
+    }
+
+    private static void receiptStatus() {
+        TelemetryUploadStatus status = new TelemetryUploadStatus();
+        var initial = status.snapshot();
+        check(initial.outcome() == TelemetryUploadStatus.Outcome.NEVER_SENT && initial.attempts() == 0
+                && initial.lastConfirmedAt() == 0, "A fresh client must not claim a historical confirmation");
+        long attempt = status.started(7, 1000);
+        check(status.snapshot().outcome() == TelemetryUploadStatus.Outcome.SENDING
+                && status.snapshot().lastBatchEvents() == 7, "Sending status records the request event count");
+        status.completed(attempt, 202, null, 1200);
+        var confirmed = status.snapshot();
+        check(confirmed.outcome() == TelemetryUploadStatus.Outcome.RECEIVER_CONFIRMED
+                && confirmed.confirmedBatches() == 1 && confirmed.lastConfirmedAt() == 1200
+                && confirmed.lastConfirmedHttp() == 202 && confirmed.lastConfirmedBatchEvents() == 7,
+                "HTTP 202 is exposed as a receiver confirmation, retaining its time and batch size");
+
+        attempt = status.started(3, 2000);
+        status.completed(attempt, 401, null, 2200);
+        var rejected = status.snapshot();
+        check(rejected.outcome() == TelemetryUploadStatus.Outcome.FAILED
+                && rejected.lastFailure() == TelemetryUploadStatus.Failure.HTTP && rejected.lastFailureHttp() == 401
+                && rejected.failedBatches() == 1 && rejected.consecutiveFailures() == 1,
+                "An HTTP rejection is a visible failure and does not count as received");
+        check(rejected.lastConfirmedAt() == 1200 && rejected.lastConfirmedBatchEvents() == 7,
+                "A later rejection must not erase the earlier receiver confirmation");
+        check(initial.attempts() == 0 && confirmed.failedBatches() == 0,
+                "Published snapshots must remain immutable across asynchronous completions");
+
+        attempt = status.started(9, 3000);
+        status.completed(attempt, 0, new java.util.concurrent.CompletionException(
+                new java.net.http.HttpTimeoutException("secret credential must not be retained")), 3500);
+        check(status.snapshot().lastFailure() == TelemetryUploadStatus.Failure.TIMEOUT
+                && status.snapshot().consecutiveFailures() == 2 && !status.snapshot().toString().contains("secret"),
+                "Wrapped timeouts use a fixed safe category without leaking exception text");
+        attempt = status.started(4, 4000);
+        status.completed(attempt, 0, new java.io.IOException("private endpoint"), 4500);
+        check(status.snapshot().lastFailure() == TelemetryUploadStatus.Failure.NETWORK
+                && !status.snapshot().toString().contains("private"), "Network error details stay out of diagnostics");
+        attempt = status.started(1, 5000);
+        status.completed(attempt, 204, null, 5500);
+        check(status.snapshot().consecutiveFailures() == 0 && status.snapshot().confirmedBatches() == 2
+                && status.snapshot().lastFailureAt() == 4500,
+                "Recovery resets consecutive failures but preserves the last observed failure");
+        attempt = status.started(1, 6000);
+        status.completed(attempt, 0, null, 6100);
+        check(status.snapshot().lastFailure() == TelemetryUploadStatus.Failure.INVALID_RESPONSE,
+                "No response is never reported as receiver acceptance");
+    }
+
+    private static void asynchronousReceiptOrder() {
+        TelemetryUploadStatus status = new TelemetryUploadStatus();
+        long old = status.started(2, 1000);
+        long current = status.started(4, 2000);
+        status.completed(old, 200, null, 2100);
+        check(status.snapshot().outcome() == TelemetryUploadStatus.Outcome.SENDING
+                && status.snapshot().confirmedBatches() == 0, "A stale completion cannot overwrite an active attempt");
+        status.completed(current, 429, null, 2200);
+        var once = status.snapshot();
+        status.completed(current, 200, null, 2300);
+        check(once.equals(status.snapshot()), "A duplicate completion cannot change outcome or double-count a batch");
+        current = status.started(256, -1);
+        status.completed(current, 999, null, -1);
+        check(status.snapshot().lastBatchEvents() == 128 && status.snapshot().lastAttemptAt() == 0
+                && status.snapshot().lastFailureHttp() == 0, "Display metadata is bounded and invalid HTTP codes fail closed");
     }
 
     private static JsonObject event(String type, String text) {

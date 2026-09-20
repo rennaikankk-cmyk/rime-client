@@ -103,13 +103,26 @@ public final class FlightTelemetryWiringTest {
         }
         check(sessionGuard, "The request must capture its session before the 400 can degrade it");
         boolean marshalled = false;
+        boolean batchTypeGuard = false;
+        boolean examinesTypes = false;
         Trace degradation = null;
         for (Map.Entry<String, Trace> entry : telemetry.entrySet()) {
             if (!entry.getKey().startsWith("lambda$flush")) continue;
-            if (entry.getValue().hasCall("net/minecraft/client/Minecraft", "execute")) marshalled = true;
+            Trace trace = entry.getValue();
+            if (trace.steps.stream().anyMatch(step -> "flight_summary".equals(step.constant))) examinesTypes = true;
+            int execute = trace.call("net/minecraft/client/Minecraft", "execute");
+            if (execute >= 0) {
+                marshalled = true;
+                boolean capturesBatchType = entry.getKey().substring(0, entry.getKey().indexOf(')')).contains("Z");
+                int response = trace.call("java/net/http/HttpResponse", "statusCode");
+                batchTypeGuard = capturesBatchType && trace.steps.subList(Math.max(0, response), execute).stream()
+                        .anyMatch(step -> step.opcode == Opcodes.IFEQ && trace.target(step) > execute);
+            }
             if (entry.getValue().hasCall(TELEMETRY, "discardFlightWindow")) degradation = entry.getValue();
         }
         check(marshalled, "The degradation handler must run on the game thread");
+        check(examinesTypes && batchTypeGuard && flush.hasCall("java/util/stream/Stream", "anyMatch"),
+                "A rejected batch without flight_summary must not disable later flight summaries");
         check(degradation != null && degradation.field("sessionId", Opcodes.GETFIELD, -1) >= 0
                         && degradation.hasCall(BUFFER, "removeType"),
                 "The 400 handler must check its session, discard the open window and purge queued summaries");

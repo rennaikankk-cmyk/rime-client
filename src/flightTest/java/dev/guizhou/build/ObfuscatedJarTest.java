@@ -53,6 +53,7 @@ public final class ObfuscatedJarTest {
             verifyEntrypointAndMixins(before, after, mapping);
             verifyGuiOverrides(before, after, mapping);
             verifyHeartbeat(before, after, mapping);
+            verifyReleaseLicense(before, after, mapping);
             System.out.println("ObfuscatedJarTest passed: " + checks + " checks; "
                     + enumCount + " enums audited, " + reflected + " isolated reflection checks, "
                     + (enumCount - reflected) + " complex enums ASM-only, "
@@ -268,34 +269,111 @@ public final class ObfuscatedJarTest {
         String denied = mapping.requiredMember(HEARTBEAT, "notifyDeniedOnce()");
         requiredMethod(heartbeat, authorized + "()Z");
         requiredMethod(heartbeat, denied + "()V");
-        for (String simpleName : List.of("GuangxiCrystalModule", "GuangxiElytraChaseModule",
-                "GuangxiBedModule", "GuangxiElytraModule", "GuangxiMineModule", "AutoUseModule", "ArmorFlyModule")) {
+        Map<String, List<String>> checkpoints = Map.ofEntries(
+                Map.entry("GuangxiCrystalModule", List.of("onPreTick", "onCrystalSpawn", "onBlockUpdate",
+                        "lambda$onBlockUpdate$", "scanBlockUpdate", "preplaceCrystal", "breakCrystal",
+                        "sendCrystalAttack", "sendGhostAttack", "doPlace", "placeCrystalShared")),
+                Map.entry("GuangxiMineModule", List.of("onTick", "onAttackBlock", "requestBreak", "startMine",
+                        "begin", "stopBreak", "sendAction", "isAvailable", "fireFinish", "fireSubmitted")),
+                Map.entry("AutoMineModule", List.of("onPreTick", "onMineFinish", "onPacket", "lambda$onPacket$", "placeGlass")),
+                Map.entry("GuangxiElytraChaseModule", List.of("onPreTick", "onPostMovement")),
+                Map.entry("GuangxiBedModule", List.of("onPreTick")),
+                Map.entry("GuangxiElytraModule", List.of("onPreTick")),
+                Map.entry("AutoUseModule", List.of("onPreTick", "shouldKeepUsing")),
+                Map.entry("ArmorFlyModule", List.of("onPreTick", "onFlightWindow", "requested")),
+                Map.entry("AutoAnchorModule", List.of("onPreTick")),
+                Map.entry("GuangxiPistonModule", List.of("onTick")),
+                Map.entry("NoFallModule", List.of("onPreTick", "protects")),
+                Map.entry("NoSlowModule", List.of("onTick", "onPacketSend", "shouldCancelConsumeSlow", "isActive")),
+                Map.entry("AntiHungerModule", List.of("onPreTick", "onPacketSend")));
+        for (var checkpoint : checkpoints.entrySet()) {
+            String simpleName = checkpoint.getKey();
             List<ClassInfo> matches = before.values().stream()
                     .filter(info -> info.name.endsWith("/" + simpleName)).toList();
             check(matches.size() == 1, "Expected one protected module: " + simpleName);
             ClassInfo source = matches.getFirst();
             ClassInfo result = required(after, mapping.requiredClass(source.name));
-            List<MethodInfo> sourceTicks = source.methods.values().stream()
-                    .filter(method -> method.descriptor.startsWith("(Ldev/guizhou/event/")
-                            && method.descriptor.endsWith(";)V"))
+            List<MethodInfo> protectedMethods = source.methods.values().stream()
                     .filter(method -> method.steps.stream().anyMatch(step ->
                             member(step, Opcodes.INVOKESTATIC, HEARTBEAT, "authorized", "()Z"))).toList();
-            int expectedCheckpoints = simpleName.equals("GuangxiElytraChaseModule") || simpleName.equals("ArmorFlyModule") ? 2 : 1;
-            check(sourceTicks.size() == expectedCheckpoints, "Input authorization checkpoint count: " + simpleName);
-            for (MethodInfo sourceTick : sourceTicks) {
-                String tickName = sourceTick.name;
-                List<MethodInfo> tickMethods = result.methods.values().stream()
-                        .filter(method -> method.name.equals(tickName)).toList();
-                check(tickMethods.size() == 1, "Protected tick method changed/lost: " + simpleName);
-                List<Step> steps = executable(tickMethods.getFirst());
-                check(steps.size() >= 5, "Authorization prefix missing: " + simpleName);
-                check(member(steps.get(0), Opcodes.INVOKESTATIC, owner, authorized, "()Z")
-                                && steps.get(1).opcode == Opcodes.IFNE
-                                && member(steps.get(2), Opcodes.INVOKESTATIC, owner, denied, "()V")
-                                && steps.get(3).opcode == Opcodes.RETURN,
-                        "Authorization must precede module work: " + simpleName);
+            for (String expected : checkpoint.getValue()) {
+                check(protectedMethods.stream().anyMatch(method -> expected.endsWith("$")
+                                ? method.name.startsWith(expected) : method.name.equals(expected)),
+                        "Input authorization missing from " + simpleName + "." + expected);
+            }
+            for (MethodInfo sourceMethod : protectedMethods) {
+                String mappedName = mapping.requiredMember(source.name, methodMappingKey(sourceMethod));
+                MethodInfo outputMethod = requiredMethod(result, mappedName + mapping.descriptor(sourceMethod.descriptor));
+                verifyAuthorizationFlow(sourceMethod, outputMethod, owner, authorized, simpleName);
+                if (Set.of("onPreTick", "onTick", "onPostMovement", "onFlightWindow").contains(sourceMethod.name)) {
+                    verifyDeniedTickPrefix(source, sourceMethod);
+                }
             }
         }
+    }
+
+    private static String methodMappingKey(MethodInfo method) {
+        return method.name + "(" + String.join(",", Arrays.stream(Type.getArgumentTypes(method.descriptor))
+                .map(Type::getClassName).toList()) + ")";
+    }
+
+    /** Production uses -dontoptimize: preserve the complete guarded control flow, including cleanup paths. */
+    private static void verifyAuthorizationFlow(MethodInfo source, MethodInfo output, String heartbeat,
+                                                 String authorized, String module) {
+        List<Step> original = executable(source), retained = executable(output);
+        String label = module + "." + source.name;
+        check(original.size() == retained.size(), "Protected action control flow changed: " + label);
+        int guards = 0;
+        for (int index = 0; index < original.size(); index++) {
+            Step expected = original.get(index), actual = retained.get(index);
+            check(expected.opcode == actual.opcode, "Protected action instruction changed: " + label + " @" + index);
+            if (expected.value instanceof Label sourceTarget) {
+                check(actual.value instanceof Label, "Protected action branch lost: " + label);
+                check(labelOrdinal(source, sourceTarget) == labelOrdinal(output, (Label) actual.value),
+                        "Protected action branch target changed: " + label);
+            }
+            boolean sourceGuard = member(expected, Opcodes.INVOKESTATIC, HEARTBEAT, "authorized", "()Z");
+            boolean outputGuard = member(actual, Opcodes.INVOKESTATIC, heartbeat, authorized, "()Z");
+            check(sourceGuard == outputGuard, "Authorization call removed or moved: " + label);
+            if (sourceGuard) guards++;
+        }
+        check(guards > 0, "Protected action has no retained authorization guard: " + label);
+    }
+
+    private static int labelOrdinal(MethodInfo method, Label label) {
+        int ordinal = 0;
+        for (Step step : method.steps) {
+            if (step.opcode < 0 && step.value == label) return ordinal;
+            if (step.opcode >= 0) ordinal++;
+        }
+        throw new AssertionError("Missing branch label in " + method.name);
+    }
+
+    /** Revocation may release state and restore user controls, but must return before normal tick work. */
+    private static void verifyDeniedTickPrefix(ClassInfo owner, MethodInfo method) {
+        List<Step> steps = executable(method);
+        String label = owner.name + "." + method.name;
+        check(steps.size() >= 4 && member(steps.getFirst(), Opcodes.INVOKESTATIC, HEARTBEAT, "authorized", "()Z"),
+                "Authorization must precede tick work: " + label);
+        Step branch = steps.get(1);
+        check(branch.opcode == Opcodes.IFNE, "Denied tick must take a terminating cleanup path: " + label);
+        int allowedWork = labelOrdinal(method, (Label) branch.value);
+        boolean returned = false;
+        Set<String> cleanup = Set.of("stopUnauthorizedMining", "resetGlass", "resetState", "restoreSprint");
+        for (int index = 2; index < allowedWork; index++) {
+            Step step = steps.get(index);
+            if (step.opcode == Opcodes.RETURN) { returned = true; break; }
+            check(!(step.value instanceof Label) && step.opcode != Opcodes.INVOKEDYNAMIC,
+                    "Denied tick can branch or schedule new business: " + label);
+            if (step.opcode >= Opcodes.INVOKEVIRTUAL && step.opcode <= Opcodes.INVOKEINTERFACE) {
+                boolean notification = member(step, Opcodes.INVOKESTATIC, HEARTBEAT, "notifyDeniedOnce", "()V");
+                boolean ownCleanup = owner.name.equals(step.owner) && cleanup.contains(step.name) && step.descriptor.equals("()V");
+                boolean clear = step.name.equals("clear") && step.descriptor.equals("()V")
+                        && (step.owner.startsWith("java/util/") || step.owner.equals("dev/guizhou/features/modules/combat/MiningBreakTracker"));
+                check(notification || ownCleanup || clear, "Denied tick calls normal business: " + label + " -> " + step.name);
+            }
+        }
+        check(returned, "Denied tick reaches normal module work: " + label);
     }
 
     private static void verifyGuardReference(MethodInfo status, String owner, String notice) {
@@ -305,6 +383,150 @@ public final class ObfuscatedJarTest {
                         && statusSteps.get(1).opcode == Opcodes.ARRAYLENGTH
                         && statusSteps.get(2).opcode == Opcodes.IFNE,
                 "Heartbeat status lost intentional guard-array reference");
+    }
+
+    private static void verifyReleaseLicense(Map<String, ClassInfo> before,
+                                             Map<String, ClassInfo> after, Mapping mapping) {
+        String buildConfig = "dev/guizhou/util/BuildConfig";
+        FieldInfo development = required(before, buildConfig).fields.get("DEVELOPMENT_BUILDZ");
+        check(development != null && (development.access & (Opcodes.ACC_STATIC | Opcodes.ACC_FINAL))
+                        == (Opcodes.ACC_STATIC | Opcodes.ACC_FINAL) && Integer.valueOf(0).equals(development.value),
+                "Production input must compile DEVELOPMENT_BUILD as the constant false");
+
+        String lease = "dev/guizhou/util/license/LicenseLease";
+        String signed = "dev/guizhou/util/license/SignedHeartbeat";
+        String verdict = signed + "$Verdict";
+        String limited = signed + "$LimitedBody";
+        for (boolean obfuscated : List.of(false, true)) {
+            Map<String, ClassInfo> classes = obfuscated ? after : before;
+            String heartbeatOwner = obfuscated ? mapping.requiredClass(HEARTBEAT) : HEARTBEAT;
+            String leaseOwner = obfuscated ? mapping.requiredClass(lease) : lease;
+            String signedOwner = obfuscated ? mapping.requiredClass(signed) : signed;
+            String verdictOwner = obfuscated ? mapping.requiredClass(verdict) : verdict;
+            String limitedOwner = obfuscated ? mapping.requiredClass(limited) : limited;
+            ClassInfo heartbeat = required(classes, heartbeatOwner);
+            MethodInfo initial = requiredMethod(heartbeat, "<clinit>()V");
+            check(initial.steps.stream().noneMatch(step -> "net/fabricmc/loader/api/FabricLoader".equals(step.owner)
+                            && "isDevelopmentEnvironment".equals(step.name)),
+                    "Production heartbeat retained a runtime development exemption");
+
+            MethodInfo authorized = retainedMethod(before, classes, mapping, HEARTBEAT, "authorized()Z", obfuscated);
+            String leaseField = obfuscated ? mapping.requiredMember(HEARTBEAT, "LEASE") : "LEASE";
+            String leaseAuthorized = obfuscated ? mapping.requiredMember(lease, "authorized()") : "authorized";
+            List<Step> gate = executable(authorized);
+            check(gate.size() == 3 && member(gate.get(0), Opcodes.GETSTATIC, heartbeatOwner, leaseField, "L" + leaseOwner + ";")
+                            && member(gate.get(1), Opcodes.INVOKEVIRTUAL, leaseOwner, leaseAuthorized, "()Z")
+                            && gate.get(2).opcode == Opcodes.IRETURN,
+                    "Production authorization must directly return the expiring lease decision");
+
+            MethodInfo beat = retainedMethod(before, classes, mapping, HEARTBEAT, "beat()V", obfuscated);
+            String verifyName = obfuscated ? mapping.requiredMember(signed, "verify(byte[],java.security.PublicKey)") : "verify";
+            String allowedName = obfuscated ? mapping.requiredMember(verdict, "allowed()") : "allowed";
+            String successName = obfuscated ? mapping.requiredMember(lease, "verifiedSuccess()") : "verifiedSuccess";
+            int verify = uniqueCall(beat, signedOwner, verifyName, "([BLjava/security/PublicKey;)L" + verdictOwner + ";");
+            int allowed = uniqueCall(beat, verdictOwner, allowedName, "()Z");
+            int success = uniqueCall(beat, leaseOwner, successName, "()V");
+            check(verify < allowed && allowed < success, "Heartbeat lease renewal must follow verified allowed verdict");
+            check(!flowReaches(beat, 0, success, verify) && !flowReaches(beat, 0, success, allowed),
+                    "Heartbeat lease renewal bypasses signature verification or the allowed verdict");
+            check(!flowReaches(beat, rejectedBooleanPath(beat, allowed), success, -1),
+                    "A signed denial can renew the production lease");
+            for (ExceptionRegion region : beat.exceptions) {
+                if (labelIndex(beat, region.start) <= verify && verify < labelIndex(beat, region.end)) {
+                    check(!flowReaches(beat, labelIndex(beat, region.handler), success, -1),
+                            "A signature-verification exception can renew the production lease");
+                }
+            }
+
+            MethodInfo verifier = retainedMethod(before, classes, mapping, signed,
+                    "verify([BLjava/security/PublicKey;)L" + verdict + ";", obfuscated);
+            int signature = uniqueCall(verifier, "java/security/Signature", "verify", "([B)Z");
+            int createVerdict = uniqueCall(verifier, verdictOwner, "<init>", "(ZLjava/lang/String;)V");
+            check(!flowReaches(verifier, 0, createVerdict, signature)
+                            && !flowReaches(verifier, rejectedBooleanPath(verifier, signature), createVerdict, -1),
+                    "SignedHeartbeat can construct a verdict after a failed or skipped cryptographic verification");
+
+            ClassInfo subscriber = required(classes, limitedOwner);
+            check(subscriber.interfaces.contains("java/net/http/HttpResponse$BodySubscriber"),
+                    "Bounded heartbeat subscriber lost its HTTP BodySubscriber interface");
+            for (String callback : List.of("getBody()Ljava/util/concurrent/CompletionStage;",
+                    "onSubscribe(Ljava/util/concurrent/Flow$Subscription;)V", "onNext(Ljava/util/List;)V",
+                    "onNext(Ljava/lang/Object;)V", "onError(Ljava/lang/Throwable;)V", "onComplete()V")) {
+                MethodInfo retained = requiredMethod(subscriber, callback);
+                check((retained.access & Opcodes.ACC_PUBLIC) != 0, "HTTP subscriber callback lost public access: " + callback);
+            }
+            MethodInfo factory = retainedMethod(before, classes, mapping, signed,
+                    "limitedBody()Ljava/net/http/HttpResponse$BodySubscriber;", obfuscated);
+            uniqueCall(factory, limitedOwner, "<init>", "()V");
+            String factoryName = obfuscated ? mapping.requiredMember(signed, "limitedBody()") : "limitedBody";
+            check(heartbeat.methods.values().stream().anyMatch(method -> method.steps.stream().anyMatch(step ->
+                            member(step, Opcodes.INVOKESTATIC, signedOwner, factoryName, "()Ljava/net/http/HttpResponse$BodySubscriber;"))),
+                    "Heartbeat response handling no longer uses the bounded subscriber factory");
+        }
+    }
+
+    private static MethodInfo retainedMethod(Map<String, ClassInfo> before, Map<String, ClassInfo> current,
+                                             Mapping mapping, String owner, String signature, boolean obfuscated) {
+        MethodInfo original = requiredMethod(required(before, owner), signature);
+        return obfuscated ? requiredMethod(required(current, mapping.requiredClass(owner)),
+                mapping.requiredMember(owner, methodMappingKey(original)) + mapping.descriptor(original.descriptor)) : original;
+    }
+
+    private static int uniqueCall(MethodInfo method, String owner, String name, String descriptor) {
+        int found = -1;
+        for (int index = 0; index < method.steps.size(); index++) {
+            Step step = method.steps.get(index);
+            if (step.opcode >= Opcodes.INVOKEVIRTUAL && step.opcode <= Opcodes.INVOKEINTERFACE
+                    && owner.equals(step.owner) && name.equals(step.name) && descriptor.equals(step.descriptor)) {
+                check(found < 0, "Expected one call to " + owner + "." + name + " in " + method.name);
+                found = index;
+            }
+        }
+        check(found >= 0, "Missing call to " + owner + "." + name + " in " + method.name);
+        return found;
+    }
+
+    private static int labelIndex(MethodInfo method, Label label) {
+        for (int index = 0; index < method.steps.size(); index++) {
+            Step step = method.steps.get(index);
+            if (step.opcode < 0 && step.value == label) return index;
+        }
+        throw new AssertionError("Missing control-flow label in " + method.name);
+    }
+
+    private static int rejectedBooleanPath(MethodInfo method, int predicate) {
+        int branchIndex = predicate + 1;
+        while (method.steps.get(branchIndex).opcode < 0) branchIndex++;
+        Step branch = method.steps.get(branchIndex);
+        check(branch.opcode == Opcodes.IFEQ || branch.opcode == Opcodes.IFNE,
+                "Security predicate no longer controls a boolean branch: " + method.name);
+        return branch.opcode == Opcodes.IFEQ ? labelIndex(method, (Label) branch.value) : branchIndex + 1;
+    }
+
+    /** Conservative CFG includes exception handlers: failure paths must never appear to be unreachable. */
+    private static boolean flowReaches(MethodInfo method, int start, int goal, int excluded) {
+        var todo = new java.util.ArrayDeque<Integer>();
+        var seen = new java.util.HashSet<Integer>();
+        todo.add(start);
+        while (!todo.isEmpty()) {
+            int index = todo.removeFirst();
+            if (index == excluded || index < 0 || index >= method.steps.size() || !seen.add(index)) continue;
+            if (index == goal) return true;
+            Step step = method.steps.get(index);
+            for (ExceptionRegion region : method.exceptions) {
+                if (step.opcode >= 0 && labelIndex(method, region.start) <= index && index < labelIndex(method, region.end))
+                    todo.add(labelIndex(method, region.handler));
+            }
+            if (step.value instanceof Label target && step.opcode >= 0) {
+                todo.add(labelIndex(method, target));
+                if (step.opcode == Opcodes.GOTO) continue;
+            }
+            check(step.opcode != Opcodes.TABLESWITCH && step.opcode != Opcodes.LOOKUPSWITCH,
+                    "Security CFG switch needs explicit review in " + method.name);
+            if (step.opcode >= Opcodes.IRETURN && step.opcode <= Opcodes.RETURN || step.opcode == Opcodes.ATHROW) continue;
+            todo.add(index + 1);
+        }
+        return false;
     }
 
     private static Set<String> stringConstants(MethodInfo method) {
@@ -387,7 +609,7 @@ public final class ObfuscatedJarTest {
 
         @Override
         public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
-            fields.put(name + descriptor, new FieldInfo(access, descriptor));
+            fields.put(name + descriptor, new FieldInfo(access, descriptor, value));
             return null;
         }
 
@@ -400,17 +622,20 @@ public final class ObfuscatedJarTest {
         }
     }
 
-    private record FieldInfo(int access, String descriptor) {
+    private record FieldInfo(int access, String descriptor, Object value) {
     }
 
     private record Step(int opcode, String owner, String name, String descriptor, Object value) {
     }
+
+    private record ExceptionRegion(Label start, Label end, Label handler) {}
 
     private static final class MethodInfo extends MethodVisitor {
         final int access;
         final String name;
         final String descriptor;
         final List<Step> steps = new ArrayList<>();
+        final List<ExceptionRegion> exceptions = new ArrayList<>();
 
         MethodInfo(int access, String name, String descriptor) {
             super(Opcodes.ASM9);
@@ -430,6 +655,9 @@ public final class ObfuscatedJarTest {
         @Override public void visitLdcInsn(Object value) { add(Opcodes.LDC, value); }
         @Override public void visitJumpInsn(int opcode, Label label) { add(opcode, label); }
         @Override public void visitLabel(Label label) { add(-1, label); }
+        @Override public void visitTryCatchBlock(Label start, Label end, Label handler, String type) {
+            exceptions.add(new ExceptionRegion(start, end, handler));
+        }
         @Override public void visitIincInsn(int varIndex, int increment) { add(Opcodes.IINC, varIndex); }
         @Override public void visitTableSwitchInsn(int min, int max, Label dflt, Label... labels) {
             add(Opcodes.TABLESWITCH, null);

@@ -18,11 +18,11 @@ if(Test-Path -LiteralPath $run){throw 'Use a fresh run name; previous evidence i
 New-Item -ItemType Directory -Force -Path "$run\saves","$run\guizhouware" | Out-Null
 Copy-Item -LiteralPath $world -Destination "$run\saves\ProbeWorld" -Recurse
 [IO.File]::WriteAllText("$run\options.txt","onboardAccessibility:false`nrenderDistance:4`nsimulationDistance:5`npauseOnLostFocus:false`n")
-[IO.File]::WriteAllText("$run\guizhouware\telemetry.json",'{"enabled":false}')
+# This development probe has no launcher capability, so automatic telemetry cannot upload.
 $env:JAVA_HOME=$JavaHome
 Push-Location -LiteralPath $repo
 try {
-    & .\gradlew.bat -I "$base\probe.gradle" "-PprobeRun=$Name" "-PprobeMode=$Mode" "-PprobeArmor=$Armor" "-PprobeAir=$Air" "-PprobeHigh=$High" runClient --console=plain *> "$base\$Name.log"
+    & .\gradlew.bat -PgzwDevelopmentBuild=true -I "$base\probe.gradle" "-PprobeRun=$Name" "-PprobeMode=$Mode" "-PprobeArmor=$Armor" "-PprobeAir=$Air" "-PprobeHigh=$High" runClient --console=plain *> "$base\$Name.log"
     $result=$LASTEXITCODE
 } finally { Pop-Location }
 if($result -ne 0){throw "Probe failed; inspect $base\$Name.log"}

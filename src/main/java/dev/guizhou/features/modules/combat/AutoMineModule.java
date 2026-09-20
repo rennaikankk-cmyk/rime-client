@@ -146,6 +146,7 @@ public class AutoMineModule extends Module {
 
     @Subscribe
     private void onPacket(PacketEvent.Receive event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         if (!(event.getPacket() instanceof ClientboundBlockDestructionPacket pkt)) return;
         var level = mc.level;
         var player = mc.player;
@@ -155,6 +156,7 @@ public class AutoMineModule extends Module {
         int progress = pkt.getProgress();
         if (level == null || player == null) return;
         mc.execute(() -> {
+            if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
             if (!isEnabled() || lifecycleGeneration != generation || mc.level != level || mc.player != player) return;
             ensureSession();
             if (breakerId == player.getId()) return;
@@ -169,7 +171,7 @@ public class AutoMineModule extends Module {
     }
 
     private void onMineFinish(BlockPos pos) {
-
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         if (!isEnabled() || nullCheck() || targetPlayer == null || !targetPlayer.isAlive()
                 || targetPlayer.level() != mc.level || sessionLevel != mc.level || sessionPlayer != mc.player) return;
 
@@ -227,6 +229,15 @@ public class AutoMineModule extends Module {
 
     @Subscribe
     private void onPreTick(PreTickEvent event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            targetPlayer = null;
+            target1 = target2 = null;
+            debugScores.clear();
+            enemyBreaking.clear();
+            resetGlass();
+            glassRenderPos = null;
+            return;
+        }
         ensureSession();
         if (nullCheck()) return;
         enemyBreaking.prune(System.currentTimeMillis());
@@ -441,6 +452,7 @@ public class AutoMineModule extends Module {
     }
 
     private boolean placeGlass(BlockPos pos) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         SwapMode swap = glassSwap.getValue() == GlassSwap.Inventory ? SwapMode.ALTSILENT : SwapMode.SILENT;
         // Count a submitted direct interaction, never a queue entry that might run much later.
         return GuizhouWare.placementManager.placeDirect(pos, null, Items.GLASS, swap,

@@ -117,10 +117,12 @@ public class GuangxiMineModule extends Module implements MineApi {
     public void removeFinishListener(MineFinishListener l) { finishListeners.remove(l); }
 
     private void fireFinish(BlockPos target) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         for (MineFinishListener l : finishListeners) l.onMineFinish(target);
     }
 
     private void fireSubmitted(BlockPos target) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         for (MineFinishListener l : submissionListeners) l.onMineFinish(target);
     }
 
@@ -166,6 +168,7 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     @Subscribe
     private void onAttackBlock(AttackBlockEvent event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         if (nullCheck()) return;
         ensureSession();
         if (mc.player.isCreative() || mc.player.isSpectator()) return;
@@ -240,6 +243,7 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     private boolean startMine(BlockPos target, Direction dir) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (pos != null && started && !finished) {
             if (doubleBreak.getValue() && secondaryPos == null) {
                 // Keep the active break when its STOP/tool swap is refused.
@@ -283,11 +287,13 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     @Override
     public boolean isAvailable() {
-        return isEnabled() && !nullCheck() && !mc.player.isCreative() && !mc.player.isSpectator();
+        return dev.guizhou.manager.HeartbeatManager.authorized()
+                && isEnabled() && !nullCheck() && !mc.player.isCreative() && !mc.player.isSpectator();
     }
 
     @Override
     public boolean requestBreak(BlockPos target) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (!mc.isSameThread() || !isAvailable() || target == null) return false;
         ensureSession();
         if (isMining(target)) return true;
@@ -373,6 +379,7 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     private void begin() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         if (paused() || !rotateFor(pos, startRotate.getValue())) return;
         if (faceMargin(direction, targetBox(pos)) <= 0) {
             direction = validFace(pos);
@@ -391,7 +398,11 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     @Subscribe
     private void onTick(PreTickEvent event) {
-        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            stopUnauthorizedMining();
+            dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
+            return;
+        }
         ensureSession();
         if (nullCheck()) return;
         if (mc.player.isDeadOrDying() || mc.player.isCreative() || mc.player.isSpectator()) {
@@ -620,6 +631,7 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     private boolean stopBreak(int slot, boolean cooldown) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (paused()) { ClientDiagnostics.count("mine.stop.paused", 1); return false; }
         if (!rotateFor(pos, endRotate.getValue())) {
             ClientDiagnostics.count("mine.stop.rotationRefused", 1); return false;
@@ -709,6 +721,9 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     private boolean sendAction(ServerboundPlayerActionPacket.Action action, BlockPos target, Direction face) {
+        // An active break must still be abortable after revocation; new START/STOP actions must not continue.
+        if (action != ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK
+                && !dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         boolean sent = PacketSendUtil.send(new ServerboundPlayerActionPacket(action, target, face));
         if (sent && action == ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK) {
             lastStopMs = System.currentTimeMillis();
@@ -777,6 +792,15 @@ public class GuangxiMineModule extends Module implements MineApi {
         finished = false;
         observedAir = false;
         retry.reset();
+    }
+
+    private void stopUnauthorizedMining() {
+        if (!nullCheck() && mc.level == sessionLevel && mc.player == sessionPlayer
+                && pos != null && started && !finished) abortBreak();
+        clearSecondary();
+        clearMine();
+        rebreakHoldPos = null;
+        rebreakHoldTicks = stopCooldown = 0;
     }
 
     public enum ToolSwitch { Silent, Visible, Manual }

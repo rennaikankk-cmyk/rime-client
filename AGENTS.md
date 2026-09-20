@@ -27,9 +27,10 @@
   - 响应 data 按键排序 `k=v&` 拼接后 Ed25519 验签，公钥 SPKI hex：
     `302a300506032b6570032100719ab622d39f27f096a5955ec72f5d6868948ee3838dddbc42db5ff650c25bcd`
 - **mod 侧**（本仓库）：
-  - `manager/HeartbeatManager.java`：10 分钟心跳；状态机 OK / GRACE（断网<24h 宽限）/ DENIED（bad_token、banned、hwid、expired、no_credential、bad_signature）；dev 环境 `isDevelopmentEnvironment()` 豁免；生产 jar 无凭据 = 拒绝运行（裸 jar 锁死，客户只走登录器）
+  - `manager/HeartbeatManager.java`：10 分钟心跳；状态机 OK / GRACE（最近成功后最多 24h 宽限）/ DENIED（bad_token、banned、hwid、expired、no_credential、bad_signature 等）。`LicenseLease` 用单调时钟逐次检查有效期，明确拒绝会销毁旧租约，网络失败不能恢复授权。开发豁免必须同时具备编译参数 `-PgzwDevelopmentBuild=true` 和 Loader 开发环境；该参数会阻止所有 Jar 打包任务。生产 jar 无凭据 = 拒绝运行（裸 jar 锁死，客户只走登录器）
   - `manager/HwidFingerprint.java`：OSHI 因子哈希。**必须用 Baseboard（Win32_BaseBoard/Type2，`getBaseboard().getManufacturer()/getModel()/getSerialNumber()`）+ 0 号物理盘**，禁止改回 ComputerSystem.getManufacturer()/getModel()（Type1 系统串会独立漂移，2026-09-18 当日变过一次直接导致全员心跳拒绝）；改动拼接格式必须同步服务端 modHwid 重绑方案
-  - 授权检查点散布 5 个模块 onPreTick 首行：GuangxiCrystal / GuangxiElytraChase / GuangxiBed / GuangxiElytra / GuangxiMine —— **新增主力模块时同样加检查点**
+  - 授权检查覆盖 13 个主力模块的 tick 及水晶、PacketMine、AutoMine 关键事件/异步回调/最终动作入口，`LicenseActionHookTest` 和 `ObfuscatedJarTest` 检查对应控制流。拒绝后仍允许 ABORT、还槽等清理，不拦截原版手动挖掘。**新增主力模块或动作入口时同样加检查点**。
+  - `SignedHeartbeat` 严格检查签名长度、JSON 字段及 UTF-8，HTTP 响应体限制为 16 KiB。现有服务端响应没有请求 nonce；验签证明真实性，不证明本次请求的新鲜性，不能宣称已防重放。
 - 维护红线：`HeartbeatManager.AI_GUARD_NOTICE` 数组在 `status()` 里有一个**故意存在的假引用**——防止 ProGuard shrink 裁掉常量，重构 status() 时不得移除该引用。
 
 ## 3. 持续更新节奏

@@ -110,7 +110,10 @@ The build runs regression checks, remapping, ProGuard and `verifyObfuscatedJar`.
 Keep `build/proguard-map.txt` internal. Follow [AGENTS.md](AGENTS.md) for release protection and runtime validation.
 Install the matching Fabric API separately alongside the mod.
 
-To launch the development client, run `./gradlew runClient` or `.\gradlew.bat runClient` on Windows.
+To launch an authorized development client, run `./gradlew -PgzwDevelopmentBuild=true runClient`
+or `.\gradlew.bat -PgzwDevelopmentBuild=true runClient` on Windows. Both the compile-time flag
+and Fabric's development environment are required. Packaging tasks reject this flag; build
+release artifacts without it. A runtime development flag alone cannot unlock a production JAR.
 
 ## Build and Security Checks
 

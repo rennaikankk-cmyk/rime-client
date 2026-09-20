@@ -298,6 +298,7 @@ public class GuangxiCrystalModule extends Module {
     /** Raw-buffer attack by entity id — the STREAM_CODEC path lets us hit ids the server has
      *  not sent us yet, because normal attack() needs a live client-side Entity. */
     private void sendGhostAttack(int entityId) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         if (mc.getConnection() == null || weaponControlBusy()) return;
         FriendlyByteBuf buf = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
         try {
@@ -721,7 +722,7 @@ public class GuangxiCrystalModule extends Module {
     }
 
     private void onCrystalSpawn(ClientboundAddEntityPacket pkt) {
-
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         instaGates[10] += pkt.getType() == EntityType.END_CRYSTAL ? 1 : 0; // crystal-typed spawns seen
         if (!doBreak.getValue() || breakDelay.getValue() != 0) { if (pkt.getType() == EntityType.END_CRYSTAL) instaGates[0]++; return; }
         if (pkt.getType() != EntityType.END_CRYSTAL) return;
@@ -766,6 +767,7 @@ public class GuangxiCrystalModule extends Module {
     private final int[] instaGates = new int[11];
 
     private void onBlockUpdate(BlockPos pos, boolean nowAir) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         if (!nowAir || nullCheck()) return;
         double range = placeRangeValue() + 2.0;
         if (mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) > range * range) return;
@@ -783,6 +785,7 @@ public class GuangxiCrystalModule extends Module {
             BlockPos changed = reactivePosition;
             reactiveScheduled = false;
             reactivePosition = null;
+            if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
             if (changed == null || mc.player.tickCount - reactiveScheduledTick > 1) return;
             long timer = ClientDiagnostics.startTimer();
             try { scanBlockUpdate(changed, true); }
@@ -791,6 +794,7 @@ public class GuangxiCrystalModule extends Module {
     }
 
     private void scanBlockUpdate(BlockPos pos, boolean nowAir) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         if (!nowAir) return;
         if (nullCheck() || mc.player.isDeadOrDying()) return;
         ensureSession();
@@ -1117,6 +1121,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private boolean breakCrystal(EndCrystal crystal) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (mc.gameMode == null || mc.getConnection() == null || weaponControlBusy()
                 || !crystalAttackEligible(crystal)
                 || !switchTimer.passedMs(tpsMs(switchPause.getValue()))) return false;
@@ -1168,6 +1173,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private boolean sendCrystalAttack(EndCrystal crystal, boolean instant) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (mc.gameMode == null || mc.getConnection() == null || weaponControlBusy()
                 || !crystalAttackEligible(crystal)
                 || !breakTimer.passedMs(tpsMs(breakDelay.getValue()))
@@ -1694,6 +1700,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private boolean doPlace(PlaceTarget target, boolean trustBase) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         boolean holdingCrystal = mc.player.getMainHandItem().is(Items.END_CRYSTAL)
                 || mc.player.getOffhandItem().is(Items.END_CRYSTAL);
         if (autoSwap.getValue() == AutoSwapMode.NONE) {
@@ -1751,6 +1758,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     public boolean placeCrystalShared(BlockPos base, boolean trustBase, LivingEntity faceEntity) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (weaponControlBusy()) return false;
         boolean mainCrystal = mc.player.getMainHandItem().is(Items.END_CRYSTAL);
         boolean offCrystal = mc.player.getOffhandItem().is(Items.END_CRYSTAL);
@@ -1796,6 +1804,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     public boolean preplaceCrystal(BlockPos airPos, boolean snap) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (nullCheck() || !place.getValue() || weaponControlBusy()) return false;
         ensureSession();
         if (!rubberbandQuiet()) return false;

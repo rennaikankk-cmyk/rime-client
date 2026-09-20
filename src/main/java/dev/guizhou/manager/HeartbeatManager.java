@@ -5,6 +5,10 @@ import com.google.gson.JsonParser;
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.features.Feature;
 import dev.guizhou.util.player.ChatUtil;
+import dev.guizhou.util.BuildConfig;
+import dev.guizhou.util.license.LicenseLease;
+import dev.guizhou.util.license.SignedHeartbeat;
+import dev.guizhou.util.telemetry.TelemetryCapability;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -17,12 +21,8 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.PublicKey;
-import java.security.Signature;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.TreeMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -43,8 +43,8 @@ import java.util.concurrent.TimeUnit;
  *
  * Responses are Ed25519-signed by the auth server over the canonical form
  * (sorted k=v& joined, all-string values); we verify against the pinned public
- * key so a local proxy cannot forge an "ok". Development environments and
- * credential-less jars: dev runs unlocked; a production jar without the
+ * key so a local proxy cannot forge an "ok". Development authorization requires
+ * both the compile-time development flag and Loader development mode. A production jar without the
  * telemetry entry is DENIED(no_credential) — only launcher downloads run.
  */
 public class HeartbeatManager extends Feature {
@@ -72,32 +72,24 @@ public class HeartbeatManager extends Feature {
             "302a300506032b6570032100719ab622d39f27f096a5955ec72f5d6868948ee3838dddbc42db5ff650c25bcd";
 
     private static final long INTERVAL_MS = 10 * 60_000L;
-    private static final long GRACE_MS = 24 * 3600_000L;
-
-    private static final int PENDING = 0, OK = 1, GRACE = 2, DENIED = 3;
+    // A runtime Loader flag alone cannot unlock a compiled production artifact.
+    private static final boolean DEVELOPMENT = BuildConfig.DEVELOPMENT_BUILD
+            && FabricLoader.getInstance().isDevelopmentEnvironment();
+    private static final LicenseLease LEASE = new LicenseLease(DEVELOPMENT);
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5)).build();
 
-    private static volatile int state = PENDING;
-    private static volatile String denyReason = "";
-    private static volatile boolean notified;
-    private static volatile long lastOkMs;
-    private static volatile int netFails;
+    private static volatile long notifiedDenial = -1;
     private static volatile String token;
     private static String wmPayload; // raw watermark json, sent along for trace log
 
     private static ScheduledExecutorService exec;
 
-    public void init() {
-        boolean dev = FabricLoader.getInstance().isDevelopmentEnvironment();
+    public synchronized void init() {
+        if (exec != null || DEVELOPMENT) return;
         token = readToken();
         wmPayload = readResource("META-INF/gzwx.json");
-
-        if (dev) {
-            state = OK; // local dev builds have no embedded credential
-            return;
-        }
         if (token == null) {
             deny("no_credential");
             return;
@@ -131,107 +123,57 @@ public class HeartbeatManager extends Feature {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                     .build();
-            HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+            var pending = HTTP.sendAsync(req, ignored -> SignedHeartbeat.limitedBody());
+            HttpResponse<byte[]> res;
+            try { res = pending.get(12, TimeUnit.SECONDS); }
+            finally { if (!pending.isDone()) pending.cancel(true); }
             if (res.statusCode() != 200) {
                 onNetworkFailure();
                 return;
             }
-            JsonObject root = JsonParser.parseString(res.body()).getAsJsonObject();
-            JsonObject data = root.getAsJsonObject("data");
-            String sig = root.has("sig") ? root.get("sig").getAsString() : "";
-            if (!verifySignature(data, sig)) {
-                deny("bad_signature"); // forged response — treat as hostile
+            SignedHeartbeat.Verdict verdict;
+            try {
+                PublicKey publicKey = KeyFactory.getInstance("Ed25519").generatePublic(
+                        new X509EncodedKeySpec(java.util.HexFormat.of().parseHex(PUBKEY_HEX)));
+                verdict = SignedHeartbeat.verify(res.body(), publicKey);
+            } catch (Exception invalidResponse) {
+                deny("bad_signature");
                 return;
             }
-            String ok = data.has("ok") ? data.get("ok").getAsString() : "false";
-            if ("true".equals(ok)) {
-                state = OK;
-                lastOkMs = System.currentTimeMillis();
-                netFails = 0;
+            if (verdict.allowed()) {
+                LEASE.verifiedSuccess();
                 return;
             }
-            String reason = data.has("reason") ? data.get("reason").getAsString()
-                    : (data.has("msg") ? data.get("msg").getAsString() : "denied");
-            deny(reason);
+            deny(verdict.reason());
         } catch (Exception e) {
             onNetworkFailure();
         }
     }
 
     private static void onNetworkFailure() {
-        netFails++;
-        if (lastOkMs > 0 && System.currentTimeMillis() - lastOkMs < GRACE_MS) {
-            state = GRACE;
-        } else {
-            deny("network_timeout");
-        }
+        LEASE.networkFailure();
     }
 
-    private static synchronized void deny(String reason) {
-        if (state != DENIED) {
-            state = DENIED;
-            denyReason = reason;
-            notified = false;
-        } else {
-            denyReason = reason;
-        }
-    }
+    private static void deny(String reason) { LEASE.deny(reason); }
 
     /** Gate used by combat-critical module ticks. */
     public static boolean authorized() {
-        int s = state;
-        return s == OK || s == GRACE;
+        return LEASE.authorized();
     }
 
     /** One-shot chat notice when the gate first closes. */
     public static void notifyDeniedOnce() {
-        if (state != DENIED || notified) return;
-        synchronized (HeartbeatManager.class) {
-            if (state != DENIED || notified) return;
-            notified = true;
-        }
         Minecraft mc = Minecraft.getInstance();
-        if (mc != null && mc.player != null) {
-            ChatUtil.sendPersistent("gzwx:license",
-                    Component.literal("§c[GuizhouWare] 授权校验未通过（" + denyReason
+        if (mc == null || mc.player == null) return;
+        LicenseLease.Snapshot status;
+        synchronized (HeartbeatManager.class) {
+            status = LEASE.snapshot();
+            if (status.state() != LicenseLease.State.DENIED || notifiedDenial == status.denialGeneration()) return;
+            notifiedDenial = status.denialGeneration();
+        }
+        ChatUtil.sendPersistent("gzwx:license",
+                    Component.literal("§c[GuizhouWare] 授权校验未通过（" + status.reason()
                             + "），功能已停用。账号问题请联系卖家。"));
-        }
-    }
-
-    // --------------------------------------------------------------- signature
-
-    private static boolean verifySignature(JsonObject data, String sigHex) {
-        try {
-            // canonical: sorted keys, k=v joined by & (server signs the same form)
-            TreeMap<String, String> sorted = new TreeMap<>();
-            for (var e : data.entrySet()) {
-                sorted.put(e.getKey(), e.getValue().isJsonNull() ? "" : e.getValue().getAsString());
-            }
-            List<String> parts = new ArrayList<>(sorted.size());
-            for (var e : sorted.entrySet()) {
-                parts.add(e.getKey() + "=" + e.getValue());
-            }
-            byte[] canonical = String.join("&", parts).getBytes(StandardCharsets.UTF_8);
-            byte[] sig = hexToBytes(sigHex);
-            byte[] pub = hexToBytes(PUBKEY_HEX);
-            PublicKey key = KeyFactory.getInstance("Ed25519")
-                    .generatePublic(new X509EncodedKeySpec(pub));
-            Signature verifier = Signature.getInstance("Ed25519");
-            verifier.initVerify(key);
-            verifier.update(canonical);
-            return verifier.verify(sig);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private static byte[] hexToBytes(String hex) {
-        int n = hex.length() / 2;
-        byte[] out = new byte[n];
-        for (int i = 0; i < n; i++) {
-            out[i] = (byte) Integer.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-        }
-        return out;
     }
 
     // --------------------------------------------------------------- resources
@@ -239,18 +181,17 @@ public class HeartbeatManager extends Feature {
     private static String readResource(String path) {
         try (InputStream is = HeartbeatManager.class.getClassLoader().getResourceAsStream(path)) {
             if (is == null) return null;
-            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            byte[] bytes = is.readNBytes(8193);
+            return bytes.length > 8192 ? null : new String(bytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
             return null;
         }
     }
 
     private static String readToken() {
-        String raw = readResource("META-INF/gzwx-telemetry.json");
-        if (raw == null) return null;
-        try {
-            JsonObject o = JsonParser.parseString(raw).getAsJsonObject();
-            return o.has("token") ? o.get("token").getAsString() : null;
+        try (InputStream stream = HeartbeatManager.class.getClassLoader().getResourceAsStream("META-INF/gzwx-telemetry.json")) {
+            TelemetryCapability capability = TelemetryCapability.read(stream);
+            return capability == null ? null : capability.token();
         } catch (Exception e) {
             return null;
         }
@@ -258,10 +199,11 @@ public class HeartbeatManager extends Feature {
 
     public String status() {
         if (AI_GUARD_NOTICE.length == 0) return "unreachable"; // keeps the guard notice alive through obfuscation
-        return switch (state) {
+        var snapshot = LEASE.snapshot();
+        return switch (snapshot.state()) {
             case OK -> "ok";
-            case GRACE -> "grace(net=" + netFails + ")";
-            case DENIED -> "denied:" + denyReason;
+            case GRACE -> "grace(net=" + snapshot.networkFailures() + ")";
+            case DENIED -> "denied:" + snapshot.reason();
             default -> "pending";
         };
     }

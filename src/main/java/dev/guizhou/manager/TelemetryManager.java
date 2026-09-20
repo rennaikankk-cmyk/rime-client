@@ -24,6 +24,7 @@ import dev.guizhou.util.telemetry.FlightSummary;
 import dev.guizhou.util.telemetry.TelemetryBuffer;
 import dev.guizhou.util.telemetry.TelemetryCapability;
 import dev.guizhou.util.telemetry.TelemetryPrivacy;
+import dev.guizhou.util.telemetry.TelemetryUploadStatus;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
@@ -51,13 +52,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Optional diagnostics. Only explicitly constructed, non-identifying fields reach the wire. */
+/** Automatic capability-gated diagnostics. Only explicitly allowlisted fields reach the wire. */
 public class TelemetryManager extends Feature {
     public static final String ENDPOINT = "http://62.234.117.226/telemetryapi/v1/events";
-    private static final Path PREFERENCES = Path.of("guizhouware", "telemetry.json");
+    private static final Path STATE_FILE = Path.of("guizhouware", "telemetry.json");
     private static final long SECOND = 1_000_000_000L;
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
@@ -66,25 +66,24 @@ public class TelemetryManager extends Feature {
 
     private final TelemetryBuffer queue = new TelemetryBuffer();
     private final ArrayBlockingQueue<PendingPacket> packets = new ArrayBlockingQueue<>(128);
-    // A separate bounded local capture queue works even with remote telemetry OFF.
+    // A separate bounded local capture queue works even without an upload capability.
     private final ArrayBlockingQueue<LocalDamage> localDamage = new ArrayBlockingQueue<>(128);
     private final ArrayDeque<Sample> history = new ArrayDeque<>(8);
     private final Map<Integer, Long> combatTargets = new HashMap<>();
     private final Map<Integer, Long> deaths = new HashMap<>();
     private final Map<String, Long> rateLimits = new HashMap<>();
     private final AtomicBoolean sending = new AtomicBoolean();
+    private final TelemetryUploadStatus uploadStatus = new TelemetryUploadStatus();
     private final TelemetryCapability capability = loadToken();
-    private volatile boolean active = true;
     private volatile String sessionId;
     private volatile long retryAfter;
     private volatile int failures;
-    private volatile CompletableFuture<?> request;
     private String installId = UUID.randomUUID().toString();
     private String serverHash;
     private ClientPacketListener connection;
     private boolean noticeShown;
     private boolean noticeUpload;
-    private boolean preferencesSaved = true;
+    private boolean stateSaved = true;
     private long sessionStarted;
     private long lastFlush;
     private long lastSample;
@@ -137,7 +136,7 @@ public class TelemetryManager extends Feature {
     }
 
     public TelemetryManager() {
-        loadPreferences();
+        loadState();
         EVENT_BUS.register(this, "TelemetryManager");
         PacketSendUtil.addSubmissionListener(packet -> {
             if (ClientDiagnostics.isCollecting() && packet instanceof ServerboundInteractPacket interact) {
@@ -152,56 +151,50 @@ public class TelemetryManager extends Feature {
         } catch (Exception ignored) { return null; }
     }
 
-    private void loadPreferences() {
+    private void loadState() {
         try {
-            if (Files.exists(PREFERENCES)) {
-                if (Files.size(PREFERENCES) > 4096) throw new IllegalArgumentException("Oversize preferences");
-                JsonObject object = JsonParser.parseString(Files.readString(PREFERENCES)).getAsJsonObject();
+            if (Files.exists(STATE_FILE)) {
+                if (Files.size(STATE_FILE) > 4096) throw new IllegalArgumentException("Oversize telemetry state");
+                JsonObject object = JsonParser.parseString(Files.readString(STATE_FILE)).getAsJsonObject();
                 installId = UUID.fromString(object.get("install").getAsString()).toString();
-                active = object.get("enabled").getAsBoolean();
-                noticeShown = object.has("notice_shown") && object.get("notice_shown").getAsBoolean();
-                noticeUpload = object.has("notice_upload") && object.get("notice_upload").getAsBoolean();
-            } else { savePreferences(); }
+            }
+            // Preserve the existing installation identity, but migrate away from the retired on/off preference.
+            saveState();
         } catch (Exception ignored) {
-            // A broken preference file must not silently re-enable a previous opt-out.
-            active = false;
-            preferencesSaved = false;
+            // Corrupt local state cannot replace or bypass the separately validated upload capability.
+            stateSaved = false;
         }
     }
 
-    private void savePreferences() {
+    private void saveState() {
         JsonObject object = new JsonObject();
         object.addProperty("install", installId);
-        object.addProperty("enabled", active);
-        object.addProperty("notice_shown", noticeShown);
-        object.addProperty("notice_upload", noticeUpload);
         try {
-            Files.createDirectories(PREFERENCES.getParent());
-            Path temporary = PREFERENCES.resolveSibling("telemetry.json.tmp");
+            Files.createDirectories(STATE_FILE.getParent());
+            Path temporary = STATE_FILE.resolveSibling("telemetry.json.tmp");
             Files.writeString(temporary, object.toString(), StandardCharsets.UTF_8);
             try {
-                Files.move(temporary, PREFERENCES, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                Files.move(temporary, STATE_FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
             } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
-                Files.move(temporary, PREFERENCES, StandardCopyOption.REPLACE_EXISTING);
+                Files.move(temporary, STATE_FILE, StandardCopyOption.REPLACE_EXISTING);
             }
-            preferencesSaved = true;
-        } catch (Exception ignored) { preferencesSaved = false; }
+            stateSaved = true;
+        } catch (Exception ignored) { stateSaved = false; }
     }
 
-    public void setActive(boolean value) {
-        if (!mc.isSameThread()) { mc.execute(() -> setActive(value)); return; }
-        active = value;
-        noticeShown = true;
-        noticeUpload = canUpload();
-        resetSession();
-        if (!value && request != null) request.cancel(true);
-        savePreferences();
+    public TelemetryUploadStatus.Snapshot uploadStatus() { return uploadStatus.snapshot(); }
+    public int queuedEvents() { return queue.count(); }
+    public int queuedBytes() { return queue.bytes(); }
+    public boolean hasSession() { return sessionId != null; }
+    public boolean isSending() { return sending.get(); }
+    public boolean identitySaved() { return stateSaved; }
+    public boolean flightSummaryBlocked() { return flightSummaryBlocked; }
+    public long retryInSeconds() {
+        long deadline = retryAfter;
+        return deadline == 0 ? 0 : Math.max(0, deadline - System.nanoTime() + SECOND - 1) / SECOND;
     }
-
-    public boolean isActive() { return active; }
-    public boolean canUpload() { return active && capability != null && capability.validAt(System.currentTimeMillis() / 1000); }
+    public boolean canUpload() { return capability != null && capability.validAt(System.currentTimeMillis() / 1000); }
     public boolean capabilityExpired() { return capability != null && !capability.validAt(System.currentTimeMillis() / 1000); }
-    public boolean preferencesSaved() { return preferencesSaved; }
 
     /** Compatibility adapter for old probe callers; unknown fields and event types are dropped. */
     public static void record(String type, String jsonFields) {
@@ -225,12 +218,12 @@ public class TelemetryManager extends Feature {
         if (mc.player == null || mc.level == null || mc.getConnection() == null) return;
         if (!noticeShown || noticeUpload != canUpload()) {
             String prefix = GuizhouWare.commandManager.getCommandPrefix();
-            Command.sendMessage("[Diagnostics] " + (canUpload() ? "Anonymous combat/correction upload is ON. "
-                    : "Diagnostic upload is OFF for this installation. ")
-                    + "No chat, names, player UUIDs or coordinates. " + prefix + "telemetry off disables it permanently.");
+            Command.sendMessage("[诊断] " + (canUpload() ? "自动上传战斗、移动与纠正诊断。"
+                    : capabilityExpired() ? "自动诊断上传暂不可用：上传凭据已过期。" : "当前 JAR 无有效上传凭据，不能自动上传诊断。")
+                    + "不上传聊天、玩家名、玩家 UUID 或坐标；" + prefix + "telemetry status 查看接收状态。"
+                    + prefix + "diag 报告仍仅保存在本地。");
             noticeShown = true;
             noticeUpload = canUpload();
-            savePreferences();
         }
         if (!canUpload()) {
             if (sessionId != null) resetSession();
@@ -812,21 +805,25 @@ public class TelemetryManager extends Feature {
                 + BuildConfig.BUILD_TIME.replaceAll("[^A-Za-z0-9]", ""));
         envelope.addProperty("sent_at", System.currentTimeMillis());
         String sessionAtSend = sessionId;
-        String body = queue.batch(envelope).toString();
+        JsonObject batch = queue.batch(envelope);
+        String body = batch.toString();
+        boolean batchHasFlightSummary = batch.getAsJsonArray("events").asList().stream()
+                .anyMatch(event -> "flight_summary".equals(event.getAsJsonObject().get("type").getAsString()));
+        long attempt = uploadStatus.started(batch.getAsJsonArray("events").size(), System.currentTimeMillis());
         try {
             var pending = HTTP.sendAsync(HttpRequest.newBuilder(URI.create(ENDPOINT))
                             .timeout(Duration.ofSeconds(8)).header("Content-Type", "application/json")
                             .header("X-Telemetry-Token", capability.token())
                             .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.discarding());
-            request = pending;
             pending.whenComplete((response, failure) -> {
-                        if (failure == null && response.statusCode() >= 200 && response.statusCode() < 300) {
+                    try {
+                        if (failure == null && response != null && response.statusCode() >= 200 && response.statusCode() < 300) {
                             failures = 0;
                             retryAfter = 0;
                         } else {
                             failures = Math.min(6, failures + 1);
                             long seconds = Math.min(1800, 30L << failures);
-                            if (response != null && response.statusCode() == 400) {
+                            if (batchHasFlightSummary && response != null && response.statusCode() == 400) {
                                 // A strict receiver that rejects flight_summary fails the whole
                                 // batch. Only the sending session may degrade, and the queue and
                                 // window state belong to the game thread.
@@ -846,10 +843,14 @@ public class TelemetryManager extends Feature {
                             }
                             retryAfter = System.nanoTime() + seconds * SECOND;
                         }
+                    } finally {
+                        uploadStatus.completed(attempt, response == null ? 0 : response.statusCode(), failure, System.currentTimeMillis());
                         sending.set(false);
-                    });
-        } catch (RuntimeException ignored) {
+                    }
+                });
+        } catch (RuntimeException failure) {
             retryAfter = System.nanoTime() + 60 * SECOND;
+            uploadStatus.completed(attempt, 0, failure, System.currentTimeMillis());
             sending.set(false);
         }
     }

@@ -25,6 +25,7 @@ public final class DiagnosticsWiringTest {
         moduleFailureIsolation();
         localSubmissionObservation();
         telemetryCountSemantics();
+        automaticTelemetryBoundary();
         localCommandBoundary();
         System.out.println("DiagnosticsWiringTest passed: " + checks + " checks");
     }
@@ -84,7 +85,7 @@ public final class DiagnosticsWiringTest {
         Trace tick = telemetry.methods.get("onTick");
         check(tick.call(TELEMETRY, "drainLocalDamage") >= 0
                         && tick.call(TELEMETRY, "drainLocalDamage") < tick.call(TELEMETRY, "canUpload"),
-                "Local damage observation runs independently of remote upload preference");
+                "Local damage observation runs independently of remote upload availability");
         Trace local = telemetry.methods.get("drainLocalDamage");
         check(local.constants.contains("combat.damage_dealt.events") && local.constants.contains("combat.damage_taken.events")
                         && local.call(TELEMETRY, "canUpload") < 0 && local.call(TELEMETRY, "enqueue") < 0,
@@ -103,6 +104,39 @@ public final class DiagnosticsWiringTest {
         check(command.methods.values().stream().flatMap(method -> method.steps.stream())
                         .noneMatch(step -> TELEMETRY.equals(step.owner) || (step.owner != null && step.owner.startsWith("java/net/"))),
                 "Local command cannot enable telemetry or perform network operations");
+    }
+
+    private static void automaticTelemetryBoundary() throws IOException {
+        Parsed telemetry = read(TELEMETRY);
+        Trace gate = telemetry.methods.get("canUpload");
+        check(gate.call(ROOT + "util/telemetry/TelemetryCapability", "validAt") >= 0,
+                "Automatic uploads still require a non-expired embedded capability");
+        check(telemetry.methods.values().stream().flatMap(method -> method.steps.stream())
+                        .noneMatch(step -> TELEMETRY.equals(step.owner) && "active".equals(step.name))
+                        && !telemetry.methods.containsKey("setActive"),
+                "The retired on/off preference cannot silently prevent automatic upload");
+        Trace state = telemetry.methods.get("loadState");
+        check(state.constants.contains("install") && !state.constants.contains("enabled")
+                        && state.call(TELEMETRY, "saveState") >= 0,
+                "State migration preserves installation identity and ignores old opt-out fields");
+        Trace save = telemetry.methods.get("saveState");
+        check(save.constants.contains("install") && !save.constants.contains("enabled"),
+                "Persisted state no longer claims to save an upload toggle");
+        String status = ROOT + "util/telemetry/TelemetryUploadStatus";
+        Trace flush = telemetry.methods.get("flush");
+        check(flush.call(status, "started") >= 0 && flush.call(status, "completed") >= 0
+                        && telemetry.methods.entrySet().stream().anyMatch(entry -> entry.getKey().startsWith("lambda$flush")
+                                && entry.getValue().call(status, "completed") >= 0),
+                "Synchronous setup errors and asynchronous HTTP outcomes both update visible status");
+        check(flush.call("java/net/http/HttpResponse$BodyHandlers", "discarding") >= 0,
+                "Receipt visibility does not retain server bodies or add fields to upload payloads");
+        Parsed command = read(ROOT + "features/commands/impl/TelemetryCommand");
+        Trace builder = command.methods.get("createArgumentBuilder");
+        check(builder.constants.contains("status") && !builder.constants.contains("on") && !builder.constants.contains("off"),
+                "Telemetry command exposes status only; old off cannot report a false stopped state");
+        Trace display = command.methods.get("status");
+        check(display.call(TELEMETRY, "uploadStatus") >= 0 && display.call(TELEMETRY, "capabilityExpired") >= 0,
+                "Users can inspect receiver outcomes and unavailable capability states");
     }
 
     private record Step(String owner, String name, int opcode) {}
