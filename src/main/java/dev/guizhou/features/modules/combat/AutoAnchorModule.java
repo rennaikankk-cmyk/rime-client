@@ -13,6 +13,13 @@ import dev.guizhou.util.AnchorDamageUtil;
 import dev.guizhou.util.DamageSyncTracker;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
+import dev.guizhou.util.PacketSendUtil;
+import dev.guizhou.util.combat.AnchorSequence;
+import dev.guizhou.util.inventory.SwapMode;
+import dev.guizhou.util.inventory.SwapPriority;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.level.block.RespawnAnchorBlock;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
@@ -21,7 +28,6 @@ import dev.guizhou.util.player.EatUtil;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.util.Mth;
@@ -30,7 +36,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.Level;
+import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -45,7 +51,13 @@ public class AutoAnchorModule extends Module {
 
     private final Setting<Double>  minDamage     = num("MinDamage", 6.0, 0.0, 36.0).setPage("General");
     private final Setting<Double>  maxSelfDamage = num("MaxSelfDamage", 4.0, 0.0, 36.0).setPage("General");
-    private static final double PLACE_RANGE = 6.0;
+    private final Setting<Double> placeRange = num("PlaceRange", 5.0, 1.0, 6.0).setPage("General");
+    private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
+    private final Setting<Boolean> assumeBestArmor = bool("AssumeBestArmor", false).setPage("General");
+    private enum AnchorSwap { SILENT, INVENTORY }
+    private final Setting<AnchorSwap> autoSwap = mode("AutoSwap", AnchorSwap.SILENT).setPage("General");
+    private final Setting<Integer> confirmTicks = num("ConfirmTicks", 8, 2, 40).setPage("General");
+    private final Setting<Integer> retries = num("Retries", 2, 1, 5).setPage("General");
     private final Setting<Integer> delay         = num("Delay", 2, 0, 20).setPage("General");
 
     private final Setting<Boolean> damageSync    = bool("DamageSync", false).setPage("General");
@@ -55,129 +67,191 @@ public class AutoAnchorModule extends Module {
     private final Setting<Color>   outlineColor  = color("OutlineColor", 130, 80, 255, 255).setPage("Render");
 
     private int lastBurstTick = -1;
+    private final AnchorSequence sequence = new AnchorSequence();
+    private BlockPos activePos;
+    private ClientLevel sessionLevel;
+    private LocalPlayer sessionPlayer;
     private float lastDamage = 0f;
     private BlockPos renderPos = null;
     private long renderStart = 0L;
 
     public AutoAnchorModule() {
-        super("AutoAnchor", "Places, charges and detonates respawn anchors in a single burst.", Category.COMBAT);
+        super("AutoAnchor", "Places, charges and detonates anchors after observing each block state.", Category.COMBAT);
     }
 
     @Override
     public void onEnable() {
-        lastBurstTick = -1;
-        lastDamage = 0f;
-        renderPos = null;
+        resetSession();
     }
 
     @Override
     public void onDisable() {
+        resetSession();
+    }
+
+    private void resetSession() {
+        lastBurstTick = -1;
         lastDamage = 0f;
         renderPos = null;
+        activePos = null;
+        sequence.reset();
+        sessionLevel = mc.level;
+        sessionPlayer = mc.player;
     }
 
     @Subscribe
     private void onPreTick(PreTickEvent event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
+            return;
+        }
+        if (sessionLevel != mc.level || sessionPlayer != mc.player) resetSession();
         if (nullCheck() || mc.player.isDeadOrDying()) return;
-        if (mc.level.dimension().equals(Level.NETHER)) return;
-        if (mc.player.containerMenu.containerId != 0) return;
-        int sinceLast = mc.player.tickCount - lastBurstTick;
-        if (sinceLast >= 0 && sinceLast < delay.getValue()) return;
+        if (mc.player.containerMenu != mc.player.inventoryMenu || !mc.player.inventoryMenu.getCarried().isEmpty()
+                || mc.player.isShiftKeyDown() || EatUtil.shouldDefer()) return;
+        int tick = mc.player.tickCount;
+        if (activePos == null && lastBurstTick >= 0 && tick - lastBurstTick < delay.getValue()) return;
 
-        if (EatUtil.shouldDefer()) return;
-
-        int anchorSlot = hotbarSlotOf(Items.RESPAWN_ANCHOR);
-        int glowSlot   = hotbarSlotOf(Items.GLOWSTONE);
-        if (anchorSlot < 0 || glowSlot < 0) {
+        List<AnchorDamageUtil.Target> targets = null;
+        AnchorDamageUtil.Target self = null;
+        if (activePos == null) {
+            targets = collectTargets();
+            self = AnchorDamageUtil.Target.of(mc.player);
+            Candidate best = findBest(targets, self);
+            if (best == null) { lastDamage = 0f; return; }
+            activePos = best.pos;
+            sequence.reset();
+        }
+        BlockState state = mc.level.getBlockState(activePos);
+        boolean anchor = state.is(Blocks.RESPAWN_ANCHOR);
+        AnchorSequence.Action action = sequence.next(anchor, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0,
+                state.canBeReplaced(), tick, confirmTicks.getValue(), retries.getValue());
+        if (action == AnchorSequence.Action.WAIT) return;
+        if (action == AnchorSequence.Action.COMPLETE || action == AnchorSequence.Action.ABORT) {
+            activePos = null;
+            sequence.reset();
+            lastBurstTick = tick;
+            return;
+        }
+        // Waiting for confirmation does not require scanning targets or reading equipment again.
+        if (targets == null) targets = collectTargets();
+        if (self == null) self = AnchorDamageUtil.Target.of(mc.player);
+        // Revalidate target damage, health and range at every action, including delayed detonations.
+        Vec3 center = Vec3.atCenterOf(activePos);
+        float damage = score(targets, center, activePos);
+        float selfDamage = AnchorDamageUtil.damage(self, center, activePos);
+        if (targets.isEmpty() || damage <= 0f || damage < minDamage.getValue() || selfDamage > maxSelfDamage.getValue()
+                || selfDamage > 0f && selfDamage + 1.5f >= mc.player.getHealth() + mc.player.getAbsorptionAmount()
+                || mc.player.getEyePosition().distanceToSqr(center) > placeRange.getValue() * placeRange.getValue()) {
+            activePos = null;
+            sequence.reset();
             lastDamage = 0f;
             return;
         }
-
-        List<AnchorDamageUtil.Target> targets = collectTargets();
-        if (targets.isEmpty()) {
-            lastDamage = 0f;
+        if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, activePos)
+                || !canSupply(action, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)) {
+            activePos = null;
+            sequence.reset();
             return;
         }
-
-        Candidate best = findBest(targets);
-        if (best == null) {
-            lastDamage = 0f;
-            return;
-        }
-
-        if (burst(best.pos, best.needPlace, anchorSlot, glowSlot)) {
-            lastBurstTick = mc.player.tickCount;
-            lastDamage = best.damage;
-            if (render.getValue()) {
-                renderPos = best.pos;
-                renderStart = System.currentTimeMillis();
-            }
+        if (perform(action, activePos)) {
+            sequence.sent(action, tick);
+            lastDamage = damage;
+            if (render.getValue()) { renderPos = activePos; renderStart = System.currentTimeMillis(); }
         }
     }
 
-    private boolean burst(BlockPos pos, boolean needPlace, int anchorSlot, int glowSlot) {
+    private SwapMode swapMode() {
+        return autoSwap.getValue() == AnchorSwap.INVENTORY ? SwapMode.ALTSILENT : SwapMode.SILENT;
+    }
+
+    private Result itemFor(AnchorSequence.Action action) {
+        return InventoryUtil.find(stack -> switch (action) {
+            case PLACE -> stack.is(Items.RESPAWN_ANCHOR);
+            case CHARGE -> stack.is(Items.GLOWSTONE);
+
+            default -> false;
+        }, swapMode().scope());
+    }
+
+    private Result detonationSlot(int excluded) {
+        int size = swapMode() == SwapMode.ALTSILENT ? 36 : 9;
+        for (int slot = 0; slot < size; slot++) {
+            if (slot == excluded) continue;
+            ItemStack stack = mc.player.getInventory().getItem(slot);
+            if (stack.is(Items.GLOWSTONE) || stack.isEmpty() && slot >= 9) continue;
+            return new Result(slot, stack, slot < 9 ? ResultType.HOTBAR : ResultType.INVENTORY);
+        }
+        return null;
+    }
+
+    private int offhandClearSlot() {
+        int size = swapMode() == SwapMode.ALTSILENT ? 36 : 9;
+        for (int slot = 0; slot < size; slot++) {
+            if (!mc.player.getInventory().getItem(slot).is(Items.GLOWSTONE) && detonationSlot(slot) != null) return slot;
+        }
+        return -1;
+    }
+
+    private boolean canSupply(AnchorSequence.Action action, int charges) {
+        if (action != AnchorSequence.Action.DETONATE) return itemFor(action).found();
+        if (charges >= 4) return true;
+        return mc.player.getOffhandItem().is(Items.GLOWSTONE) ? offhandClearSlot() >= 0 : detonationSlot(-1) != null;
+    }
+
+    private boolean detonate(BlockHitResult hit, int charges) {
+        // In 1.21.11 only MAIN_HAND reaches useWithoutItem. A glowstone offhand defers
+        // that main-hand interaction while the anchor can still accept a charge.
+        if (charges >= 4) return sendUseItemOn(hit, InteractionHand.MAIN_HAND);
+        int cleared = mc.player.getOffhandItem().is(Items.GLOWSTONE) ? offhandClearSlot() : -1;
+        if (mc.player.getOffhandItem().is(Items.GLOWSTONE) && cleared < 0) return false;
+        if (cleared >= 0) InventoryUtil.swapToOffhand(cleared);
+        try {
+            if (mc.player.getOffhandItem().is(Items.GLOWSTONE)) return false;
+            Result item = detonationSlot(cleared);
+            if (item == null) return false;
+            boolean[] sent = {false};
+            Runnable action = () -> sent[0] = sendUseItemOn(hit, InteractionHand.MAIN_HAND);
+            boolean swapped = item.stack().isEmpty()
+                    ? GuizhouWare.swapManager.withEmptySlot(item.slot(), SwapPriority.CRYSTAL, action)
+                    : GuizhouWare.swapManager.withSwap(item, swapMode(), SwapPriority.CRYSTAL, action);
+            return swapped && sent[0];
+        } finally {
+            if (cleared >= 0) InventoryUtil.swapToOffhand(cleared);
+        }
+    }
+
+    private boolean perform(AnchorSequence.Action action, BlockPos pos) {
         ClientPacketListener conn = mc.getConnection();
         if (conn == null) return false;
-
-        BlockHitResult placeHit = null;
-        if (needPlace) {
-            placeHit = GuizhouWare.placementManager.prepareAirPlaceHit(pos);
-            if (placeHit == null) return false;
+        BlockHitResult hit = action == AnchorSequence.Action.PLACE
+                ? GuizhouWare.placementManager.prepareAirPlaceHit(pos)
+                : anchorHit(pos, mc.player.getEyePosition());
+        if (hit == null || action == AnchorSequence.Action.PLACE && !PlaceUtil.canPlace(pos)) return false;
+        if (mc.player.getEyePosition().distanceToSqr(hit.getLocation()) > placeRange.getValue() * placeRange.getValue()) return false;
+        if (rotate.getValue()) {
+            float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
+            if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                    "AutoAnchor", 62, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
         }
-
-        Vec3 eye = mc.player.getEyePosition(1.0f);
-        BlockHitResult hit = anchorHit(pos, eye);
-        float[] angles = MathUtil.calcAngle(eye, hit.getLocation());
-        GuizhouWare.rotationManager.submit(new RotationRequest(
-                "AutoAnchor", 62, angles[0], angles[1], RotationRequest.Mode.SILENT));
-
-        int originalSlot = GuizhouWare.swapManager.serverSlot();
-        int returnSlot = isGlowstone(originalSlot) ? anchorSlot : originalSlot;
-        int currentSlot = originalSlot;
-
-        if (needPlace) {
-            if (anchorSlot != currentSlot) {
-                conn.send(new ServerboundSetCarriedItemPacket(anchorSlot));
-                currentSlot = anchorSlot;
-            }
-
-            // The anchor slot is already selected, so place straight from the mainhand — the
-            // offhand round-trip this used to take bought nothing but two extra packets.
-            sendUseItemOn(conn, placeHit);
+        if (action == AnchorSequence.Action.DETONATE)
+            return detonate(hit, mc.level.getBlockState(pos).getValue(RespawnAnchorBlock.CHARGE));
+        Result item = itemFor(action);
+        if (!item.found()) return false;
+        boolean[] sent = {false};
+        boolean swapped = GuizhouWare.swapManager.withSwap(item, swapMode(), SwapPriority.CRYSTAL,
+                () -> sent[0] = sendUseItemOn(hit, item.hand()));
+        if (swapped && sent[0] && action == AnchorSequence.Action.PLACE)
             GuizhouWare.placementManager.notePlacement(pos);
-        }
-
-        if (glowSlot != currentSlot) {
-            conn.send(new ServerboundSetCarriedItemPacket(glowSlot));
-            currentSlot = glowSlot;
-        }
-        sendUseItemOn(conn, hit);
-
-        if (returnSlot != currentSlot) {
-            conn.send(new ServerboundSetCarriedItemPacket(returnSlot));
-            currentSlot = returnSlot;
-        }
-        sendUseItemOn(conn, hit);
-        conn.send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
-
-        if (currentSlot != originalSlot) conn.send(new ServerboundSetCarriedItemPacket(originalSlot));
-        return true;
+        return swapped && sent[0];
     }
 
-    private void sendUseItemOn(ClientPacketListener conn, BlockHitResult hit) {
-        sendUseItemOn(conn, hit, InteractionHand.MAIN_HAND);
-    }
-
-    private void sendUseItemOn(ClientPacketListener conn, BlockHitResult hit, InteractionHand hand) {
+    private boolean sendUseItemOn(BlockHitResult hit, InteractionHand hand) {
         try (var handler = ((ClientLevelAccessor) mc.level).guizhouware$getBlockStatePredictionHandler().startPredicting()) {
-            conn.send(new ServerboundUseItemOnPacket(hand, hit, handler.currentSequence()));
+            boolean sent = PacketSendUtil.send(new ServerboundUseItemOnPacket(hand, hit, handler.currentSequence()));
+            if (sent) mc.getConnection().send(new ServerboundSwingPacket(hand));
+            return sent;
         }
-    }
-
-    private boolean isGlowstone(int slot) {
-        if (slot < 0 || slot > 8) return false;
-        ItemStack stack = mc.player.getInventory().getItem(slot);
-        return stack.is(Items.GLOWSTONE);
     }
 
     private BlockHitResult anchorHit(BlockPos pos, Vec3 eye) {
@@ -188,20 +262,24 @@ public class AutoAnchorModule extends Module {
         if (ay >= ax && ay >= az)  face = dy > 0 ? Direction.UP    : Direction.DOWN;
         else if (ax >= az)         face = dx > 0 ? Direction.EAST  : Direction.WEST;
         else                       face = dz > 0 ? Direction.SOUTH : Direction.NORTH;
-        Vec3 hitVec = center.add(face.getStepX() * 0.5, face.getStepY() * 0.5, face.getStepZ() * 0.5);
+        Vec3 hitVec = center.add(face.getStepX() * 0.45, face.getStepY() * 0.45, face.getStepZ() * 0.45);
         return new BlockHitResult(hitVec, face, pos, false);
     }
 
-    private Candidate findBest(List<AnchorDamageUtil.Target> targets) {
+    private Candidate findBest(List<AnchorDamageUtil.Target> targets, AnchorDamageUtil.Target selfTarget) {
+        if (targets.isEmpty()) return null;
         Vec3 eye = mc.player.getEyePosition(1.0f);
         BlockPos playerPos = mc.player.blockPosition();
         double maxSelf = maxSelfDamage.getValue();
         double min = minDamage.getValue();
-        double rangeSq = PLACE_RANGE * PLACE_RANGE;
+        double rangeSq = placeRange.getValue() * placeRange.getValue();
         float playerHealth = mc.player.getHealth() + mc.player.getAbsorptionAmount();
-        int r = (int) Math.ceil(PLACE_RANGE);
+        int r = (int) Math.ceil(placeRange.getValue());
         int rr = r * r;
 
+        boolean canPlaceAnchor = canSupply(AnchorSequence.Action.PLACE, 0);
+        boolean canChargeAnchor = canSupply(AnchorSequence.Action.CHARGE, 0);
+        boolean canDetonateAnchor = canSupply(AnchorSequence.Action.DETONATE, 1);
         Candidate best = null;
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         for (int x = -r; x <= r; x++) {
@@ -216,14 +294,20 @@ public class AutoAnchorModule extends Module {
 
                     BlockState state = mc.level.getBlockState(cursor);
                     boolean existing = state.is(Blocks.RESPAWN_ANCHOR);
-                    BlockPos pos = null;
-                    boolean bounded = false;
-                    for (int i = 0, n = targets.size(); i < n; i++) {
-                        AnchorDamageUtil.Target target = targets.get(i);
-                        if (target.pos().distanceTo(center) > AnchorDamageUtil.DIAMETER) continue;
-                        if (AnchorDamageUtil.maxDamage(target, center) >= min) { bounded = true; break; }
+                    if (!existing && (!state.canBeReplaced() || !canPlaceAnchor)) continue;
+                    if (existing) {
+                        int charges = state.getValue(RespawnAnchorBlock.CHARGE);
+                        if (charges == 0 && !canChargeAnchor || charges > 0 && charges < 4 && !canDetonateAnchor) continue;
                     }
-                    if (!bounded) continue;
+                    if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, cursor)) continue;
+                    BlockPos pos = null;
+                    // Sum upper bounds using the same group-damage scoring as the exact pass.
+                    float upper = 0f;
+                    for (AnchorDamageUtil.Target target : targets) {
+                        if (damageSync.getValue() && DamageSyncTracker.shouldHold(target.entity())) continue;
+                        upper += AnchorDamageUtil.maxDamage(target, center);
+                    }
+                    if (upper < min || best != null && upper <= best.damage) continue;
 
                     if (existing) {
                         pos = cursor.immutable();
@@ -233,26 +317,14 @@ public class AutoAnchorModule extends Module {
                         pos = cursor.immutable();
                     }
 
-                    float total = 0f;
-                    boolean any = false;
-                    for (int i = 0, n = targets.size(); i < n; i++) {
-                        AnchorDamageUtil.Target target = targets.get(i);
-                        if (target.pos().distanceTo(center) > AnchorDamageUtil.DIAMETER) continue;
-                        if (damageSync.getValue() && DamageSyncTracker.shouldHold(target.entity())) continue;
-                        float dmg = AnchorDamageUtil.damage(target, center, pos);
-                        if (dmg <= 0f) continue;
-                        total += dmg;
-                        any = true;
-                    }
-                    if (!any || total < min) continue;
-
-                    float self = AnchorDamageUtil.selfDamage(center, pos);
-                    if (best != null && total <= best.damage) continue;
+                    float total = score(targets, center, pos);
+                    if (total <= 0f || total < min || best != null && total <= best.damage) continue;
+                    float self = AnchorDamageUtil.damage(selfTarget, center, pos);
                     if (self > maxSelf) continue;
 
                     if (self > 0f && self + 1.5f >= playerHealth) continue;
 
-                    best = new Candidate(pos, total, !existing);
+                    best = new Candidate(pos, total);
                 }
             }
         }
@@ -262,19 +334,23 @@ public class AutoAnchorModule extends Module {
     private List<AnchorDamageUtil.Target> collectTargets() {
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
         List<AnchorDamageUtil.Target> out = new ArrayList<>();
-        AABB area = mc.player.getBoundingBox().inflate(PLACE_RANGE + AnchorDamageUtil.DIAMETER);
+        AABB area = mc.player.getBoundingBox().inflate(placeRange.getValue() + AnchorDamageUtil.DIAMETER);
         for (Entity e : mc.level.getEntities(mc.player, area)) {
             if (!(e instanceof LivingEntity living)) continue;
             if (living.isDeadOrDying()) continue;
             if (targets != null && !targets.isValidPlayerTarget(e)) continue;
-            out.add(AnchorDamageUtil.Target.of(living));
+            out.add(AnchorDamageUtil.Target.of(living, assumeBestArmor.getValue()));
         }
         return out;
     }
 
-    private int hotbarSlotOf(net.minecraft.world.item.Item item) {
-        Result r = InventoryUtil.find(item, InventoryUtil.HOTBAR_SCOPE);
-        return (r.found() && r.type() != ResultType.OFFHAND) ? r.slot() : -1;
+    private float score(List<AnchorDamageUtil.Target> targets, Vec3 center, BlockPos pos) {
+        float total = 0f;
+        for (AnchorDamageUtil.Target target : targets) {
+            if (damageSync.getValue() && DamageSyncTracker.shouldHold(target.entity())) continue;
+            total += AnchorDamageUtil.damage(target, center, pos);
+        }
+        return total;
     }
 
     @Override
@@ -304,5 +380,5 @@ public class AutoAnchorModule extends Module {
         return lastDamage > 0 ? String.format("%.1f", lastDamage) : null;
     }
 
-    private record Candidate(BlockPos pos, float damage, boolean needPlace) {}
+    private record Candidate(BlockPos pos, float damage) {}
 }

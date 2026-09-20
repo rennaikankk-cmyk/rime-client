@@ -115,7 +115,8 @@ public class MixinClientPlayerEntity {
     @Inject(method = "isMovingSlowly", at = @At("HEAD"), cancellable = true)
     private void fastCrawl(CallbackInfoReturnable<Boolean> cir) {
         LocalPlayer self = (LocalPlayer) (Object) this;
-        if (self.isVisuallyCrawling() && NoSlowModule.isActive(m -> m.crawl.getValue())) {
+        if (NoSlowModule.isActive(m -> self.isVisuallyCrawling() && m.crawl.getValue()
+                || self.isCrouching() && m.sneak.getValue())) {
             cir.setReturnValue(false);
         }
     }

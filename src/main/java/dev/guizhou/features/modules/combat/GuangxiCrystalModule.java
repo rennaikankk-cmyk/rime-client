@@ -14,6 +14,8 @@ import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.DamageSyncTracker;
 import dev.guizhou.util.combat.CrystalAttackWindow;
 import dev.guizhou.util.combat.CrystalSelectionPolicy;
+import dev.guizhou.util.combat.CrystalRetryTracker;
+import dev.guizhou.util.combat.ExplosionDamageModel;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.PredictUtil;
@@ -32,6 +34,7 @@ import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundExplodePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
@@ -180,7 +183,13 @@ public class GuangxiCrystalModule extends Module {
     private static final double  ARMOR_BALANCE  = 0.20;
     private static final boolean NO_SELF_POP    = true; // retained for config compatibility; Reserve now drives the margin
 
-    private static final long PLACE_PENDING_MS = 40;
+    private final Setting<Boolean> blockDestruction = bool("BlockDestruction", true).setPage("General");
+    private final Setting<Boolean> inhibit = bool("Inhibit", true).setPage("General");
+    private final Setting<Integer> attackLimit = num("AttackLimit", 3, 1, 10).setPage("General");
+    private final Setting<Integer> breakTimeout = num("BreakTimeout", 100, 0, 1000).setPage("General");
+    private final Setting<Integer> retryReset = num("RetryReset", 500, 100, 5000).setPage("General");
+    private final Setting<Integer> placeTimeout = num("PlaceTimeout", 100, 0, 1000).setPage("General");
+    private final Setting<Integer> reactiveBudget = num("ReactiveScans", 2, 1, 8).setPage("General");
 
     /** Same-spot rhythm lock yields once another candidate beats the locked spot by this much. */
     private static final float LOCK_RELEASE_MARGIN = 2.0f;
@@ -191,6 +200,10 @@ public class GuangxiCrystalModule extends Module {
     private final Timer breakTimer  = new Timer();
     private final Timer switchTimer = new Timer();
     private final CrystalAttackWindow attackWindow = new CrystalAttackWindow();
+    private final CrystalRetryTracker attackRetries = new CrystalRetryTracker();
+    private int reactiveTick = Integer.MIN_VALUE;
+    private int reactiveScans;
+    private List<TargetCache> decisionTargets = List.of();
 
     private int lastCarriedSlot = -1;
     private long lastBreakMs = 0L;
@@ -209,7 +222,7 @@ public class GuangxiCrystalModule extends Module {
 
     private record SelfCache(Vec3 pos, AABB box, Vec3 currentPos, AABB currentBox,
                              float health, float armor, float toughness,
-                             int epf, Difficulty difficulty) {}
+                             int epf, float resistanceMultiplier, Difficulty difficulty) {}
 
     private SelfCache selfCache = null;
     // tick-scoped entity snapshot: candidate-cell occupancy filters in memory instead of
@@ -262,7 +275,7 @@ public class GuangxiCrystalModule extends Module {
     }
 
     private long pendingWindowMs() {
-        return tpsMs(PLACE_PENDING_MS);
+        return tpsMs(placeTimeout.getValue());
     }
 
     /** True right after a server rubberband — placing into an unconfirmed world wastes blocks. */
@@ -369,6 +382,10 @@ public class GuangxiCrystalModule extends Module {
         crystalPlaces.clear();
         deadIds.clear();
         attackWindow.clear();
+        attackRetries.clear();
+        reactiveTick = Integer.MIN_VALUE;
+        reactiveScans = 0;
+        decisionTargets = List.of();
         placeTimer.reset();
         breakTimer.reset();
         switchTimer.reset();
@@ -526,6 +543,7 @@ public class GuangxiCrystalModule extends Module {
         if (!(packet instanceof ClientboundEntityEventPacket)
                 && !(packet instanceof ClientboundAddEntityPacket)
                 && !(packet instanceof ClientboundExplodePacket)
+                && !(packet instanceof ClientboundRemoveEntitiesPacket)
                 && !(packet instanceof ClientboundPlayerPositionPacket)) return;
         executeForSession(() -> handleIncomingPacket(packet));
     }
@@ -544,6 +562,10 @@ public class GuangxiCrystalModule extends Module {
     }
 
     private void handleIncomingPacket(net.minecraft.network.protocol.Packet<?> packet) {
+        if (packet instanceof ClientboundRemoveEntitiesPacket removed) {
+            for (int id : removed.getEntityIds()) attackRetries.removed(id);
+            return;
+        }
         if (packet instanceof ClientboundPlayerPositionPacket) {
             sentRotationKnown = false;
             pendingRotation = null;
@@ -564,6 +586,7 @@ public class GuangxiCrystalModule extends Module {
         }
 
         if (packet instanceof ClientboundAddEntityPacket pkt) {
+            attackRetries.removed(pkt.getId());
             if (pkt.getId() > lastMaxEntityId) lastMaxEntityId = pkt.getId();
             instaGates[9]++; // any spawn packet reached this listener
             if (packetLog.getValue() && pkt.getType() == EntityType.END_CRYSTAL) {
@@ -733,9 +756,6 @@ public class GuangxiCrystalModule extends Module {
         if (nullCheck() || mc.player.isDeadOrDying()) return;
         ensureSession();
         if (!rubberbandQuiet()) return;
-        ensureSelfCache();
-        refreshEntitySnapshot();
-
         if (weaponControlBusy()) return;
 
         AutoSwordModule sword = GuizhouWare.moduleManager.getModuleByClass(AutoSwordModule.class);
@@ -744,6 +764,12 @@ public class GuangxiCrystalModule extends Module {
         double cutoff = (placeRangeValue() + 2.0) * (placeRangeValue() + 2.0);
         if (mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) > cutoff) return;
 
+        if (reactiveTick != mc.player.tickCount) {
+            reactiveTick = mc.player.tickCount;
+            reactiveScans = 0;
+        }
+        if (reactiveScans >= reactiveBudget.getValue()) return;
+
         updateSeeThrough();
 
         boolean canBreak = doBreak.getValue() && breakTimer.passedMs(tpsMs(breakDelay.getValue()))
@@ -751,6 +777,9 @@ public class GuangxiCrystalModule extends Module {
         boolean canPlace = place.getValue() && placeTimer.passedMs(tpsMs(placeDelay.getValue()))
                 && canSupplyCrystal() && mc.player.tickCount != lastReactorPlaceTick;
         if (!canBreak && !canPlace) return;
+        reactiveScans++;
+        ensureSelfCache();
+        refreshEntitySnapshot();
 
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
         double scanRadius = placeRangeValue() + 12.0;
@@ -1067,7 +1096,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     private boolean crystalAttackEligible(EndCrystal crystal) {
         return crystal.isAlive() && !crystal.isRemoved() && !deadIds.contains(crystal.getId())
                 && crystal.tickCount >= minAge.getValue()
+                && (!inhibit.getValue() || attackRetries.canAttempt(crystal.getId(), System.currentTimeMillis(),
+                    tpsMs(breakTimeout.getValue()), attackLimit.getValue(), retryResetMs()))
                 && attackWindow.canAttack(crystal.getId(), mc.player.tickCount);
+    }
+
+    private long retryResetMs() {
+        return Math.max(tpsMs(breakTimeout.getValue()), tpsMs(retryReset.getValue()));
     }
 
     private boolean canPlanCrystalAttack(EndCrystal crystal) {
@@ -1115,6 +1150,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         }
         if (attempt == null || attempt.isCancelled()) return false;
         attackWindow.markSent(crystal.getId(), mc.player.tickCount);
+        attackRetries.markSent(crystal.getId(), System.currentTimeMillis(), retryResetMs());
         breakTimer.reset();
         lastBreakMs = System.currentTimeMillis();
         if (instant) diagInstaBreak++;
@@ -1498,8 +1534,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
             out.add(new TargetCache(living, tPos, tBox,
                     living.getHealth(), living.getAbsorptionAmount(), armorBroken,
-                    armor, toughness, protPoints, faceEligible));
+                    armor, toughness, protPoints, resistanceMultiplier(living), faceEligible));
         }
+        decisionTargets = out;
         return out;
     }
 
@@ -1528,9 +1565,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     private record TargetCache(LivingEntity entity, Vec3 pos, AABB box, float hp, float abs,
                                boolean armorBroken, float armor, float toughness,
-                               int protPoints, boolean faceEligible) {}
+                               int protPoints, float resistanceMultiplier, boolean faceEligible) {}
 
-    /** Main-thread refresh; background planning reads the immutable list through the volatile. */
+    /** Main-thread entity references; this shallow list must never be used by a background worker. */
     private void refreshEntitySnapshot() {
         int tick = mc.player == null ? -1 : mc.player.tickCount;
         if (tick == entitySnapshotTick) return;
@@ -1786,6 +1823,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     private void ageCrystalPlaces() {
         long now = System.currentTimeMillis();
+        attackRetries.expire(now, Math.max(5000L, retryResetMs()));
         LongIterator it = crystalPlaces.keySet().iterator();
         while (it.hasNext()) {
             long key = it.nextLong();
@@ -1820,9 +1858,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (impact <= 0) return 0;
 
         float dmg = baseExplosionDamage(impact, selfNow().difficulty());
-        dmg = armorAbsorb(dmg, tc.armor, tc.toughness);
-        dmg = CombatRules.getDamageAfterMagicAbsorb(dmg, tc.protPoints);
-        return Math.max(dmg, 0f);
+        return ExplosionDamageModel.reduce(dmg, tc.armor, tc.toughness, tc.resistanceMultiplier, tc.protPoints);
     }
 
     private float maxDamageSelf(Vec3 explosionPos) {
@@ -1887,7 +1923,12 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             box = box.move(p.x - mc.player.getX(), p.y - mc.player.getY(), p.z - mc.player.getZ());
         }
         selfCache = new SelfCache(pos, box, currentPos, currentBox, health, armor, toughness,
-                protectionPoints(mc.player), mc.level.getDifficulty());
+                protectionPoints(mc.player), resistanceMultiplier(mc.player), mc.level.getDifficulty());
+    }
+
+    private static float resistanceMultiplier(LivingEntity entity) {
+        var effect = entity.getEffect(net.minecraft.world.effect.MobEffects.RESISTANCE);
+        return ExplosionDamageModel.resistanceMultiplier(effect == null ? -1 : effect.getAmplifier());
     }
 
     private int protectionPoints(LivingEntity entity) {
@@ -1913,13 +1954,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (impact <= 0) return 0;
 
         float dmg = baseExplosionDamage(impact, sc.difficulty());
-        dmg = armorAbsorb(dmg, sc.armor(), sc.toughness());
-        return Math.max(CombatRules.getDamageAfterMagicAbsorb(dmg, sc.epf()), 0f);
+        return ExplosionDamageModel.reduce(dmg, sc.armor(), sc.toughness(), sc.resistanceMultiplier(), sc.epf());
     }
 
     private float baseExplosionDamage(double impact, Difficulty difficulty) {
         float dmg = (float) ((impact * impact + impact) / 2.0 * 7.0 * 12.0 + 1.0);
         switch (difficulty) {
+            case PEACEFUL -> dmg = 0f;
             case EASY -> dmg = Math.min(dmg / 2f + 1f, dmg);
             case HARD -> dmg *= 1.5f;
         }
@@ -1932,7 +1973,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
      */
     private boolean balanceOk(float totalDamage, Vec3 crystalCenter, BlockPos phantomObsidianPos) {
         if (!balance.getValue()) return true;
-        if (totalDamage >= 20.0f) return true;
+        // A group sum of 20 is not proof that any one target dies, especially with absorption.
+        for (TargetCache target : decisionTargets) {
+            float health = target.hp + target.abs;
+            if (health <= 0 || totalDamage < health || isSyncHeld(target.entity)) continue;
+            if (damageSync.getValue() && DamageSyncTracker.shouldHold(target.entity)) continue;
+            if (calcDamage(target, crystalCenter, phantomObsidianPos) >= health) return true;
+        }
         float selfDamage = calcDamageSelf(crystalCenter, phantomObsidianPos);
         return totalDamage >= selfDamage + balanceOffset.getValue();
     }
@@ -1957,7 +2004,12 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         double dx = box.getXsize();
         double dy = box.getYsize();
         double dz = box.getZsize();
-        int steps = 2;
+        double stepX = 1.0 / (dx * 2.0 + 1.0);
+        double stepY = 1.0 / (dy * 2.0 + 1.0);
+        double stepZ = 1.0 / (dz * 2.0 + 1.0);
+        if (stepX <= 0 || stepY <= 0 || stepZ <= 0) return 0;
+        double offsetX = (1.0 - Math.floor(1.0 / stepX) * stepX) / 2.0;
+        double offsetZ = (1.0 - Math.floor(1.0 / stepZ) * stepZ) / 2.0;
         int total = 0;
         int unblocked = 0;
 
@@ -1972,20 +2024,20 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             BlockState state = getStateFast(pos);
             if (state.isAir()) return null;
 
-            if (state.getBlock().getExplosionResistance() < EXPLODABLE_RESISTANCE) return null;
+            if (blockDestruction.getValue() && state.getBlock().getExplosionResistance() < EXPLODABLE_RESISTANCE) return null;
 
             VoxelShape shape = state.getCollisionShape(mc.level, pos);
             if (shape.isEmpty()) return null;
             return shape.clip(from, to, pos);
         };
 
-        for (int xi = 0; xi <= steps; xi++) {
-            for (int yi = 0; yi <= steps; yi++) {
-                for (int zi = 0; zi <= steps; zi++) {
+        for (double xi = 0; xi <= 1.0; xi += stepX) {
+            for (double yi = 0; yi <= 1.0; yi += stepY) {
+                for (double zi = 0; zi <= 1.0; zi += stepZ) {
                     Vec3 point = new Vec3(
-                        box.minX + dx * xi / steps,
-                        box.minY + dy * yi / steps,
-                        box.minZ + dz * zi / steps
+                        box.minX + dx * xi + offsetX,
+                        box.minY + dy * yi,
+                        box.minZ + dz * zi + offsetZ
                     );
                     ctx.set(point, source);
                     if (BlockGetter.traverseBlocks(point, source, ctx, tester, c -> null) == null) unblocked++;

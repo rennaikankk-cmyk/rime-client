@@ -78,19 +78,26 @@ public class RotationManager {
     }
 
     public void submit(RotationRequest request) {
+        trySubmit(request);
+    }
+
+    /** SILENT returns true only after an uncancelled local send; other modes are queued. */
+    public boolean trySubmit(RotationRequest request) {
+        if (!mc.isSameThread() || mc.player == null || mc.getConnection() == null) return false;
         if (request.mode == RotationRequest.Mode.SILENT) {
-            if (silentWindow.blocks(request.priority)) return;
-            performSilent(request);
+            if (silentWindow.blocks(request.priority)) return false;
+            if (!performSilent(request)) return false;
             silentWindow.accepted(request.priority);
             silentSentPriority = request.priority;
             silentSyncRequired = true;
             lastSilentMs = System.currentTimeMillis();
-            return;
+            return true;
         }
 
         requests.removeIf(r -> r.id.equals(request.id));
         requests.add(request);
         requests.sort(Comparator.comparingInt((RotationRequest r) -> r.priority).reversed());
+        return true;
     }
 
     public void cancel(String id) {
@@ -266,20 +273,23 @@ public class RotationManager {
         return new Input(f, b, l, r, real.jump(), real.shift(), real.sprint());
     }
 
-    private void performSilent(RotationRequest req) {
+    private boolean performSilent(RotationRequest req) {
         float targetYaw = req.targetYaw;
         float targetPitch = req.targetPitch;
 
         float f = (float) ((Math.random() * 2.0 - 1.0) * 0.001f);
         targetPitch = Mth.clamp(targetPitch + f, -90.0f, 90.0f);
 
-        setServerYaw(targetYaw);
-        setServerPitch(targetPitch);
-
-        mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
+        ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.PosRot(
                 mc.player.getX(), mc.player.getY(), mc.player.getZ(),
                 targetYaw, targetPitch, mc.player.onGround(), true
-        ));
+        );
+        boolean sent = dev.guizhou.util.PacketSendUtil.send(packet);
+        if (sent) {
+            setServerYaw(packet.getYRot(targetYaw));
+            setServerPitch(packet.getXRot(targetPitch));
+        }
+        return sent;
     }
 
     private RotationRequest getActiveRequest() {

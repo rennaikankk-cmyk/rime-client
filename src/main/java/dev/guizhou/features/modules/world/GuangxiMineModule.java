@@ -7,7 +7,11 @@ import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
+import dev.guizhou.manager.PlacementManager;
+import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.InteractionUtil;
+import dev.guizhou.util.MathUtil;
+import dev.guizhou.util.PacketSendUtil;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.inventory.SwapMode;
@@ -36,9 +40,6 @@ public class GuangxiMineModule extends Module implements MineApi {
     private static final double GRIM_MIN_EYE = 0.4;
     private static final double GRIM_MAX_EYE = 1.62;
 
-    /** ticks past the predicted server completion before the secondary is written off. */
-    private static final int SECONDARY_TIMEOUT = 10;
-
     /** how far inside a face the BreakAhead ray has to exit for it to count as straight-through. */
     private static final double BREAK_AHEAD_EDGE = 0.05;
 
@@ -46,6 +47,15 @@ public class GuangxiMineModule extends Module implements MineApi {
     private final Setting<Integer> fudgeTicks = num("FudgeTicks", 1, 0, 5);
     private final Setting<Integer> breakDelay = num("BreakDelay", 6, 0, 10);
     private final Setting<Boolean> pauseOnEat = bool("PauseOnEat", true);
+    private final Setting<Boolean> onlyOnGround = bool("OnlyOnGround", false);
+    private final Setting<Boolean> pauseOnFlying = bool("PauseOnFlying", false);
+    private final Setting<Boolean> pauseInFluid = bool("PauseInFluid", false);
+    private final Setting<Boolean> startRotate = bool("StartRotate", false);
+    private final Setting<Boolean> endRotate = bool("EndRotate", false);
+    private final Setting<ToolSwitch> swapAction = mode("SwapAction", ToolSwitch.Silent);
+    private final Setting<Integer> holdTicks = num("HoldTicks", 10, 1, 40);
+    private final Setting<Integer> retryTicks = num("RetryTicks", 2, 1, 20);
+    private final Setting<Integer> retryAttempts = num("RetryAttempts", 6, 1, 20);
     private final Setting<Boolean> decoy = bool("GrimDecoy", true);
     private final Setting<Boolean> doubleBreak = bool("DoubleBreak", true);
     private final Setting<Boolean> breakAhead = bool("BreakAhead", false);
@@ -65,6 +75,14 @@ public class GuangxiMineModule extends Module implements MineApi {
     private double progress;
     private boolean started;
     private boolean finished;
+    private boolean observedAir;
+    private final MiningRetryWindow retry = new MiningRetryWindow();
+    private final Object primaryToolOwner = new Object();
+    private final Object secondaryToolOwner = new Object();
+    private int primaryHeldTicks;
+    private int secondaryHeldTicks;
+    private net.minecraft.client.multiplayer.ClientLevel sessionLevel;
+    private net.minecraft.client.player.LocalPlayer sessionPlayer;
 
     private BlockPos secondaryPos;
     private int secondaryTicks;
@@ -82,6 +100,12 @@ public class GuangxiMineModule extends Module implements MineApi {
     public interface MineFinishListener { void onMineFinish(BlockPos pos); }
 
     private final CopyOnWriteArrayList<MineFinishListener> finishListeners = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<MineFinishListener> submissionListeners = new CopyOnWriteArrayList<>();
+    private final PlacementManager.PlacementListener blockListener = this::onBlockObserved;
+
+    /** Early notification for predictive preplace; does not imply server confirmation. */
+    public void addSubmissionListener(MineFinishListener l) { submissionListeners.addIfAbsent(l); }
+    public void removeSubmissionListener(MineFinishListener l) { submissionListeners.remove(l); }
 
     public void addFinishListener(MineFinishListener l) { finishListeners.addIfAbsent(l); }
 
@@ -89,6 +113,10 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     private void fireFinish(BlockPos target) {
         for (MineFinishListener l : finishListeners) l.onMineFinish(target);
+    }
+
+    private void fireSubmitted(BlockPos target) {
+        for (MineFinishListener l : submissionListeners) l.onMineFinish(target);
     }
 
     public GuangxiMineModule() {
@@ -102,14 +130,25 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     @Override
+    public void onEnable() {
+        ensureSession();
+        GuizhouWare.placementManager.addListener(blockListener);
+    }
+
+    @Override
     public void onDisable() {
-        if (!nullCheck() && pos != null && started && !finished) {
+        GuizhouWare.placementManager.removeListener(blockListener);
+        if (!nullCheck() && mc.level == sessionLevel && mc.player == sessionPlayer
+                && pos != null && started && !finished) {
             abortBreak();
         }
         clearSecondary();
         clearMine();
         rebreakHoldPos = null;
         rebreakHoldTicks = 0;
+        stopCooldown = 0;
+        sessionLevel = null;
+        sessionPlayer = null;
     }
 
     @Override
@@ -123,12 +162,13 @@ public class GuangxiMineModule extends Module implements MineApi {
     @Subscribe
     private void onAttackBlock(AttackBlockEvent event) {
         if (nullCheck()) return;
+        ensureSession();
         if (mc.player.isCreative() || mc.player.isSpectator()) return;
 
         event.cancel();
 
         if (isMining(event.getPos())) return;
-        if (!InteractionUtil.canBreak(event.getPos(), event.getState())) return;
+        if (!inMineRange(event.getPos()) || !InteractionUtil.canBreak(event.getPos(), event.getState())) return;
 
         // start the block behind first so it gets demoted into the secondary slot and
         // finishes on its own while the clicked block runs as the primary break.
@@ -194,21 +234,29 @@ public class GuangxiMineModule extends Module implements MineApi {
         return ahead;
     }
 
-    private void startMine(BlockPos target, Direction dir) {
+    private boolean startMine(BlockPos target, Direction dir) {
         if (pos != null && started && !finished) {
-            if (!doubleBreak.getValue() || secondaryPos != null || !demote()) {
+            if (doubleBreak.getValue() && secondaryPos == null) {
+                // Keep the active break when its STOP/tool swap is refused.
+                if (!demote()) return false;
+            } else {
                 abortBreak();
             }
         }
 
+        GuizhouWare.swapManager.release(primaryToolOwner);
+        primaryHeldTicks = 0;
         pos = target.immutable();
         direction = dir;
         ticks = 0;
         progress = 0;
         started = false;
         finished = false;
+        observedAir = false;
+        retry.reset();
 
-        if (stopCooldown == 0 && canBegin()) begin();
+        if (!paused() && stopCooldown == 0 && canBegin()) begin();
+        return true;
     }
 
     private boolean canBegin() {
@@ -234,7 +282,8 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     @Override
     public boolean requestBreak(BlockPos target) {
-        if (!isAvailable()) return false;
+        if (!mc.isSameThread() || !isAvailable() || target == null) return false;
+        ensureSession();
         if (isMining(target)) return true;
         if (!inMineRange(target)) return false;
         BlockState state = mc.level.getBlockState(target);
@@ -243,13 +292,12 @@ public class GuangxiMineModule extends Module implements MineApi {
             if (!started) return false;
             if (!doubleBreak.getValue() || secondaryPos != null) return false;
         }
-        startMine(target, validFace(target));
-        return true;
+        return startMine(target, validFace(target));
     }
 
     @Override
     public boolean isMining(BlockPos target) {
-        return target.equals(pos) || target.equals(secondaryPos);
+        return target != null && (target.equals(pos) || target.equals(secondaryPos));
     }
 
     @Override
@@ -269,7 +317,8 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     @Override
     public boolean inMineRange(BlockPos target) {
-        return mc.player.getEyePosition().distanceTo(Vec3.atCenterOf(target)) <= range.getValue();
+        return !nullCheck() && target != null
+                && mc.player.getEyePosition().distanceTo(Vec3.atCenterOf(target)) <= range.getValue();
     }
 
     /** The primary mine target, finished or not. */
@@ -306,23 +355,23 @@ public class GuangxiMineModule extends Module implements MineApi {
     private boolean demote() {
         BlockState state = mc.level.getBlockState(pos);
         if (state.isAir()) return false;
-        if (!stopBreak(bestSlot(state, pos), false)) {
-            sendAction(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, validFace(pos));
-        }
+        if (!stopBreak(bestSlot(state, pos), false)) return false;
         secondaryPos = pos;
         secondaryTicks = ticks;
         secondaryHolding = false;
+        secondaryHeldTicks = 0;
         secondaryProgress = Math.min(progress, 1);
         return true;
     }
 
     private void begin() {
-        started = true;
-        trackStarts(decoy.getValue() ? 2 : 1);
+        if (paused() || !rotateFor(pos, startRotate.getValue())) return;
         if (faceMargin(direction, targetBox(pos)) <= 0) {
             direction = validFace(pos);
         }
-        sendAction(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, direction);
+        if (!sendAction(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, direction)) return;
+        started = true;
+        trackStarts(decoy.getValue() ? 2 : 1);
         if (decoy.getValue()) {
             BlockPos decoyPos = pos.below(DECOY_Y_OFFSET);
             sendAction(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, decoyPos, validFace(decoyPos));
@@ -335,7 +384,13 @@ public class GuangxiMineModule extends Module implements MineApi {
     @Subscribe
     private void onTick(PreTickEvent event) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        ensureSession();
         if (nullCheck()) return;
+        if (mc.player.isDeadOrDying() || mc.player.isCreative() || mc.player.isSpectator()) {
+            clearSecondary();
+            clearMine();
+            return;
+        }
 
         if (stopCooldown > 0) stopCooldown--;
         if (rebreakHoldTicks > 0) rebreakHoldTicks--;
@@ -351,6 +406,25 @@ public class GuangxiMineModule extends Module implements MineApi {
         }
 
         BlockState state = mc.level.getBlockState(pos);
+        if (state.isAir() && started) {
+            onBlockObserved(pos, true);
+            if (!rebreak.getValue()) clearMine();
+            return;
+        }
+        if (paused()) {
+            GuizhouWare.swapManager.release(primaryToolOwner);
+            primaryHeldTicks = 0;
+            return;
+        }
+        if (GuizhouWare.swapManager.isLatched(primaryToolOwner) && ++primaryHeldTicks >= holdTicks.getValue()) {
+            GuizhouWare.swapManager.release(primaryToolOwner);
+            primaryHeldTicks = 0;
+            return; // Yield the selected slot for a tick instead of immediately reclaiming it.
+        }
+        if (observedAir) {
+            observedAir = false;
+            retry.reset();
+        }
 
         if (!started) {
             if (state.isAir() || !InteractionUtil.canBreak(pos, state)) {
@@ -364,11 +438,6 @@ public class GuangxiMineModule extends Module implements MineApi {
         }
 
         if (!finished) {
-            if (state.isAir()) {
-                clearMine();
-                return;
-            }
-
             int slot = bestSlot(state, pos);
             double delta = InteractionUtil.getBreakDelta(mc.player.getInventory().getItem(slot), state, pos);
             if (delta <= 0) {
@@ -381,27 +450,48 @@ public class GuangxiMineModule extends Module implements MineApi {
             progress = Math.max(ticks - fudgeTicks.getValue(), 0) * delta;
             if (progress >= threshold.getValue()) {
                 finished = stopBreak(slot);
-                if (finished) fireFinish(pos);
+                if (finished) {
+                    retry.submitted();
+                    fireSubmitted(pos);
+                }
             }
             return;
         }
 
-        if (!rebreak.getValue()) {
-            clearMine();
+        if (rebreakHoldTicks > 0 && pos.equals(rebreakHoldPos)) return;
+        retry.tick();
+        if (!retry.ready(retryTicks.getValue())) return;
+        if (retry.exhausted(retryAttempts.getValue())) {
+            // Rejected early STOPs must eventually return to a fresh START, not loop forever.
+            abortBreak();
+            GuizhouWare.swapManager.release(primaryToolOwner);
+            started = finished = false;
+            ticks = 0;
+            progress = 0;
+            retry.reset();
             return;
         }
-        if (state.isAir()) return;
-        if (rebreakHoldTicks > 0 && pos.equals(rebreakHoldPos)) return;
-        stopBreak(bestSlot(state, pos));
+        if (stopBreak(bestSlot(state, pos))) {
+            boolean first = retry.age() == 0;
+            retry.submitted();
+            if (first) fireSubmitted(pos);
+        }
     }
 
     private void tickSecondary() {
         if (secondaryPos == null) return;
+        if (!inMineRange(secondaryPos)) { clearSecondary(); return; }
 
         BlockState state = mc.level.getBlockState(secondaryPos);
         if (state.isAir()) {
-            fireFinish(secondaryPos);
+            BlockPos completed = secondaryPos;
             clearSecondary();
+            fireFinish(completed);
+            return;
+        }
+        if (paused()) {
+            GuizhouWare.swapManager.release(secondaryToolOwner);
+            secondaryHolding = false;
             return;
         }
 
@@ -416,25 +506,35 @@ public class GuangxiMineModule extends Module implements MineApi {
         int expected = Mth.ceil(1.0 / delta) - 1;
         secondaryProgress = Math.min(secondaryTicks * delta, 1);
 
-        if (secondaryTicks > expected + SECONDARY_TIMEOUT) {
+        if (secondaryTicks > expected + holdTicks.getValue()) {
             clearSecondary();
             return;
         }
 
-        if (secondaryTicks >= expected - 1 && !secondaryHolding) {
+        secondaryHolding = GuizhouWare.swapManager.isLatched(secondaryToolOwner);
+        if (secondaryHolding && GuizhouWare.swapManager.latchedSlot() != slot) {
+            GuizhouWare.swapManager.release(secondaryToolOwner);
+            secondaryHolding = false;
+        }
+        if (secondaryHolding && ++secondaryHeldTicks >= holdTicks.getValue()) {
+            clearSecondary();
+            return;
+        }
+        if (secondaryTicks >= expected - 1 && !secondaryHolding && swapAction.getValue() != ToolSwitch.Manual) {
             Result result = new Result(slot, mc.player.getInventory().getItem(slot), ResultType.HOTBAR);
-            if (!result.holding() && !GuizhouWare.swapManager.isLatched() && GuizhouWare.swapManager.latch(result)) {
+            if (GuizhouWare.swapManager.latch(secondaryToolOwner, result)) {
                 secondaryHolding = true;
             }
         }
     }
 
     private void clearSecondary() {
-        if (secondaryHolding) GuizhouWare.swapManager.release();
+        GuizhouWare.swapManager.release(secondaryToolOwner);
         secondaryPos = null;
         secondaryTicks = 0;
         secondaryHolding = false;
         secondaryProgress = 0;
+        secondaryHeldTicks = 0;
     }
 
     // Display-side progress: the real progress only advances per tick (20fps steps read as
@@ -507,19 +607,32 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     private boolean stopBreak(int slot, boolean cooldown) {
-        // A SILENT swap would break an active latch (SwordGap eating, or our own secondary hold) —
-        // wait it out instead; the caller just retries next tick.
-        if (GuizhouWare.swapManager.isLatched() && (pauseOnEat.getValue() || secondaryHolding)) return false;
+        if (paused() || !rotateFor(pos, endRotate.getValue())) return false;
+        // A temporary tool switch must not steal a live secondary or another module's hold.
+        if (GuizhouWare.swapManager.isLatched() && !GuizhouWare.swapManager.isLatched(primaryToolOwner)) {
+            if (pauseOnEat.getValue() || GuizhouWare.swapManager.isLatched(secondaryToolOwner)) return false;
+        }
 
         ItemStack stack = mc.player.getInventory().getItem(slot);
-        return GuizhouWare.swapManager.withSwap(new Result(slot, stack, ResultType.HOTBAR), SwapMode.SILENT,
-                SwapPriority.MINING, () -> {
-            if (cooldown) stopCooldown = breakDelay.getValue();
-            sendAction(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, validFace(pos));
-            if (swing.getValue()) {
+        boolean[] sent = {false};
+        Runnable action = () -> {
+            sent[0] = sendAction(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, validFace(pos));
+            if (sent[0] && cooldown) stopCooldown = breakDelay.getValue();
+            if (sent[0] && swing.getValue()) {
                 mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
             }
-        });
+        };
+        Result result = new Result(slot, stack, ResultType.HOTBAR);
+        if (swapAction.getValue() == ToolSwitch.Manual) {
+            if (slot != mc.player.getInventory().getSelectedSlot()) return false;
+            action.run();
+        } else if (swapAction.getValue() == ToolSwitch.Visible) {
+            if (!GuizhouWare.swapManager.latch(primaryToolOwner, result)) return false;
+            action.run();
+        } else {
+            if (!GuizhouWare.swapManager.withSwap(result, SwapMode.SILENT, SwapPriority.MINING, action)) return false;
+        }
+        return sent[0];
     }
 
     private void abortBreak() {
@@ -565,6 +678,7 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     private int bestSlot(BlockState state, BlockPos target) {
         int best = mc.player.getInventory().getSelectedSlot();
+        if (swapAction.getValue() == ToolSwitch.Manual) return best;
         double bestDelta = InteractionUtil.getBreakDelta(mc.player.getInventory().getItem(best), state, target);
         for (int i = 0; i < 9; i++) {
             double delta = InteractionUtil.getBreakDelta(mc.player.getInventory().getItem(i), state, target);
@@ -576,19 +690,68 @@ public class GuangxiMineModule extends Module implements MineApi {
         return best;
     }
 
-    private void sendAction(ServerboundPlayerActionPacket.Action action, BlockPos target, Direction face) {
-        if (action == ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK) {
+    private boolean sendAction(ServerboundPlayerActionPacket.Action action, BlockPos target, Direction face) {
+        boolean sent = PacketSendUtil.send(new ServerboundPlayerActionPacket(action, target, face));
+        if (sent && action == ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK) {
             lastStopMs = System.currentTimeMillis();
         }
-        mc.getConnection().send(new ServerboundPlayerActionPacket(action, target, face));
+        return sent;
+    }
+
+    private boolean paused() {
+        return nullCheck() || (pauseOnEat.getValue() && mc.player.isUsingItem())
+                || (onlyOnGround.getValue() && !mc.player.onGround())
+                || (pauseOnFlying.getValue() && (mc.player.isFallFlying() || mc.player.getAbilities().flying))
+                || (pauseInFluid.getValue() && (mc.player.isInWater() || mc.player.isInLava()));
+    }
+
+    private boolean rotateFor(BlockPos target, boolean rotate) {
+        if (!rotate) return true;
+        float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), Vec3.atCenterOf(target));
+        return GuizhouWare.rotationManager.trySubmit(new RotationRequest("GuangxiMine", SwapPriority.MINING,
+                angles[0], angles[1], RotationRequest.Mode.SILENT));
+    }
+
+    private void onBlockObserved(BlockPos target, boolean nowAir) {
+        if (!isEnabled() || !mc.isSameThread() || mc.level != sessionLevel || mc.player != sessionPlayer) return;
+        if (target.equals(pos) && started && nowAir && !observedAir) {
+            observedAir = true;
+            finished = true;
+            retry.reset();
+            GuizhouWare.swapManager.release(primaryToolOwner);
+            primaryHeldTicks = 0;
+            fireFinish(target);
+        }
+        if (target.equals(secondaryPos) && nowAir) {
+            clearSecondary();
+            fireFinish(target);
+        }
+    }
+
+    private void ensureSession() {
+        if (sessionLevel == mc.level && sessionPlayer == mc.player) return;
+        clearSecondary();
+        clearMine();
+        rebreakHoldPos = null;
+        rebreakHoldTicks = stopCooldown = 0;
+        lastStopMs = 0;
+        delayBalance = 0;
+        sessionLevel = mc.level;
+        sessionPlayer = mc.player;
     }
 
     private void clearMine() {
+        GuizhouWare.swapManager.release(primaryToolOwner);
+        primaryHeldTicks = 0;
         pos = null;
         direction = null;
         ticks = 0;
         progress = 0;
         started = false;
         finished = false;
+        observedAir = false;
+        retry.reset();
     }
+
+    public enum ToolSwitch { Silent, Visible, Manual }
 }

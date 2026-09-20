@@ -9,6 +9,17 @@ import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.DamageSyncTracker;
+import dev.guizhou.util.EnchantmentUtil;
+import dev.guizhou.util.PacketSendUtil;
+import dev.guizhou.util.combat.ExplosionDamageModel;
+import dev.guizhou.util.combat.CrystalRetryTracker;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.HitResult;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.inventory.InventoryUtil;
@@ -43,18 +54,24 @@ public class GuangxiPistonModule extends Module {
 
     private static final String ROTATION_ID     = "PistonCrystal";
     private static final int    ROTATION_PRIORITY = 70;
-    private static final double TARGET_RANGE     = 10.0;
-    private static final double TARGET_RANGE_SQ  = TARGET_RANGE * TARGET_RANGE;
-    private static final int    EXTEND_TIMEOUT   = 10;
 
     private static final double NUDGE = 1.0 / 16.0;
 
-    private static final double PLACE_RANGE = 6.0;
-    private static final double BREAK_RANGE = 3.0;
+    private final Setting<Double> placeReach = num("PlaceRange", 5.0, 1.0, 6.0).setPage("General");
+    private final Setting<Double> breakReach = num("BreakRange", 3.0, 0.5, 6.0).setPage("General");
 
     private final Setting<Double>  minDamage    = num("MinDamage",    6.0, 0.0, 36.0).setPage("General");
     private final Setting<Integer> delay        = num("Delay",       10, 0, 20).setPage("General");
     private final Setting<Boolean> autoBase     = bool("AutoBase",   true).setPage("General");
+
+    private final Setting<Double> maxSelfDamage = num("MaxSelfDamage", 8.0, 0.0, 36.0).setPage("General");
+    private final Setting<Double> reserve = num("Reserve", 2.0, 0.0, 20.0).setPage("General");
+    private final Setting<Double> targetRange = num("TargetRange", 10.0, 1.0, 16.0).setPage("General");
+    private final Setting<Integer> actionTimeout = num("ActionTimeout", 60, 10, 200).setPage("General");
+    private final Setting<Integer> retryDelay = num("RetryDelay", 4, 1, 20).setPage("General");
+    private final Setting<Integer> attackWait = num("AttackWait", 2, 1, 20).setPage("General");
+    private final Setting<Boolean> inAirTarget = bool("InAirTarget", true).setPage("General");
+    private final Setting<Boolean> blockDestruction = bool("BlockDestruction", true).setPage("General");
 
     private final Setting<Boolean> damageSync   = bool("DamageSync", false).setPage("General");
 
@@ -70,6 +87,14 @@ public class GuangxiPistonModule extends Module {
     private int     delayTicks;
     private int     rotateHeld;
     private int     waitTicks;
+    private Stage stage = Stage.BASE;
+    private int stageAttempts;
+    private long lastStageSubmit = Long.MIN_VALUE;
+    private int trackedCrystal = -1;
+    private ClientLevel sessionLevel;
+    private LocalPlayer sessionPlayer;
+    private final CrystalRetryTracker attacks = new CrystalRetryTracker();
+    private enum Stage { BASE, PISTON, CRYSTAL, POWER, EXTEND, ATTACK, CONFIRM }
     private float   lastDamage;
 
     private ArmorProfile                     targetProfile;
@@ -101,159 +126,235 @@ public class GuangxiPistonModule extends Module {
         waitTicks  = 0;
         lastDamage = 0;
         renderMap.clear();
+        attacks.clear();
+        trackedCrystal = -1;
+        stageAttempts = 0;
+        lastStageSubmit = Long.MIN_VALUE;
     }
 
     @Subscribe
     private void onTick(TickEvent event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        if (sessionLevel != mc.level || sessionPlayer != mc.player) {
+            GuizhouWare.rotationManager.cancel(ROTATION_ID);
+            resetState();
+            sessionLevel = mc.level;
+            sessionPlayer = mc.player;
+        }
         if (nullCheck() || mc.player.isDeadOrDying()) return;
-
-        if (EatUtil.shouldDefer()) return;
-
-        int fadeTicks = (int)(fadeTime.getValue() * 20);
-        int now = mc.player.tickCount;
-        renderMap.entrySet().removeIf(e -> now - e.getValue() > fadeTicks);
-
+        attacks.expire(System.currentTimeMillis(), 5000);
+        renderMap.entrySet().removeIf(e -> mc.player.tickCount - e.getValue() > Math.max(1, (int)(fadeTime.getValue() * 20)));
         if (active != null) {
-            tickActive();
+            // Timeouts still advance while resources are owned by another module.
+            if (++waitTicks > actionTimeout.getValue() || !validTarget(active)) { clearActive(); return; }
+            if (!EatUtil.shouldDefer()) tickActive();
             return;
         }
-
-        if (delayTicks < delay.getValue()) {
-            delayTicks++;
-            return;
-        }
-
-        int pistonSlot   = pistonSlot();
-        int redstoneSlot = hotbarSlotOf(Items.REDSTONE_BLOCK);
-        int crystalSlot  = hotbarSlotOf(Items.END_CRYSTAL);
-        if (pistonSlot < 0 || redstoneSlot < 0 || crystalSlot < 0) {
-            clearPending();
-            lastDamage = 0;
-            return;
-        }
-
-        Setup setup = findSetup(pistonSlot, redstoneSlot, crystalSlot);
-        if (setup == null) {
-            clearPending();
-            return;
-        }
-
+        if (EatUtil.shouldDefer()) return;
+        if (delayTicks < delay.getValue()) { delayTicks++; return; }
+        Setup setup = findSetup();
+        if (setup == null) { clearPending(); return; }
+        // Only an actual clearing attack consumes this tick; an unreachable crystal cannot stall planning forever.
         if (breakCrystalsAround(setup.head())) return;
-
-        if (pending == null || pending.dir() != setup.dir()) rotateHeld = 0;
-        pending = setup;
-        GuizhouWare.rotationManager.submit(new RotationRequest(
-                ROTATION_ID, ROTATION_PRIORITY,
-                setup.dir().toYRot(), 0f,
-                RotationRequest.Mode.MOTION, true, false));
-        if (GuizhouWare.rotationManager.isCompleted(ROTATION_ID)) rotateHeld++;
-        else rotateHeld = 0;
-        if (rotateHeld < 2) return;
-
-        place(setup, pistonSlot, redstoneSlot, crystalSlot);
+        active = setup;
+        pending = null;
+        waitTicks = 0;
+        trackedCrystal = -1;
+        enterStage(Stage.BASE);
+        tickActive();
     }
 
     private void clearPending() {
-        if (pending != null) {
-            GuizhouWare.rotationManager.cancel(ROTATION_ID);
-            pending = null;
-        }
+        GuizhouWare.rotationManager.cancel(ROTATION_ID);
+        pending = null;
         rotateHeld = 0;
         lastDamage = 0;
     }
 
-    private void place(Setup setup, int pistonSlot, int redstoneSlot, int crystalSlot) {
-        if (setup.placeBase() && hotbarSlotOf(Items.OBSIDIAN) < 0) return;
-
-        if (setup.placeBase()
-                && !GuizhouWare.placementManager.placeDirect(setup.base(), null, Items.OBSIDIAN))
-            return;
-        Item piston = mc.player.getInventory().getItem(pistonSlot).getItem();
-        if (!GuizhouWare.placementManager.placeDirect(setup.piston(), null, piston))
-            return;
-        if (setup.placeRedstone())
-            GuizhouWare.placementManager.placeDirect(setup.redstone(), null, Items.REDSTONE_BLOCK);
-        GuangxiCrystalModule autoCrystal = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
-        if (autoCrystal != null) autoCrystal.placeCrystalShared(setup.base(), true);
-        else GuizhouWare.placementManager.placeCrystal(setup.base(), true);
-
-        int tick = mc.player.tickCount;
-        if (setup.placeBase())   renderMap.put(setup.base(),    tick);
-        renderMap.put(setup.piston(),                           tick);
-        if (setup.placeRedstone()) renderMap.put(setup.redstone(), tick);
-        renderMap.put(setup.crystal(),                          tick);
-
-        GuizhouWare.rotationManager.cancel(ROTATION_ID);
-        pending    = null;
-        rotateHeld = 0;
-        active     = setup;
-        waitTicks  = 0;
+    private void clearActive() {
+        active = null;
+        trackedCrystal = -1;
+        waitTicks = 0;
         delayTicks = 0;
+        clearPending();
+    }
+
+    private boolean validTarget(Setup setup) {
+        var entity = mc.level.getEntity(setup.targetId());
+        if (!(entity instanceof LivingEntity target) || !target.isAlive() || target.isRemoved()) return false;
+        TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
+        return (targets == null || targets.isValidPlayerTarget(target))
+                && target.position().distanceToSqr(setup.targetOrigin()) <= 1.0
+                && mc.player.distanceToSqr(target) <= targetRange.getValue() * targetRange.getValue();
+    }
+
+    private void enterStage(Stage next) {
+        stage = next;
+        stageAttempts = 0;
+        lastStageSubmit = Long.MIN_VALUE;
+    }
+
+    private boolean canSubmit() {
+        return stageAttempts < 3 && (lastStageSubmit == Long.MIN_VALUE
+                || (long)mc.player.tickCount - lastStageSubmit >= retryDelay.getValue());
+    }
+
+    private void submitted(BlockPos pos) {
+        stageAttempts++;
+        lastStageSubmit = mc.player.tickCount;
+        renderMap.put(pos, mc.player.tickCount);
     }
 
     private void tickActive() {
-        waitTicks++;
-
-        BlockState pistonState = mc.level.getBlockState(active.piston());
-        boolean extended = pistonState.hasProperty(BlockStateProperties.EXTENDED)
-                && pistonState.getValue(BlockStateProperties.EXTENDED);
-        if (!extended) {
-            extended = mc.level.getBlockState(active.crystal()).is(Blocks.PISTON_HEAD)
-                    || mc.level.getBlockState(active.crystal()).is(Blocks.MOVING_PISTON);
+        if (active == null || !validTarget(active)) { clearActive(); return; }
+        Setup setup = active;
+        if (stage != Stage.BASE && needsBase(setup.base())) { clearActive(); return; }
+        if (stage.ordinal() >= Stage.CRYSTAL.ordinal() && stage.ordinal() <= Stage.EXTEND.ordinal()) {
+            BlockState piston = mc.level.getBlockState(setup.piston());
+            if (!(piston.is(Blocks.PISTON) || piston.is(Blocks.STICKY_PISTON))
+                    || piston.getValue(BlockStateProperties.FACING) != setup.dir().getOpposite()) { clearActive(); return; }
         }
-
-        if (extended) {
-            breakCrystalsAround(active.head());
-            active = null;
-            return;
+        if (trackedCrystal >= 0 && mc.level.getEntity(trackedCrystal) == null) { clearActive(); return; }
+        if (!selfSafe(setup.explosion(), needsBase(setup.base()) ? setup.base() : null)) { clearActive(); return; }
+        // Several already-observed stages may advance in one tick; a submitted packet never counts as observation.
+        for (int steps = 0; steps < Stage.values().length && active != null; steps++) {
+            BlockPos interaction = switch (stage) {
+                case BASE -> setup.base();
+                case PISTON -> setup.piston();
+                case CRYSTAL -> setup.base();
+                case POWER -> setup.redstone();
+                default -> null;
+            };
+            if (interaction != null && mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(interaction))
+                    > placeReach.getValue() * placeReach.getValue()) { clearActive(); return; }
+            switch (stage) {
+                case BASE -> {
+                    if (!needsBase(setup.base())) { enterStage(Stage.PISTON); continue; }
+                    if (canSubmit() && GuizhouWare.placementManager.placeDirect(setup.base(), null, Items.OBSIDIAN)) submitted(setup.base());
+                    return;
+                }
+                case CRYSTAL -> {
+                    if (mc.level.hasNeighborSignal(setup.piston())
+                            || mc.level.getBlockState(setup.piston()).getValue(BlockStateProperties.EXTENDED)) { clearActive(); return; }
+                    EndCrystal crystal = crystalAt(setup.crystal());
+                    if (crystal != null) { trackedCrystal = crystal.getId(); enterStage(Stage.POWER); continue; }
+                    if (canSubmit() && GuizhouWare.placementManager.placeCrystal(setup.base(), false)) submitted(setup.crystal());
+                    return;
+                }
+                case PISTON -> {
+                    BlockState state = mc.level.getBlockState(setup.piston());
+                    if (state.is(Blocks.PISTON) || state.is(Blocks.STICKY_PISTON)) {
+                        if (!state.hasProperty(BlockStateProperties.FACING)
+                                || state.getValue(BlockStateProperties.FACING) != setup.dir().getOpposite()) { clearActive(); return; }
+                        enterStage(Stage.CRYSTAL); continue;
+                    }
+                    int slot = pistonSlot();
+                    if (canSubmit() && slot >= 0 && GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                            ROTATION_ID, ROTATION_PRIORITY, setup.dir().toYRot(), 0f, RotationRequest.Mode.SILENT))) {
+                        Item item = mc.player.getInventory().getItem(slot).getItem();
+                        if (GuizhouWare.placementManager.placeDirect(setup.piston(), null, item)) submitted(setup.piston());
+                    }
+                    return;
+                }
+                case POWER -> {
+                    if (mc.level.getBlockState(setup.redstone()).is(Blocks.REDSTONE_BLOCK)) { enterStage(Stage.EXTEND); continue; }
+                    if (canSubmit() && GuizhouWare.placementManager.placeDirect(setup.redstone(), null, Items.REDSTONE_BLOCK)) submitted(setup.redstone());
+                    return;
+                }
+                case EXTEND -> {
+                    BlockState state = mc.level.getBlockState(setup.piston());
+                    if (state.hasProperty(BlockStateProperties.EXTENDED) && state.getValue(BlockStateProperties.EXTENDED)) {
+                        enterStage(Stage.ATTACK); continue;
+                    }
+                    return;
+                }
+                case ATTACK -> {
+                    var entity = mc.level.getEntity(trackedCrystal);
+                    if (!(entity instanceof EndCrystal crystal) || !crystal.isAlive()) { clearActive(); return; }
+                    if (breakCrystal(crystal)) { enterStage(Stage.CONFIRM); lastStageSubmit = mc.player.tickCount; }
+                    return;
+                }
+                case CONFIRM -> {
+                    var entity = mc.level.getEntity(trackedCrystal);
+                    if (entity == null || entity.isRemoved()) { clearActive(); return; }
+                    if ((long)mc.player.tickCount - lastStageSubmit >= attackWait.getValue()) enterStage(Stage.ATTACK);
+                    return;
+                }
+            }
         }
+    }
 
-        if (waitTicks > EXTEND_TIMEOUT) active = null;
+    private EndCrystal crystalAt(BlockPos pos) {
+        for (var entity : mc.level.getEntities(null, new AABB(pos))) {
+            if (entity instanceof EndCrystal crystal && crystal.isAlive() && !crystal.isRemoved()
+                    && crystal.position().distanceToSqr(new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5)) < 0.25) return crystal;
+        }
+        return null;
     }
 
     private boolean breakCrystalsAround(BlockPos head) {
-        Vec3 eye       = mc.player.getEyePosition();
-        double rangeSq = BREAK_RANGE * BREAK_RANGE;
-        AABB area      = new AABB(head).inflate(1.0);
-        boolean found  = false;
-        for (var e : mc.level.getEntities(null, area)) {
-            if (!(e instanceof EndCrystal crystal)) continue;
-            found = true;
-            if (distSqToBox(eye, crystal.getBoundingBox()) > rangeSq) continue;
-            breakCrystal(crystal);
+        for (var entity : mc.level.getEntities(null, new AABB(head).inflate(1.0))) {
+            if (entity instanceof EndCrystal crystal && breakCrystal(crystal)) return true;
         }
-        return found;
+        return false;
     }
 
-    private void breakCrystal(EndCrystal crystal) {
-        Vec3 eyePos = mc.player.getEyePosition(1.0f);
-        Vec3 hit    = closestPointOnBox(eyePos, crystal.getBoundingBox());
-        float[] angles = MathUtil.calcAngle(eyePos, hit);
-        if (!canHitCrystal(crystal, angles[0], angles[1])) return;
-        GuizhouWare.rotationManager.submit(new RotationRequest(
-                "PistonCrystal_break", 60, angles[0], angles[1], RotationRequest.Mode.SILENT));
-        mc.gameMode.attack(mc.player, crystal);
+    private boolean breakCrystal(EndCrystal crystal) {
+        if (mc.gameMode == null || !crystal.isAlive() || crystal.isRemoved() || !selfSafe(crystal.position(), null)) return false;
+        long now = System.currentTimeMillis();
+        if (!attacks.canAttempt(crystal.getId(), now, attackWait.getValue() * 50L, 3, 500)) return false;
+        Vec3 eye = mc.player.getEyePosition();
+        float[] angles = MathUtil.calcAngle(eye, closestPointOnBox(eye, crystal.getBoundingBox()));
+        if (!canHitCrystal(crystal, angles[0], angles[1])) return false;
+        if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                "PistonCrystal_break", ROTATION_PRIORITY, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
+        if (!canHitCrystal(crystal, GuizhouWare.rotationManager.getServerYaw(), GuizhouWare.rotationManager.getServerPitch())) return false;
+        if (!PacketSendUtil.send(ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown()))) return false;
+        attacks.markSent(crystal.getId(), now, 500);
+        mc.player.swing(InteractionHand.MAIN_HAND);
+        return true;
     }
 
     private boolean canHitCrystal(EndCrystal crystal, float yaw, float pitch) {
-        AABB bb = crystal.getBoundingBox();
-        Vec3 eye = mc.player.getEyePosition(1.0f);
-        if (bb.contains(eye)) return true;
-        Vec3 look     = getLookVector(yaw, pitch);
-        Vec3 reachEnd = eye.add(look.scale(BREAK_RANGE));
-        return bb.clip(eye, reachEnd).isPresent();
+        AABB box = crystal.getBoundingBox();
+        Vec3 eye = mc.player.getEyePosition();
+        if (box.contains(eye)) return true;
+        var hit = box.clip(eye, eye.add(getLookVector(yaw, pitch).scale(breakReach.getValue())));
+        if (hit.isEmpty()) return false;
+        var obstruction = mc.level.clip(new ClipContext(eye, hit.get(), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
+        return obstruction.getType() == HitResult.Type.MISS
+                || eye.distanceToSqr(obstruction.getLocation()) + 1.0E-6 >= eye.distanceToSqr(hit.get());
     }
 
-    private Setup findSetup(int pistonSlot, int redstoneSlot, int crystalSlot) {
-        LivingEntity target = findTarget();
-        if (target == null) { lastDamage = 0; return null; }
-        if (damageSync.getValue() && DamageSyncTracker.shouldHold(target)) { lastDamage = 0; return null; }
+    private boolean selfSafe(Vec3 explosion, BlockPos phantomBase) {
+        float damage = calcDamage(mc.player, explosion, phantomBase);
+        return Float.isFinite(damage) && damage <= maxSelfDamage.getValue()
+                && mc.player.getHealth() + mc.player.getAbsorptionAmount() - damage >= reserve.getValue()
+                && damage < mc.player.getHealth() + mc.player.getAbsorptionAmount();
+    }
 
-        targetProfile    = profileOf(target);
+    private Setup findSetup() {
+        TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
+        java.util.List<Player> ordered = new java.util.ArrayList<>(mc.level.players());
+        ordered.sort(java.util.Comparator.comparingDouble(mc.player::distanceToSqr));
+        for (Player target : ordered) {
+            if (target == mc.player || target.isDeadOrDying() || target.isSpectator()
+                    || mc.player.distanceToSqr(target) > targetRange.getValue() * targetRange.getValue()) continue;
+            if (targets != null && !targets.isValidPlayerTarget(target)) continue;
+            if ((!inAirTarget.getValue() && !target.onGround()) || isPhased(target)) continue;
+            if (damageSync.getValue() && DamageSyncTracker.shouldHold(target)) continue;
+            Setup setup = findSetupFor(target);
+            if (setup != null) { lastDamage = setup.damage(); return setup; }
+        }
+        return null;
+    }
+
+    private Setup findSetupFor(LivingEntity target) {
+        targetProfile = profileOf(target);
         targetDifficulty = mc.level.getDifficulty();
 
         Vec3  eye   = mc.player.getEyePosition();
-        double range = PLACE_RANGE;
+        double range = placeReach.getValue();
 
         AABB bb = target.getBoundingBox();
         int minX = Mth.floor(bb.minX), maxX = Mth.floor(bb.maxX - 1e-7);
@@ -342,7 +443,14 @@ public class GuangxiPistonModule extends Module {
                              BlockPos crystalPos, BlockPos base, BlockPos pistonPos,
                              Vec3 explosionPos, Vec3 eye, double range,
                              boolean placeBase) {
-        if (!PlaceUtil.canPlace(pistonPos)) return null;
+        BlockState pistonState = mc.level.getBlockState(pistonPos);
+        boolean existingPiston = (pistonState.is(Blocks.PISTON) || pistonState.is(Blocks.STICKY_PISTON))
+                && pistonState.hasProperty(BlockStateProperties.FACING)
+                && pistonState.getValue(BlockStateProperties.FACING) == dir.getOpposite()
+                && !pistonState.getValue(BlockStateProperties.EXTENDED);
+        if (!existingPiston && (!PlaceUtil.canPlace(pistonPos) || pistonSlot() < 0)) return null;
+        if (mc.level.hasNeighborSignal(pistonPos)) return null;
+        if (crystalAt(crystalPos) == null && hotbarSlotOf(Items.END_CRYSTAL) < 0) return null;
 
         double rangeSq = range * range;
         if (eye.distanceToSqr(Vec3.atCenterOf(pistonPos)) > rangeSq) return null;
@@ -351,17 +459,20 @@ public class GuangxiPistonModule extends Module {
         AABB crystalBox = new AABB(
                 explosionPos.x - 1, explosionPos.y,     explosionPos.z - 1,
                 explosionPos.x + 1, explosionPos.y + 2, explosionPos.z + 1);
-        double breakRangeSq = BREAK_RANGE * BREAK_RANGE;
+        double breakRangeSq = breakReach.getValue() * breakReach.getValue();
         if (distSqToBox(eye, crystalBox) > breakRangeSq) return null;
 
         float damage = calcDamage(target, explosionPos, placeBase ? base : null);
-        if (damage < minDamage.getValue()) return null;
+        if (damage < minDamage.getValue() || !selfSafe(explosionPos, placeBase ? base : null)) return null;
 
         RedstoneSpot redstone = findRedstoneSpot(pistonPos, dir, explosionPos, eye, rangeSq);
-        if (redstone == null) return null;
+        if (redstone == null || (redstone.place() && hotbarSlotOf(Items.REDSTONE_BLOCK) < 0)) return null;
+        // A pre-powered new piston extends into the crystal cell before crystal placement.
+        // Placing the crystal first is also invalid: its full entity box obstructs placing the piston.
+        if (!redstone.place()) return null;
 
         return new Setup(dir, pistonPos, redstone.pos(), crystalPos, base, head,
-                         redstone.place(), placeBase, damage);
+                         redstone.place(), placeBase, damage, target.getId(), target.position(), explosionPos);
     }
 
     private RedstoneSpot findRedstoneSpot(BlockPos pistonPos, Direction dir,
@@ -415,17 +526,22 @@ public class GuangxiPistonModule extends Module {
         double dx = box.getXsize();
         double dy = box.getYsize();
         double dz = box.getZsize();
-        int steps = 2;
+        double stepX = 1.0 / (dx * 2.0 + 1.0);
+        double stepY = 1.0 / (dy * 2.0 + 1.0);
+        double stepZ = 1.0 / (dz * 2.0 + 1.0);
+        if (stepX <= 0 || stepY <= 0 || stepZ <= 0) return 0;
+        double offsetX = (1.0 - Math.floor(1.0 / stepX) * stepX) / 2.0;
+        double offsetZ = (1.0 - Math.floor(1.0 / stepZ) * stepZ) / 2.0;
         int total = 0;
         int unblocked = 0;
 
-        for (int xi = 0; xi <= steps; xi++) {
-            for (int yi = 0; yi <= steps; yi++) {
-                for (int zi = 0; zi <= steps; zi++) {
+        for (double xi = 0; xi <= 1.0; xi += stepX) {
+            for (double yi = 0; yi <= 1.0; yi += stepY) {
+                for (double zi = 0; zi <= 1.0; zi += stepZ) {
                     Vec3 point = new Vec3(
-                            box.minX + dx * xi / steps,
-                            box.minY + dy * yi / steps,
-                            box.minZ + dz * zi / steps);
+                            box.minX + dx * xi + offsetX,
+                            box.minY + dy * yi,
+                            box.minZ + dz * zi + offsetZ);
                     if (!explosionBlocked(point, source, phantomBase)) unblocked++;
                     total++;
                 }
@@ -435,38 +551,13 @@ public class GuangxiPistonModule extends Module {
     }
 
     private boolean explosionBlocked(Vec3 from, Vec3 to, BlockPos phantomBase) {
-        Vec3 diff  = to.subtract(from);
-        int  steps = (int) Math.ceil(diff.length() / 0.25);
-        long last  = Long.MIN_VALUE;
-        for (int i = 1; i < steps; i++) {
-            double s = (double) i / steps;
-            rayCursor.set(Mth.floor(from.x + diff.x * s),
-                          Mth.floor(from.y + diff.y * s),
-                          Mth.floor(from.z + diff.z * s));
-            long key = rayCursor.asLong();
-            if (key == last) continue;
-            last = key;
-            if (phantomBase != null && rayCursor.equals(phantomBase)) return true;
-            if (mc.level.getBlockState(rayCursor).getBlock().getExplosionResistance() >= 600.0f) return true;
-        }
-        return false;
-    }
-
-    private LivingEntity findTarget() {
-        TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
-        LivingEntity best   = null;
-        double       bestSq = Double.MAX_VALUE;
-
-        for (Player p : mc.level.players()) {
-            if (p == mc.player || p.isDeadOrDying()) continue;
-            if (targets != null && !targets.isValidPlayerTarget(p)) continue;
-            if (isPhased(p)) continue;
-            double dSq = mc.player.distanceToSqr(p);
-            if (dSq > TARGET_RANGE_SQ || dSq >= bestSq) continue;
-            bestSq = dSq;
-            best   = p;
-        }
-        return best;
+        return net.minecraft.world.level.BlockGetter.traverseBlocks(from, to, phantomBase, (ignored, pos) -> {
+            if (pos.equals(phantomBase)) return net.minecraft.world.phys.shapes.Shapes.block().clip(from, to, pos);
+            BlockState state = mc.level.getBlockState(pos);
+            if (state.isAir() || (blockDestruction.getValue() && state.getBlock().getExplosionResistance() < 600.0f)) return null;
+            VoxelShape shape = state.getCollisionShape(mc.level, pos);
+            return shape.isEmpty() ? null : shape.clip(from, to, pos);
+        }, ignored -> null) != null;
     }
 
     private boolean isPhased(LivingEntity target) {
@@ -501,35 +592,29 @@ public class GuangxiPistonModule extends Module {
         if (impact <= 0) return 0;
 
         float damage = (float)((impact * impact + impact) / 2.0 * 7.0 * 12.0 + 1.0);
-        switch (targetDifficulty) {
+        switch (mc.level.getDifficulty()) {
+            case PEACEFUL -> damage = 0;
             case EASY -> damage = Math.min(damage / 2f + 1f, damage);
             case HARD -> damage *= 1.5f;
             default   -> {}
         }
 
-        ArmorProfile p = targetProfile;
-        float i = 2.0f + p.toughness() / 4.0f;
-        float j = Mth.clamp(p.armor() - damage / i, p.armor() * 0.2f, 20.0f);
-        damage *= 1.0f - j / 25.0f;
-        damage *= p.resistanceMul();
-        damage = CombatRules.getDamageAfterMagicAbsorb(damage, p.protPoints());
-
-        return Math.max(damage, 0f);
+        ArmorProfile p = target == mc.player ? profileOf(target) : targetProfile;
+        return ExplosionDamageModel.reduce(damage, p.armor(), p.toughness(), p.resistanceMul(), p.protPoints());
     }
 
     private ArmorProfile profileOf(LivingEntity target) {
         float armor = (float) target.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ARMOR);
         float tough = (float) target.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ARMOR_TOUGHNESS);
 
-        float resistanceMul = 1.0f;
         MobEffectInstance res = target.getEffect(MobEffects.RESISTANCE);
-        if (res != null) resistanceMul = 1.0f - 0.2f * (res.getAmplifier() + 1);
-
+        float resistanceMul = ExplosionDamageModel.resistanceMultiplier(res == null ? -1 : res.getAmplifier());
         int protPoints = 0;
-        if (!target.getItemBySlot(EquipmentSlot.HEAD).isEmpty())  protPoints += 4;
-        if (!target.getItemBySlot(EquipmentSlot.CHEST).isEmpty()) protPoints += 4;
-        if (!target.getItemBySlot(EquipmentSlot.LEGS).isEmpty())  protPoints += 8;
-        if (!target.getItemBySlot(EquipmentSlot.FEET).isEmpty())  protPoints += 4;
+        for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
+            var stack = target.getItemBySlot(slot);
+            protPoints += EnchantmentUtil.getLevel(Enchantments.PROTECTION, stack)
+                    + 2 * EnchantmentUtil.getLevel(Enchantments.BLAST_PROTECTION, stack);
+        }
 
         return new ArmorProfile(armor, tough, resistanceMul, protPoints);
     }
@@ -574,14 +659,14 @@ public class GuangxiPistonModule extends Module {
     }
 
     private int hotbarSlotOf(Item item) {
-        var r = InventoryUtil.find(item, InventoryUtil.PLACE_SCOPE);
+        var r = InventoryUtil.find(item, java.util.EnumSet.of(ResultType.HOTBAR));
         return (r.found() && r.type() != ResultType.OFFHAND) ? r.slot() : -1;
     }
 
     @Override
     public void onRender3D(Render3DEvent event) {
-        if (!render.getValue()) return;
-        int  fadeTicks = (int)(fadeTime.getValue() * 20);
+        if (nullCheck() || !render.getValue()) return;
+        int  fadeTicks = Math.max(1, (int)(fadeTime.getValue() * 20));
         int  now       = mc.player.tickCount;
         for (Map.Entry<BlockPos, Integer> entry : renderMap.entrySet()) {
             int age = now - entry.getValue();
@@ -607,7 +692,7 @@ public class GuangxiPistonModule extends Module {
 
     private record Setup(Direction dir, BlockPos piston, BlockPos redstone,
                          BlockPos crystal, BlockPos base, BlockPos head,
-                         boolean placeRedstone, boolean placeBase, float damage) {}
+                         boolean placeRedstone, boolean placeBase, float damage, int targetId, Vec3 targetOrigin, Vec3 explosion) {}
 
     private record RedstoneSpot(BlockPos pos, boolean place) {}
 

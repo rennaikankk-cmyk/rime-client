@@ -132,6 +132,14 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        movementSafetyTest: 'dev.guizhou.util.movement.MovementSafetyTest',
+        movementMixinHookTest: 'dev.guizhou.util.movement.MovementMixinHookTest',
+        explosionDamageModelTest: 'dev.guizhou.util.combat.ExplosionDamageModelTest',
+        blastSequenceTest: 'dev.guizhou.util.combat.BlastSequenceTest',
+        packetActionHookTest: 'dev.guizhou.util.combat.PacketActionHookTest',
+        crystalRetryTrackerTest: 'dev.guizhou.util.combat.CrystalRetryTrackerTest',
+        miningRetryWindowTest: 'dev.guizhou.features.modules.world.MiningRetryWindowTest',
+        miningBreakTrackerTest: 'dev.guizhou.features.modules.combat.MiningBreakTrackerTest',
         hudAppearanceTest: 'dev.guizhou.util.render.HudAppearanceTest',
         hudLayoutTest: 'dev.guizhou.features.modules.client.HudLayoutTest',
         shadcnTextFieldTest: 'dev.guizhou.features.gui.ShadcnTextFieldTest',

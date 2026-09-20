@@ -11,12 +11,10 @@ import dev.guizhou.features.modules.world.GuangxiMineModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.InteractionUtil;
 import dev.guizhou.util.MathUtil;
-import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.inventory.InventoryUtil;
-import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
+import dev.guizhou.util.inventory.SwapMode;
 import dev.guizhou.util.render.RenderUtil;
-import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
@@ -37,6 +35,9 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 public class AutoMineModule extends Module {
 
@@ -48,6 +49,9 @@ public class AutoMineModule extends Module {
     private final Setting<Double>  range = num("Range", 6.5, 0.0, 7.0);
     private final Setting<SortPriority> targetPriority = mode("Priority", SortPriority.Angle);
     private final Setting<Boolean> ignoreNakeds = bool("IgnoreNakeds", true);
+    private final Setting<Boolean> checkSelf = bool("CheckSelf", true);
+    private final Setting<Boolean> friendSync = bool("FriendSync", true);
+    private final Setting<Boolean> targetFallback = bool("TargetFallback", true);
     private final Setting<ExtendBreakMode> extendBreakMode = mode("Extend", ExtendBreakMode.Long);
     private final Setting<Boolean> underMine = bool("UnderMine", true);
     private final Setting<Boolean> crawlMine = bool("CrawlMine", false);
@@ -59,6 +63,8 @@ public class AutoMineModule extends Module {
 
     private final Setting<Boolean> glassPush     = bool("GlassPush", false);
     private final Setting<Integer> glassAttempts = num("GlassAttempts", 2, 1, 5);
+    private final Setting<GlassSwap> glassSwap = mode("GlassSwap", GlassSwap.Inventory);
+    private final Setting<Integer> glassWaitTicks = num("GlassWaitTicks", 10, 2, 40);
 
     private final Setting<Boolean> glassRender = bool("GlassRender", true).setPage("Render");
     private final Setting<Float> glassFadeTime = num("GlassFadeTime", 0.5f, 0.05f, 2.0f).setPage("Render")
@@ -81,14 +87,20 @@ public class AutoMineModule extends Module {
     private int glassUsedAttempts = 0;
     private BlockPos glassRenderPos = null;
     private long glassRenderStart = 0L;
+    private GlassStage glassStage = GlassStage.Idle;
+    private int glassStageAge;
+    private final List<CityBlock> debugScores = new ArrayList<>();
+    private volatile long lifecycleGeneration;
+    private net.minecraft.client.multiplayer.ClientLevel sessionLevel;
+    private net.minecraft.client.player.LocalPlayer sessionPlayer;
 
-    private final Long2LongOpenHashMap enemyBreaking = new Long2LongOpenHashMap();
+    private final MiningBreakTracker enemyBreaking = new MiningBreakTracker();
     private static final long ENEMY_BREAK_TTL_MS = 1000;
 
     private final GuangxiMineModule.MineFinishListener finishListener = this::onMineFinish;
 
     public AutoMineModule() {
-        super("AutoMine", "Automatically mines blocks around a target. Requires SpeedMine.", Category.COMBAT);
+        super("AutoMine", "Automatically mines feasible target blocks. Requires GuangxiMine.", Category.COMBAT);
         antiSurroundInnerSnap.setVisibility(v -> antiSurroundMode.getValue() == AntiSurroundMode.Auto
                 || antiSurroundMode.getValue() == AntiSurroundMode.Inner);
         antiSurroundOuterSnap.setVisibility(v -> antiSurroundMode.getValue() == AntiSurroundMode.Auto
@@ -96,49 +108,70 @@ public class AutoMineModule extends Module {
         antiSurroundOuterCooldown.setVisibility(v -> antiSurroundMode.getValue() == AntiSurroundMode.Auto
                 || antiSurroundMode.getValue() == AntiSurroundMode.Outer);
         glassAttempts.setVisibility(v -> glassPush.getValue());
+        glassSwap.setVisibility(v -> glassPush.getValue());
+        glassWaitTicks.setVisibility(v -> glassPush.getValue());
     }
 
     @Override
     public void onEnable() {
+        lifecycleGeneration++;
+        ensureSession();
         GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
-        if (mine != null) mine.addFinishListener(finishListener);
+        if (mine != null) {
+            mine.addSubmissionListener(finishListener);
+            mine.addFinishListener(finishListener);
+        }
         enemyBreaking.clear();
         lastOuterPlaceTime = 0;
     }
 
     @Override
     public void onDisable() {
+        lifecycleGeneration++;
         GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
-        if (mine != null) mine.removeFinishListener(finishListener);
+        if (mine != null) {
+            mine.removeSubmissionListener(finishListener);
+            mine.removeFinishListener(finishListener);
+        }
         targetPlayer = null;
         target1 = target2 = null;
         ignorePos = null;
         enemyBreaking.clear();
         resetGlass();
         glassRenderPos = null;
+        debugScores.clear();
+        sessionLevel = null;
+        sessionPlayer = null;
     }
 
     @Subscribe
     private void onPacket(PacketEvent.Receive event) {
         if (!(event.getPacket() instanceof ClientboundBlockDestructionPacket pkt)) return;
-
-        if (mc.player != null && pkt.getId() == mc.player.getId()) return;
+        var level = mc.level;
+        var player = mc.player;
+        long generation = lifecycleGeneration;
+        int breakerId = pkt.getId();
+        long position = pkt.getPos().asLong();
         int progress = pkt.getProgress();
-        if (progress >= 0 && progress <= 9) {
-            enemyBreaking.put(pkt.getPos().asLong(), System.currentTimeMillis());
-        } else {
-            enemyBreaking.remove(pkt.getPos().asLong());
-        }
+        if (level == null || player == null) return;
+        mc.execute(() -> {
+            if (!isEnabled() || lifecycleGeneration != generation || mc.level != level || mc.player != player) return;
+            ensureSession();
+            if (breakerId == player.getId()) return;
+            Entity breaker = level.getEntity(breakerId);
+            boolean friend = breaker instanceof Player other && GuizhouWare.friendManager.isFriend(other);
+            enemyBreaking.update(breakerId, position, progress, friend, System.currentTimeMillis(), ENEMY_BREAK_TTL_MS);
+        });
     }
 
     private boolean isBlockBeingBroken(BlockPos pos) {
-        long ts = enemyBreaking.get(pos.asLong());
-        return ts != 0L && System.currentTimeMillis() - ts < ENEMY_BREAK_TTL_MS;
+        return enemyBreaking.isBreaking(pos.asLong(), false, System.currentTimeMillis());
     }
 
     private void onMineFinish(BlockPos pos) {
 
-        if (nullCheck() || targetPlayer == null) return;
+        if (!isEnabled() || nullCheck() || targetPlayer == null || !targetPlayer.isAlive()
+                || targetPlayer.level() != mc.level || sessionLevel != mc.level || sessionPlayer != mc.player) return;
 
         AntiSurroundMode swMode = antiSurroundMode.getValue();
         if (swMode == AntiSurroundMode.None) return;
@@ -153,7 +186,7 @@ public class AutoMineModule extends Module {
 
                 boolean outerReady = (System.currentTimeMillis() - lastOuterPlaceTime)
                         > (antiSurroundOuterCooldown.getValue() * 1000.0);
-                if (!outerReady) return;
+                if (!outerReady) break;
 
                 AABB checkBox = AABB.ofSize(Vec3.atCenterOf(playerSurroundBlock), 2.5, 3.0, 2.5);
                 AABB blockHitbox = new AABB(playerSurroundBlock);
@@ -175,8 +208,8 @@ public class AutoMineModule extends Module {
 
                         if (crystal.preplaceCrystal(bp.immutable(), antiSurroundOuterSnap.getValue())) {
                             lastOuterPlaceTime = System.currentTimeMillis();
+                            return;
                         }
-                        return;
                     }
                 }
             }
@@ -194,13 +227,29 @@ public class AutoMineModule extends Module {
 
     @Subscribe
     private void onPreTick(PreTickEvent event) {
+        ensureSession();
         if (nullCheck()) return;
+        enemyBreaking.prune(System.currentTimeMillis());
         update();
+    }
+
+    private void ensureSession() {
+        if (sessionLevel == mc.level && sessionPlayer == mc.player) return;
+        targetPlayer = null;
+        target1 = target2 = null;
+        ignorePos = null;
+        enemyBreaking.clear();
+        debugScores.clear();
+        resetGlass();
+        glassRenderPos = null;
+        lastOuterPlaceTime = 0;
+        sessionLevel = mc.level;
+        sessionPlayer = mc.player;
     }
 
     private void update() {
         GuangxiMineModule mine = speedMine();
-        if (mine == null) return;
+        if (mine == null) { targetPlayer = null; resetGlass(); debugScores.clear(); return; }
 
         if (tryCrawlMine(mine)) return;
 
@@ -227,8 +276,16 @@ public class AutoMineModule extends Module {
             prioHead = true;
         }
 
-        targetPlayer = selectTarget();
-        if (targetPlayer == null) return;
+        targetPlayer = null;
+        target1 = target2 = null;
+        debugScores.clear();
+        for (Player candidate : selectTargets()) {
+            targetPlayer = candidate;
+            findTargetBlocks();
+            if (target1 != null || !targetFallback.getValue()) break;
+            targetPlayer = null;
+        }
+        if (targetPlayer == null) { resetGlass(); return; }
 
         handleGlassPush(mine);
 
@@ -238,8 +295,6 @@ public class AutoMineModule extends Module {
         }
 
         if (prioHead) return;
-
-        findTargetBlocks();
 
         int free = 0;
         if (mine.hasFreePrimary()) free++;
@@ -274,11 +329,10 @@ public class AutoMineModule extends Module {
         return !state.canBeReplaced() && state.getShape(mc.level, pos) != Shapes.empty();
     }
 
-    private Player selectTarget() {
+    private List<Player> selectTargets() {
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
         double rangeV = range.getValue();
-        Player best = null;
-        double bestMetric = Double.MAX_VALUE;
+        List<Player> candidates = new ArrayList<>();
 
         AABB area = mc.player.getBoundingBox().inflate(rangeV);
         for (Entity e : mc.level.getEntities(mc.player, area)) {
@@ -290,13 +344,13 @@ public class AutoMineModule extends Module {
             if (player.position().distanceTo(mc.player.getEyePosition()) > rangeV) continue;
             if (ignoreNakeds.getValue() && isNaked(player)) continue;
 
-            double metric = switch (targetPriority.getValue()) {
-                case Distance -> mc.player.distanceToSqr(player);
-                case Angle    -> angleTo(player);
-            };
-            if (metric < bestMetric) { bestMetric = metric; best = player; }
+            candidates.add(player);
         }
-        return best;
+        candidates.sort(Comparator.comparingDouble(player -> switch (targetPriority.getValue()) {
+            case Distance -> mc.player.distanceToSqr(player);
+            case Angle -> angleTo(player);
+        }));
+        return candidates;
     }
 
     private double angleTo(Player player) {
@@ -322,22 +376,45 @@ public class AutoMineModule extends Module {
         BlockPos pos = mine.getRebreakPos();
         if (pos == null) { resetGlass(); return; }
 
-        if (!isGoodRebreak(pos, inBedrockCase()) || !crystal.isDesirablePlacement(pos)) {
+        if (!isGoodRebreak(pos, inBedrockCase())
+                || (glassStage == GlassStage.Idle && !crystal.isDesirablePlacement(pos))) {
             resetGlass();
             return;
         }
 
         if (!pos.equals(glassTargetPos)) {
+            resetGlass();
             glassTargetPos = pos.immutable();
-            glassUsedAttempts = 0;
+        }
+
+        BlockState state = mc.level.getBlockState(pos);
+        if (glassStage == GlassStage.AwaitPlace) {
+            if (state.is(Blocks.GLASS)) {
+                // The server-visible glass has arrived; mining may now remove it.
+                mine.holdRebreak(pos, 0);
+                glassStage = GlassStage.AwaitBreak;
+                glassStageAge = 0;
+            } else if (++glassStageAge >= glassWaitTicks.getValue() || !state.isAir()) {
+                mine.holdRebreak(pos, 0);
+                glassStage = GlassStage.Idle;
+            }
+            return;
+        }
+        if (glassStage == GlassStage.AwaitBreak) {
+            if (!state.isAir()) {
+                if (++glassStageAge >= glassWaitTicks.getValue() * 4) {
+                    glassStage = GlassStage.Idle;
+                    glassUsedAttempts = glassAttempts.getValue();
+                }
+                return;
+            }
+            glassStage = GlassStage.Idle;
         }
 
         if (!itemInCrystalSpot(pos)) {
-
-            if (glassUsedAttempts > 0 && mc.level.getBlockState(pos).isAir()) {
-                crystal.preplaceCrystal(pos, true);
+            if (glassUsedAttempts > 0 && state.isAir()) {
+                if (crystal.preplaceCrystal(pos, true)) resetGlass();
             }
-            glassUsedAttempts = 0;
             return;
         }
 
@@ -347,7 +424,9 @@ public class AutoMineModule extends Module {
 
         if (placeGlass(pos)) {
             glassUsedAttempts++;
-            mine.holdRebreak(pos, 5);
+            glassStage = GlassStage.AwaitPlace;
+            glassStageAge = 0;
+            mine.holdRebreak(pos, glassWaitTicks.getValue());
             glassRenderPos = pos.immutable();
             glassRenderStart = System.currentTimeMillis();
         }
@@ -362,25 +441,37 @@ public class AutoMineModule extends Module {
     }
 
     private boolean placeGlass(BlockPos pos) {
-        Result glass = InventoryUtil.find(Items.GLASS, InventoryUtil.PLACE_SCOPE);
-        if (!glass.found()) return false;
-        if (!PlaceUtil.canPlace(pos)) return false;
-        if (!GuizhouWare.placementManager.enqueue(pos, Items.GLASS)) return false;
-        GuizhouWare.placementManager.flushQueue();
-        return true;
+        SwapMode swap = glassSwap.getValue() == GlassSwap.Inventory ? SwapMode.ALTSILENT : SwapMode.SILENT;
+        // Count a submitted direct interaction, never a queue entry that might run much later.
+        return GuizhouWare.placementManager.placeDirect(pos, null, Items.GLASS, swap,
+                glassSwap.getValue() == GlassSwap.Inventory ? InventoryUtil.PLACE_SCOPE
+                        : java.util.EnumSet.of(ResultType.HOTBAR));
     }
 
     private void resetGlass() {
+        if (glassTargetPos != null) {
+            GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
+            if (mine != null) mine.holdRebreak(glassTargetPos, 0);
+        }
         glassTargetPos = null;
         glassUsedAttempts = 0;
+        glassStage = GlassStage.Idle;
+        glassStageAge = 0;
     }
 
     private void findTargetBlocks() {
         target1 = null;
         target2 = null;
         ignorePos = null;
+        debugScores.clear();
 
-        CityBlock best = findCityBlock(null);
+        boolean inBedrock = inBedrockCase();
+        isTerrainFight = !inBedrock && computeTerrainFight();
+        Set<CheckPos> positions = new HashSet<>();
+        if (inBedrock) addBedrockCaseCheckPositions(positions);
+        else addNormalCaseCheckPositions(positions);
+
+        CityBlock best = findCityBlock(null, positions, inBedrock);
         if (best == null) return;
 
         target1 = best;
@@ -392,20 +483,15 @@ public class AutoMineModule extends Module {
             above.blockPos = best.blockPos.above();
             above.score = best.score - 10;
             above.type = CheckPosType.Surround;
-            target2 = above;
+            if (evalCheckPos(new CheckPos(above.blockPos, above.type), inBedrock) != INVALID_SCORE)
+                target2 = above;
         } else {
-            target2 = findCityBlock(target1.blockPos);
+            target2 = findCityBlock(target1.blockPos, positions, inBedrock);
         }
     }
 
-    private CityBlock findCityBlock(BlockPos exclude) {
+    private CityBlock findCityBlock(BlockPos exclude, Set<CheckPos> checkPositions, boolean inBedrock) {
         if (targetPlayer == null) return null;
-
-        boolean inBedrock = inBedrockCase();
-        isTerrainFight = !inBedrock && computeTerrainFight();
-        Set<CheckPos> checkPositions = new HashSet<>();
-        if (inBedrock) addBedrockCaseCheckPositions(checkPositions);
-        else addNormalCaseCheckPositions(checkPositions);
 
         CityBlock bestBlock = new CityBlock();
         boolean set = false;
@@ -413,6 +499,13 @@ public class AutoMineModule extends Module {
             if (pos.blockPos.equals(exclude)) continue;
             double score = evalCheckPos(pos, inBedrock);
             if (score == INVALID_SCORE) continue;
+            if (exclude == null && renderDebugScores.getValue()) {
+                CityBlock debug = new CityBlock();
+                debug.blockPos = pos.blockPos;
+                debug.score = score;
+                debug.type = pos.type;
+                debugScores.add(debug);
+            }
             if (score > bestBlock.score) {
                 bestBlock.score = score;
                 bestBlock.blockPos = pos.blockPos;
@@ -428,6 +521,9 @@ public class AutoMineModule extends Module {
         if (mine == null) return INVALID_SCORE;
 
         BlockPos blockPos = pos.blockPos;
+        if (checkSelf.getValue() && isSelfProtection(blockPos)) return INVALID_SCORE;
+        if (friendSync.getValue() && enemyBreaking.isBreaking(blockPos.asLong(), true, System.currentTimeMillis()))
+            return INVALID_SCORE;
         BlockState block = mc.level.getBlockState(blockPos);
         boolean goodRebreak = isGoodRebreak(blockPos, inBedrock);
 
@@ -440,6 +536,16 @@ public class AutoMineModule extends Module {
         // keep the current rebreak block sticky so we don't thrash it away
         if (goodRebreak) score += inBedrock && block.isAir() ? 10 : 40;
         return score;
+    }
+
+    private boolean isSelfProtection(BlockPos candidate) {
+        AABB feet = mc.player.getBoundingBox().deflate(0.01, 0.1, 0.01);
+        for (BlockPos ownFeet : BlockPos.betweenClosed(Mth.floor(feet.minX), mc.player.getBlockY(), Mth.floor(feet.minZ),
+                Mth.floor(feet.maxX), mc.player.getBlockY(), Mth.floor(feet.maxZ))) {
+            if (candidate.equals(ownFeet) || candidate.equals(ownFeet.below())) return true;
+            for (Direction dir : HORIZONTAL) if (candidate.equals(ownFeet.relative(dir))) return true;
+        }
+        return false;
     }
 
     private boolean isGoodRebreak(BlockPos blockPos, boolean inBedrock) {
@@ -685,22 +791,11 @@ public class AutoMineModule extends Module {
         if (nullCheck() || !renderDebugScores.getValue() || targetPlayer == null) return;
         if (speedMine() == null) return;
 
-        boolean inBedrock = inBedrockCase();
-        isTerrainFight = !inBedrock && computeTerrainFight();
-        Set<CheckPos> checkPos = new HashSet<>();
-        if (inBedrock) addBedrockCaseCheckPositions(checkPos);
-        else addNormalCaseCheckPositions(checkPos);
-
-        double bestScore = 0;
-        for (CheckPos cp : checkPos) {
-            double s = evalCheckPos(cp, inBedrock);
-            if (s != INVALID_SCORE && s > bestScore) bestScore = s;
-        }
+        double bestScore = debugScores.stream().mapToDouble(cp -> cp.score).max().orElse(0);
         if (bestScore <= 0) return;
 
-        for (CheckPos cp : checkPos) {
-            double s = evalCheckPos(cp, inBedrock);
-            if (s == INVALID_SCORE) continue;
+        for (CityBlock cp : debugScores) {
+            double s = cp.score;
             int alpha = (int) Math.min(200, Math.max(20, 200 * (s / bestScore)));
             RenderUtil.drawBox(event.getMatrix(), cp.blockPos, new Color(255, 40, 40, alpha), 1.0f);
         }
@@ -813,4 +908,6 @@ public class AutoMineModule extends Module {
     private enum AntiSurroundMode { None, Inner, Outer, Auto }
 
     private enum ExtendBreakMode { None, Long, Corner }
+    public enum GlassSwap { Silent, Inventory }
+    private enum GlassStage { Idle, AwaitPlace, AwaitBreak }
 }

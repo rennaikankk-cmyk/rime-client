@@ -76,6 +76,19 @@ public class PlacementManager extends Feature {
     private final Map<BlockPos, Item> queue = new LinkedHashMap<>();
     private final Deque<Long> window = new ArrayDeque<>();
     private final Map<BlockPos, Long> cooldowns = new ConcurrentHashMap<>();
+    private net.minecraft.client.multiplayer.ClientLevel sessionLevel;
+    private net.minecraft.client.player.LocalPlayer sessionPlayer;
+
+    private void ensureSession() {
+        if (sessionLevel == mc.level && sessionPlayer == mc.player) return;
+        sessionLevel = mc.level;
+        sessionPlayer = mc.player;
+        queue.clear();
+        window.clear();
+        cooldowns.clear();
+        sneakSandwich = false;
+        crystalWallRangeSq = -1.0;
+    }
 
     public interface PlacementListener {
         void onBlockUpdate(BlockPos pos, boolean nowAir);
@@ -91,6 +104,7 @@ public class PlacementManager extends Feature {
     private boolean sneakSandwich = false;
 
     public void setSneakSandwich(boolean enabled) {
+        ensureSession();
         this.sneakSandwich = enabled;
     }
 
@@ -102,6 +116,7 @@ public class PlacementManager extends Feature {
     private double crystalWallRangeSq = -1.0;
 
     public void setCrystalWallRangeSq(double sqRange) {
+        ensureSession();
         this.crystalWallRangeSq = sqRange;
     }
 
@@ -120,6 +135,9 @@ public class PlacementManager extends Feature {
      * placement.
      */
     public boolean enqueue(BlockPos pos, Item item) {
+        if (!mc.isSameThread()) return false;
+        ensureSession();
+        if (nullCheck()) return false;
         if (pos == null || item == null) return false;
         if (onCooldown(pos)) return false;
         return queue.putIfAbsent(pos.immutable(), item) == null;
@@ -163,6 +181,8 @@ public class PlacementManager extends Feature {
 
     /** Sends what the rate window allows right now. Safe to call straight after queueing. */
     public void flushQueue() {
+        if (!mc.isSameThread()) return;
+        ensureSession();
         if (nullCheck() || queue.isEmpty()) return;
         if (EatUtil.shouldDefer()) return;
 
@@ -193,24 +213,25 @@ public class PlacementManager extends Feature {
         stale.forEach(queue::remove);
         if (batch.isEmpty()) return;
 
-        if (place(batch, item, SwapPriority.PLACEMENT)) batch.forEach(queue::remove);
+        place(batch, item, SwapPriority.PLACEMENT).forEach(queue::remove);
     }
 
     /**
-     * Places {@code item} at every position in {@code batch} inside one silent swap. Returns false
-     * when the swap was refused (budget, eat, item gone) — the caller keeps its positions queued.
+     * Places a batch inside one silent swap and returns only locally submitted positions.
+     * Refused or cancelled entries remain available for retry.
      */
-    private boolean place(List<BlockPos> batch, Item item, int priority) {
+    private List<BlockPos> place(List<BlockPos> batch, Item item, int priority) {
+        List<BlockPos> submitted = new ArrayList<>();
         boolean swapped = GuizhouWare.swapManager.withSwap(item, SCOPE, SwapMode.SILENT, priority,
-                () -> batch.forEach(pos -> sendPlace(pos, null)));
-        if (!swapped) return false;
+                () -> batch.forEach(pos -> { if (sendPlace(pos, null)) submitted.add(pos); }));
+        if (!swapped) return List.of();
 
         long stamp = System.currentTimeMillis();
-        for (BlockPos pos : batch) {
+        for (BlockPos pos : submitted) {
             cooldowns.put(pos, stamp);
             window.addLast(stamp);
         }
-        return true;
+        return submitted;
     }
 
     /**
@@ -218,6 +239,8 @@ public class PlacementManager extends Feature {
      * window. Returns the positions actually sent.
      */
     public List<BlockPos> placeBatch(List<BlockPos> positions, Item item) {
+        if (!mc.isSameThread()) return List.of();
+        ensureSession();
         if (nullCheck() || positions.isEmpty() || EatUtil.shouldDefer()) return List.of();
 
         int budget = budget();
@@ -226,13 +249,14 @@ public class PlacementManager extends Feature {
         List<BlockPos> batch = new ArrayList<>();
         for (BlockPos pos : positions) {
             if (batch.size() >= budget) break;
+            if (batch.contains(pos)) continue;
             if (onCooldown(pos)) continue;
             if (!PlaceUtil.canPlace(pos)) continue;
             batch.add(pos.immutable());
         }
         if (batch.isEmpty()) return List.of();
 
-        return place(batch, item, SwapPriority.PLACEMENT) ? batch : List.of();
+        return place(batch, item, SwapPriority.PLACEMENT);
     }
 
     /** Single placement, bypassing the queue. {@code face} pins the side to click against. */
@@ -243,20 +267,23 @@ public class PlacementManager extends Feature {
     /** Single placement with an explicit swap mode/scope (e.g. BasePlace following AutoSwap). */
     public boolean placeDirect(BlockPos pos, @Nullable Direction face, Item item,
                                SwapMode mode, EnumSet<ResultType> scope) {
+        if (!mc.isSameThread()) return false;
+        ensureSession();
         if (nullCheck() || EatUtil.shouldDefer()) return false;
         if (budget() <= 0 || onCooldown(pos)) return false;
         if (!PlaceUtil.canPlace(pos)) return false;
 
+        boolean[] sent = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(item, scope, mode,
-                SwapPriority.PLACEMENT, () -> sendPlace(pos, face));
-        if (!swapped) return false;
+                SwapPriority.PLACEMENT, () -> sent[0] = sendPlace(pos, face));
+        if (!swapped || !sent[0]) return false;
 
         notePlacement(pos);
         return true;
     }
 
     /** Sends one {@code UseItemOn} for {@code pos}. Must run inside a swap holding the block item. */
-    private void sendPlace(BlockPos pos, @Nullable Direction face) {
+    private boolean sendPlace(BlockPos pos, @Nullable Direction face) {
         Direction side = face != null ? face : placeSide(pos);
 
         BlockPos clicked;
@@ -290,7 +317,7 @@ public class PlacementManager extends Feature {
             }
         }
 
-        send(new BlockHitResult(hitPos, hitSide, clicked, false), InteractionHand.MAIN_HAND);
+        return send(new BlockHitResult(hitPos, hitSide, clicked, false), InteractionHand.MAIN_HAND);
     }
 
     // ---------------------------------------------------------------- crystals
@@ -309,14 +336,18 @@ public class PlacementManager extends Feature {
 
     /** {@code allowOccupant} lets the cell contain that entity (FacePlace target). */
     public boolean placeCrystal(BlockPos base, boolean trustBase, SwapMode mode, EnumSet<ResultType> scope,
-                                net.minecraft.world.entity.LivingEntity allowOccupant) {
+                                 net.minecraft.world.entity.LivingEntity allowOccupant) {
+        if (!mc.isSameThread()) return false;
+        ensureSession();
         if (nullCheck() || EatUtil.shouldDefer()) return false;
 
         BlockHitResult hit = crystalHit(base, trustBase, allowOccupant);
         if (hit == null) return false;
 
-        return GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, scope, mode,
-                SwapPriority.CRYSTAL, () -> send(hit, InteractionHand.MAIN_HAND));
+        boolean[] sent = {false};
+        boolean swapped = GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, scope, mode,
+                SwapPriority.CRYSTAL, () -> sent[0] = send(hit, InteractionHand.MAIN_HAND));
+        return swapped && sent[0];
     }
 
     /** Places with the given hand directly, without any swap — for when a crystal is already held. */
@@ -325,14 +356,15 @@ public class PlacementManager extends Feature {
     }
 
     public boolean placeCrystalDirect(BlockPos base, boolean trustBase, InteractionHand hand,
-                                      net.minecraft.world.entity.LivingEntity allowOccupant) {
+                                       net.minecraft.world.entity.LivingEntity allowOccupant) {
+        if (!mc.isSameThread()) return false;
+        ensureSession();
         if (nullCheck() || EatUtil.shouldDefer()) return false;
 
         BlockHitResult hit = crystalHit(base, trustBase, allowOccupant);
         if (hit == null) return false;
 
-        send(hit, hand);
-        return true;
+        return send(hit, hand);
     }
 
     @Nullable
@@ -403,13 +435,15 @@ public class PlacementManager extends Feature {
     public boolean useFireworks(List<BlockPos> positions, Direction face) {
         if (nullCheck() || positions.isEmpty()) return false;
 
-        return GuizhouWare.swapManager.withSwap(Items.FIREWORK_ROCKET, SCOPE, SwapMode.SILENT,
+        boolean[] submitted = {false};
+        boolean swapped = GuizhouWare.swapManager.withSwap(Items.FIREWORK_ROCKET, SCOPE, SwapMode.SILENT,
                 SwapPriority.USER_ACTION, () -> {
-            for (BlockPos pos : positions) {
-                send(new BlockHitResult(fireworkHit(pos, face), face.getOpposite(),
+            for (BlockPos pos : new java.util.LinkedHashSet<>(positions)) {
+                submitted[0] |= send(new BlockHitResult(fireworkHit(pos, face), face.getOpposite(),
                         pos.relative(face), false), InteractionHand.MAIN_HAND);
             }
         });
+        return swapped && submitted[0];
     }
 
     private Vec3 fireworkHit(BlockPos pos, Direction face) {
@@ -532,7 +566,8 @@ public class PlacementManager extends Feature {
         return new Vec3(g * h, i, f * h);
     }
 
-    private void send(BlockHitResult hit, InteractionHand hand) {
+    private boolean send(BlockHitResult hit, InteractionHand hand) {
+        if (nullCheck() || !mc.isSameThread()) return false;
         try (var prediction = ((ClientLevelAccessor) mc.level)
                 .guizhouware$getBlockStatePredictionHandler().startPredicting()) {
             if (sneakSandwich && mc.player != null) {
@@ -541,11 +576,14 @@ public class PlacementManager extends Feature {
                 net.minecraft.world.entity.player.Input flipped = new net.minecraft.world.entity.player.Input(
                         cur.forward(), cur.backward(), cur.left(), cur.right(), cur.jump(),
                         !cur.shift(), cur.sprint());
-                mc.getConnection().send(new ServerboundPlayerInputPacket(flipped));
-                mc.getConnection().send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
-                mc.getConnection().send(new ServerboundPlayerInputPacket(cur));
+                if (!dev.guizhou.util.PacketSendUtil.send(new ServerboundPlayerInputPacket(flipped))) return false;
+                try {
+                    return dev.guizhou.util.PacketSendUtil.send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
+                } finally {
+                    mc.getConnection().send(new ServerboundPlayerInputPacket(cur));
+                }
             } else {
-                mc.getConnection().send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
+                return dev.guizhou.util.PacketSendUtil.send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
             }
         }
     }
@@ -560,6 +598,7 @@ public class PlacementManager extends Feature {
     /** Called after vanilla applies the update, so reactive scans observe the new block. */
     public void onBlockUpdateApplied(ClientboundBlockUpdatePacket packet) {
         if (!mc.isSameThread() || mc.level == null || mc.player == null) return;
+        ensureSession();
         BlockPos pos = packet.getPos().immutable();
         boolean nowAir = packet.getBlockState().isAir();
         // The server confirmed the block: the cooldown that was suppressing retries has done its job.

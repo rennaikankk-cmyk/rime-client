@@ -3,7 +3,7 @@ package dev.guizhou.features.modules.world;
 import net.minecraft.core.BlockPos;
 
 /**
- * Programmatic access to the client's silent miner (SpeedMine), so other
+ * Programmatic access to GuangxiMine, so other
  * modules (AutoMine, Nuker, ...) can request block breaks without simulating clicks.
  */
 public interface MineApi {
@@ -12,9 +12,9 @@ public interface MineApi {
     boolean isAvailable();
 
     /**
-     * Requests a silent break of the given block. Behaves like a player click:
+     * Requests a break on the client thread using the configured tool-switch mode:
      * an in-progress primary break is demoted to the secondary (double break)
-     * slot when possible, otherwise aborted.
+     * slot when possible. A busy slot or rejected STOP/tool swap leaves the old break intact.
      *
      * @return true if the block is now (or already was) being mined.
      */
@@ -23,7 +23,7 @@ public interface MineApi {
     /** True if the given position is the primary or secondary mine target. */
     boolean isMining(BlockPos pos);
 
-    /** The position currently held for rebreaking, or null if none. */
+    /** Position kept after a STOP submission; this alone does not confirm observed block removal. */
     BlockPos getRebreakPos();
 
     /** True if the primary slot can take a new target without aborting a break in progress. */

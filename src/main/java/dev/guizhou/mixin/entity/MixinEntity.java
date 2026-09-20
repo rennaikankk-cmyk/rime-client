@@ -2,21 +2,44 @@ package dev.guizhou.mixin.entity;
 
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.features.modules.movement.VelocityModule;
+import dev.guizhou.features.modules.movement.NoSlowModule;
 import dev.guizhou.features.modules.render.NoRenderModule;
 import dev.guizhou.features.modules.render.ShadersModule;
 import dev.guizhou.manager.RotationManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Entity.class)
 public class MixinEntity {
+
+    @ModifyVariable(method = "makeStuckInBlock", at = @At("HEAD"), argsOnly = true, require = 1)
+    private Vec3 guizhouware$noSlowStuck(Vec3 multiplier, BlockState state, Vec3 original) {
+        if ((Object) this != Minecraft.getInstance().player) return multiplier;
+        // Only replace the movement multiplier; vanilla still resets fall distance in webs.
+        return NoSlowModule.stuckMultiplier(state, multiplier);
+    }
+
+    @Inject(method = "getBlockSpeedFactor", at = @At("RETURN"), cancellable = true, require = 1)
+    private void guizhouware$noSlowSurface(CallbackInfoReturnable<Float> cir) {
+        Entity self = (Entity) (Object) this;
+        if (self != Minecraft.getInstance().player || cir.getReturnValue() >= 1.0f) return;
+        BlockState state = self.level().getBlockState(self.blockPosition());
+        if (state.is(Blocks.WATER) || state.is(Blocks.BUBBLE_COLUMN)) return;
+        if (state.getBlock().getSpeedFactor() == 1.0f) {
+            state = self.level().getBlockState(self.getBlockPosBelowThatAffectsMyMovement());
+        }
+        if (NoSlowModule.ignoresSpeedFactor(state)) cir.setReturnValue(1.0f);
+    }
 
     @Inject(method = "getLookAngle", at = @At("HEAD"), cancellable = true)
     private void guizhouware$spoofLookAngle(CallbackInfoReturnable<Vec3> cir) {

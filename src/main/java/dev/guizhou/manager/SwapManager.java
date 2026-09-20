@@ -57,6 +57,7 @@ public class SwapManager extends Feature {
     private static final int SILENT_BUDGET = 3;
 
     private HeldSwap held;
+    private static final Object LEGACY_LATCH_OWNER = new Object();
 
     /** SILENT swaps that have gone out this tick, against {@link #SILENT_BUDGET}. */
     private int silentUsed;
@@ -91,7 +92,7 @@ public class SwapManager extends Feature {
     public boolean withSwap(Result target, SwapMode mode, int priority, Runnable action) {
         if (mode == SwapMode.LATCH) throw new IllegalArgumentException("LATCH is held, not run: use latch()");
         if (!onClientThread()) {
-            mc.execute(() -> withSwap(target, mode, priority, action));
+            // A failed synchronous request must not secretly execute later with a stale target.
             return false;
         }
 
@@ -180,6 +181,14 @@ public class SwapManager extends Feature {
         return withSwap(InventoryUtil.find(predicate, mode.scope()), mode, priority, action);
     }
 
+    /** Explicit empty-hand hotbar action. A missing inventory search result is never accepted. */
+    public boolean withEmptySlot(int slot, int priority, Runnable action) {
+        if (!onClientThread() || nullCheck() || slot < 0 || slot > 8) return false;
+        ItemStack empty = mc.player.getInventory().getItem(slot);
+        if (!empty.isEmpty()) return false;
+        return withSwap(new Result(slot, empty, ResultType.HOTBAR), SwapMode.SILENT, priority, action);
+    }
+
     // ---------------------------------------------------------------- latching
 
     /**
@@ -187,15 +196,21 @@ public class SwapManager extends Feature {
      * another latch is up, or while an item is being used.
      */
     public boolean latch(Result target) {
+        return latch(LEGACY_LATCH_OWNER, target);
+    }
+
+    /** Claims a visible hold for one identity; callers may release only their own hold. */
+    public boolean latch(Object owner, Result target) {
         if (!onClientThread()) return false;
+        if (owner == null) throw new IllegalArgumentException("Latch owner is required");
 
         Result result = resolve(target, SwapMode.LATCH);
         if (result == null || !result.found()) {
             if (logging) log("latch caller={} -> no result", caller());
             return false;
         }
-        if (result.holding()) return true;
         if (held != null) {
+            if (held.owner == owner && held.result.slot() == result.slot()) return true;
             if (logging) log("latch {} caller={} -> busy (held {} ticks)", describe(result), caller(), held.ticksHeld);
             return false;
         }
@@ -210,7 +225,7 @@ public class SwapManager extends Feature {
             return false;
         }
 
-        held = new HeldSwap(result, last);
+        held = new HeldSwap(owner, result, last);
         if (logging) log("latch {} from={} caller={}", describe(result), last, caller());
         return true;
     }
@@ -226,8 +241,17 @@ public class SwapManager extends Feature {
             log("release {} back={} after {} ticks{}", describe(held.result), held.last, held.ticksHeld,
                     nullCheck() ? " (no player, dropped)" : "");
         }
-        if (!nullCheck()) SwapMode.LATCH.strategy().swapBack(held.last, held.result);
+        if (!nullCheck() && mc.player == held.player && mc.level == held.level)
+            SwapMode.LATCH.strategy().swapBack(held.last, held.result);
         held = null;
+    }
+
+    public void release(Object owner) {
+        if (held != null && held.owner == owner) release();
+    }
+
+    public boolean isLatched(Object owner) {
+        return held != null && held.owner == owner && mc.player == held.player && mc.level == held.level;
     }
 
     public boolean isLatched() {
@@ -323,7 +347,7 @@ public class SwapManager extends Feature {
     private void repinLatch() {
         if (held == null) return;
 
-        if (nullCheck()) {
+        if (nullCheck() || mc.player != held.player || mc.level != held.level) {
             if (logging) log("latch dropped: no player/world");
             held = null;
             return;
@@ -384,7 +408,9 @@ public class SwapManager extends Feature {
             ItemStack live = mc.player.getInventory().getItem(result.slot());
             // Rebuild rather than return: the constructor recomputes holding() against the slot
             // that is selected *now*, which is the whole point of the refresh.
-            if (live == result.stack() && !live.isEmpty()) {
+            boolean explicitEmptySlot = mode == SwapMode.SILENT && result.type() == ResultType.HOTBAR
+                    && result.slot() >= 0 && result.slot() <= 8;
+            if (live == result.stack() && (!live.isEmpty() || explicitEmptySlot)) {
                 return new Result(result.slot(), live, result.type());
             }
         }
@@ -435,11 +461,17 @@ public class SwapManager extends Feature {
     }
 
     private static final class HeldSwap {
+        private final Object owner;
+        private final net.minecraft.client.player.LocalPlayer player;
+        private final net.minecraft.client.multiplayer.ClientLevel level;
         private final Result result;
         private final int last;
         private int ticksHeld;
 
-        private HeldSwap(Result result, int last) {
+        private HeldSwap(Object owner, Result result, int last) {
+            this.owner = owner;
+            this.player = mc.player;
+            this.level = mc.level;
             this.result = result;
             this.last = last;
         }

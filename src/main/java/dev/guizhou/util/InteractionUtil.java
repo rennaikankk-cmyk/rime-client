@@ -3,6 +3,7 @@ package dev.guizhou.util;
 import dev.guizhou.util.traits.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Holder;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.tags.FluidTags;
@@ -12,6 +13,9 @@ import net.minecraft.world.effect.MobEffectUtil;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
@@ -98,32 +102,28 @@ public class InteractionUtil implements Util {
     }
 
     public static double getBlockBreakingSpeed(int slot, BlockPos pos) {
-        return getBlockBreakingSpeed(slot, mc.level.getBlockState(pos));
+        double delta = getBreakDelta(mc.player.getInventory().getItem(slot), mc.level.getBlockState(pos), pos);
+        return delta <= 0 ? Double.POSITIVE_INFINITY : Math.ceil(1.0 / delta) * 50.0;
     }
 
     public static double getBlockBreakingSpeed(int slot, BlockState block) {
         double speed = rawMiningSpeed(slot, block, mc.player.onGround());
 
-        float hardness = block.getDestroySpeed(null, null);
-        if (hardness == -1) return 0;
-
-        speed /= hardness / (!block.requiresCorrectToolForDrops() || mc.player.getInventory().getNonEquipmentItems().get(slot).isCorrectToolForDrops(block) ? 30 : 100);
-
-        float ticks = (float) (Math.floor(1.0f / speed) + 1.0f);
-
-        return (long) ((ticks / 20.0f) * 1000);
+        float hardness = block.getDestroySpeed(mc.level, mc.player.blockPosition());
+        if (hardness < 0 || speed <= 0) return Double.POSITIVE_INFINITY;
+        if (hardness == 0) return 0;
+        double delta = speed / hardness / (!block.requiresCorrectToolForDrops()
+                || mc.player.getInventory().getItem(slot).isCorrectToolForDrops(block) ? 30 : 100);
+        return Math.ceil(1.0 / delta) * 50.0;
     }
 
     public static double rawMiningSpeed(int slot, BlockState block, boolean onGround) {
-        double speed = mc.player.getInventory().getNonEquipmentItems().get(slot).getDestroySpeed(block);
+        return miningSpeed(mc.player.getInventory().getItem(slot), block, onGround);
+    }
 
-        if (speed > 1) {
-            ItemStack tool = mc.player.getInventory().getItem(slot);
-
-            int efficiency = EnchantmentUtil.getLevel(Enchantments.EFFICIENCY, tool);
-
-            if (efficiency > 0 && !tool.isEmpty()) speed += efficiency * efficiency + 1;
-        }
+    private static float miningSpeed(ItemStack stack, BlockState state, boolean onGround) {
+        float speed = stack.getDestroySpeed(state);
+        if (speed > 1) speed += (float) miningAttribute(Attributes.MINING_EFFICIENCY, stack);
 
         if (MobEffectUtil.hasDigSpeed(mc.player)) {
             speed *= 1 + (MobEffectUtil.getDigSpeedAmplification(mc.player) + 1) * 0.2F;
@@ -140,9 +140,9 @@ public class InteractionUtil implements Util {
             speed *= k;
         }
 
-        if (mc.player.isEyeInFluid(FluidTags.WATER) && EnchantmentUtil.has(Enchantments.AQUA_AFFINITY, EquipmentSlot.HEAD)) {
-            speed /= 5.0F;
-        }
+        speed *= (float) miningAttribute(Attributes.BLOCK_BREAK_SPEED, stack);
+        if (mc.player.isEyeInFluid(FluidTags.WATER))
+            speed *= (float) miningAttribute(Attributes.SUBMERGED_MINING_SPEED, stack);
 
         if (!onGround) {
             speed /= 5.0F;
@@ -151,41 +151,32 @@ public class InteractionUtil implements Util {
         return speed;
     }
 
+    /** Models a hypothetical main-hand tool without changing the live inventory or attributes. */
+    private static double miningAttribute(Holder<Attribute> attribute, ItemStack tool) {
+        AttributeInstance live = mc.player.getAttribute(attribute);
+        if (live == null) return attribute.value().getDefaultValue();
+        ItemStack held = mc.player.getMainHandItem();
+        if (tool == held) return live.getValue();
+        AttributeInstance estimate = new AttributeInstance(attribute, ignored -> {});
+        estimate.replaceFrom(live);
+        held.forEachModifier(EquipmentSlot.MAINHAND, (type, modifier) -> {
+            if (type.equals(attribute)) estimate.removeModifier(modifier.id());
+        });
+        tool.forEachModifier(EquipmentSlot.MAINHAND, (type, modifier) -> {
+            if (type.equals(attribute)) estimate.addOrUpdateTransientModifier(modifier);
+        });
+        return estimate.getValue();
+    }
+
     /**
      * Per-tick break progress for mining {@code state} at {@code pos} with {@code stack} held,
      * as a fraction of the block (so {@code 1 / delta} ticks to break it).
      */
     public static float getBreakDelta(ItemStack stack, BlockState state, BlockPos pos) {
         float hardness = state.getDestroySpeed(mc.level, pos);
-        if (hardness == -1) return 0;
-
-        float speed = stack.getDestroySpeed(state);
-        if (speed > 1) {
-            int efficiency = EnchantmentUtil.getLevel(Enchantments.EFFICIENCY, stack);
-            if (efficiency > 0 && !stack.isEmpty()) speed += efficiency * efficiency + 1;
-        }
-
-        if (MobEffectUtil.hasDigSpeed(mc.player)) {
-            speed *= 1 + (MobEffectUtil.getDigSpeedAmplification(mc.player) + 1) * 0.2F;
-        }
-
-        if (mc.player.hasEffect(MobEffects.MINING_FATIGUE)) {
-            speed *= switch (mc.player.getEffect(MobEffects.MINING_FATIGUE).getAmplifier()) {
-                case 0 -> 0.3F;
-                case 1 -> 0.09F;
-                case 2 -> 0.0027F;
-                default -> 8.1E-4F;
-            };
-        }
-
-        if (mc.player.isEyeInFluid(FluidTags.WATER)
-                && !EnchantmentUtil.has(Enchantments.AQUA_AFFINITY, EquipmentSlot.HEAD)) {
-            speed /= 5.0F;
-        }
-
-        if (!mc.player.onGround()) {
-            speed /= 5.0F;
-        }
+        if (hardness < 0) return 0;
+        if (hardness == 0) return 1;
+        float speed = miningSpeed(stack, state, mc.player.onGround());
 
         boolean harvestable = !state.requiresCorrectToolForDrops() || stack.isCorrectToolForDrops(state);
         return speed / hardness / (harvestable ? 30 : 100);
