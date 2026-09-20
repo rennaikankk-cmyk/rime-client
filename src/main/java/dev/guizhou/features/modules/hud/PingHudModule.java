@@ -4,7 +4,7 @@ import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.features.modules.client.HudClientModule;
 import dev.guizhou.features.modules.client.HudModule;
-import dev.guizhou.features.modules.client.HudPosition;
+import dev.guizhou.util.render.ShadcnDraw;
 import dev.guizhou.mixin.client.PlayerTabOverlayAccessor;
 import net.minecraft.client.gui.components.PlayerTabOverlay;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -15,11 +15,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class PingHudModule extends HudModule {
-    private static final int WHITE = 0xFFFFFFFF;
-    private static final int GRAY = 0xFFAAAAAA;
-
     private static final Pattern PING_SUFFIX = Pattern.compile("(?i)(\\d+)\\s*(?:ms)?\\s*ping");
-    private static final Pattern PING_PREFIX = Pattern.compile("(?i)ping\\s*(?:[:=-])?\\s*(\\d+)");
+    private static final Pattern PING_PREFIX = Pattern.compile("(?i)ping\\s*[:=\\-]?\\s*(\\d+)");
 
     public PingHudModule() {
         super("Ping");
@@ -27,19 +24,25 @@ public class PingHudModule extends HudModule {
 
     @Override
     public void render(Render2DEvent event) {
-        String label = "Ping ";
-        String value = String.valueOf(getPing());
-
-        int totalWidth = mc.font.width(label) + mc.font.width(value);
-
         HudClientModule hud = GuizhouWare.moduleManager.getModuleByClass(HudClientModule.class);
-        int linesBelow = hud != null ? hud.linesBelow(this) : 0;
+        String value = String.valueOf(getPing()) + " ms";
 
-        int rx = lineX(HudPosition.BOTTOM_RIGHT, totalWidth);
-        int ry = blockTop(HudPosition.BOTTOM_RIGHT, 1, linesBelow, 0);
+        float pad = 6f;
+        float labelW = ShadcnDraw.width("Ping", 10f);
+        float cardW = pad + labelW + 8f + ShadcnDraw.width(value, 12f) + pad;
+        float cardH = 24f;
 
-        event.getContext().drawString(mc.font, label, rx, ry, WHITE);
-        event.getContext().drawString(mc.font, value, rx + mc.font.width(label), ry, GRAY);
+        int below = hud != null ? hud.stackBelowHeight(this) : 0;
+        int defX = Math.round(screenWidth() - cardW - 4f);
+        int defY = Math.round(bottomAnchor() - 4f - below - cardH);
+        int[] o = origin(defX, defY, (int) cardW, (int) cardH);
+        int ox = o[0], oy = o[1];
+
+        ShadcnDraw.panel(event.getContext(), ox, oy, cardW, cardH, 6f);
+        float ty = oy + (cardH - 12f) / 2f - 1f;
+        ShadcnDraw.text(event.getContext(), "Ping", ox + pad, ty, 10f, ShadcnDraw.MUTED);
+        ShadcnDraw.text(event.getContext(), value, ox + pad + labelW + 8f, ty, 12f, ShadcnDraw.TEXT);
+        bounds(ox, oy, (int) cardW, (int) cardH);
     }
 
     private int getPing() {
@@ -49,7 +52,6 @@ public class PingHudModule extends HudModule {
             int latency = info != null ? info.getLatency() : 0;
             if (latency > 0) return latency;
         }
-
         Integer parsed = parseFromTablist();
         return parsed != null ? Math.max(parsed, 0) : 0;
     }
@@ -58,7 +60,6 @@ public class PingHudModule extends HudModule {
         if (mc.gui == null) return null;
         PlayerTabOverlay tab = mc.gui.getTabList();
         if (!(tab instanceof PlayerTabOverlayAccessor accessor)) return null;
-
         Integer fromHeader = parse(accessor.guizhouware$getHeader());
         return fromHeader != null ? fromHeader : parse(accessor.guizhouware$getFooter());
     }
@@ -67,7 +68,6 @@ public class PingHudModule extends HudModule {
         if (component == null) return null;
         String text = component.getString();
         if (text.isEmpty()) return null;
-
         Matcher m = PING_SUFFIX.matcher(text);
         if (m.find()) return tryInt(m.group(1));
         m = PING_PREFIX.matcher(text);

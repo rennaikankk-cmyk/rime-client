@@ -94,7 +94,11 @@ public class ClickGuiModule extends Module {
         rainbowBrightness.setVisibility(v -> theme.getValue() == Theme.RAINBOW);
         rainbowSaturation.setVisibility(v -> theme.getValue() == Theme.RAINBOW);
         customColor.setVisibility(v -> theme.getValue() == Theme.CUSTOM);
-        fontName.setVisibility(v -> clickGuiFont.getValue() || hudFont.getValue());
+        // Retain legacy font keys for old config compatibility. Native screens and
+        // the rebuilt HUD share the bundled Geist/CJK chain, so these are not UI controls.
+        clickGuiFont.setVisibility(v -> false);
+        hudFont.setVisibility(v -> false);
+        fontName.setVisibility(v -> false);
 
         INSTANCE = this;
     }
@@ -119,7 +123,7 @@ public class ClickGuiModule extends Module {
     @Override
     public void onEnable() {
         if (nullCheck()) return;
-        mc.setScreen(GuizhouWareGui.getClickGui());
+        if (!(mc.screen instanceof GuizhouWareGui)) mc.setScreen(GuizhouWareGui.getClickGui());
     }
 
     @Override
@@ -133,7 +137,7 @@ public class ClickGuiModule extends Module {
 
     @Override
     public void onTick() {
-        if (!(mc.screen instanceof GuizhouWareGui)) {
+        if (!(mc.screen instanceof GuizhouWareGui) && !(mc.screen instanceof dev.guizhou.features.gui.HudEditorScreen)) {
             this.disable();
         }
     }

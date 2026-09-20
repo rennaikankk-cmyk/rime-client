@@ -2,7 +2,7 @@ package dev.guizhou.features.modules.hud;
 
 import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.features.modules.client.HudModule;
-import net.minecraft.client.gui.GuiGraphics;
+import dev.guizhou.util.render.ShadcnDraw;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
@@ -10,14 +10,12 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 public class CountsHudModule extends HudModule {
-    private static final int ICON = 16;
-    private static final float ICON_SCALE = 0.85f;
-    private static final float RENDER_ICON = ICON * ICON_SCALE;
+    private static final float ICON = 14f;
     private static final int HOTBAR_HALF = 91;
     private static final int HUNGER_TOP_OFFSET = 39;
     private static final int BUBBLE_HEIGHT = 10;
-    private static final int GAP = 2;
-    private static final int TEXT_PAD = 2;
+    private static final float PAD = 4f;
+    private static final float ROW = 16f;
 
     private static final Item[] ITEMS = {
             Items.END_CRYSTAL,
@@ -32,39 +30,35 @@ public class CountsHudModule extends HudModule {
 
     @Override
     public void render(Render2DEvent event) {
-        GuiGraphics ctx = event.getContext();
-
-        int x = screenWidth() / 2 + HOTBAR_HALF + GAP;
-        int yTop = screenHeight() - HUNGER_TOP_OFFSET - 1 - ICON;
-        if (showingBubbles()) yTop -= BUBBLE_HEIGHT;
-
-        for (int i = 0; i < ITEMS.length; i++) {
-            int y = yTop + Math.round(i * RENDER_ICON);
-            int count = countItem(ITEMS[i]);
-
-            ItemStack stack = new ItemStack(ITEMS[i], Math.max(count, 1));
-            drawIcon(ctx, stack, x, y);
-            drawCount(ctx, count, x, y);
+        float textW = 0f;
+        for (Item item : ITEMS) {
+            textW = Math.max(textW, ShadcnDraw.width("999", 11f));
         }
-    }
+        float cardW = PAD * 2 + ICON + 5f + textW;
+        float cardH = PAD * 2 + ITEMS.length * ROW;
 
-    private void drawIcon(GuiGraphics ctx, ItemStack stack, int x, int y) {
+        int defX = screenWidth() / 2 + HOTBAR_HALF + 4;
+        int defY = screenHeight() - HUNGER_TOP_OFFSET - 1 - (int) cardH;
+        if (showingBubbles()) defY -= BUBBLE_HEIGHT;
+        int[] o = origin(defX, defY, (int) cardW, (int) cardH);
+        int ox = o[0], oy = o[1];
 
-        ctx.pose().pushMatrix();
-        ctx.pose().scale(ICON_SCALE, ICON_SCALE);
-        ctx.renderItem(stack, Math.round(x / ICON_SCALE), Math.round(y / ICON_SCALE));
-        ctx.pose().popMatrix();
-    }
-
-    private static final int GLYPH_HEIGHT = 8;
-
-    private void drawCount(GuiGraphics ctx, int count, int x, int y) {
-
-        String label = String.valueOf(count);
-        int drawX = Math.round(x + RENDER_ICON + TEXT_PAD);
-        int drawY = Math.round(y + (RENDER_ICON - GLYPH_HEIGHT) / 2f);
-        ctx.drawString(mc.font, label, drawX, drawY,
-                count > 0 ? 0xFFFFFFFF : 0xFFFF5555, true);
+        ShadcnDraw.panel(event.getContext(), ox, oy, cardW, cardH, 6f);
+        float scale = ICON / 16f;
+        for (int i = 0; i < ITEMS.length; i++) {
+            int count = countItem(ITEMS[i]);
+            float ry = oy + PAD + i * ROW;
+            ItemStack stack = new ItemStack(ITEMS[i], Math.max(count, 1));
+            var pose = event.getContext().pose();
+            pose.pushMatrix();
+            pose.scale(scale, scale);
+            event.getContext().renderItem(stack,
+                    Math.round((ox + PAD) / scale), Math.round(ry / scale));
+            pose.popMatrix();
+            ShadcnDraw.text(event.getContext(), String.valueOf(count),
+                    ox + PAD + ICON + 5f, ry + 2f, 11f, count > 0 ? ShadcnDraw.TEXT : 0xFFFF5555);
+        }
+        bounds(ox, oy, (int) cardW, (int) cardH);
     }
 
     private int countItem(Item item) {

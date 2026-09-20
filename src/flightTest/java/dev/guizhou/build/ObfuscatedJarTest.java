@@ -229,20 +229,21 @@ public final class ObfuscatedJarTest {
 
     private static void verifyGuiOverrides(Map<String, ClassInfo> before,
                                            Map<String, ClassInfo> after, Mapping mapping) {
-        String gui = "dev/guizhou/features/gui/GuizhouWareGui";
+        for (String gui : List.of("dev/guizhou/features/gui/GuizhouWareGui", "dev/guizhou/features/gui/HudEditorScreen")) {
         ClassInfo source = required(before, gui);
         ClassInfo result = required(after, mapping.requiredClass(gui));
-        check(source.superName.equals(result.superName), "ClickGUI lost its Minecraft Screen superclass");
+        check(source.superName.equals(result.superName), gui + " lost its Minecraft Screen superclass");
         int overrides = 0;
         for (MethodInfo method : source.methods.values()) {
             if (!method.name.startsWith("method_")) continue;
             overrides++;
             check(result.methods.containsKey(method.name + method.descriptor),
-                    "ClickGUI override removed/renamed: " + method.name + method.descriptor);
+                    gui + " override removed/renamed: " + method.name + method.descriptor);
         }
-        check(overrides >= 8, "ClickGUI override coverage unexpectedly small");
+        check(overrides >= 8, gui + " override coverage unexpectedly small");
         check(result.methods.keySet().stream().anyMatch(key -> key.startsWith("method_25394(")),
-                "ClickGUI render override missing");
+                gui + " render override missing");
+        }
     }
 
     private static void verifyHeartbeat(Map<String, ClassInfo> before,

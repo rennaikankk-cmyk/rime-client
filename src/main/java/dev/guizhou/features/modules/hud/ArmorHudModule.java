@@ -3,7 +3,7 @@ package dev.guizhou.features.modules.hud;
 import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.features.modules.client.HudModule;
 import dev.guizhou.util.EnchantmentUtil;
-import net.minecraft.client.gui.GuiGraphics;
+import dev.guizhou.util.render.ShadcnDraw;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -17,7 +17,7 @@ public class ArmorHudModule extends HudModule {
     private static final int HOTBAR_HALF = 91;
     private static final int HUNGER_TOP_OFFSET = 39;
     private static final int BUBBLE_HEIGHT = 10;
-    private static final float TAG_SCALE = 0.8f;
+    private static final float PAD = 4f;
 
     private static final EquipmentSlot[] SLOTS = {
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET
@@ -38,32 +38,39 @@ public class ArmorHudModule extends HudModule {
 
     @Override
     public void render(Render2DEvent event) {
-        int totalWidth = SLOTS.length * STRIDE - (STRIDE - ICON);
-        int rightX = screenWidth() / 2 + HOTBAR_HALF;
-        int x = rightX - totalWidth;
-        int y = screenHeight() - HUNGER_TOP_OFFSET - 1 - ICON;
-        if (showingBubbles()) y -= BUBBLE_HEIGHT;
+        int count = 0;
+        for (EquipmentSlot slot : SLOTS) {
+            if (!mc.player.getItemBySlot(slot).isEmpty()) count++;
+        }
+        if (count == 0) {
+            bounds(0, 0, 0, 0);
+            return;
+        }
+        float cardW = PAD * 2 + count * STRIDE - (STRIDE - ICON);
+        float cardH = PAD * 2 + ICON + 8f;
 
-        GuiGraphics ctx = event.getContext();
-        for (int i = 0; i < SLOTS.length; i++) {
-            int sx = x + i * STRIDE;
-            ItemStack stack = mc.player.getItemBySlot(SLOTS[i]);
+        int totalWidthAll = (int) (PAD * 2 + SLOTS.length * STRIDE - (STRIDE - ICON));
+        int defX = screenWidth() / 2 + HOTBAR_HALF - totalWidthAll;
+        int defY = screenHeight() - HUNGER_TOP_OFFSET - 1 - (int) cardH;
+        if (showingBubbles()) defY -= BUBBLE_HEIGHT;
+        int[] o = origin(defX, defY, (int) cardW, (int) cardH);
+        int ox = o[0], oy = o[1];
+
+        ShadcnDraw.panel(event.getContext(), ox, oy, cardW, cardH, 6f);
+        int drawn = 0;
+        for (EquipmentSlot slot : SLOTS) {
+            ItemStack stack = mc.player.getItemBySlot(slot);
             if (stack.isEmpty()) continue;
-
-            ctx.renderItem(stack, sx, y);
-            ctx.renderItemDecorations(mc.font, stack, sx, y);
-
+            int sx = ox + (int) PAD + drawn * STRIDE;
+            int sy = oy + (int) PAD;
+            event.getContext().renderItem(stack, sx, sy);
             String tag = protectionTag(stack);
             if (tag != null) {
-
-                ctx.pose().pushMatrix();
-                ctx.pose().scale(TAG_SCALE, TAG_SCALE);
-                ctx.drawString(mc.font, tag,
-                        Math.round(sx / TAG_SCALE), Math.round(y / TAG_SCALE),
-                        0xFFFFFFFF, true);
-                ctx.pose().popMatrix();
+                ShadcnDraw.text(event.getContext(), tag, sx, sy + ICON, 8f, ShadcnDraw.ACCENT);
             }
+            drawn++;
         }
+        bounds(ox, oy, (int) cardW, (int) cardH);
     }
 
     private String protectionTag(ItemStack stack) {

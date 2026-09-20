@@ -244,9 +244,11 @@ public class ModuleManager implements Jsonable, Util {
 
     @Override
     public void fromJson(JsonElement element) {
+        if (element == null || !element.isJsonObject()) return;
+        JsonObject imported = dev.guizhou.util.ArmorFlyConfigMigration.migrate(element.getAsJsonObject());
         for (Module module : getModules()) {
             try {
-                module.fromJson(element.getAsJsonObject().get(module.getName()));
+                module.fromJson(imported.get(module.getName()));
             } catch (Throwable e) {
                 LOGGER.error("Failed to load module {}", module.getName(), e);
             }

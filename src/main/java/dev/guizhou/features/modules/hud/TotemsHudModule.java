@@ -2,6 +2,7 @@ package dev.guizhou.features.modules.hud;
 
 import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.features.modules.client.HudModule;
+import dev.guizhou.util.render.ShadcnDraw;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -18,20 +19,24 @@ public class TotemsHudModule extends HudModule {
     @Override
     public void render(Render2DEvent event) {
         int count = countTotems();
-
-        int x = screenWidth() / 2 - ICON / 2;
-        int y = screenHeight() - XP_BAR_TOP_OFFSET - GAP_ABOVE_XP - ICON;
-
         ItemStack stack = new ItemStack(Items.TOTEM_OF_UNDYING, Math.max(count, 1));
-        event.getContext().renderItem(stack, x, y);
-        if (count > 0) {
-            event.getContext().renderItemDecorations(mc.font, stack, x, y, String.valueOf(count));
-        } else {
-            String label = "0";
-            int tx = x + 19 - 2 - mc.font.width(label);
-            int ty = y + 6 + 3;
-            event.getContext().drawString(mc.font, label, tx, ty, 0xFFFF5555);
-        }
+
+        float pad = 4f;
+        float cardW = pad + ICON + pad;
+        float cardH = pad + ICON + pad;
+
+        int defX = Math.round(screenWidth() / 2f - cardW / 2f);
+        int defY = Math.round(screenHeight() - XP_BAR_TOP_OFFSET - GAP_ABOVE_XP - cardH);
+        int[] o = origin(defX, defY, (int) cardW, (int) cardH);
+        int ox = o[0], oy = o[1];
+
+        ShadcnDraw.panel(event.getContext(), ox, oy, cardW, cardH, 6f);
+        event.getContext().renderItem(stack, ox + (int) pad, oy + (int) pad);
+        String label = String.valueOf(count);
+        int color = count > 0 ? ShadcnDraw.TEXT : 0xFFFF5555;
+        ShadcnDraw.text(event.getContext(), label,
+                ox + cardW - ShadcnDraw.width(label, 10f) - 2f, oy + cardH - 11f, 10f, color);
+        bounds(ox, oy, (int) cardW, (int) cardH);
     }
 
     private int countTotems() {

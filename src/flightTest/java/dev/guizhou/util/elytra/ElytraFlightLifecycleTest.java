@@ -104,10 +104,10 @@ public final class ElytraFlightLifecycleTest {
         check(requested.hasCall("armorFlyRequested")
                         && requested.fieldAfter(Opcodes.GETFIELD, "correctionPending", -1) >= 0
                         && requested.fieldAfter(Opcodes.GETFIELD, "boostRetryTick", -1) >= 0,
-                "Armor restarts need an independent or legacy owner and must respect correction recovery");
+                "Armor restarts need the independent owner and must respect correction recovery");
         Trace owner = methods.get("armorFlyRequested");
-        check(owner.hasCall("authorized") && owner.hasCall("requested") && owner.hasCall("isEnabled"),
-                "Independent armor ownership must retain authorization and the legacy setting");
+        check(owner.hasCall("requested") && !owner.hasCall("isEnabled"),
+                "Only the independently authorized ArmorFly module may request armor flight");
         check(disable.hasCall("requested") && methods.get("releaseArmorFly").hasCall("armorFlyRequested"),
                 "Closing either flight owner must preserve the other owner");
         int descent = requested.call("preservesMaceDescent");

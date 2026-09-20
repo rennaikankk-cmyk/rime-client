@@ -7,7 +7,6 @@
     "MotionLerp": "1.0",
     "AutoRescale": "false",
     "RescaleAmount": "5.0",
-    "ArmorFly": "true",
     "Takeoff": "true",
     "TerrainGuard": "true",
     "SafeLanding": "true",
@@ -31,5 +30,8 @@
     "MaceHeight": "20.0",
     "MaceMinFallDistance": "1.5",
     "MaceCustomPullUpAngle": "0.0"
+  },
+  "ArmorFly": {
+    "Enabled": "false"
   }
 }

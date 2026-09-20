@@ -129,7 +129,6 @@ public class GuangxiElytraModule extends Module {
     // ---- Tricks ----
     private final Setting<Boolean> flipHover = bool("FlipHover", true).setPage("Tricks");
     private final Setting<Boolean> autoEquip = bool("AutoEquip", true).setPage("Tricks");
-    private final Setting<Boolean> armorFly = bool("ArmorFly", false).setPage("Tricks");
     private final Setting<Boolean> groundHop = bool("GroundHop", false).setPage("Tricks");
     private final Setting<Double> hopHeight = num("HopHeight", 3.0, 1.0, 8.0).setPage("Tricks");
     private final Setting<Double> hopPitch = num("HopPitch", 80.0, 40.0, 89.0).setPage("Tricks");
@@ -272,8 +271,7 @@ public class GuangxiElytraModule extends Module {
     }
 
     public boolean armorFlyRequested() {
-        return dev.guizhou.manager.HeartbeatManager.authorized()
-                && (ArmorFlyModule.requested() || isEnabled() && armorFly.getValue());
+        return ArmorFlyModule.requested();
     }
 
     public void monitorArmorFly() { armorSwap.monitor(); }
@@ -1602,7 +1600,7 @@ public class GuangxiElytraModule extends Module {
             case VOID -> "Void";
         };
         if (freezing) return m + "·Freeze";
-        if (armorFly.getValue()) return m + (armorSwap.active() ? "·ArmorFly" : "·ArmorWait");
+        if (armorFlyRequested()) return m + (armorSwap.active() ? "·ArmorFly" : "·ArmorWait");
         if (chaseActive()) return m + "·Chase";
         return m;
     }

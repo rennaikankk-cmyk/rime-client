@@ -71,6 +71,8 @@ public class NotificationsModule extends Module {
                 name,
                 moduleState ? "{green}" : "{red}",
                 moduleState ? "enabled" : "disabled"));
+        NotifierHudModule.push("module:"+name, NotifierHudModule.Icon.INFO,
+                event.getFeature().getName()+(moduleState?" 已开启":" 已关闭"));
     }
 
     @Subscribe(priority = 100)
@@ -91,6 +93,7 @@ public class NotificationsModule extends Module {
                             .append(Component.literal(String.valueOf(pops)).withColor(0xFFFF55))
                             .append(Component.literal(" " + unit + "."));
                     ChatUtil.sendPrefixed(ChatUtil.getSkullComponent(), message);
+                    NotifierHudModule.push("death:"+id, NotifierHudModule.Icon.SKULL, message);
                 }
             } else {
                 currentlyAlive.add(id);

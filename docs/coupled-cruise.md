@@ -1,6 +1,6 @@
 # 耦合巡航（1.21.11）
 
-独立飞行选项，默认关闭；启用 `GuangxiElytra → CoupledCruise`，配合 `FIREWORKS` 使用。甲飞换装仍由独立甲飞模块/现有 `ArmorFly` 设置控制。巡航总速帽是计算上限，不代表实际能达到的速度，也不是服务器许可值。
+独立飞行选项，默认关闭；启用 `GuangxiElytra → CoupledCruise`，配合 `FIREWORKS` 使用。甲飞换装统一由独立 `ArmorFly` 模块控制，Tricks 中的旧开关在加载旧配置时迁移。巡航总速帽是计算上限，不代表实际能达到的速度，也不是服务器许可值。
 
 本轮使用 v10.4.26 的单视角巡航作为功能参考。原始 `.disabled` + `729.nbt` 仍是空战对打基准，二者没有互换。
 
@@ -31,7 +31,7 @@
 | CruiseDualClimbAngle | 双视角拉升角，0=自动求解 | 0 |
 | CruiseDualDiveAngle | 双视角俯冲角，0=自动求解 | 0 |
 
-`manual-coupled-cruise` 预设开启本选项和速度日志，保留地形防护，关闭追击及 AutoFly。加载方法与其他预设相同；加载后手动启用飞行。
+`manual-coupled-cruise` 预设开启本选项和速度日志，保留地形防护，关闭追击及 AutoFly。加载方法与其他预设相同；加载后手动启用飞行；需要换甲时另开启独立甲飞。
 
 ## 控制权和约束
 

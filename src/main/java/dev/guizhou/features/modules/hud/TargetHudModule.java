@@ -146,8 +146,12 @@ public class TargetHudModule extends HudModule {
         else ghostHp = sHp;
 
         float s = canvasScale();
-        int x0 = screenWidth() - px(W, s) - px(12f, s);
-        int y0 = Math.max(px(8f, s), (screenHeight() - px(TARGET_H, s)) / 2 - px(4f, s));
+        int defX = screenWidth() - px(W, s) - px(12f, s);
+        int defY = Math.max(px(8f, s), (screenHeight() - px(TARGET_H, s)) / 2 - px(4f, s));
+        int[] o = origin(defX, defY, px(W, s), px(TARGET_H, s));
+        int x0 = o[0];
+        int y0 = o[1];
+        bounds(x0, y0, px(W, s), px(TARGET_H, s));
 
         // Quantize primitives in the design canvas, then transform once. Scaling
         // each pixel before drawing drops thin icon strokes at normal HUD size.
@@ -480,7 +484,7 @@ public class TargetHudModule extends HudModule {
 
         GuangxiElytraModule flight = flightModule();
         boolean gliding = mc.player.isFallFlying();
-        boolean armorFly = flight != null && flight.isEnabled() && flight.armorFlyRequested();
+        boolean armorFly = flight != null && flight.armorFlyRequested();
         boolean rocket = flight != null && flight.isEnabled() && flight.isBoostAttached();
 
         text(ctx, "FLIGHT · 巡航层", PAD, TOP + 3f, 13f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);

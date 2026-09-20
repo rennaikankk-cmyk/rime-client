@@ -5,7 +5,6 @@
     "MotionMode": "FIREWORKS",
     "FreeLook": "true",
     "AutoFly": "false",
-    "ArmorFly": "true",
     "Takeoff": "true",
     "GroundHop": "false",
     "TerrainGuard": "true",
@@ -26,6 +25,9 @@
     "CruiseSpeedLog": "true"
   },
   "GuangxiElytraChase": {
+    "Enabled": "false"
+  },
+  "ArmorFly": {
     "Enabled": "false"
   }
 }

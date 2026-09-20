@@ -2,7 +2,7 @@ package dev.guizhou.features.modules.hud;
 
 import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.features.modules.client.HudModule;
-import net.minecraft.client.gui.GuiGraphics;
+import dev.guizhou.util.render.ShadcnDraw;
 import net.minecraft.network.chat.Component;
 import net.minecraft.tags.FluidTags;
 
@@ -28,16 +28,14 @@ public class NotifierHudModule extends HudModule {
     private static final long DEFAULT_DURATION_MS = 3000;
     private static final long FADE_MS = 400;
     private static final int MAX_VISIBLE = 5;
-    private static final int LINE_GAP = 3;
-    private static final int STATS_GAP = 4;
-    private static final int STATS_TOP_OFFSET = 56;
-    private static final int NAME_CLEARANCE = 11;
-    private static final int BUBBLE_HEIGHT = 10;
-
-    private static final int TEXT_COLOR = 0xFFFFFFFF;
-    private static final String OPEN = "<< ";
-    private static final String SEP = " ";
-    private static final String CLOSE = " >>";
+    private static final float ROW_GAP = 4f;
+    private static final float STATS_GAP = 4f;
+    private static final float STATS_TOP_OFFSET = 56f;
+    private static final float NAME_CLEARANCE = 11f;
+    private static final float BUBBLE_HEIGHT = 10f;
+    private static final float TEXT = 11f;
+    private static final float PAD = 6f;
+    private static final float CARD_H = 22f;
 
     private static final class Entry {
         final String key;
@@ -90,43 +88,54 @@ public class NotifierHudModule extends HudModule {
     public void render(Render2DEvent event) {
         long now = System.currentTimeMillis();
         ENTRIES.removeIf(e -> e.expiry <= now);
-        if (ENTRIES.isEmpty()) return;
+        if (ENTRIES.isEmpty()) {
+            bounds(0, 0, 0, 0);
+            return;
+        }
 
-        GuiGraphics ctx = event.getContext();
-        int lineHeight = mc.font.lineHeight;
-        int lineStride = lineHeight + LINE_GAP;
-
-        int statsTop = screenHeight() - STATS_TOP_OFFSET;
+        float statsTop = screenHeight() - STATS_TOP_OFFSET;
         if (showingBubbles()) statsTop -= BUBBLE_HEIGHT;
-        int anchorY = statsTop - STATS_GAP - NAME_CLEARANCE;
+        float anchorY = statsTop - STATS_GAP - NAME_CLEARANCE;
 
         int total = ENTRIES.size();
         int shown = Math.min(total, MAX_VISIBLE);
+
+        // Fit long messages to the viewport and size the whole stack once,
+        // so the entire notification block is one draggable, clamped unit.
+        float maxTextW = Math.max(40f, screenWidth() - 48f - PAD * 2f - TEXT - 6f);
+        String[] messages = new String[shown];
+        float stackW = 0f;
         for (int k = 0; k < shown; k++) {
             Entry e = ENTRIES.get(total - 1 - k);
-            int topY = anchorY - lineHeight - k * lineStride;
+            messages[k] = ShadcnDraw.fit(e.message.getString(), maxTextW, TEXT);
+            float cardW = PAD * 2f + ShadcnDraw.width(e.icon.glyph, TEXT) + 6f
+                    + ShadcnDraw.width(messages[k], TEXT);
+            stackW = Math.max(stackW, cardW);
+        }
+        float stackH = shown * (CARD_H + ROW_GAP) - ROW_GAP;
+
+        int defX = Math.round(screenWidth() / 2f - stackW / 2f);
+        int defY = Math.round(anchorY - stackH);
+        int[] o = origin(defX, defY, (int) stackW, (int) stackH);
+        int ox = o[0], oy = o[1];
+        bounds(ox, oy, (int) stackW, (int) stackH);
+
+        for (int k = 0; k < shown; k++) {
+            Entry e = ENTRIES.get(total - 1 - k);
             float alpha = fade(e, now);
-            drawLine(ctx, e, topY, alpha);
+            // k=0 is the newest toast at the bottom of the stack.
+            drawToast(event, e, messages[k], ox, oy + stackH - CARD_H - k * (CARD_H + ROW_GAP), stackW, alpha);
         }
     }
 
-    private void drawLine(GuiGraphics ctx, Entry e, int y, float alpha) {
-        int width = mc.font.width(OPEN) + mc.font.width(e.icon.glyph)
-                + mc.font.width(SEP) + mc.font.width(e.message) + mc.font.width(CLOSE);
-        int x = (screenWidth() - width) / 2;
-
-        int text = applyAlpha(TEXT_COLOR, alpha);
-        int iconColor = applyAlpha(e.icon.color, alpha);
-
-        ctx.drawString(mc.font, OPEN, x, y, text, true);
-        x += mc.font.width(OPEN);
-        ctx.drawString(mc.font, e.icon.glyph, x, y, iconColor, true);
-        x += mc.font.width(e.icon.glyph);
-        ctx.drawString(mc.font, SEP, x, y, text, true);
-        x += mc.font.width(SEP);
-        ctx.drawString(mc.font, e.message, x, y, text, true);
-        x += mc.font.width(e.message);
-        ctx.drawString(mc.font, CLOSE, x, y, text, true);
+    private void drawToast(Render2DEvent event, Entry e, String message, float x, float y, float cardW, float alpha) {
+        ShadcnDraw.round(event.getContext(), x, y, cardW, CARD_H, 6f, mulAlpha(0xFF343434, alpha));
+        ShadcnDraw.round(event.getContext(), x + 1f, y + 1f, cardW - 2f, CARD_H - 2f, 5f, mulAlpha(0xF5171717, alpha));
+        float ty = y + (CARD_H - TEXT) / 2f - 1f;
+        float tx = x + PAD;
+        ShadcnDraw.text(event.getContext(), e.icon.glyph, tx, ty, TEXT, mulAlpha(e.icon.color, alpha));
+        ShadcnDraw.text(event.getContext(), message, tx + ShadcnDraw.width(e.icon.glyph, TEXT) + 6f, ty, TEXT,
+                mulAlpha(ShadcnDraw.TEXT, alpha));
     }
 
     private float fade(Entry e, long now) {
@@ -135,13 +144,15 @@ public class NotifierHudModule extends HudModule {
         return Math.max(0f, remaining / (float) FADE_MS);
     }
 
-    private int applyAlpha(int argb, float alpha) {
-        int a = Math.round(((argb >>> 24) & 0xFF) * alpha);
+    private static int mulAlpha(int argb, float alpha) {
+        if (alpha >= 1f) return argb;
+        int a = (argb >>> 24);
+        a = (int) (a * Math.max(0f, Math.min(1f, alpha)));
         return (a << 24) | (argb & 0x00FFFFFF);
     }
 
     private boolean showingBubbles() {
-        return mc.player.isEyeInFluid(FluidTags.WATER)
-                || mc.player.getAirSupply() < mc.player.getMaxAirSupply();
+        return mc.player != null && (mc.player.isEyeInFluid(FluidTags.WATER)
+                || mc.player.getAirSupply() < mc.player.getMaxAirSupply());
     }
 }

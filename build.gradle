@@ -132,8 +132,11 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        hudLayoutTest: 'dev.guizhou.features.modules.client.HudLayoutTest',
+        shadcnTextFieldTest: 'dev.guizhou.features.gui.ShadcnTextFieldTest',
         eventBusTest: 'dev.guizhou.event.system.EventBusTest',
         configFilesTest: 'dev.guizhou.util.ConfigFilesTest',
+        armorFlyConfigMigrationTest: 'dev.guizhou.util.ArmorFlyConfigMigrationTest',
         autoUseWhitelistTest: 'dev.guizhou.util.player.AutoUseWhitelistTest',
         itemUseOwnershipTest: 'dev.guizhou.util.player.ItemUseOwnershipTest',
         fontPageTest: 'dev.guizhou.util.render.font.FontPageTest',

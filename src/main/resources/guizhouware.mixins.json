@@ -62,7 +62,8 @@
     "render.gui.MixinCommandSuggestions",
     "render.gui.MixinHeldItemTooltip",
     "render.gui.MixinInGameHud",
-    "render.gui.MixinScreen"
+    "render.gui.MixinScreen",
+    "render.gui.MixinTitleScreen"
   ],
   "injectors": {
     "defaultRequire": 1

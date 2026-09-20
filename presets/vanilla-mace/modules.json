@@ -5,7 +5,6 @@
     "MotionMode": "VOID",
     "Speed": "6.0",
     "MotionLerp": "1.0",
-    "ArmorFly": "true",
     "Takeoff": "true",
     "TerrainGuard": "true",
     "SafeLanding": "true",
@@ -28,5 +27,8 @@
     "MaceHeight": "20.0",
     "MaceMinFallDistance": "1.5",
     "MaceCustomPullUpAngle": "0.0"
+  },
+  "ArmorFly": {
+    "Enabled": "false"
   }
 }

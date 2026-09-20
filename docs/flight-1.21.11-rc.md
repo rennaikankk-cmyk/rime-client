@@ -20,7 +20,7 @@
 | 简易鞘翅控制 | Movement / GuangxiElytra | 优化追击方向与末段速度的传递 |
 | 武器攻击 Hack | Combat / GuangxiElytraChase 的 MACE、SPEAR、MXS | 优先完善重锤攻击时机与移动拦截 |
 | 自动使用 | Player / AutoUse | 新增独立开关，可自行绑定鼠标键 |
-| 鞘翅甲飞 | GuangxiElytra / Tricks / ArmorFly | 修复滑翔标志延迟期间的移动换装 |
+| 鞘翅甲飞 | Movement / ArmorFly（独立模块；旧配置自动迁移） | 修复滑翔标志延迟期间的移动换装 |
 | 鞘翅追人 | Combat / GuangxiElytraChase | 增加 MaceAdaptive 与 MaceTerminal |
 
 此对照覆盖客户提出的五项功能及重锤链。旧端其他武器、传送、攻击模拟和全部子选项不构成逐项等价承诺。
