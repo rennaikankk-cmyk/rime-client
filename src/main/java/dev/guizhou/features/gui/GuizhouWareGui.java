@@ -52,6 +52,9 @@ public class GuizhouWareGui extends Screen {
     public static Color getColorClipboard() {return colorClipboard;}
     public static void setColorClipboard(Color color) {colorClipboard=color;}
     public void reload() { selected=null; moduleScroll=settingScroll=0; }
+    public boolean capturesMovementKeys() {
+        return editor!=null || binding!=null || dropdown!=null || keyboardFocus>=0 || search!=null && search.focused;
+    }
 
     @Override public void init() {
         ClickGuiModule gui=ClickGuiModule.getInstance();
@@ -326,7 +329,7 @@ public class GuizhouWareGui extends Screen {
     }
     @Override public boolean keyPressed(KeyEvent e) {
         int k=e.input();
-        if(binding!=null){if(k!=GLFW_KEY_ESCAPE)assign(binding,k==GLFW_KEY_DELETE||k==GLFW_KEY_BACKSPACE?Bind.none():new Bind(k));binding=null;return true;}
+        if(binding!=null){if(k==GLFW_KEY_UNKNOWN)return true;if(k!=GLFW_KEY_ESCAPE)assign(binding,k==GLFW_KEY_DELETE||k==GLFW_KEY_BACKSPACE?Bind.none():new Bind(k));binding=null;return true;}
         if(editor!=null){if(k==GLFW_KEY_ESCAPE){editor=null;editing=null;}else if(k==GLFW_KEY_ENTER||k==GLFW_KEY_KP_ENTER)commitEdit();else editor.key(e);return true;}
         if(dropdown!=null){
             Object[] values=dropdown.getValue().getClass().getEnumConstants();

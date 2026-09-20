@@ -24,6 +24,10 @@ public class GuiMove implements Util {
     public void init() {
         EVENT_BUS.register(this);
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (exclusiveInput()) {
+                clearMovement();
+                return;
+            }
             if (shouldRun()) {
                 mc.options.keyUp.setDown(up);
                 mc.options.keyDown.setDown(down);
@@ -39,6 +43,7 @@ public class GuiMove implements Util {
     @Subscribe
     private void onKey(KeyInputEvent event) {
         if (event.getAction() != GLFW.GLFW_PRESS && event.getAction() != GLFW.GLFW_RELEASE) return;
+        if (exclusiveInput()) { clearMovement(); return; }
         if (mc.screen instanceof GuizhouWareGui && isArrowKey(event.getKey())) return;
         
         boolean pressed = event.getAction() == GLFW.GLFW_PRESS;
@@ -56,6 +61,7 @@ public class GuiMove implements Util {
     @Subscribe
     private void onMouse(MouseInputEvent event) {
         if (event.getAction() != GLFW.GLFW_PRESS && event.getAction() != GLFW.GLFW_RELEASE) return;
+        if (exclusiveInput()) { clearMovement(); return; }
         
         boolean pressed = event.getAction() == GLFW.GLFW_PRESS;
         MouseButtonEvent me = new MouseButtonEvent(0, 0, new MouseButtonInfo(event.getButton(), 0));
@@ -72,6 +78,22 @@ public class GuiMove implements Util {
     private static boolean isArrowKey(int key) {
         return key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_RIGHT
                 || key == GLFW.GLFW_KEY_UP || key == GLFW.GLFW_KEY_DOWN;
+    }
+
+    private boolean exclusiveInput() {
+        return mc.screen instanceof GuizhouWareGui gui && gui.capturesMovementKeys()
+                || mc.screen instanceof dev.guizhou.features.gui.HudEditorScreen;
+    }
+
+    private void clearMovement() {
+        up=down=left=right=jump=shift=sprint=false;
+        mc.options.keyUp.setDown(false);
+        mc.options.keyDown.setDown(false);
+        mc.options.keyLeft.setDown(false);
+        mc.options.keyRight.setDown(false);
+        mc.options.keyJump.setDown(false);
+        mc.options.keyShift.setDown(false);
+        mc.options.keySprint.setDown(false);
     }
 
     private boolean shouldRun() {
