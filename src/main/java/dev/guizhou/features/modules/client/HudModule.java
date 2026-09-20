@@ -15,6 +15,29 @@ public abstract class HudModule implements Util {
     // Editor/positioning support: last rendered bounds, cleared each frame.
     private int boundX, boundY, boundW, boundH;
     private boolean renderedThisFrame;
+    private net.minecraft.client.gui.GuiGraphics drawing;
+    private float drawScale = 1;
+    private int naturalW = 96, naturalH = 20;
+
+    public final void renderStyled(Render2DEvent event, HudClientModule hud) {
+        drawing = event.getContext();
+        drawScale = 1;
+        var previous = dev.guizhou.util.render.HudAppearance.use(hud.appearanceOf(this));
+        drawing.pose().pushMatrix();
+        try { render(event); }
+        finally {
+            drawing.pose().popMatrix();
+            drawing = null;
+            dev.guizhou.util.render.HudAppearance.use(previous);
+        }
+    }
+
+    public int previewWidth(float requested) {
+        return Math.max(1, Math.round(naturalW * dev.guizhou.util.render.HudAppearance.fitScale(requested,naturalW,naturalH,screenWidth(),screenHeight())));
+    }
+    public int previewHeight(float requested) {
+        return Math.max(1, Math.round(naturalH * dev.guizhou.util.render.HudAppearance.fitScale(requested,naturalW,naturalH,screenWidth(),screenHeight())));
+    }
 
     public HudModule(String name) {
         this.name = name;
@@ -59,8 +82,9 @@ public abstract class HudModule implements Util {
     protected void bounds(int x, int y, int w, int h) {
         boundX = x;
         boundY = y;
-        boundW = w;
-        boundH = h;
+        boundW = Math.round(w * drawScale);
+        boundH = Math.round(h * drawScale);
+        if (w > 0 && h > 0) { naturalW = w; naturalH = h; }
         renderedThisFrame = w > 0 && h > 0;
     }
 
@@ -93,6 +117,11 @@ public abstract class HudModule implements Util {
         int y = defY;
         HudClientModule hud = GuizhouWare.moduleManager == null
                 ? null : GuizhouWare.moduleManager.getModuleByClass(HudClientModule.class);
+        drawScale = dev.guizhou.util.render.HudAppearance.fitScale(hud == null ? 1 : hud.scaleOf(this),w,h,screenWidth(),screenHeight());
+        int scaledW = Math.round(w * drawScale), scaledH = Math.round(h * drawScale);
+        // Preserve the default anchor's relative position when its footprint changes.
+        x = Math.round(defX * Math.max(0, screenWidth()-scaledW)/(float)Math.max(1,screenWidth()-w));
+        y = Math.round(defY * Math.max(0, screenHeight()-scaledH)/(float)Math.max(1,screenHeight()-h));
         if (hud != null) {
             int[] live = hud.livePosition(this);
             if (live != null) {
@@ -102,13 +131,18 @@ public abstract class HudModule implements Util {
                 x = Math.round(hud.normalizedX(this) * screenWidth());
                 y = Math.round(hud.normalizedY(this) * screenHeight());
             } else if (!(this instanceof dev.guizhou.features.modules.hud.TargetHudModule)) {
-                var placed = hud.defaultPlacement(this, x, y, w, h);
+                var placed = hud.defaultPlacement(this, x, y, scaledW, scaledH);
                 x = placed.x();
                 y = placed.y();
             }
         }
-        if (w > 0) x = Math.max(0, Math.min(x, Math.max(0, screenWidth() - w)));
-        if (h > 0) y = Math.max(0, Math.min(y, Math.max(0, screenHeight() - h)));
+        if (w > 0) x = Math.max(0, Math.min(x, Math.max(0, screenWidth() - scaledW)));
+        if (h > 0) y = Math.max(0, Math.min(y, Math.max(0, screenHeight() - scaledH)));
+        if (drawing != null) {
+            drawing.pose().translate(x,y);
+            drawing.pose().scale(drawScale,drawScale);
+            drawing.pose().translate(-x,-y);
+        }
         return new int[]{x, y};
     }
 }

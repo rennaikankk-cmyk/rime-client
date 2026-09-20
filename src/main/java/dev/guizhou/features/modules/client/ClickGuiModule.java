@@ -19,6 +19,7 @@ public class ClickGuiModule extends Module {
     public Setting<Theme>   theme            = mode("Theme", Theme.GUIZHOUWARE);
     public Setting<Color>   customColor      = color("Custom Color", 114, 168, 216, 220);
     public Setting<Boolean> smooth           = bool("Smooth", true);
+    public Setting<Double> menuScale = num("菜单大小 (%)", 100.0, 60.0, 150.0);
     public Setting<Integer> rainbowHue       = num("Delay", 240, 0, 600);
     public Setting<Float>   rainbowBrightness = num("Brightness", 200.0f, 1.0f, 255.0f);
     public Setting<Float>   rainbowSaturation = num("Saturation", 140.0f, 1.0f, 255.0f);

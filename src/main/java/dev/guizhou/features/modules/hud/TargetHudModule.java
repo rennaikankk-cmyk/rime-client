@@ -762,6 +762,7 @@ public class TargetHudModule extends HudModule {
     }
 
     private static int c(int argb, float alpha) {
+        argb = dev.guizhou.util.render.HudAppearance.color(argb);
         if (alpha >= 1f) return argb;
         int a = (argb >>> 24);
         a = (int) (a * Math.max(0f, Math.min(1f, alpha)));

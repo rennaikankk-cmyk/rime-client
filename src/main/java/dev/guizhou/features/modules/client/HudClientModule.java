@@ -33,6 +33,11 @@ public class HudClientModule extends Module {
     private final Map<HudModule, Setting<Boolean>> customPos = new LinkedHashMap<>();
     private final Map<HudModule, Setting<Double>> posX = new LinkedHashMap<>();
     private final Map<HudModule, Setting<Double>> posY = new LinkedHashMap<>();
+    private final Map<HudModule, Setting<Double>> sizes = new LinkedHashMap<>();
+    private final Map<HudModule, Setting<Double>> opacity = new LinkedHashMap<>();
+    private final Map<HudModule, Setting<Color>> backgrounds = new LinkedHashMap<>();
+    private final Map<HudModule, Setting<Color>> foregrounds = new LinkedHashMap<>();
+    private final Map<HudModule, Setting<Color>> accents = new LinkedHashMap<>();
 
     // Live editor drag override (screen px); only present while the editor drags.
     private HudModule dragTarget;
@@ -69,6 +74,23 @@ public class HudClientModule extends Module {
         customPos.put(element, bool(id + " CustomPos", false).setPage("Layout"));
         posX.put(element, num(id + " X", 0.5, 0.0, 1.0).setPage("Layout"));
         posY.put(element, num(id + " Y", 0.5, 0.0, 1.0).setPage("Layout"));
+        sizes.put(element, num(id + " 大小 (%)", 100.0, 50.0, 200.0).setPage(id));
+        opacity.put(element, num(id + " 背景不透明度 (%)", 100.0, 0.0, 100.0).setPage(id));
+        boolean target = element instanceof TargetHudModule;
+        Color bg = new Color(target ? 0x171717 : 0x182338);
+        Color fg = new Color(target ? 0xFAFAFA : 0xE0E6F2);
+        Color acc = new Color(target ? 0xE5E5E5 : 0x72A8D8);
+        backgrounds.put(element, register(new Setting<>(id + " 背景颜色", bg)).setPage(id));
+        foregrounds.put(element, register(new Setting<>(id + " 文字颜色", fg)).setPage(id));
+        accents.put(element, register(new Setting<>(id + " 强调色", acc)).setPage(id));
+    }
+
+    public float scaleOf(HudModule element) { return sizes.get(element).getValue().floatValue()/100f; }
+    public void resizeElement(HudModule element, double percent) { sizes.get(element).setValue(percent); }
+    public dev.guizhou.util.render.HudAppearance appearanceOf(HudModule element) {
+        return new dev.guizhou.util.render.HudAppearance(backgrounds.get(element).getValue().getRGB(),
+                foregrounds.get(element).getValue().getRGB(), accents.get(element).getValue().getRGB(),
+                opacity.get(element).getValue().floatValue()/100f);
     }
 
     public HudPosition positionOf(HudModule element) {
@@ -252,12 +274,12 @@ public class HudClientModule extends Module {
             for(HudModule element:elements.keySet())element.beginFrame();
             // Reserve the measured TargetHUD canvas before placing smaller default cards.
             HudModule target=getElement(TargetHudModule.class);
-            if(target!=null && elements.get(target).getValue())target.render(event);
+            if(target!=null && elements.get(target).getValue())target.renderStyled(event, this);
             for (Map.Entry<HudModule, Setting<Boolean>> entry : elements.entrySet()) {
                 HudModule element = entry.getKey();
                 if(element==target)continue;
                 if (!entry.getValue().getValue()) continue;
-                element.render(event);
+                element.renderStyled(event, this);
             }
         } finally {
             dev.guizhou.util.render.font.Fonts.endHudPass();

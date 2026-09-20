@@ -52,6 +52,14 @@ public class GuizhouWareGui extends Screen {
     public static Color getColorClipboard() {return colorClipboard;}
     public static void setColorClipboard(Color color) {colorClipboard=color;}
     public void reload() { selected=null; moduleScroll=settingScroll=0; }
+    public void openHudAppearance(HudClientModule hud, String element) {
+        category=Module.Category.CLIENT; query=""; select(hud); page=element;
+        for(String p:hud.getSettings().stream().filter(Setting::isVisible).map(Setting::getPage).distinct().toList()) {
+            if(p.equals(page))break;
+            tabScroll+=width(p,9)+24;
+        }
+        if(search!=null)search=new ShadcnTextField("",s->{query=s;moduleScroll=0;});
+    }
     public boolean capturesMovementKeys() {
         return editor!=null || binding!=null || dropdown!=null || keyboardFocus>=0 || search!=null && search.focused;
     }
@@ -65,8 +73,11 @@ public class GuizhouWareGui extends Screen {
         layout();
     }
     private void layout() {
-        scale=Math.min(1,Math.min(width/712f,height/452f));
-        w=Math.min(860,width/scale-24); h=Math.min(500,height/scale-24);
+        float fit=Math.min(1,Math.min(width/712f,height/452f));
+        w=Math.min(860,width/fit-24); h=Math.min(500,height/fit-24);
+        double requested=ClickGuiModule.getInstance()==null?1:ClickGuiModule.getInstance().menuScale.getValue()/100;
+        requested=Double.isFinite(requested)?Math.clamp(requested,.6,1.5):1;
+        scale=Math.min(fit*(float)requested,Math.min((width-12)/w,(height-12)/h));
         x=(width/scale-w)/2; y=(height/scale-h)/2;
         if(ClickGuiModule.getInstance()!=null && ClickGuiModule.getInstance().smooth.getValue()) {
             double progress=Math.clamp((System.currentTimeMillis()-opened)/150d,0d,1d);
@@ -106,7 +117,9 @@ public class GuizhouWareGui extends Screen {
         double mx=mouseX/scale,my=mouseY/scale;
         g.fill(0,0,width,height,0xA0000000);
         g.pose().pushMatrix();g.pose().scale(scale,scale);
+        round(g,x-4,y+5,w+8,h+2,13,0x35070F22);
         panel(g,x,y,w,h,10);
+        round(g,x+1,y+1,w-2,3,2,0x486E9CC9);
         g.fill((int)x+128,(int)y+1,(int)x+129,(int)(y+h-1),BORDER);
         g.fill((int)(listX+listW),(int)y+42,(int)(listX+listW+1),(int)(y+h-32),BORDER);
         g.fill((int)x+1,(int)y+42,(int)(x+w-1),(int)y+43,BORDER);
@@ -118,7 +131,7 @@ public class GuizhouWareGui extends Screen {
         for(Module.Category c:GuizhouWare.moduleManager.getCategories()) {
             if(c==Module.Category.HUD || c==Module.Category.FUNNY && !GuizhouWare.commandManager.isFunnyVisible()) continue;
             boolean active=c==category && query.isBlank();
-            if(active || contains(mx,my,x+10,cy,108,29)) round(g,x+10,cy,108,29,5,active?SURFACE:0xFF202020);
+            if(active || contains(mx,my,x+10,cy,108,29)) round(g,x+10,cy,108,29,7,active?SURFACE:0x702B3D59);
             text(g,categoryName(c),x+21,cy+9,10,active?TEXT:MUTED);
             if(active) round(g,x+10,cy+9,2,11,1,accent());
             final Module.Category target=c;
@@ -138,7 +151,7 @@ public class GuizhouWareGui extends Screen {
             Module m=visible.get(i);float ry=bodyTop+i*43-moduleScroll;
             if(ry+40<=bodyTop || ry>=bodyBottom)continue;
             boolean active=m==selected;
-            if(active || contains(mx,my,listX+8,ry,listW-16,39))round(g,listX+8,ry,listW-16,39,6,active?SURFACE:0xFF202020);
+            if(active || contains(mx,my,listX+8,ry,listW-16,39))round(g,listX+8,ry,listW-16,39,8,active?SURFACE:0x702B3D59);
             text(g,fit(m.getDisplayName(),listW-69,10),listX+18,ry+8,10,600,active?TEXT:MUTED);
             text(g,query.isBlank()?fit(m.getDescription(),listW-69,8):categoryName(m.getCategory()),listX+18,ry+24,8,MUTED);
             hit(listX+8,Math.max(ry,bodyTop),listW-56,Math.max(0,Math.min(ry+39,bodyBottom)-Math.max(ry,bodyTop)),b->{if(b==0)select(m);else if(b==1)m.toggle();});
@@ -193,9 +206,11 @@ public class GuizhouWareGui extends Screen {
     private float rowHeight(Setting<?> s) {return s.isNumberSetting() && s.hasRestriction()?57:43;}
     private void drawSetting(GuiGraphics g,Setting<?> s,float sx,float sy,float sw,float sh,double mx,double my,float top,float bottom) {
         Object v=s.getValue();boolean hover=contains(mx,my,sx,sy,sw,sh) && my>=top && my<bottom;
-        if(hover && !s.getDescription().isBlank())hint=s.getName()+" · "+s.getDescription();
+        if(hover)hint=s.getName()+(s.getDescription().isBlank()?"":" · "+s.getDescription());
         g.fill((int)sx,(int)(sy+sh-1),(int)(sx+sw),(int)(sy+sh),0xFF252525);
-        text(g,fit(s.getName(),sw*.56f,10),sx,sy+8,10,TEXT);
+        String label=s.getName();
+        if(selected instanceof HudClientModule && label.startsWith(page+" "))label=label.substring(page.length()+1);
+        text(g,fit(label,sw*.56f,10),sx,sy+8,10,TEXT);
         if(!s.getDescription().isBlank())text(g,fit(s.getDescription(),sw*.56f,8),sx,sy+24,8,MUTED);
         boolean fully=sy>=top && sy+sh<=bottom;
         if(v instanceof Boolean on) {

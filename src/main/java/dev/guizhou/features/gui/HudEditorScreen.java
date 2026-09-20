@@ -153,7 +153,7 @@ public class HudEditorScreen extends Screen {
         ShadcnDraw.text(g, "重置布局", resetX + 8f, btnY + 3f, TEXT, ShadcnDraw.TEXT);
         ShadcnDraw.round(g, doneX, btnY, btnW, BTN_H, 5f, ShadcnDraw.ACCENT);
         ShadcnDraw.text(g, "完成", doneX + 10f, btnY + 3f, TEXT, 0xFF0A0A0A);
-        ShadcnDraw.text(g, ShadcnDraw.fit("拖拽移动 · Tab 选择 · Esc 返回",panelW-2*PAD,8f), panelX + PAD, btnY + BTN_H + 6f, 8f, ShadcnDraw.MUTED);
+        ShadcnDraw.text(g, ShadcnDraw.fit("拖动移动 · 滚轮缩放 · 右键外观",panelW-2*PAD,8f), panelX + PAD, btnY + BTN_H + 6f, 8f, ShadcnDraw.MUTED);
 
         // 3) live drag: world HUD renders before this screen, override applies next frame
         if (dragging != null) {
@@ -171,8 +171,8 @@ public class HudEditorScreen extends Screen {
      * last-known bounds — a stale rect must never pin a repositioned preview.
      */
     private int[] elementRect(HudModule module) {
-        int w = module.boundW() > 0 ? module.boundW() : 96;
-        int h = module.boundH() > 0 ? module.boundH() : 20;
+        int w = module.wasRendered() ? module.boundW() : module.previewWidth(hud.scaleOf(module));
+        int h = module.wasRendered() ? module.boundH() : module.previewHeight(hud.scaleOf(module));
         int[] live = hud.livePosition(module);
         if (live != null) return clamped(live[0], live[1], w, h);
         if (hud.isCustomPosition(module)) {
@@ -209,6 +209,11 @@ public class HudEditorScreen extends Screen {
             layout();
             return true;
         }
+        if (hovered != null && dragging == null) {
+            selected = hovered;
+            hud.resizeElement(selected, Math.round(hud.scaleOf(selected)*100) + Math.signum(vertical)*5);
+            return true;
+        }
         return super.mouseScrolled(mx, my, horizontal, vertical);
     }
 
@@ -235,8 +240,12 @@ public class HudEditorScreen extends Screen {
         if (inToolbar(mx, my)) {
             for (Row row : rows) {
                 if (ShadcnDraw.contains(mx, my, panelX, row.y() - 1f, panelW, ROW_H)) {
-                    var toggle = hud.elementToggle(row.module());
-                    toggle.setValue(!toggle.getValue());
+                    selected = row.module();
+                    if (click.button() == 1) openAppearance(selected);
+                    else if (mx >= panelX + panelW - 29) {
+                        var toggle = hud.elementToggle(row.module());
+                        toggle.setValue(!toggle.getValue());
+                    }
                     return true;
                 }
             }
@@ -247,6 +256,8 @@ public class HudEditorScreen extends Screen {
             HudModule module = list.get(i);
             int[] r = elementRect(module);
             if (ShadcnDraw.contains(mx, my, r[0], r[1], r[2], r[3])) {
+                if (click.button() == 1) {openAppearance(module);return true;}
+                if (click.button() != 0) return true;
                 dragging = module;
                 selected = module;
                 grabOffX = (int) Math.round(mx) - r[0];
@@ -255,6 +266,13 @@ public class HudEditorScreen extends Screen {
             }
         }
         return super.mouseClicked(click, doubled);
+    }
+
+    private void openAppearance(HudModule module) {
+        onClose();
+        GuizhouWareGui gui = parent instanceof GuizhouWareGui p ? p : GuizhouWareGui.getClickGui();
+        minecraft.setScreen(gui);
+        gui.openHudAppearance(hud, module.getName());
     }
 
     @Override

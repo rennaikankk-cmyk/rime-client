@@ -132,6 +132,7 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        hudAppearanceTest: 'dev.guizhou.util.render.HudAppearanceTest',
         hudLayoutTest: 'dev.guizhou.features.modules.client.HudLayoutTest',
         shadcnTextFieldTest: 'dev.guizhou.features.gui.ShadcnTextFieldTest',
         eventBusTest: 'dev.guizhou.event.system.EventBusTest',

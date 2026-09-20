@@ -5,11 +5,13 @@ import net.minecraft.client.gui.GuiGraphics;
 
 /** Native GUI-pixel primitives shared by screens and HUD. No web runtime. */
 public final class ShadcnDraw {
-    public static final int BG = 0xFF0A0A0A, CARD = 0xF5171717, SURFACE = 0xFF262626,
-            BORDER = 0xFF343434, TEXT = 0xFFFAFAFA, MUTED = 0xFFA1A1A1, ACCENT = 0xFFE5E5E5;
+    // InternalBeyond-inspired moon-blue palette, rendered natively over the world.
+    public static final int BG = 0xFF181E32, CARD = 0xED182338, SURFACE = 0xF025334B,
+            BORDER = 0xB8405471, TEXT = 0xFFE0E6F2, MUTED = 0xFFADB8D0, ACCENT = 0xFF72A8D8;
     private ShadcnDraw() {}
 
     public static void round(GuiGraphics g, float x, float y, float w, float h, float radius, int color) {
+        color = HudAppearance.color(color);
         if (w <= 0 || h <= 0 || (color >>> 24) == 0) return;
         int left = Math.round(x), top = Math.round(y), right = Math.round(x + w), bottom = Math.round(y + h);
         int r = Math.max(0, Math.min(Math.round(radius), Math.min(right-left, bottom-top)/2));
@@ -30,7 +32,7 @@ public final class ShadcnDraw {
         text(g,text,x,y,size,HudFonts.REGULAR,color);
     }
     public static void text(GuiGraphics g,String text,float x,float y,float size,int weight,int color) {
-        HudFonts.draw(g,text,x,y,size,weight,color);
+        HudFonts.draw(g,text,x,y,size,weight,HudAppearance.color(color));
     }
     public static float width(String text,float size) { return HudFonts.width(text,size,HudFonts.REGULAR); }
     public static String fit(String text,float maxWidth,float size) {
