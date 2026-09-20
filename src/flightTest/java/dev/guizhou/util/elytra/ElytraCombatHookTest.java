@@ -238,13 +238,43 @@ public final class ElytraCombatHookTest {
      * submission is the closing tick's last opportunity, never the next tick's gate. */
     private static void verifySilentWindowBoundary() throws IOException {
         Map<String, Trace> rotation = read(ROTATION);
-        Trace submit = method(rotation, "submit");
+        Trace legacy = method(rotation, "submit");
+        int delegate = legacy.call(ROTATION, "trySubmit");
+        check(legacy.steps.stream().filter(step -> step.opcode >= Opcodes.INVOKEVIRTUAL
+                        && step.opcode <= Opcodes.INVOKEINTERFACE).count() == 1,
+                "The compatibility submit entry must delegate every request to trySubmit without a second send path");
+        check(delegate >= 2 && legacy.steps.get(delegate - 2).opcode == Opcodes.ALOAD
+                        && Integer.valueOf(0).equals(legacy.steps.get(delegate - 2).constant)
+                        && legacy.steps.get(delegate - 1).opcode == Opcodes.ALOAD
+                        && Integer.valueOf(1).equals(legacy.steps.get(delegate - 1).constant),
+                "Compatibility submit must forward this and the original rotation request unchanged");
+        for (int index = 0; index < legacy.steps.size(); index++) {
+            Step step = legacy.steps.get(index);
+            check(step.opcode != Opcodes.PUTFIELD,
+                    "Compatibility submit must not mutate arbitration or sync state outside trySubmit");
+            if (step.opcode == Opcodes.RETURN) {
+                check(!canReach(legacy, 0, index, delegate, new HashSet<>()),
+                        "Compatibility submit must not return without passing through trySubmit");
+            }
+        }
+
+        Trace submit = method(rotation, "trySubmit");
         int blocks = submit.call(SILENT_WINDOW, "blocks");
         int send = submit.call(ROTATION, "performSilent");
         int accept = submit.call(SILENT_WINDOW, "accepted");
         int sync = submit.field(ROTATION, "silentSyncRequired", Opcodes.PUTFIELD);
         check(blocks < send && send < accept && accept < sync,
                 "Silent submit must arbitrate on the window before sending and still mark the sync after");
+        check(!canReach(submit, 0, send, blocks, new HashSet<>())
+                        && !canReach(submit, 0, accept, send, new HashSet<>())
+                        && !canReach(submit, 0, sync, accept, new HashSet<>()),
+                "No silent action may bypass arbitration, successful sending or accepted-window bookkeeping");
+        check(submit.steps.get(blocks + 1).opcode == Opcodes.IFEQ,
+                "A blocked request must stop before performSilent");
+        assertFalseReturn(submit, blocks + 2, "Blocked silent rotation");
+        check(submit.steps.get(send + 1).opcode == Opcodes.IFNE,
+                "Only a successful local rotation send may consume the arbitration window");
+        assertFalseReturn(submit, send + 2, "Rejected local rotation send");
 
         Trace boundary = null;
         Trace updater = null;
