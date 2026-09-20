@@ -11,8 +11,10 @@ import java.util.List;
  * Geist-backed HUD fonts sized in CSS pixels — the shadcn prototype is the
  * design truth. Three static weights; glyphs bake at a 26px ascent so the
  * 22/26px hero numbers stay sharp while smaller sizes downscale. Latin and
- * digits come from Geist, CJK falls through to the side-download ib_zh face
- * (same lookup the ClickGui chain uses) and then the OS sans tail.
+ * digits come from Geist, CJK falls through to an installed sans face
+ * (Microsoft YaHei on Windows), then the side-download ib_zh face, then the
+ * OS logical sans. No drop shadow; fully transparent text is skipped rather
+ * than forced opaque by the renderer's legacy alpha floor.
  */
 public final class HudFonts {
 
@@ -22,6 +24,8 @@ public final class HudFonts {
 
     /** Hero-number bake ascent; all sizes render by scaling against this. */
     private static final float BAKE_ASCENT = 26f;
+    /** Sparse-label pages: keep CJK baking cheap. */
+    private static final int CHARS_PER_PAGE = 128;
 
     private static volatile FontRenderer regular;
     private static volatile FontRenderer semibold;
@@ -41,6 +45,8 @@ public final class HudFonts {
 
     /** Draws text at an explicit CSS-px size, no drop shadow. x/y in GUI px. */
     public static void draw(GuiGraphics g, String text, float x, float y, float sizePx, int weight, int color) {
+        // FontRenderer forces alpha < 4 to opaque; a nearly invisible draw is skipped instead
+        if (((color >>> 24) & 0xFF) < 4) return;
         FontRenderer r = of(weight);
         if (r == null) return;
         float em = r.emGuiHeight();
@@ -63,22 +69,39 @@ public final class HudFonts {
     private static synchronized void init() {
         if (regular != null) return;
         try {
+            Font yahei = installedSans();
             Font zh = zhFace();
-            regular = make("/assets/guizhouware/font/geist-400.ttf", zh);
-            semibold = make("/assets/guizhouware/font/geist-600.ttf", zh);
-            bold = make("/assets/guizhouware/font/geist-700.ttf", zh);
+            regular = make("/assets/guizhouware/font/geist-400.ttf", yahei, zh);
+            semibold = make("/assets/guizhouware/font/geist-600.ttf", yahei, zh);
+            bold = make("/assets/guizhouware/font/geist-700.ttf", yahei, zh);
         } catch (Throwable ignored) {
             // any failure leaves of() returning null; callers skip text rather than crash
         }
     }
 
-    private static FontRenderer make(String geistPath, Font zh) {
-        List<Font> chain = new ArrayList<>(3);
+    private static FontRenderer make(String geistPath, Font yahei, Font zh) {
+        List<Font> chain = new ArrayList<>(4);
         Font geist = loadResource(geistPath);
         if (geist != null) chain.add(geist);
+        if (yahei != null) chain.add(yahei);
         if (zh != null) chain.add(zh);
         chain.add(new Font(Font.SANS_SERIF, Font.PLAIN, 1));
-        return new FontRenderer(chain.toArray(new Font[0]), 512, 4, BAKE_ASCENT);
+        return new FontRenderer(chain.toArray(new Font[0]), CHARS_PER_PAGE, 4, BAKE_ASCENT);
+    }
+
+    /** Installed CJK sans (Microsoft YaHei on Windows), preferred over the IB face. */
+    private static Font installedSans() {
+        try {
+            for (String family : java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+                    .getAvailableFontFamilyNames()) {
+                if (family.equalsIgnoreCase("Microsoft YaHei") || family.equals("微软雅黑")) {
+                    return new Font(family, Font.PLAIN, 1);
+                }
+            }
+        } catch (Throwable ignored) {
+            // headless or font lookup failure — fall through
+        }
+        return null;
     }
 
     private static Font zhFace() {
