@@ -54,6 +54,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
 
+import static dev.guizhou.manager.PlacementGeometry.faceCenter;
+
 /**
  * Rate-limited block placement.
  *
@@ -295,12 +297,10 @@ public class PlacementManager extends Feature {
             clicked = pos;
             hitPos = faceCenter(pos, hitSide);
         } else {
-            clicked = pos.relative(side);
-            hitSide = side.getOpposite();
-            // The hit position belongs to the clicked anchor's face, not the target cell —
-            // anchoring pos's face center onto the anchor puts the cursor 1.05 outside it,
-            // which cursor-checking servers (NetEase, Grim) silently reject.
-            hitPos = faceCenter(clicked, hitSide);
+            BlockHitResult hit = PlacementGeometry.neighbourHit(pos, side);
+            clicked = hit.getBlockPos();
+            hitSide = hit.getDirection();
+            hitPos = hit.getLocation();
         }
 
         // Logs and pillars take their axis from the face that was clicked, so a batch placed off the
@@ -401,14 +401,13 @@ public class PlacementManager extends Feature {
         else if (absX >= absZ)                 clickFace = dx > 0 ? Direction.EAST  : Direction.WEST;
         else                                   clickFace = dz > 0 ? Direction.SOUTH : Direction.NORTH;
 
-        // Bias the hit vector toward where we are standing, so it stays inside the face we can
-        // actually see rather than sitting dead centre.
+        // Preserve the existing fractional-position bias; this is not a nearest-point projection.
         Vec3 playerPos = mc.player.position();
         double offX = Math.clamp(playerPos.x - Math.floor(playerPos.x), 0.2, 0.8) - 0.5;
         double offY = Math.clamp(playerPos.y - Math.floor(playerPos.y), 0.2, 0.8) - 0.5;
         double offZ = Math.clamp(playerPos.z - Math.floor(playerPos.z), 0.2, 0.8) - 0.5;
-        // 0.45 keeps the cursor strictly inside the block face — exactly-1.0 edge cursors are
-        // silently rejected by NetEase-family servers (wire-capture verified, 2026-09-16).
+        // Retain the inset used for the server tested on 2026-09-16. Boundary rejection is
+        // server-specific, not a vanilla protocol requirement.
         Vec3 hitVec = switch (clickFace) {
             case UP, DOWN -> baseCenter.add(offX, clickFace == Direction.UP ? 0.45 : -0.45, offZ);
             case NORTH, SOUTH -> baseCenter.add(offX, offY, clickFace == Direction.SOUTH ? 0.45 : -0.45);
@@ -447,7 +446,7 @@ public class PlacementManager extends Feature {
     }
 
     private Vec3 fireworkHit(BlockPos pos, Direction face) {
-        if (face != Direction.DOWN) return faceCenter(pos, face);
+        if (face != Direction.DOWN) return PlacementGeometry.neighbourHit(pos, face).getLocation();
 
         // Lean the hit toward the player so the rocket clears our own hitbox.
         Vec3 player = mc.player.position();
@@ -491,10 +490,10 @@ public class PlacementManager extends Feature {
      */
     @Nullable
     public BlockHitResult prepareAirPlaceHit(BlockPos pos) {
-        if (onCooldown(pos) || !PlaceUtil.canPlace(pos)) return null;
+        if (nullCheck() || pos == null || onCooldown(pos) || !PlaceUtil.canPlace(pos)) return null;
 
         Vec3 eye = mc.player.getEyePosition();
-        Direction best = null;
+        BlockHitResult bestHit = null;
         double bestDistSq = Double.MAX_VALUE;
         for (Direction side : Direction.values()) {
             BlockPos neighbour = pos.relative(side);
@@ -503,21 +502,21 @@ public class PlacementManager extends Feature {
             if (!state.getFluidState().isEmpty()) continue;
             if (isInteractable(state.getBlock())) continue;
 
-            Vec3 hit = faceCenter(pos, side);
-            // Skip faces pointing away from us — clicking those is a server-side reach failure.
-            Vec3 normal = new Vec3(-side.getStepX(), -side.getStepY(), -side.getStepZ());
+            BlockHitResult candidate = PlacementGeometry.neighbourHit(pos, side);
+            Vec3 hit = candidate.getLocation();
+            // Apply the facing and distance checks to the same point we will send.
+            Direction face = candidate.getDirection();
+            Vec3 normal = new Vec3(face.getStepX(), face.getStepY(), face.getStepZ());
             if (eye.subtract(hit).dot(normal) <= 0.01) continue;
 
             double distSq = eye.distanceToSqr(hit);
             if (distSq < bestDistSq) {
                 bestDistSq = distSq;
-                best = side;
+                bestHit = candidate;
             }
         }
 
-        if (best != null) {
-            return new BlockHitResult(faceCenter(pos, best), best.getOpposite(), pos.relative(best), false);
-        }
+        if (bestHit != null) return bestHit;
         Direction dir = airPlaceDirection(pos);
         return new BlockHitResult(faceCenter(pos, dir), dir, pos, false);
     }
@@ -536,14 +535,6 @@ public class PlacementManager extends Feature {
             }
         }
         return best;
-    }
-
-    /**
-     * Hit point on a block face, pulled 0.05 INSIDE the block: NetEase-family servers reject
-     * placements whose cursor sits exactly on the face plane (0.0/1.0 edge) — vanilla allows it.
-     */
-    private static Vec3 faceCenter(BlockPos pos, Direction dir) {
-        return Vec3.atCenterOf(pos).add(dir.getStepX() * 0.45, dir.getStepY() * 0.45, dir.getStepZ() * 0.45);
     }
 
     private static boolean isInteractable(Block block) {
