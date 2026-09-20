@@ -450,11 +450,27 @@ public final class ObfuscatedJarTest {
             check(subscriber.interfaces.contains("java/net/http/HttpResponse$BodySubscriber"),
                     "Bounded heartbeat subscriber lost its HTTP BodySubscriber interface");
             for (String callback : List.of("getBody()Ljava/util/concurrent/CompletionStage;",
-                    "onSubscribe(Ljava/util/concurrent/Flow$Subscription;)V", "onNext(Ljava/util/List;)V",
+                    "onSubscribe(Ljava/util/concurrent/Flow$Subscription;)V",
                     "onNext(Ljava/lang/Object;)V", "onError(Ljava/lang/Throwable;)V", "onComplete()V")) {
                 MethodInfo retained = requiredMethod(subscriber, callback);
                 check((retained.access & Opcodes.ACC_PUBLIC) != 0, "HTTP subscriber callback lost public access: " + callback);
             }
+            // Flow.Subscriber dispatches the erased Object signature. Its typed target may legally be renamed.
+            MethodInfo typedNext = retainedMethod(before, classes, mapping, limited,
+                    "onNext(Ljava/util/List;)V", obfuscated);
+            check((typedNext.access & Opcodes.ACC_PUBLIC) != 0, "Typed HTTP subscriber callback lost public access");
+            MethodInfo bridgeNext = requiredMethod(subscriber, "onNext(Ljava/lang/Object;)V");
+            // ProGuard may discard ACC_BRIDGE metadata; the erased dispatch implementation must remain exact.
+            int bridgeFlags = Opcodes.ACC_PUBLIC | Opcodes.ACC_SYNTHETIC | (obfuscated ? 0 : Opcodes.ACC_BRIDGE);
+            check((bridgeNext.access & bridgeFlags) == bridgeFlags,
+                    "HTTP subscriber erased onNext lost its synthetic bridge contract");
+            List<Step> bridge = executable(bridgeNext);
+            check(bridge.size() == 5 && bridge.get(0).opcode == Opcodes.ALOAD && Integer.valueOf(0).equals(bridge.get(0).value)
+                            && bridge.get(1).opcode == Opcodes.ALOAD && Integer.valueOf(1).equals(bridge.get(1).value)
+                            && bridge.get(2).opcode == Opcodes.CHECKCAST && Type.getObjectType("java/util/List").equals(bridge.get(2).value)
+                            && member(bridge.get(3), Opcodes.INVOKEVIRTUAL, limitedOwner, typedNext.name, typedNext.descriptor)
+                            && bridge.get(4).opcode == Opcodes.RETURN,
+                    "HTTP subscriber erased onNext no longer delegates its List argument to the mapped typed callback");
             MethodInfo factory = retainedMethod(before, classes, mapping, signed,
                     "limitedBody()Ljava/net/http/HttpResponse$BodySubscriber;", obfuscated);
             uniqueCall(factory, limitedOwner, "<init>", "()V");
