@@ -72,8 +72,9 @@ public final class HudFonts {
             Font yahei = installedSans();
             Font zh = zhFace();
             regular = make("/assets/guizhouware/font/geist-400.ttf", yahei, zh);
-            semibold = make("/assets/guizhouware/font/geist-600.ttf", yahei, zh);
-            bold = make("/assets/guizhouware/font/geist-700.ttf", yahei, zh);
+            Font strongCjk = yahei == null ? null : yahei.deriveFont(Font.BOLD);
+            semibold = make("/assets/guizhouware/font/geist-600.ttf", strongCjk, zh);
+            bold = make("/assets/guizhouware/font/geist-700.ttf", strongCjk, zh);
         } catch (Throwable ignored) {
             // any failure leaves of() returning null; callers skip text rather than crash
         }
