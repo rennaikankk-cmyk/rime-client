@@ -50,6 +50,23 @@ public final class SpearCombat {
                 + weapon.damageConditions().get().maxDurationTicks();
     }
 
+    /** Estimate for route planning only; the weapon controller still owns starting use. */
+    public static int readyInTicks(Player player) {
+        if (player == null) return Integer.MAX_VALUE;
+        ItemStack stack = player.isUsingItem() ? player.getUseItem() : player.getMainHandItem();
+        KineticWeapon weapon = kineticWeapon(stack);
+        if (weapon == null || weapon.damageConditions().isEmpty()) return Integer.MAX_VALUE;
+        return remainingCharge(player.isUsingItem(), player.getTicksUsingItem(), weapon.delayTicks(),
+                weapon.damageConditions().get().maxDurationTicks());
+    }
+
+    static int remainingCharge(boolean using, int useTicks, int delayTicks, int durationTicks) {
+        if (delayTicks < 0 || durationTicks < 0 || useTicks < 0) return Integer.MAX_VALUE;
+        long left = !using || useTicks > (long) delayTicks + durationTicks
+                ? (long) delayTicks + 1 : Math.max(0L, (long) delayTicks - useTicks);
+        return (int) Math.min(Integer.MAX_VALUE, left);
+    }
+
     public static double minRange(Player player, ItemStack stack) {
         return player == null ? 0.0 : attackRange(player, stack).effectiveMinRange(player);
     }

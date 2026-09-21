@@ -36,6 +36,7 @@ import dev.guizhou.util.elytra.MaceApproach;
 import dev.guizhou.util.elytra.SpearAimSweep;
 import dev.guizhou.util.elytra.SpearCombat;
 import dev.guizhou.util.elytra.SpearApproach;
+import dev.guizhou.util.elytra.SpearRecovery;
 import dev.guizhou.util.elytra.TargetMotionTracker;
 import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.player.EatUtil;
@@ -60,6 +61,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.MaceItem;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -1475,14 +1477,19 @@ public class GuangxiElytraChaseModule extends Module {
 
         int tickPullOver() {
             Vec3 tp = targetPos();
-            if (pulledAfterHit) {
-                double distance = spearPullOverDistance.getValue();
-                if (spearAttackEye().distanceToSqr(tp) >= distance * distance) {
-                    pulledAfterHit = false;
-                    return FOLLOW;
-                }
-            }
-            if (++pullOverTicks > (pulledAfterHit ? 20 : 6)) {
+            Vec3 eye = spearAttackEye();
+            Vec3 offset = observedTargetBox().getCenter().subtract(eye);
+            TargetMotionTracker.Snapshot motion = targetHistory.snapshot(target.getDeltaMovement());
+            ItemStack spear = mc.player.isUsingItem() ? mc.player.getUseItem() : mc.player.getMainHandItem();
+            double clearance = Math.max(spearNoEntryDistance.getValue(), SpearCombat.minRange(mc.player, spear) + 0.35);
+            double desired = pulledAfterHit ? spearPullOverDistance.getValue()
+                    : Math.max(clearance + 1.0, SpearCombat.maxRange(mc.player, spear));
+            if (SpearRecovery.resume(new SpearRecovery.Input(eye.distanceTo(tp),
+                    Math.sqrt(observedTargetBox().distanceToSqr(eye)), clearance, desired,
+                    SpearCombat.maxRange(mc.player, spear), mc.player.getDeltaMovement().length(),
+                    motion.velocity().dot(offset.normalize()), SpearCombat.readyInTicks(mc.player),
+                    ++pullOverTicks, pulledAfterHit ? 20 : 6, motion.confidence()))) {
+                pulledAfterHit = false;
                 return FOLLOW;
             }
             heading = escapeHeading(tp);
