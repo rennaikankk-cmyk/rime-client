@@ -6,7 +6,7 @@ import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.render.RenderUtil;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl;
+import net.minecraft.world.entity.projectile.ThrownEnderpearl;
 import net.minecraft.world.phys.Vec3;
 
 import java.awt.Color;

@@ -28,7 +28,7 @@ public final class PlacementLabels implements Util {
                               String stage, String info, boolean main, double fade, PlacementVisualOptions options) {
         if (mc.level == null || mc.player == null || !options.info.getValue() || labels.size() >= 64) return;
         if (!main && !options.parts.getValue()) return;
-        double distance = mc.gameRenderer.getMainCamera().position().distanceTo(point);
+        double distance = mc.gameRenderer.getMainCamera().getPosition().distanceTo(point);
         if (distance > options.maxDistance.getValue()) return;
         boolean visible = options.occlusion.getValue() == PlacementVisualOptions.Occlusion.THROUGH || visible(box, point);
         if (!visible && options.occlusion.getValue() == PlacementVisualOptions.Occlusion.VISIBLE_ONLY) return;
@@ -58,7 +58,7 @@ public final class PlacementLabels implements Util {
         };
     }
     private static boolean visible(AABB ownBox, Vec3 point) {
-        Vec3 eye = mc.gameRenderer.getMainCamera().position();
+        Vec3 eye = mc.gameRenderer.getMainCamera().getPosition();
         var hit = mc.level.clip(new ClipContext(eye,point,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,mc.player));
         return hit.getType() == HitResult.Type.MISS || ownBox.inflate(.002).contains(hit.getLocation())
                 || hit.getBlockPos().equals(net.minecraft.core.BlockPos.containing(point));
@@ -85,7 +85,7 @@ public final class PlacementLabels implements Util {
             for (Label label : labels) groups.computeIfAbsent(label.key,k -> new ArrayList<>()).add(label);
             List<LabelLayout.Rect> occupied = new ArrayList<>();
             var camera=mc.gameRenderer.getMainCamera();
-            Vec3 left=vector(camera.leftVector()),up=vector(camera.upVector()),forward=vector(camera.forwardVector());
+            Vec3 left=vector(camera.rotation().transform(new org.joml.Vector3f(1f,0f,0f))),up=vector(camera.rotation().transform(new org.joml.Vector3f(0f,1f,0f))),forward=vector(camera.rotation().transform(new org.joml.Vector3f(0f,0f,1f)));
             for (List<Label> group : groups.values()) {
                 Label label=group.getFirst();
                 List<String> rows=new ArrayList<>();

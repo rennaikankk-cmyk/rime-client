@@ -2,7 +2,6 @@ package dev.guizhou.mixin.input;
 
 import dev.guizhou.event.impl.input.KeyInputEvent;
 import net.minecraft.client.KeyboardHandler;
-import net.minecraft.client.input.KeyEvent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -13,13 +12,13 @@ import static dev.guizhou.util.traits.Util.EVENT_BUS;
 @Mixin(KeyboardHandler.class)
 public class MixinKeyboard {
     @Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
-    private void onKey(long window, int action, KeyEvent input, CallbackInfo ci) {
+    private void onKey(long window, int key, int scanCode, int action, int modifiers, CallbackInfo ci) {
         if (action != 0 && action != 1) return;
 
-        if (action == 1 && EVENT_BUS.post(new KeyInputEvent(input.key(), action))) {
+        if (action == 1 && EVENT_BUS.post(new KeyInputEvent(key, action))) {
             ci.cancel();
         } else if (action == 0) {
-            EVENT_BUS.post(new KeyInputEvent(input.key(), action));
+            EVENT_BUS.post(new KeyInputEvent(key, action));
         }
     }
 }

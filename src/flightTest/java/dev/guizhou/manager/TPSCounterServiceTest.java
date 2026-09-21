@@ -2,8 +2,9 @@ package dev.guizhou.manager;
 
 import dev.guizhou.util.models.TickRateWindow;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
-import net.minecraft.world.entity.PositionMoveRotation;
-import net.minecraft.world.entity.Relative;
+
+
+import net.minecraft.world.entity.RelativeMovement;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Set;
@@ -70,22 +71,26 @@ public final class TPSCounterServiceTest {
         near(window.add(25, 11 * SECOND).average(), 20.0, "New session ignores old history");
     }
 
+    // 1.21.1: packets carry raw axis values plus the relative-argument set; the
+    // service math is Vec3-based, so build before/after positions explicitly.
     private static void checkRelativeCorrections() {
-        PositionMoveRotation before = new PositionMoveRotation(new Vec3(1000, 70, -2000), Vec3.ZERO, 40, 20);
-        near(distance(before, new Vec3(0, 0, 0), Set.of(Relative.X, Relative.Y, Relative.Z)), 0.0,
+        Vec3 before = new Vec3(1000, 70, -2000);
+        // 1.21.1 packets carry raw axis values: relative axes are deltas added to the
+        // current position, absolute axes are used verbatim.
+        near(distance(before, 0, 0, 0, Set.of(RelativeMovement.X, RelativeMovement.Y, RelativeMovement.Z)), 0.0,
                 "Relative zero does not imply a large teleport");
-        near(distance(before, new Vec3(1, 2, 2), Set.of(Relative.X, Relative.Y, Relative.Z)), 9.0,
+        near(distance(before, 1, 2, 2, Set.of(RelativeMovement.X, RelativeMovement.Y, RelativeMovement.Z)), 9.0,
                 "Relative displacement preserves the three-block boundary");
-        near(distance(before, new Vec3(3, 70, -2000), Set.of(Relative.X)), 9.0,
+        near(distance(before, 3, 70, -2000, Set.of(RelativeMovement.X)), 9.0,
                 "Mixed relative and absolute axes");
-        near(distance(before, new Vec3(1004, 70, -2000), Set.of()), 16.0, "Absolute teleport");
-        near(distance(before, before.position(), Set.of(Relative.Y_ROT, Relative.X_ROT)), 0.0,
+        near(distance(before, 1004, 70, -2000, Set.of()), 16.0, "Absolute teleport");
+        near(distance(before, 1000, 70, -2000, Set.of(RelativeMovement.Y_ROT, RelativeMovement.X_ROT)), 0.0,
                 "Relative rotation does not change position");
     }
 
-    private static double distance(PositionMoveRotation before, Vec3 change, Set<Relative> relatives) {
-        ClientboundPlayerPositionPacket packet = new ClientboundPlayerPositionPacket(1,
-                new PositionMoveRotation(change, Vec3.ZERO, 10, 10), relatives);
+    private static double distance(Vec3 before, double x, double y, double z,
+                                   Set<RelativeMovement> relatives) {
+        ClientboundPlayerPositionPacket packet = new ClientboundPlayerPositionPacket(x, y, z, 10, 10, relatives, 0);
         return TPSCounterService.correctionDistanceSquared(before, packet);
     }
 

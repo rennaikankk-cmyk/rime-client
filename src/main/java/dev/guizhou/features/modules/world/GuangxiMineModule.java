@@ -706,7 +706,7 @@ public class GuangxiMineModule extends Module implements MineApi {
         };
         Result result = new Result(slot, stack, ResultType.HOTBAR);
         if (swapAction.getValue() == ToolSwitch.Manual) {
-            if (slot != mc.player.getInventory().getSelectedSlot()) return false;
+            if (slot != mc.player.getInventory().selected) return false;
             action.run();
         } else if (swapAction.getValue() == ToolSwitch.Visible) {
             if (!GuizhouWare.swapManager.latch(primaryToolOwner, result)) return false;
@@ -759,7 +759,7 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     private int bestSlot(BlockState state, BlockPos target) {
-        int best = mc.player.getInventory().getSelectedSlot();
+        int best = mc.player.getInventory().selected;
         if (swapAction.getValue() == ToolSwitch.Manual) return best;
         double bestDelta = InteractionUtil.getBreakDelta(mc.player.getInventory().getItem(best), state, target);
         for (int i = 0; i < 9; i++) {

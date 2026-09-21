@@ -1,7 +1,8 @@
-#version 330
+#version 150
 
 #moj_import <guizhouware:skylib.glsl>
 
+uniform float GameTime;
 in vec2 ndc;
 in vec4 vColor;
 out vec4 fragColor;

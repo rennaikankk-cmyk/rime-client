@@ -10,8 +10,8 @@ import dev.guizhou.util.render.targethud.TargetHudMath;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.resources.Identifier;
+import dev.guizhou.util.render.GuiBlitCompat;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -71,8 +71,7 @@ public class TargetHudModule extends HudModule {
     private static final int[][] RING_INNER = ringOffsets(25, true);
 
     // Original Lucide paths from the prototype, baked once into a small atlas.
-    private static final Identifier ICON_ATLAS = Identifier.fromNamespaceAndPath(
-            "guizhouware", "textures/gui/air_hud_icons.png");
+    private static final ResourceLocation ICON_ATLAS = ResourceLocation.fromNamespaceAndPath("guizhouware", "textures/gui/air_hud_icons.png");
     private static final int ICON_HEART = 0, ICON_SHIELD = 1, ICON_WIND = 2,
             ICON_SPARKLE = 3, ICON_TIMER = 4, ICON_FEATHER = 5, ICON_FLAME = 6,
             ICON_ARROW_UP = 7, ICON_ARROW_DOWN = 8;
@@ -157,15 +156,15 @@ public class TargetHudModule extends HudModule {
         // Quantize primitives in the design canvas, then transform once. Scaling
         // each pixel before drawing drops thin icon strokes at normal HUD size.
         var pose = ctx.pose();
-        pose.pushMatrix();
-        pose.translate(x0, y0);
-        pose.scale(s, s);
+        pose.pushPose();
+        pose.translate(x0, y0, 0);
+        pose.scale(s, s, s);
         try {
             float flightA = 1f - layerA;
             if (flightA > 0.005f) drawFlight(ctx, 0, 0, flightA, 6f * layerA, 1f);
             if (layerA > 0.005f) drawTarget(ctx, 0, 0, layerA, 6f * (1f - layerA), 1f);
         } finally {
-            pose.popMatrix();
+            pose.popPose();
         }
     }
 
@@ -568,29 +567,29 @@ public class TargetHudModule extends HudModule {
         int inset = Math.max(1, Math.round(s));
         int inner = box - inset * 2;
         if (inner < 4) return;
-        Identifier skin = faceTexture();
+        ResourceLocation skin = faceTexture();
         if (skin != null) {
             float sc = inner / 8f;
             var pose = ctx.pose();
-            pose.pushMatrix();
-            pose.scale(sc, sc);
-            ctx.blit(RenderPipelines.GUI_TEXTURED, skin,
+            pose.pushPose();
+            pose.scale(sc, sc, sc);
+            GuiBlitCompat.blitTinted(ctx, skin,
                     Math.round((x + inset) / sc), Math.round((y + inset) / sc),
                     8f, 8f, 8, 8, 64, 64, c(0xFFFFFFFF, a));
-            pose.popMatrix();
+            pose.popPose();
         } else {
             pixelFace(ctx, x + inset, y + inset, inner, a);
         }
     }
 
-    private Identifier faceTexture() {
+    private ResourceLocation faceTexture() {
         ClientPacketListener conn = mc.getConnection();
         if (conn == null || trackedId == null) return null;
         PlayerInfo info = conn.getPlayerInfo(trackedId);
         if (info == null) return null;
         try {
-            var body = info.getSkin().body();
-            return body == null ? null : body.texturePath();
+            // 1.21.1 skins are a single texture; face UV is selected at draw time.
+            return info.getSkin().texture();
         } catch (Throwable unavailable) {
             return null; // skin not resolved yet — pixel face stands in
         }
@@ -659,12 +658,12 @@ public class TargetHudModule extends HudModule {
         float size = index == ICON_HEART || index == ICON_SHIELD ? 14f : 12f;
         float factor = size * s / 96f;
         var pose = ctx.pose();
-        pose.pushMatrix();
-        pose.scale(factor, factor);
-        ctx.blit(RenderPipelines.GUI_TEXTURED, ICON_ATLAS,
+        pose.pushPose();
+        pose.scale(factor, factor, factor);
+        GuiBlitCompat.blitTinted(ctx, ICON_ATLAS,
                 Math.round((ox + dx * s) / factor), Math.round((oy + dy * s) / factor),
                 (float) (index * 96), 0f, 96, 96, 864, 96, color);
-        pose.popMatrix();
+        pose.popPose();
     }
 
     private void iconBadge(GuiGraphics ctx, int x, int y, int w, int h, String label,

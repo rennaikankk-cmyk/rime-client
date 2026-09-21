@@ -134,7 +134,7 @@ public class Slider extends SettingButton<Number> {
     }
 
     private void dragSetting(int mouseX, int mouseY) {
-        if (this.isHovering(mouseX, mouseY) && GLFW.glfwGetMouseButton(mc.getWindow().handle(), 0) == 1) {
+        if (this.isHovering(mouseX, mouseY) && GLFW.glfwGetMouseButton(mc.getWindow().getWindow(), 0) == 1) {
             this.setSettingFromX(mouseX);
         }
     }

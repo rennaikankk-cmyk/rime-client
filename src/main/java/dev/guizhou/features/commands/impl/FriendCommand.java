@@ -100,7 +100,7 @@ public class FriendCommand extends Command {
         for (Player player : mc.level.players()) {
             if (player.getUUID().equals(self)) continue;
             if (mc.player.distanceToSqr(player) > radiusSq) continue;
-            String name = player.getGameProfile().name();
+            String name = player.getGameProfile().getName();
             if (name == null) continue;
             if (GuizhouWare.friendManager.isFriend(name)) continue;
             GuizhouWare.friendManager.addFriend(name, expiry);

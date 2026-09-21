@@ -14,7 +14,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.MaceItem;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
-import net.minecraft.world.item.equipment.Equippable;
+import dev.guizhou.util.VersionCompat;
 
 import static dev.guizhou.util.traits.Util.EVENT_BUS;
 import static dev.guizhou.util.traits.Util.mc;
@@ -155,18 +155,16 @@ public final class MaceDiveController {
     }
 
     private boolean chestArmor(ItemStack stack) {
-        return wearableChest(stack) && !stack.has(DataComponents.GLIDER)
+        return wearableChest(stack) && !VersionCompat.isGlider(stack)
                 && !EnchantmentHelper.has(stack, EnchantmentEffectComponents.PREVENT_ARMOR_CHANGE);
     }
 
     private boolean wearableChest(ItemStack stack) {
-        Equippable equippable = stack.get(DataComponents.EQUIPPABLE);
-        return !stack.isEmpty() && stack.getCount() == 1 && equippable != null
-                && equippable.slot() == EquipmentSlot.CHEST && equippable.canBeEquippedBy(player.getType());
+        return VersionCompat.wearableChest(player, stack);
     }
 
     private boolean usableWings(ItemStack stack) {
-        return wearableChest(stack) && stack.has(DataComponents.GLIDER)
+        return wearableChest(stack) && VersionCompat.isGlider(stack)
                 && (!stack.isDamageableItem() || stack.getDamageValue() < stack.getMaxDamage() - 1);
     }
 

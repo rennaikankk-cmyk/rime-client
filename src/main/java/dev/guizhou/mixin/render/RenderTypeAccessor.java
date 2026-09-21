@@ -1,12 +1,12 @@
 package dev.guizhou.mixin.render;
 
-import net.minecraft.client.renderer.rendertype.RenderSetup;
-import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.RenderType;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin(RenderType.class)
+/** 1.21.1: reads the composite state off concrete render types for state cloning. */
+@Mixin(RenderType.CompositeRenderType.class)
 public interface RenderTypeAccessor {
     @Accessor("state")
-    RenderSetup guizhouware$getState();
+    RenderType.CompositeState guizhouware$getState();
 }

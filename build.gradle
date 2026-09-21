@@ -196,6 +196,7 @@ def clientRegressionTests = [
         elytraFlightLifecycleTest: 'dev.guizhou.util.elytra.ElytraFlightLifecycleTest',
         combatHitWindowTest: 'dev.guizhou.util.elytra.CombatHitWindowTest',
         spearCombatTest: 'dev.guizhou.util.elytra.SpearCombatTest',
+        spearCapabilityTest: 'dev.guizhou.util.elytra.SpearCapabilityTest',
         spearApproachTest: 'dev.guizhou.util.elytra.SpearApproachTest',
         spearRecoveryTest: 'dev.guizhou.util.elytra.SpearRecoveryTest',
         elytraWeaponControllerTest: 'dev.guizhou.util.elytra.ElytraWeaponControllerTest',
@@ -278,8 +279,28 @@ tasks.register('obfuscateJar', proguard.gradle.ProGuardTask) {
     dependsOn prepareObfuscationInput, check
     // resolve external fabric classes: without these ProGuard strips the
     // 'implements ModInitializer' table from kept classes (ClassCastException at entrypoint)
-    def apiJar = new File(projectDir, ".gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api/fabric-api-4abd26ae/0.141.1+1.21.11/fabric-api-4abd26ae-0.141.1+1.21.11.jar")
-    if (apiJar.exists()) libraryjars files(apiJar)
+    // The loom remapped-mods cache path embeds a mappings hash per fabric-api version,
+    // so locate the jar for the CURRENT fabric_version by glob instead of a pinned path
+    // (21f7504 pinned fabric-api-4abd26ae/0.141.1+1.21.11; ported to 1.21.1 2026-09-21).
+    def apiRemapRoot = new File(projectDir, ".gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api")
+    def apiJars = []
+    if (apiRemapRoot.exists()) {
+        apiRemapRoot.eachFileRecurse { f ->
+            if (f.name.endsWith(".jar") && f.name.contains(project.fabric_version)) apiJars << f
+        }
+    }
+    if (!apiJars.isEmpty()) libraryjars files(apiJars)
+    else doFirst {
+        // first build on a clean cache: remapJar has run by now, so the glob succeeds
+        def found = []
+        if (apiRemapRoot.exists()) {
+            apiRemapRoot.eachFileRecurse { f ->
+                if (f.name.endsWith(".jar") && f.name.contains(project.fabric_version)) found << f
+            }
+        }
+        if (found.isEmpty()) throw new GradleException("fabric-api remapped jar for ${project.fabric_version} not found under ${apiRemapRoot}")
+        libraryjars files(found)
+    }
     libraryjars configurations.compileClasspath.filter { it.name.startsWith('fabric-loader-') }
     // JDK base classes: without this ProGuard strips 'extends java.lang.Enum' from
     // enums (ClassCastException: not an enum) just like it stripped entrypoint interfaces

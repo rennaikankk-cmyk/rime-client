@@ -1,116 +1,52 @@
 package dev.guizhou.util.render;
 
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.buffers.Std140Builder;
-import com.mojang.blaze3d.buffers.Std140SizeCalculator;
-import com.mojang.blaze3d.opengl.GlBuffer;
-import dev.guizhou.mixin.render.GLBufferAccessor;
+import com.mojang.blaze3d.shaders.Uniform;
 import dev.guizhou.mixin.render.PostChainAccessor;
 import dev.guizhou.mixin.render.PostPassAccessor;
+import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.client.renderer.PostChain;
 import net.minecraft.client.renderer.PostPass;
-import net.minecraft.client.renderer.UniformValue;
-import org.lwjgl.system.MemoryStack;
 
-import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.lwjgl.opengl.GL15.*;
-import static org.lwjgl.opengl.GL31.*;
-
 /**
- * Writes uniforms directly to a {@link PostChain}.
+ * 1.21.1 adapter replacing the 1.21.5+ UBO writer: uniforms are set per pass through
+ * {@link EffectInstance#getUniform(String)}. Values are flat scalars; the shader JSONs
+ * declare the same names with defaults.
  */
-public class UniformWriter
-{
-    private final Map<String, Integer> cache = new HashMap<>();
+public final class UniformWriter {
 
-    public void setUniforms(PostChain chain, Map<String, List<UniformValue>> configs)
-    {
-        if (configs.isEmpty())
-        {
-            return;
-        }
+    public sealed interface Value permits FVal, IVal {}
+    public record FVal(float value) implements Value {}
+    public record IVal(int value) implements Value {}
 
-        List<PostPass> passes = ((PostChainAccessor) chain).guizhouware$getPasses();
-        for (PostPass pass : passes)
-        {
-            Map<String, GpuBuffer> uniformBuffers = ((PostPassAccessor) pass).guizhouware$getUniformBuffers();
-            for (Map.Entry<String, List<UniformValue>> entry : configs.entrySet())
-            {
-                GpuBuffer dest = uniformBuffers.get(entry.getKey());
-                if (!(dest instanceof GlBuffer))
-                {
-                    continue;
-                }
+    public UniformWriter() {}
 
-                int handle    = ((GLBufferAccessor) dest).guizhouware$getHandle();
-                int size      = getSize(entry.getValue());
-                int stagingId = createStagingBuffer(entry.getKey(), size);
+    public void setUniforms(PostChain chain, Map<String, List<Value>> configs) {
+        if (configs.isEmpty() || !(chain instanceof PostChainAccessor accessor)) return;
 
-                try (MemoryStack stack = MemoryStack.stackPush())
-                {
-                    ByteBuffer buf = stack.malloc(size);
-                    Std140Builder builder = Std140Builder.intoBuffer(buf);
-                    for (UniformValue value : entry.getValue())
-                    {
-                        value.writeTo(builder);
+        for (PostPass pass : accessor.guizhouware$getPasses()) {
+            EffectInstance effect = ((PostPassAccessor) pass).guizhouware$getEffect();
+            for (Map.Entry<String, List<Value>> entry : configs.entrySet()) {
+                List<Value> values = entry.getValue();
+                if (values.size() == 1) {
+                    Uniform uniform = effect.getUniform(entry.getKey());
+                    if (uniform == null) continue;
+                    Value value = values.get(0);
+                    if (value instanceof FVal f) uniform.set(f.value());
+                    else if (value instanceof IVal i) uniform.set(i.value());
+                } else {
+                    // vector uniforms are declared as Name0..NameN scalars
+                    for (int i = 0; i < values.size(); i++) {
+                        Uniform uniform = effect.getUniform(entry.getKey() + i);
+                        if (uniform == null) continue;
+                        Value value = values.get(i);
+                        if (value instanceof FVal f) uniform.set(f.value());
+                        else if (value instanceof IVal in) uniform.set(in.value());
                     }
-
-                    buf.flip();
-                    glBindBuffer(GL_COPY_READ_BUFFER, stagingId);
-                    glBufferSubData(GL_COPY_READ_BUFFER, 0, buf);
-                    glBindBuffer(GL_COPY_READ_BUFFER, 0);
                 }
-
-                glBindBuffer(GL_COPY_READ_BUFFER, stagingId);
-                glBindBuffer(GL_COPY_WRITE_BUFFER, handle);
-                glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, Math.min(size, (int) dest.size()));
-                glBindBuffer(GL_COPY_READ_BUFFER, 0);
-                glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
             }
         }
-    }
-
-    /**
-     * Lazily retrieves this configs id.
-     *
-     * @param name the name of the uniform config.
-     * @param size the size of this uniform config. See {@link UniformWriter#getSize(List)}.
-     * @return the staging id of this config.
-     */
-    private int createStagingBuffer(String name, int size)
-    {
-        Integer cached = cache.get(name);
-        if (cached != null)
-        {
-            return cached;
-        }
-
-        int id = glGenBuffers();
-        glBindBuffer(GL_COPY_READ_BUFFER, id);
-        glBufferData(GL_COPY_READ_BUFFER, size, GL_DYNAMIC_DRAW);
-        glBindBuffer(GL_COPY_READ_BUFFER, 0);
-        cache.put(name, id);
-        return id;
-    }
-
-    /**
-     * Gets the total size of the uniforms in a config.
-     *
-     * @param values the uniforms.
-     * @return the size of the uniforms.
-     */
-    private int getSize(List<UniformValue> values)
-    {
-        Std140SizeCalculator calc = new Std140SizeCalculator();
-        for (UniformValue v : values)
-        {
-            v.addSize(calc);
-        }
-
-        return Math.max(calc.get(), 16);
     }
 }

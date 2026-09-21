@@ -2,8 +2,8 @@ package dev.guizhou.features.gui;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.input.CharacterEvent;
-import net.minecraft.client.input.KeyEvent;
+import dev.guizhou.util.compat.input.CharacterEvent;
+import dev.guizhou.util.compat.input.KeyEvent;
 import java.util.function.Consumer;
 import static dev.guizhou.util.render.ShadcnDraw.*;
 import static org.lwjgl.glfw.GLFW.*;
@@ -28,7 +28,7 @@ final class ShadcnTextField {
         float caret = width(value.substring(0,cursor),10);
         scroll = Math.max(0,Math.min(scroll,Math.max(0,width(value,10)-w+16)));
         if (focused) scroll = Math.max(Math.max(0,caret-w+17), Math.min(scroll,caret));
-        g.enableScissor((int)x+5,(int)y+1,(int)(x+w-5),(int)(y+h-1));
+        dev.guizhou.util.render.ScissorUtil.enableTransformed(g,(int)x+5,(int)y+1,(int)(x+w-5),(int)(y+h-1));
         float tx=x+7-scroll, ty=y+(h-10)/2;
         if (focused && anchor!=cursor) {
             float a=width(value.substring(0,Math.min(cursor,anchor)),10);

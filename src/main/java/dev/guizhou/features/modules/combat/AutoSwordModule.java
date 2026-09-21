@@ -121,7 +121,7 @@ public class AutoSwordModule extends Module {
         if (sameSession()) return;
         resetState();
         sessionPlayer = mc.player; sessionLevel = mc.level; sessionConnection = mc.getConnection();
-        submittedSlot = mc.player.getInventory().getSelectedSlot();
+        submittedSlot = mc.player.getInventory().selected;
         submittedPosition = mc.player.position();
         clock.reset(mc.player.tickCount, ((LivingEntityAttackAccessor)mc.player).guizhouware$attackStrengthTicks());
     }
@@ -214,7 +214,7 @@ public class AutoSwordModule extends Module {
             try { GuizhouWare.swapManager.withSwap(new Result(slot,stack,ResultType.HOTBAR),SwapMode.SILENT,SwapPriority.WEAPON,action); }
             finally {
                 if (!nullCheck() && sameSession()) {
-                    int restore = mc.player.getInventory().getSelectedSlot();
+                    int restore = mc.player.getInventory().selected;
                     if (submittedSlot != restore && !ensureSlot(restore)) recoverSlot = restore;
                 }
             }
@@ -233,7 +233,7 @@ public class AutoSwordModule extends Module {
         boolean owned = GuizhouWare.swapManager.isLatched(this);
         GuizhouWare.swapManager.release(this);
         if (owned && !nullCheck() && sameSession()) {
-            int restore = mc.player.getInventory().getSelectedSlot();
+            int restore = mc.player.getInventory().selected;
             if (submittedSlot != restore && !ensureSlot(restore)) recoverSlot = restore;
         }
     }
@@ -362,7 +362,7 @@ public class AutoSwordModule extends Module {
         };
     }
     private int getWeapon(Entity target) {
-        int selected = mc.player.getInventory().getSelectedSlot();
+        int selected = mc.player.getInventory().selected;
         if (weaponMode.getValue() == WeaponMode.NONE) return selected;
         if (weaponMode.getValue() == WeaponMode.REQUIRE) return allowedWeapon(mc.player.getMainHandItem()) ? selected : -1;
         int best = -1;
@@ -398,7 +398,7 @@ public class AutoSwordModule extends Module {
     }
     private boolean clearSegment(Vec3 from, Vec3 to) {
         AABB swept = mc.player.getBoundingBox().move(from.subtract(mc.player.position())).expandTowards(to.subtract(from)).deflate(1e-5);
-        if (swept.minY < mc.level.getMinY() || swept.maxY > mc.level.getMaxY()
+        if (swept.minY < mc.level.getMinBuildHeight() || swept.maxY > mc.level.getMaxBuildHeight()
                 || !mc.level.getWorldBorder().isWithinBounds(swept)) return false;
         for (int x = Mth.floor(swept.minX)>>4; x <= Mth.floor(swept.maxX)>>4; x++)
             for (int z = Mth.floor(swept.minZ)>>4; z <= Mth.floor(swept.maxZ)>>4; z++)
@@ -414,7 +414,7 @@ public class AutoSwordModule extends Module {
     }
     private boolean moveTo(Vec3 point, float yaw, float pitch) {
         if (nullCheck() || !sameSession()) return false;
-        boolean sent = PacketSendUtil.send(new ServerboundMovePlayerPacket.PosRot(point.x,point.y,point.z,yaw,pitch,false,mc.player.horizontalCollision));
+        boolean sent = PacketSendUtil.send(new ServerboundMovePlayerPacket.PosRot(point.x,point.y,point.z,yaw,pitch,false));
         return sent && submittedPosition != null && submittedPosition.distanceToSqr(point) < 1e-10
                 && GuizhouWare.rotationManager.isSynchronized(yaw,pitch);
     }
@@ -469,7 +469,11 @@ public class AutoSwordModule extends Module {
         int density = 0;
         if (weapon.getItem() instanceof MaceItem mace && MaceItem.canSmashAttack(mc.player)) {
             // The client branch provides vanilla fall damage; Density is applied only on ServerLevel.
-            fallBonus = mace.getAttackDamageBonus(target, (float) base, mc.player.damageSources().mace(mc.player));
+            fallBonus = mace.getAttackDamageBonus(target, (float) base, mc.player.damageSources().source(
+                        net.minecraft.resources.ResourceKey.create(
+                                net.minecraft.core.registries.Registries.DAMAGE_TYPE,
+                                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", "mace_smash")),
+                        mc.player));
             density = EnchantmentUtil.getLevel(Enchantments.DENSITY, weapon);
         }
         return MaceDamageScore.damage(base, enchantments, fallBonus, mc.player.fallDistance, density);

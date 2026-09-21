@@ -6,10 +6,9 @@ import dev.guizhou.mixin.client.ChatComponentAccessor;
 import net.minecraft.client.GuiMessage;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.FontDescription;
 import net.minecraft.network.chat.MessageSignature;
 import net.minecraft.network.chat.Style;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 import java.security.SecureRandom;
 import java.util.HashMap;
@@ -53,8 +52,7 @@ public class ChatUtil {
         }
     }
 
-    private static final FontDescription LOGO_FONT = new FontDescription.Resource(
-            Identifier.fromNamespaceAndPath("guizhouware", "logo"));
+    private static final ResourceLocation LOGO_FONT = ResourceLocation.fromNamespaceAndPath("guizhouware", "logo");
 
     public static Component getClientNameComponent() {
         return Component.literal("")

@@ -382,7 +382,7 @@ public class GuangxiTPModule extends Module {
                 pos.x, pos.y, pos.z,
                 GuizhouWare.rotationManager.getServerYaw(),
                 GuizhouWare.rotationManager.getServerPitch(),
-                false, false));
+                false));
     }
 
     private void sendRealMove() {
@@ -390,7 +390,7 @@ public class GuangxiTPModule extends Module {
                 mc.player.getX(), mc.player.getY(), mc.player.getZ(),
                 GuizhouWare.rotationManager.getServerYaw(),
                 GuizhouWare.rotationManager.getServerPitch(),
-                mc.player.onGround(), mc.player.horizontalCollision));
+                mc.player.onGround()));
     }
 
     /** Optimistic explosion damage (exposure 1.0) with armor reduction; prot skipped on purpose. */

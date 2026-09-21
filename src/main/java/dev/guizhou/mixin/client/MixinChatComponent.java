@@ -3,7 +3,6 @@ package dev.guizhou.mixin.client;
 import dev.guizhou.util.player.ChatUtil;
 import net.minecraft.client.GuiMessage;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.ChatComponent;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,29 +25,29 @@ public abstract class MixinChatComponent {
     @Unique private long guizhouware$lastTimeMs;
 
     @Inject(
-            method = "render(Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/client/gui/Font;IIIZZ)V",
+            method = "render(Lnet/minecraft/client/gui/GuiGraphics;IIIZ)V",
             at = @At("HEAD")
     )
-    private void guizhouware$slideIn(GuiGraphics graphics, Font font, int tickCount, int mouseX, int mouseY,
-                                  boolean focused, boolean bl, CallbackInfo ci) {
+    private void guizhouware$slideIn(GuiGraphics graphics, int tickCount, int mouseX, int mouseY,
+                                  boolean focused, CallbackInfo ci) {
         guizhouware$pushed = false;
 
         float dy = guizhouware$update(((ChatComponentAccessor) this).guizhouware$getTrimmedMessages());
         if (dy != 0f) {
-            graphics.pose().pushMatrix();
-            graphics.pose().translate(0f, dy);
+            graphics.pose().pushPose();
+            graphics.pose().translate(0f, dy, 0);
             guizhouware$pushed = true;
         }
     }
 
     @Inject(
-            method = "render(Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/client/gui/Font;IIIZZ)V",
+            method = "render(Lnet/minecraft/client/gui/GuiGraphics;IIIZ)V",
             at = @At("RETURN")
     )
-    private void guizhouware$slideInEnd(GuiGraphics graphics, Font font, int tickCount, int mouseX, int mouseY,
-                                     boolean focused, boolean bl, CallbackInfo ci) {
+    private void guizhouware$slideInEnd(GuiGraphics graphics, int tickCount, int mouseX, int mouseY,
+                                     boolean focused, CallbackInfo ci) {
         if (guizhouware$pushed) {
-            graphics.pose().popMatrix();
+            graphics.pose().popPose();
             guizhouware$pushed = false;
         }
     }

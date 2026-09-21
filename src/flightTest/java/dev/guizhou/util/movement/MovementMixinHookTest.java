@@ -14,8 +14,10 @@ public final class MovementMixinHookTest {
     public static void main(String[] args) throws IOException {
         String entity = "net/minecraft/world/entity/Entity";
         String local = "net/minecraft/client/player/LocalPlayer";
-        assertCalls(local, "modifyInput", "(Lnet/minecraft/world/phys/Vec2;)Lnet/minecraft/world/phys/Vec2;",
-                local, "itemUseSpeedMultiplier", "()F", 1);
+        // 1.21.1: no modifyInput/itemUseSpeedMultiplier; the use-item input slowdown
+        // is the single isUsingItem() gate in aiStep scaling input impulses by 0.2.
+        assertCalls(local, "aiStep", "()V",
+                "net/minecraft/client/player/LocalPlayer", "isUsingItem", "()Z", 1);
         assertCalls(entity, "makeStuckInBlock", "(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/phys/Vec3;)V",
                 entity, "resetFallDistance", "()V", 1);
         assertCalls("net/minecraft/world/level/block/SlimeBlock", "stepOn",

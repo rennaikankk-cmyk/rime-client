@@ -6,7 +6,6 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.PlainTextButton;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -66,7 +65,7 @@ public abstract class MixinTitleScreen extends Screen {
         round(g,px+1,py+1,pw-2,3*s,2*s,0x5072A8D8);
         round(g,px+16*s,py+18*s,27*s,27*s,7*s,ACCENT);text(g,"G",px+23*s,py+25*s,14*s,700,BG);
         text(g,"GuizhouWare",px+53*s,py+18*s,21*s,600,TEXT);
-        text(g,"MINECRAFT 1.21.11",px+54*s,py+43*s,8*s,MUTED);
+        text(g,"MINECRAFT 1.21.1",px+54*s,py+43*s,8*s,MUTED);
         for(var child:children())if(child instanceof AbstractWidget b && b.visible) {
             String label=b.getMessage().getString();
             if(b instanceof PlainTextButton){
@@ -82,15 +81,15 @@ public abstract class MixinTitleScreen extends Screen {
             text(g,visible,b.getX()+(b.getWidth()-width(visible,10*s))/2,b.getY()+(b.getHeight()-10*s)/2f,10*s,!b.active?MUTED:main?BG:TEXT);
             if(!b.active && (hover || focus)) {
                 Component reason=getMultiplayerDisabledReason();
-                if(reason!=null)g.setTooltipForNextFrame(reason,mx,my);
+                if(reason!=null)g.renderComponentTooltip(net.minecraft.client.Minecraft.getInstance().font, java.util.List.of(reason), mx, my);
             }
         }
         text(g,"GuizhouWare "+BuildConfig.VERSION,8,height-13,8,MUTED);
         ci.cancel();
     }
     @Inject(method="mouseClicked",at=@At("HEAD"),cancellable=true)
-    private void guizhouware$click(MouseButtonEvent event,boolean doubled,CallbackInfoReturnable<Boolean> cir) {
+    private void guizhouware$click(double mx,double my,int button,CallbackInfoReturnable<Boolean> cir) {
         // Only visible native controls receive input; the old Realms overlay used old coordinates.
-        cir.setReturnValue(super.mouseClicked(event,doubled));
+        cir.setReturnValue(super.mouseClicked(mx,my,button));
     }
 }

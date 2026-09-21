@@ -154,7 +154,7 @@ public class GuangxiSpearTPModule extends Module {
 
     private ServerboundMovePlayerPacket buildMove(Vec3 pos, float yaw, float pitch) {
         return new ServerboundMovePlayerPacket.PosRot(
-                pos.x, pos.y, pos.z, yaw, pitch, false, false);
+                pos.x, pos.y, pos.z, yaw, pitch, false);
     }
 
     private boolean chargedSpearReady() {

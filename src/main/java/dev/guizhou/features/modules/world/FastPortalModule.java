@@ -54,7 +54,7 @@ public class FastPortalModule extends Module {
         Result pearl = InventoryUtil.find(Items.ENDER_PEARL, FULL_SCOPE);
         if (!pearl.found()) return;
 
-        if (mc.player.getCooldowns().isOnCooldown(new ItemStack(Items.ENDER_PEARL))) return;
+        if (mc.player.getCooldowns().isOnCooldown(Items.ENDER_PEARL)) return;
 
         Vec3 portalCenter = new Vec3(eyeBlockPos.getX(), eyeBlockPos.getY() - 1, eyeBlockPos.getZ());
         float yaw = calcYaw(eye, portalCenter);

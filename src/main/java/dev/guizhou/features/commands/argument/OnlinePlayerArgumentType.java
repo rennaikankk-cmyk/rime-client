@@ -26,7 +26,7 @@ public class OnlinePlayerArgumentType implements ArgumentType<String> {
 
         String input = builder.getRemainingLowerCase();
         for (var info : conn.getOnlinePlayers()) {
-            String name = info.getProfile().name();
+            String name = info.getProfile().getName();
             if (name == null) continue;
             if (input.isEmpty() || name.toLowerCase().contains(input)) {
                 builder.suggest(name);

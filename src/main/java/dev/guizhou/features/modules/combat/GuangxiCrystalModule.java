@@ -475,7 +475,7 @@ public class GuangxiCrystalModule extends Module {
         LocalPlayer player = mc.player;
         long generation = lifecycleGeneration;
         if (level == null || player == null) return;
-        mc.execute(() -> {
+        mc.tell(() -> {
             if (!isEnabled() || lifecycleGeneration != generation
                     || mc.level != level || mc.player != player) return;
             ensureSession();
@@ -693,7 +693,7 @@ public class GuangxiCrystalModule extends Module {
         var player = mc.player;
         // schedule always queues, unlike execute on the client thread. Already queued block updates
         // therefore merge into one scan; crystal-spawn instant attacks keep their separate direct path.
-        mc.schedule(() -> {
+        mc.tell(() -> {
             if (!isEnabled() || generation != lifecycleGeneration || mc.level != level || mc.player != player) return;
             BlockPos changed = reactivePosition;
             reactiveScheduled = false;
@@ -1912,7 +1912,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private static float resistanceMultiplier(LivingEntity entity) {
-        var effect = entity.getEffect(net.minecraft.world.effect.MobEffects.RESISTANCE);
+        var effect = entity.getEffect(net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE);
         return ExplosionDamageModel.resistanceMultiplier(effect == null ? -1 : effect.getAmplifier());
     }
 

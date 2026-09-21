@@ -8,9 +8,10 @@ import dev.guizhou.features.settings.Bind;
 import dev.guizhou.features.settings.Setting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.CharacterEvent;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
+import dev.guizhou.util.compat.input.CharacterEvent;
+import dev.guizhou.util.compat.input.KeyEvent;
+import dev.guizhou.util.compat.input.MouseButtonEvent;
+import dev.guizhou.util.compat.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 import org.joml.Vector2f;
 import java.awt.Color;
@@ -116,7 +117,7 @@ public class GuizhouWareGui extends Screen {
         layout(); hits.clear();hint="右键设置恢复默认 · Ctrl+F 搜索 · Tab 键导航";
         double mx=mouseX/scale,my=mouseY/scale;
         g.fill(0,0,width,height,0xA0000000);
-        g.pose().pushMatrix();g.pose().scale(scale,scale);
+        g.pose().pushPose();g.pose().scale(scale, scale, scale);
         round(g,x-4,y+5,w+8,h+2,13,0x35070F22);
         panel(g,x,y,w,h,10);
         round(g,x+1,y+1,w-2,3,2,0x486E9CC9);
@@ -139,14 +140,14 @@ public class GuizhouWareGui extends Screen {
             cy+=33;
         }
         button(g,"编辑 HUD  ↗",x+12,y+h-77,104,28,mx,my,false,()->{save();GuizhouWare.moduleManager.getModuleByClass(HudClientModule.class).openEditor(this);});
-        text(g,"MINECRAFT 1.21.11",x+14,y+h-36,8,MUTED);
+        text(g,"MINECRAFT 1.21.1",x+14,y+h-36,8,MUTED);
         search.draw(g,"搜索模块…");
         hit(search.x,search.y,search.w,search.h,b->{if(b==0)search.focused=true;});
         List<Module> visible=modules();
         if(selected==null && !visible.isEmpty()) select(visible.getFirst());
         moduleMax=Math.max(0,visible.size()*43-(bodyBottom-bodyTop));
         moduleScroll=Math.clamp(moduleScroll,0,moduleMax);
-        g.enableScissor((int)listX+4,(int)bodyTop,(int)(listX+listW-3),(int)bodyBottom);
+        dev.guizhou.util.render.ScissorUtil.enableTransformed(g,(int)listX+4,(int)bodyTop,(int)(listX+listW-3),(int)bodyBottom);
         for(int i=0;i<visible.size();i++) {
             Module m=visible.get(i);float ry=bodyTop+i*43-moduleScroll;
             if(ry+40<=bodyTop || ry>=bodyBottom)continue;
@@ -168,7 +169,7 @@ public class GuizhouWareGui extends Screen {
         if(dropdown!=null)drawDropdown(g,mx,my);
         if(editor!=null)drawEditor(g,mx,my);
         if(binding!=null)drawBinding(g);
-        g.pose().popMatrix();
+        g.pose().popPose();
     }
     private void drawSettings(GuiGraphics g,double mx,double my) {
         if(selected==null)return;
@@ -179,7 +180,7 @@ public class GuizhouWareGui extends Screen {
         List<String> pages=settings.stream().map(Setting::getPage).distinct().toList();
         if(!pages.contains(page))page=pages.isEmpty()?"General":pages.getFirst();
         float tabsLeft=detailX+16,tabsRight=x+w-16,tx=tabsLeft-tabScroll;
-        g.enableScissor((int)tabsLeft,(int)y+99,(int)tabsRight,(int)y+127);
+        dev.guizhou.util.render.ScissorUtil.enableTransformed(g,(int)tabsLeft,(int)y+99,(int)tabsRight,(int)y+127);
         for(String p:pages) {
             float pw=width(p,9)+20;
             if(p.equals(page))round(g,tx,y+100,pw,24,5,SURFACE);
@@ -194,7 +195,7 @@ public class GuizhouWareGui extends Screen {
         List<Setting<?>> rows=settings.stream().filter(s->s.getPage().equals(page)).toList();
         float content=0;for(Setting<?> s:rows)content+=rowHeight(s);
         settingMax=Math.max(0,content-(bottom-top));settingScroll=Math.clamp(settingScroll,0,settingMax);
-        g.enableScissor((int)detailX+8,(int)top,(int)(x+w-8),(int)bottom);
+        dev.guizhou.util.render.ScissorUtil.enableTransformed(g,(int)detailX+8,(int)top,(int)(x+w-8),(int)bottom);
         float ry=top-settingScroll;
         for(Setting<?> s:rows) {
             float rh=rowHeight(s);
@@ -311,7 +312,10 @@ public class GuizhouWareGui extends Screen {
         if(max<=0)return;float thumb=Math.max(18,height*height/(height+max));
         round(g,sx,sy+(height-thumb)*scroll/max,2,thumb,1,0xFF525252);
     }
-    @Override public boolean mouseClicked(MouseButtonEvent e,boolean doubled) {
+    @Override public boolean mouseClicked(double mxRaw, double myRaw, int button) {
+        return mouseClicked(new MouseButtonEvent(mxRaw, myRaw, new MouseButtonInfo(button, 0)), false);
+    }
+    public boolean mouseClicked(MouseButtonEvent e,boolean doubled) {
         double mx=e.x()/scale,my=e.y()/scale;int b=e.button();keyboardFocus=-1;
         if(binding!=null){assign(binding,Bind.fromMouseButton(b));binding=null;return true;}
         if(editor!=null) {
@@ -330,10 +334,16 @@ public class GuizhouWareGui extends Screen {
         for(int i=hits.size()-1;i>=0;i--)if(hits.get(i).at(mx,my)){hits.get(i).action.accept(b);return true;}
         return true;
     }
-    @Override public boolean mouseDragged(MouseButtonEvent e,double dx,double dy) {
+    @Override public boolean mouseDragged(double mxRaw, double myRaw, int button, double dx, double dy) {
+        return mouseDragged(new MouseButtonEvent(mxRaw, myRaw, new MouseButtonInfo(button, 0)), dx, dy);
+    }
+    public boolean mouseDragged(MouseButtonEvent e,double dx,double dy) {
         if(dragging!=null && e.button()==0){setSlider(e.x()/scale);return true;}return false;
     }
-    @Override public boolean mouseReleased(MouseButtonEvent e){dragging=null;return true;}
+    @Override public boolean mouseReleased(double mxRaw, double myRaw, int button) {
+        return mouseReleased(new MouseButtonEvent(mxRaw, myRaw, new MouseButtonInfo(button, 0)));
+    }
+    public boolean mouseReleased(MouseButtonEvent e){dragging=null;return true;}
     @Override public boolean mouseScrolled(double mx,double my,double horizontal,double vertical) {
         mx/=scale;my/=scale;if(editor!=null || binding!=null)return true;
         if(dropdown!=null){dropdownScroll-=(int)Math.signum(vertical);return true;}
@@ -342,7 +352,10 @@ public class GuizhouWareGui extends Screen {
         else if(contains(mx,my,detailX,y+132,detailW,bodyBottom-y-132))settingScroll=Math.clamp((float)(settingScroll-vertical*35),0,settingMax);
         return true;
     }
-    @Override public boolean keyPressed(KeyEvent e) {
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        return keyPressed(new KeyEvent(keyCode, scanCode, modifiers));
+    }
+    public boolean keyPressed(KeyEvent e) {
         int k=e.input();
         if(binding!=null){if(k==GLFW_KEY_UNKNOWN)return true;if(k!=GLFW_KEY_ESCAPE)assign(binding,k==GLFW_KEY_DELETE||k==GLFW_KEY_BACKSPACE?Bind.none():new Bind(k));binding=null;return true;}
         if(editor!=null){if(k==GLFW_KEY_ESCAPE){editor=null;editing=null;}else if(k==GLFW_KEY_ENTER||k==GLFW_KEY_KP_ENTER)commitEdit();else editor.key(e);return true;}
@@ -364,7 +377,10 @@ public class GuizhouWareGui extends Screen {
         if(k==ClickGuiModule.getInstance().bind.getValue().getKey() && System.currentTimeMillis()-opened>100){onClose();return true;}
         return true;
     }
-    @Override public boolean charTyped(CharacterEvent e){if(editor!=null)return editor.character(e);return search.character(e);}
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return charTyped(new CharacterEvent(codePoint, modifiers));
+    }
+    public boolean charTyped(CharacterEvent e){if(editor!=null)return editor.character(e);return search.character(e);}
     private static String categoryName(Module.Category c) {
         return switch(c){case COMBAT->"战斗 / Combat";case MOVEMENT->"移动 / Movement";case RENDER->"渲染 / Render";case PLAYER->"玩家 / Player";case WORLD->"世界 / World";case CLIENT->"客户端 / Client";case FUNNY->"趣味 / Fun";case HUD->"HUD";};
     }

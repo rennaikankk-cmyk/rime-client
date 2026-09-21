@@ -8,7 +8,8 @@ import dev.guizhou.util.models.TickRateWindow;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
-import net.minecraft.world.entity.PositionMoveRotation;
+import net.minecraft.world.entity.RelativeMovement;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -39,7 +40,7 @@ public class TPSCounterService extends Feature {
     public void onPacketReceive(PacketEvent.Receive event) {
         if (!(event.getPacket() instanceof ClientboundSetTimePacket packet)) return;
         long arrivalNanos = System.nanoTime();
-        long serverTick = packet.gameTime();
+        long serverTick = packet.getGameTime();
         ClientPacketListener connection = mc.getConnection();
         long generation = sessionGeneration.get();
         if (connection == null) return;
@@ -56,16 +57,21 @@ public class TPSCounterService extends Feature {
         if (mc.player == null) return 0.0;
         ClientPacketListener connection = mc.getConnection();
         if (sampledConnection != connection) resetSamples(connection);
-        double distanceSquared = correctionDistanceSquared(PositionMoveRotation.of(mc.player), packet);
+        double distanceSquared = correctionDistanceSquared(mc.player.position(), packet);
         if (Double.isFinite(distanceSquared) && distanceSquared > RUBBERBAND_DIST_SQ) {
             lastRubberbandNs = System.nanoTime();
         }
         return distanceSquared;
     }
 
-    static double correctionDistanceSquared(PositionMoveRotation before, ClientboundPlayerPositionPacket packet) {
-        PositionMoveRotation absolute = PositionMoveRotation.calculateAbsolute(before, packet.change(), packet.relatives());
-        return before.position().distanceToSqr(absolute.position());
+    static double correctionDistanceSquared(Vec3 before, ClientboundPlayerPositionPacket packet) {
+        // 1.21.1: the packet carries one value per axis; axes listed in the relative
+        // set are deltas to add to the current position, the others are absolute.
+        java.util.Set<RelativeMovement> relative = packet.getRelativeArguments();
+        double x = relative.contains(RelativeMovement.X) ? before.x + packet.getX() : packet.getX();
+        double y = relative.contains(RelativeMovement.Y) ? before.y + packet.getY() : packet.getY();
+        double z = relative.contains(RelativeMovement.Z) ? before.z + packet.getZ() : packet.getZ();
+        return before.distanceToSqr(x, y, z);
     }
 
     private void resetSamples(ClientPacketListener connection) {

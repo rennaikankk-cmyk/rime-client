@@ -2,10 +2,9 @@ package dev.guizhou.util.render.font;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.system.MemoryUtil;
 
 import java.awt.AlphaComposite;
@@ -35,7 +34,7 @@ public class GlyphMap {
 
     private boolean generated;
     private DynamicTexture texture;
-    private Identifier textureId;
+    private ResourceLocation textureId;
     private int width;
     private int height;
 
@@ -82,7 +81,7 @@ public class GlyphMap {
         }
     }
 
-    public Identifier getTextureId() { return textureId; }
+    public ResourceLocation getTextureId() { return textureId; }
     public int        getWidth()     { return width; }
     public int        getHeight()    { return height; }
 
@@ -165,21 +164,21 @@ public class GlyphMap {
         img.getRGB(0, 0, atlasW, atlasH, rgb, 0, atlasW);
 
         NativeImage native_ = new NativeImage(NativeImage.Format.RGBA, atlasW, atlasH, true);
-        IntBuffer buf = MemoryUtil.memIntBuffer(native_.getPointer(), atlasW * atlasH);
+        // Review 17: write through setPixelRGBA (ABGR) — getPixelsRGBA() is a copy.
         for (int i = 0; i < rgb.length; i++) {
             int p = rgb[i];
             int a = (p >>> 24) & 0xFF;
             int r = (p >>> 16) & 0xFF;
             int g2 = (p >>> 8) & 0xFF;
             int b = p & 0xFF;
-            buf.put((a << 24) | (b << 16) | (g2 << 8) | r);
+            native_.setPixelRGBA(i % atlasW, i / atlasW, (a << 24) | (b << 16) | (g2 << 8) | r);
         }
 
         int id = ID_COUNTER.getAndIncrement();
         texture = new LinearDynamicTexture(() -> "GuizhouWareFontPage" + id, native_);
         texture.upload();
 
-        textureId = Identifier.fromNamespaceAndPath("guizhouware", "font/page_" + id);
+        textureId = ResourceLocation.fromNamespaceAndPath("guizhouware", "font/page_" + id);
         Minecraft.getInstance().getTextureManager().register(textureId, texture);
 
         generated = true;
@@ -187,8 +186,9 @@ public class GlyphMap {
 
     private static final class LinearDynamicTexture extends DynamicTexture {
         LinearDynamicTexture(Supplier<String> label, NativeImage image) {
-            super(label, image);
-            this.sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
+            super(image);
+            // 1.21.1: no sampler cache; linear filtering via texture filter flag
+            this.setFilter(true, false);
         }
     }
 

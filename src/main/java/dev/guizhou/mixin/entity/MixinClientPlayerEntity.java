@@ -14,7 +14,6 @@ import dev.guizhou.features.modules.world.ScaffoldModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.phys.Vec2;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -51,23 +50,21 @@ public class MixinClientPlayerEntity {
 
     @Inject(
         method = "aiStep",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/ClientInput;tick()V", shift = At.Shift.AFTER)
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/Input;tick(ZF)V", shift = At.Shift.AFTER)
     )
     private void scaffold$suppressSneakAfterInputTick(CallbackInfo ci) {
         ScaffoldModule scaffold = GuizhouWare.moduleManager.getModuleByClass(ScaffoldModule.class);
         if (scaffold == null || !scaffold.isEnabled()) return;
 
         LocalPlayer self = (LocalPlayer) (Object) this;
-        Input kp = self.input.keyPresses;
-        if (!kp.shift()) return;
+        if (!self.input.shiftKeyDown) return;
 
-        self.input.keyPresses = new Input(
-                kp.forward(), kp.backward(), kp.left(), kp.right(), kp.jump(), false, kp.sprint());
+        self.input.shiftKeyDown = false;
     }
 
     @Inject(
         method = "aiStep",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/ClientInput;tick()V", shift = At.Shift.AFTER)
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/Input;tick(ZF)V", shift = At.Shift.AFTER)
     )
     private void sprint$applyBeforeJump(CallbackInfo ci) {
         SprintModule sprint = GuizhouWare.moduleManager.getModuleByClass(SprintModule.class);
@@ -78,22 +75,27 @@ public class MixinClientPlayerEntity {
 
     @Inject(
         method = "aiStep",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/ClientInput;tick()V", shift = At.Shift.AFTER)
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/Input;tick(ZF)V", shift = At.Shift.AFTER)
     )
     private void guizhouware$moveFixAfterInputTick(CallbackInfo ci) {
         var rotation = GuizhouWare.rotationManager;
         if (rotation == null || !rotation.isRotating() || !rotation.isMoveFixEnabled()) return;
 
         LocalPlayer self = (LocalPlayer)(Object) this;
-        Input real = self.input.keyPresses;
-        Input fixed = rotation.computeMoveFixInput(real, self.getYRot());
+        net.minecraft.client.player.Input real = self.input;
+        net.minecraft.client.player.Input fixed = rotation.computeMoveFixInput(real, self.getYRot());
         if (fixed == real) return;
 
-        self.input.keyPresses = fixed;
+        // 1.21.1: apply the fixed impulses directly to the live input object.
+        self.input.leftImpulse = fixed.leftImpulse;
+        self.input.forwardImpulse = fixed.forwardImpulse;
+        self.input.left = fixed.left;
+        self.input.right = fixed.right;
+        self.input.up = fixed.up;
+        self.input.down = fixed.down;
+        self.input.jumping = fixed.jumping;
+        self.input.shiftKeyDown = fixed.shiftKeyDown;
 
-        float leftImpulse = fixed.left() == fixed.right() ? 0f : (fixed.left() ? 1f : -1f);
-        float forwardImpulse = fixed.forward() == fixed.backward() ? 0f : (fixed.forward() ? 1f : -1f);
-        self.input.moveVector = new Vec2(leftImpulse, forwardImpulse).normalized();
     }
 
     @Inject(method = "moveTowardsClosestSpace", at = @At("HEAD"), cancellable = true)
@@ -104,12 +106,17 @@ public class MixinClientPlayerEntity {
         }
     }
 
+    // 1.21.1: the use-item input slowdown lives in aiStep — a single isUsingItem()
+    // call gates the branch scaling input.leftImpulse/forwardImpulse by 0.2f (and
+    // resetting sprintTriggerTime). MixinExtras here has no ModifyConstant, so the
+    // gate itself is inverted: returning false skips the entire slowdown branch.
     @ModifyExpressionValue(
-        method = "modifyInput",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;itemUseSpeedMultiplier()F")
+        method = "aiStep",
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;isUsingItem()Z"),
+        require = 1
     )
-    private float noSlow$eatSpeed(float original) {
-        return NoSlowModule.shouldCancelConsumeSlow() ? 1.0f : original;
+    private boolean noSlow$eatSpeed(boolean original) {
+        return original && !NoSlowModule.shouldCancelConsumeSlow();
     }
 
     @Inject(method = "isMovingSlowly", at = @At("HEAD"), cancellable = true)
@@ -122,13 +129,13 @@ public class MixinClientPlayerEntity {
     }
 
     @Redirect(
-        method = "handlePortalTransitionEffect",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screens/Screen;isAllowedInPortal()Z")
+        method = "handleConfusionTransitionEffect",
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screens/Screen;isPauseScreen()Z")
     )
     private boolean guizhouware$portalGui(Screen screen) {
         if (NoRenderModule.isActive(m -> m.portalGui.getValue())) {
-            return true;
+            return false;
         }
-        return screen.isAllowedInPortal();
+        return screen.isPauseScreen();
     }
 }

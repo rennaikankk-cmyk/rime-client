@@ -100,7 +100,7 @@ public class ScaffoldModule extends Module {
 
     /** The block to scaffold with: whatever is held, else the first block item in the hotbar. */
     private Item findHotbarBlock() {
-        int selected = mc.player.getInventory().getSelectedSlot();
+        int selected = mc.player.getInventory().selected;
         if (mc.player.getInventory().getItem(selected).getItem() instanceof BlockItem held) return held;
 
         for (int i = 0; i < 9; i++) {

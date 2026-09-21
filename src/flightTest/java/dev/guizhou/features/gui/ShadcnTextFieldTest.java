@@ -1,7 +1,7 @@
 package dev.guizhou.features.gui;
 
-import net.minecraft.client.input.CharacterEvent;
-import net.minecraft.client.input.KeyEvent;
+import dev.guizhou.util.compat.input.CharacterEvent;
+import dev.guizhou.util.compat.input.KeyEvent;
 import static org.lwjgl.glfw.GLFW.*;
 
 /** Exercise real input state without a game window: Unicode, selection and empty-field boundaries. */

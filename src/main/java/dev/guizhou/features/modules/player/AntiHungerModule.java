@@ -17,8 +17,6 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
-import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
-import net.minecraft.world.entity.player.Input;
 
 public final class AntiHungerModule extends Module {
     private final Setting<Boolean> sprint = bool("Sprint", true);
@@ -27,7 +25,6 @@ public final class AntiHungerModule extends Module {
     private LocalPlayer sessionPlayer;
     private boolean sprintSuppressed;
     private boolean previouslyGrounded;
-    private boolean forwardingInput;
 
     public AntiHungerModule() {
         super("AntiHunger", "Reduces movement exhaustion with sprint and ground spoofing.", Category.PLAYER);
@@ -67,17 +64,9 @@ public final class AntiHungerModule extends Module {
                 event.cancel();
                 return;
             }
-            // 1.21.11 also carries sprint intent in the input packet; retain all other input bits.
-            if (!forwardingInput && event.getPacket() instanceof ServerboundPlayerInputPacket packet
-                    && packet.input().sprint()) {
-                Input input = packet.input();
-                forwardingInput = true;
-                try {
-                    PacketSendUtil.forward(event, new ServerboundPlayerInputPacket(new Input(input.forward(),
-                            input.backward(), input.left(), input.right(), input.jump(), input.shift(), false)));
-                } finally { forwardingInput = false; }
-                return;
-            }
+            // 1.21.1's ServerboundPlayerInputPacket carries only impulses/jump/shift;
+            // sprint intent travels on ServerboundPlayerCommandPacket (handled elsewhere),
+            // so there is no sprint bit to strip here.
         }
         if (ground.getValue() && mc.player.onGround() && event.getPacket() instanceof ServerboundMovePlayerPacket move
                 && GroundSpoofPolicy.hideGround(move.isOnGround(), mc.player.onGround(), previouslyGrounded,
@@ -106,7 +95,6 @@ public final class AntiHungerModule extends Module {
             mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, mc.player.isSprinting()
                     ? ServerboundPlayerCommandPacket.Action.START_SPRINTING
                     : ServerboundPlayerCommandPacket.Action.STOP_SPRINTING));
-            mc.getConnection().send(new ServerboundPlayerInputPacket(mc.player.input.keyPresses));
         }
     }
 
@@ -115,6 +103,5 @@ public final class AntiHungerModule extends Module {
         sessionPlayer = null;
         sprintSuppressed = false;
         previouslyGrounded = false;
-        forwardingInput = false;
     }
 }

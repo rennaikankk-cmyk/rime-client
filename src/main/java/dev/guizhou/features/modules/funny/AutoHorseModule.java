@@ -5,9 +5,8 @@ import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 
 import java.util.ArrayList;
@@ -15,7 +14,7 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class AutoHorseModule extends Module {
-    private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath("guizhouware", "textures/autohorse.png");
+    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath("guizhouware", "textures/autohorse.png");
     private static final int TEXTURE_WIDTH = 1024;
     private static final int TEXTURE_HEIGHT = 1536;
     private static final long MIN_TRIGGER_INTERVAL_MS = 200L;
@@ -85,14 +84,13 @@ public class AutoHorseModule extends Module {
             }
 
             context.blit(
-                RenderPipelines.GUI_TEXTURED,
                 TEXTURE,
                 Math.max(0, Math.min(horse.x(), screenWidth - width)),
                 Math.max(0, Math.min(horse.y(), screenHeight - height)),
-                0.0f,
-                0.0f,
                 width,
                 height,
+                0.0f,
+                0.0f,
                 TEXTURE_WIDTH,
                 TEXTURE_HEIGHT,
                 TEXTURE_WIDTH,

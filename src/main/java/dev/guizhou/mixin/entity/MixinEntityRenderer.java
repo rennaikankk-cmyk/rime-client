@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(EntityRenderer.class)
 public class MixinEntityRenderer {
-    @Inject(method = "submitNameTag", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "renderNameTag", at = @At("HEAD"), cancellable = true)
     private void cancelVanillaNameTag(CallbackInfo ci) {
         NametagsModule nametags = GuizhouWare.moduleManager.getModuleByClass(NametagsModule.class);
         if (nametags != null && nametags.isEnabled()) {

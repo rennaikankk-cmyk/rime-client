@@ -6,7 +6,7 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -21,11 +21,11 @@ import static dev.guizhou.util.traits.Util.EVENT_BUS;
 @Mixin(Gui.class)
 public abstract class MixinInGameHud {
     @Shadow
-    protected abstract void renderTextureOverlay(GuiGraphics context, Identifier texture, float alpha);
+    protected abstract void renderTextureOverlay(GuiGraphics context, ResourceLocation texture, float alpha);
 
     @Shadow
     @Final
-    private static Identifier POWDER_SNOW_OUTLINE_LOCATION;
+    private static ResourceLocation POWDER_SNOW_OUTLINE_LOCATION;
 
     @Inject(method = "render", at = @At("RETURN"))
     public void render(GuiGraphics context, DeltaTracker tickCounter, CallbackInfo ci) {
@@ -70,21 +70,14 @@ public abstract class MixinInGameHud {
         }
     }
 
-    @Inject(method = "renderConfusionOverlay", at = @At("HEAD"), cancellable = true)
-    private void guizhouware$noNausea(GuiGraphics context, float distortionStrength, CallbackInfo ci) {
-        if (NoRenderModule.isActive(m -> m.noNausea.getValue())) {
-            ci.cancel();
-        }
-    }
-
     @Redirect(
         method = "renderCameraOverlays",
         at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/client/gui/Gui;renderTextureOverlay(Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/resources/Identifier;F)V"
+            target = "Lnet/minecraft/client/gui/Gui;renderTextureOverlay(Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/resources/ResourceLocation;F)V"
         )
     )
-    private void guizhouware$noCameraOverlay(Gui instance, GuiGraphics context, Identifier texture, float alpha) {
+    private void guizhouware$noCameraOverlay(Gui instance, GuiGraphics context, ResourceLocation texture, float alpha) {
         if (NoRenderModule.isActive(m -> m.noPowderedSnow.getValue()) && POWDER_SNOW_OUTLINE_LOCATION.equals(texture)) {
             return;
         }

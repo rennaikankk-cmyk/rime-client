@@ -7,8 +7,8 @@ import dev.guizhou.features.modules.client.HudModule;
 import dev.guizhou.features.modules.render.NametagsModule;
 import dev.guizhou.util.render.ShadcnDraw;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.resources.Identifier;
+import dev.guizhou.util.render.GuiBlitCompat;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.ArrayList;
@@ -23,7 +23,7 @@ public class RadarHudModule extends HudModule {
     private static final float PAD = 6f;
     private static final float LOGO = 12f;
 
-    private static final Identifier LOGO_TEX = Identifier.fromNamespaceAndPath("guizhouware", "textures/font/logo_white.png");
+    private static final ResourceLocation LOGO_TEX = ResourceLocation.fromNamespaceAndPath("guizhouware", "textures/font/logo_white.png");
     private static final int LOGO_TEX_W = 128;
     private static final int LOGO_TEX_H = 128;
 
@@ -64,7 +64,7 @@ public class RadarHudModule extends HudModule {
 
         float textW = 0f;
         for (Entry e : entries) {
-            String label = e.player.getGameProfile().name();
+            String label = e.player.getGameProfile().getName();
             String pops = GuizhouWare.playerInfoManager.getTotemPops(e.player.getUUID()) > 0
                     ? " -" + GuizhouWare.playerInfoManager.getTotemPops(e.player.getUUID()) : "";
             textW = Math.max(textW, ShadcnDraw.width(label + pops, TEXT));
@@ -88,14 +88,14 @@ public class RadarHudModule extends HudModule {
             int nameColor = resolveNameColor(hudClient, entry.player);
             float tx = ox + PAD;
             if (entry.player == mc.player) {
-                ctx.blit(RenderPipelines.GUI_TEXTURED, LOGO_TEX,
+                GuiBlitCompat.blitTinted(ctx, LOGO_TEX,
                         (int) tx, (int) (ry + (TEXT - LOGO) / 2f), 0.0f, 0.0f,
                         (int) LOGO, (int) LOGO, LOGO_TEX_W, LOGO_TEX_H, 0xFFFFFFFF);
                 tx += LOGO + 4f;
             } else {
                 tx += LOGO + 4f;
             }
-            String name = entry.player.getGameProfile().name();
+            String name = entry.player.getGameProfile().getName();
             ShadcnDraw.text(ctx, name, tx, ry, TEXT, nameColor);
             if (!popsStr.isEmpty()) {
                 ShadcnDraw.text(ctx, popsStr, tx + ShadcnDraw.width(name, TEXT), ry, TEXT, popColor);

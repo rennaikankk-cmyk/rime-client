@@ -22,7 +22,7 @@ public class EnemyManager implements Jsonable {
     }
 
     public boolean isEnemy(Player player) {
-        return this.isEnemy(player.getGameProfile().name());
+        return this.isEnemy(player.getGameProfile().getName());
     }
 
     public void addEnemy(String name) {

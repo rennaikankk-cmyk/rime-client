@@ -5,7 +5,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
@@ -51,7 +50,8 @@ public class MixinAbstractContainerScreen<T extends AbstractContainerMenu> {
         }
     }
 
-    @Inject(method = "renderContents", at = @At("TAIL"))
+    // 1.21.1: no renderContents split; render TAIL is after contents/labels/tooltips
+    @Inject(method = "render", at = @At("TAIL"))
     private void onRenderShulkerList(GuiGraphics graphics, int mouseX, int mouseY, float partial, CallbackInfo ci) {
         ShulkerPreviewModule module = ShulkerPreviewModule.get();
         if (module == null || !module.isEnabled() || !module.shulkerList.getValue()) return;
@@ -79,7 +79,7 @@ public class MixinAbstractContainerScreen<T extends AbstractContainerMenu> {
     }
 
     @Inject(method = "renderSlot", at = @At("TAIL"))
-    private void onRenderShulkerThumbnail(GuiGraphics graphics, Slot slot, int mouseX, int mouseY, CallbackInfo ci) {
+    private void onRenderShulkerThumbnail(GuiGraphics graphics, Slot slot, CallbackInfo ci) {
         ShulkerPreviewModule module = ShulkerPreviewModule.get();
         if (module == null || !module.isEnabled()) return;
         if (slot == null || !slot.hasItem()) return;
@@ -87,7 +87,7 @@ public class MixinAbstractContainerScreen<T extends AbstractContainerMenu> {
     }
 
     @Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)
-    private void onMouseDragged(MouseButtonEvent mouseButtonEvent, double deltaX, double deltaY, CallbackInfoReturnable<Boolean> cir) {
+    private void onMouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY, CallbackInfoReturnable<Boolean> cir) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null && mc.player.getAbilities().instabuild) return;
 

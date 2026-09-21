@@ -33,7 +33,7 @@ public final class PistonPowerSequence {
 
     /** Gap-two head sweep overlaps the two-wide crystal by half a block, plus vanilla's 0.01 nudge. */
     public static Vec3 predictedPush(BlockPos crystal, Direction outward) {
-        return Vec3.atBottomCenterOf(crystal).subtract(Vec3.atLowerCornerOf(outward.getUnitVec3i()).scale(0.51));
+        return Vec3.atBottomCenterOf(crystal).subtract(Vec3.atLowerCornerOf(outward.getNormal()).scale(0.51));
     }
 
     public static boolean pushed(Vec3 start, Vec3 current, Direction outward) {

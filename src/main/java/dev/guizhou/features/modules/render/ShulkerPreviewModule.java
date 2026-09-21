@@ -65,7 +65,7 @@ public class ShulkerPreviewModule extends Module {
         int x = clamp(mouseX + CURSOR_GAP, SCREEN_MARGIN, graphics.guiWidth() - width - SCREEN_MARGIN);
         int y = clamp(mouseY - CURSOR_GAP, SCREEN_MARGIN, graphics.guiHeight() - height - SCREEN_MARGIN);
 
-        graphics.nextStratum();
+        // 1.21.1: no strata; draw at a slightly higher Z offset instead
         graphics.fill(x - BORDER, y - BORDER, x + width + BORDER, y + height + BORDER, border.getValue().getRGB());
         graphics.fill(x, y, x + width, y + height, background.getValue().getRGB());
 
@@ -95,15 +95,15 @@ public class ShulkerPreviewModule extends Module {
         float scale = thumbnailScale.getValue().floatValue();
         float offset = 8.0f * (1.0f - scale);
 
-        Matrix3x2fStack pose = graphics.pose();
-        pose.pushMatrix();
-        pose.translate(slotX + offset, slotY + offset);
-        pose.scale(scale, scale);
+        com.mojang.blaze3d.vertex.PoseStack pose = graphics.pose();
+        pose.pushPose();
+        pose.translate(slotX + offset, slotY + offset, 0);
+        pose.scale(scale, scale, scale);
         graphics.renderItem(icon, 0, 0);
         if (thumbnailCount.getValue()) {
             graphics.renderItemDecorations(mc.font, icon, 0, 0);
         }
-        pose.popMatrix();
+        pose.popPose();
     }
 
     private ItemStack selectThumbnail(ItemContainerContents contents) {
@@ -151,19 +151,19 @@ public class ShulkerPreviewModule extends Module {
         float stepX = (panelW + LIST_GAP) * scale;
         float stepY = (panelH + LIST_GAP) * scale;
 
-        graphics.nextStratum();
-        Matrix3x2fStack pose = graphics.pose();
+        // 1.21.1: no strata; draw at a slightly higher Z offset instead
+        com.mojang.blaze3d.vertex.PoseStack pose = graphics.pose();
         for (int i = 0; i < shulkers.size(); i++) {
             int col = i % cols;
             int row = i / cols;
             float x = LIST_MARGIN + col * stepX;
             float y = LIST_MARGIN + row * stepY;
 
-            pose.pushMatrix();
-            pose.translate(x, y);
-            pose.scale(scale, scale);
+            pose.pushPose();
+            pose.translate(x, y, 0);
+            pose.scale(scale, scale, scale);
             drawListPanel(graphics, shulkers.get(i), panelW, panelH);
-            pose.popMatrix();
+            pose.popPose();
         }
     }
 

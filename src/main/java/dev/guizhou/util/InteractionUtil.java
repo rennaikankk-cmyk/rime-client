@@ -19,7 +19,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownExperienceBottle;
+import net.minecraft.world.entity.projectile.ThrownExperienceBottle;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.state.BlockState;
@@ -66,7 +66,7 @@ public class InteractionUtil implements Util {
         InteractionResult result = mc.gameMode.useItemOn(mc.player, hand, new BlockHitResult(
                 Vec3.atCenterOf(pos), direction, pos, false
         ));
-        if (result instanceof InteractionResult.Success success && success.swingSource() != InteractionResult.SwingSource.NONE) {
+        if (result != null && (result.consumesAction() || result == net.minecraft.world.InteractionResult.SUCCESS)) {
             mc.player.connection.send(new ServerboundSwingPacket(hand));
         }
     }
@@ -89,7 +89,7 @@ public class InteractionUtil implements Util {
                 airPlace ? Vec3.atCenterOf(pos) : Vec3.atCenterOf(bp).relative(direction.getOpposite(), 0.5),
                 airPlace ? direction : direction.getOpposite(), bp, false
         ));
-        if (result instanceof InteractionResult.Success success && success.swingSource() != InteractionResult.SwingSource.NONE) {
+        if (result != null && (result.consumesAction() || result == net.minecraft.world.InteractionResult.SUCCESS)) {
             mc.player.connection.send(new ServerboundSwingPacket(hand));
         }
         return true;
@@ -97,7 +97,7 @@ public class InteractionUtil implements Util {
 
     public static Direction calcSide(BlockPos pos) {
         for (Direction d : Direction.values())
-            if (!mc.level.getBlockState(pos.offset(d.getUnitVec3i())).canBeReplaced()) return d;
+            if (!mc.level.getBlockState(pos.offset(d.getNormal())).canBeReplaced()) return d;
         return null;
     }
 
@@ -129,8 +129,8 @@ public class InteractionUtil implements Util {
             speed *= 1 + (MobEffectUtil.getDigSpeedAmplification(mc.player) + 1) * 0.2F;
         }
 
-        if (mc.player.hasEffect(MobEffects.MINING_FATIGUE)) {
-            float k = switch (mc.player.getEffect(MobEffects.MINING_FATIGUE).getAmplifier()) {
+        if (mc.player.hasEffect(MobEffects.DIG_SLOWDOWN)) {
+            float k = switch (mc.player.getEffect(MobEffects.DIG_SLOWDOWN).getAmplifier()) {
                 case 0 -> 0.3F;
                 case 1 -> 0.09F;
                 case 2 -> 0.0027F;
@@ -190,7 +190,7 @@ public class InteractionUtil implements Util {
     }
 
     public static int fastestToolSlot(BlockState block) {
-        int best = mc.player.getInventory().getSelectedSlot();
+        int best = mc.player.getInventory().selected;
         double bestSpeed = -1;
 
         for (int i = 0; i < 9; i++) {

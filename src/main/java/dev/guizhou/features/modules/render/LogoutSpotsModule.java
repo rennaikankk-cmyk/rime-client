@@ -187,7 +187,7 @@ public class LogoutSpotsModule extends Module {
         final ResourceKey<Level> dimension;
 
         SpotData(Player player, ResourceKey<Level> dimension) {
-            this.name      = player.getGameProfile().name();
+            this.name      = player.getGameProfile().getName();
             this.uuid      = player.getUUID();
             this.pos       = player.position();
             this.entity    = player;

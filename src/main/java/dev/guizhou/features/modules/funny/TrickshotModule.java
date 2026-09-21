@@ -36,7 +36,7 @@ public class TrickshotModule extends Module {
     @Subscribe
     private void onTick(TickEvent event) {
         if (mc.player == null || mc.level == null) { disable(); return; }
-        if (!mc.level.dimension().identifier().getPath().equals("the_end")) { disable(); return; }
+        if (!mc.level.dimension().location().getPath().equals("the_end")) { disable(); return; }
 
         double px = mc.player.getX(), pz = mc.player.getZ();
         if (px * px + pz * pz > MAX_XZ_DIST * MAX_XZ_DIST) { disable(); return; }
@@ -44,7 +44,7 @@ public class TrickshotModule extends Module {
         Result pearl = InventoryUtil.find(Items.ENDER_PEARL, InventoryUtil.FULL_SCOPE);
         if (!pearl.found()) { disable(); return; }
 
-        if (mc.player.getCooldowns().isOnCooldown(new ItemStack(Items.ENDER_PEARL))) { disable(); return; }
+        if (mc.player.getCooldowns().isOnCooldown(Items.ENDER_PEARL)) { disable(); return; }
 
         Vec3 eye = mc.player.getEyePosition();
 

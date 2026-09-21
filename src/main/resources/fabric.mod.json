@@ -3,12 +3,11 @@
   "id": "guizhouware",
   "version": "${version}",
   "name": "GuizhouWare",
-  "description": "GuizhouWare — 贵州客户端. Fork of Homovore (AGPL-3.0) by Leonetic & widerthaneurasia, with AutoCrystal enhancements ported from AlienV4.",
+  "description": "GuizhouWare \u2014 \u8d35\u5dde\u5ba2\u6237\u7aef. Fork of Homovore (AGPL-3.0) by Leonetic & widerthaneurasia, with AutoCrystal enhancements ported from AlienV4.",
   "authors": [
     "renna"
   ],
-  "contact": {
-  },
+  "contact": {},
   "license": "AGPL-3.0-or-later",
   "icon": "assets/guizhouware/icon.png",
   "environment": "client",

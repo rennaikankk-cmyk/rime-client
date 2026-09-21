@@ -14,7 +14,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl;
+import net.minecraft.world.entity.projectile.ThrownEnderpearl;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 
@@ -140,7 +140,7 @@ public class PearlBlockerModule extends Module {
             }
             pos = next;
             vel = stepVelocity(vel, inWater);
-            if (pos.y < mc.level.getMinY() - 5) break;
+            if (pos.y < mc.level.getMinBuildHeight() - 5) break;
         }
         return null;
     }

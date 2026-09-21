@@ -53,7 +53,7 @@ public class PositionManager
 
     public void setPositionPacket(double x, double y, double z, boolean onGround, boolean setPos, boolean noLagBack) {
         boolean bl = mc.player.horizontalCollision;
-        mc.player.connection.send(new ServerboundMovePlayerPacket.Pos(x, y, z, onGround, bl));
+        mc.player.connection.send(new ServerboundMovePlayerPacket.Pos(x, y, z, onGround));
         if (setPos) {
             mc.player.setPos(x, y, z);
             if (noLagBack) {

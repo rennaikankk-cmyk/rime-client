@@ -18,11 +18,13 @@ import java.util.Map;
 public final class ElytraHookTest {
     private static final String ENTITY = "net/minecraft/world/entity/LivingEntity";
     private static final String VECTOR = "Lnet/minecraft/world/phys/Vec3;";
-    private static final String TRAVEL = "travelFallFlying(" + VECTOR + ")V";
-    private static final String UPDATE_DESCRIPTOR = "(" + VECTOR + ")" + VECTOR;
-    private static final String TARGET = "L" + ENTITY + ";updateFallFlyingMovement" + UPDATE_DESCRIPTOR;
-    private static final String MODIFY_EXPRESSION =
-            "Lcom/llamalad7/mixinextras/injector/ModifyExpressionValue;";
+    private static final String TRAVEL = "travel(" + VECTOR + ")V";
+    private static final String MOVE_DESCRIPTOR =
+            "(Lnet/minecraft/world/entity/MoverType;" + VECTOR + ")V";
+    private static final String MOVE_TARGET = "Lnet/minecraft/world/entity/LivingEntity;move" + MOVE_DESCRIPTOR;
+    private static final String GLIDE_GATE = "L" + ENTITY + ";isFallFlying()Z";
+    private static final String MODIFY_ARG = "Lorg/spongepowered/asm/mixin/injection/ModifyArg;";
+    private static final String SLICE = "Lorg/spongepowered/asm/mixin/injection/Slice;";
     private static final String AT = "Lorg/spongepowered/asm/mixin/injection/At;";
 
     private ElytraHookTest() {
@@ -31,10 +33,11 @@ public final class ElytraHookTest {
     public static void main(String[] args) throws IOException {
         verifyGlideCallOrder();
         verifyCompiledMixin();
+        verifyIncomingVelocityDataflow();
         verifySteeringDelegation();
         verifyRocketAttachmentAccessor();
         verifyChaseHandoff();
-        System.out.println("Elytra hook checks passed: glide phase, mixin target, steering, rocket attachment and chase handoff.");
+        System.out.println("Elytra hook checks passed: inline glide branch, mixin target, steering, rocket attachment and chase handoff.");
     }
 
     private static void verifyGlideCallOrder() throws IOException {
@@ -57,21 +60,198 @@ public final class ElytraHookTest {
         }, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 
         check(methods[0] == 1, "Expected exactly one named LivingEntity." + TRAVEL);
-        int update = singleIndex(calls, "updateFallFlyingMovement", UPDATE_DESCRIPTOR);
-        int assign = singleIndex(calls, "setDeltaMovement", "(" + VECTOR + ")V");
-        int move = singleIndex(calls, "move", "(Lnet/minecraft/world/entity/MoverType;" + VECTOR + ")V");
-        check(calls.get(update).owner().equals(ENTITY), "Glide invocation owner changed");
-        check(update + 1 == assign, "Glide result must be assigned immediately after calculation");
-        check(assign + 2 == move, "Movement must follow assignment and its velocity getter");
-        check(calls.get(assign + 1).name().equals("getDeltaMovement")
-                        && calls.get(assign + 1).descriptor().equals("()" + VECTOR),
-                "Movement no longer reads the corrected delta movement");
+        int gate = singleIndex(calls, "isFallFlying", "()Z");
+        check(calls.get(gate).owner().equals(ENTITY), "Glide gate invocation owner changed");
+
+        // 1.21.1: glide physics is inline. The glide branch ends with
+        // setDeltaMovement(v) -> getDeltaMovement() -> move(SELF, v). ModifyArg
+        // matches ordinal 0 in the slice, i.e. the FIRST move after the gate, so
+        // that call must carry the glide shape — no uniqueness claim is made about
+        // later move calls in the method.
+        int gateMove = -1;
+        int lastGet = -1;
+        int lastSet = -1;
+        for (int i = gate + 1; i < calls.size(); i++) {
+            Invocation call = calls.get(i);
+            if (call.name().equals("move") && call.descriptor().equals(MOVE_DESCRIPTOR)) {
+                if (gateMove == -1) {
+                    gateMove = i;
+                    break;
+                }
+            }
+            if (call.name().equals("setDeltaMovement") && call.descriptor().equals("(" + VECTOR + ")V")) {
+                lastSet = i;
+            }
+            if (call.name().equals("getDeltaMovement") && call.descriptor().equals("()" + VECTOR)) {
+                lastGet = i;
+            }
+        }
+        check(gateMove != -1, "Glide branch move call missing after isFallFlying");
+        check(calls.get(gateMove).owner().equals(ENTITY),
+                "Vanilla glide move owner must be LivingEntity, was " + calls.get(gateMove).owner());
+        check(MOVE_TARGET.equals("L" + calls.get(gateMove).owner() + ";move" + MOVE_DESCRIPTOR),
+                "Annotation MOVE_TARGET owner must match the actual vanilla move owner");
+        check(lastSet != -1 && lastSet < gateMove, "Glide velocity must be assigned before the slice move");
+        check(lastGet == gateMove - 1, "The ordinal-0 slice move argument must be read from the assigned velocity");
+    }
+
+
+    /**
+     * Dataflow checks over the compiled mixin (code included):
+     *  1. travel HEAD captures getDeltaMovement() into guizhouware$incomingVelocity
+     *     BEFORE any early return, so the glide modifier sees the pre-travel velocity.
+     *  2. guizhouware$flightVelocity passes that saved field as the SECOND argument
+     *     of applyFlightVelocity (after the vanilla glide velocity, before the look).
+     *  3. The transformed result local is the same Vec3 written through
+     *     setDeltaMovement and returned by the modifier.
+     */
+    private static void verifyIncomingVelocityDataflow() throws IOException {
+        String mixin = "dev/guizhou/mixin/entity/MixinLivingEntityTravel";
+        String incomingField = "guizhouware$incomingVelocity";
+
+        List<int[]> headSequence = new ArrayList<>();  // opcode, kind
+        List<String[]> headOps = new ArrayList<>();    // owner, name for invokes/fields
+        readMethod(mixin, "guizhouware$travelHead", headSequence, headOps);
+        int captureCall = -1;
+        int captureStore = -1;
+        int earlyReturn = -1;
+        for (int i = 0; i < headSequence.size(); i++) {
+            int opcode = headSequence.get(i)[0];
+            String[] op = headOps.get(i);
+            if (opcode == Opcodes.INVOKEVIRTUAL && "getDeltaMovement".equals(op[1])
+                    && op[2].equals("()" + VECTOR)) {
+                captureCall = i;
+            }
+            if (opcode == Opcodes.PUTFIELD && incomingField.equals(op[1])) {
+                captureStore = i;
+            }
+            if (opcode == Opcodes.RETURN && earlyReturn == -1 && captureStore == -1) {
+                earlyReturn = i;
+            }
+        }
+        check(captureCall != -1 && captureStore == captureCall + 1,
+                "travel HEAD must store getDeltaMovement() directly into " + incomingField);
+        check(captureStore != -1 && (earlyReturn == -1 || captureStore < earlyReturn),
+                "The incoming-velocity capture must precede every early return in travel HEAD");
+
+        List<int[]> flightSequence = new ArrayList<>();
+        List<String[]> flightOps = new ArrayList<>();
+        readMethod(mixin, "guizhouware$flightVelocity", flightSequence, flightOps);
+        int apply = -1;
+        for (int i = 0; i < flightSequence.size(); i++) {
+            if (flightSequence.get(i)[0] == Opcodes.INVOKEVIRTUAL
+                    && "applyFlightVelocity".equals(flightOps.get(i)[1])) {
+                apply = i;
+                break;
+            }
+        }
+        check(apply != -1, "Flight modifier must delegate through applyFlightVelocity");
+
+        // Walk back over the three Vec3 producers feeding the call: nearest is the
+        // look (arg3), then the saved incoming field (arg2), then the modifier
+        // parameter (arg1).
+        int vecsSeen = 0;
+        int incomingArg = -1;
+        for (int i = apply - 1; i >= 0 && vecsSeen < 3; i--) {
+            int opcode = flightSequence.get(i)[0];
+            String[] op = flightOps.get(i);
+            if (opcode == Opcodes.INVOKEVIRTUAL || opcode == Opcodes.INVOKEINTERFACE) {
+                if (op[2].endsWith(VECTOR)) vecsSeen++;
+                if (vecsSeen == 3) break;  // looked past arg1
+                continue;
+            }
+            if (opcode == Opcodes.GETFIELD && op[2].equals(VECTOR)) {
+                vecsSeen++;
+                if (vecsSeen == 2) check(incomingField.equals(op[1]),
+                        "applyFlightVelocity arg2 must read " + incomingField + ", was " + op[1]);
+                incomingArg = i;
+                continue;
+            }
+            if (opcode == Opcodes.ALOAD && flightSequence.get(i)[1] == 1) {
+                // the modifier parameter may only be arg1 (outermost producer)
+                vecsSeen++;
+            }
+        }
+        check(incomingArg != -1, "Flight modifier must read " + incomingField + " for the second argument");
+
+        // The call result local is both written back through setDeltaMovement and
+        // returned unchanged.
+        int callStore = -1;
+        for (int i = apply + 1; i < flightSequence.size() && callStore == -1; i++) {
+            if (flightSequence.get(i)[0] == Opcodes.ASTORE) {
+                callStore = flightSequence.get(i)[1];
+            }
+        }
+        check(callStore != -1, "applyFlightVelocity result must be stored to a local");
+        boolean writesBack = false;
+        for (int i = apply + 1; i + 1 < flightSequence.size(); i++) {
+            if (flightSequence.get(i)[0] == Opcodes.ALOAD && flightSequence.get(i)[1] == callStore
+                    && flightSequence.get(i + 1)[0] == Opcodes.INVOKEVIRTUAL
+                    && "setDeltaMovement".equals(flightOps.get(i + 1)[1])) {
+                writesBack = true;
+            }
+        }
+        check(writesBack, "The transformed velocity must be written back via setDeltaMovement");
+        boolean returnsSame = false;
+        for (int i = apply + 1; i < flightSequence.size() - 1; i++) {
+            if (flightSequence.get(i)[0] == Opcodes.ALOAD && flightSequence.get(i)[1] == callStore
+                    && flightSequence.get(i + 1)[0] == Opcodes.ARETURN) {
+                returnsSame = true;
+            }
+        }
+        check(returnsSame, "The modifier must return the same transformed Vec3 instance");
+    }
+
+    /** Records per-instruction (opcode, extra) and (owner, name, descriptor) triples. */
+    private static void readMethod(String owner, String methodName,
+                                   List<int[]> sequence, List<String[]> ops) throws IOException {
+        read(owner).accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor,
+                                             String signature, String[] exceptions) {
+                if (!name.equals(methodName)) return null;
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitVarInsn(int opcode, int var) {
+                        sequence.add(new int[]{opcode, var});
+                        ops.add(new String[]{"", "", ""});
+                    }
+
+                    @Override
+                    public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
+                        sequence.add(new int[]{opcode, -1});
+                        ops.add(new String[]{owner, name, descriptor});
+                    }
+
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String name,
+                                                String descriptor, boolean isInterface) {
+                        sequence.add(new int[]{opcode, -1});
+                        ops.add(new String[]{owner, name, descriptor});
+                    }
+
+                    @Override
+                    public void visitInsn(int opcode) {
+                        sequence.add(new int[]{opcode, -1});
+                        ops.add(new String[]{"", "", ""});
+                    }
+
+                    @Override
+                    public void visitJumpInsn(int opcode, org.objectweb.asm.Label label) {
+                        sequence.add(new int[]{opcode, -1});
+                        ops.add(new String[]{"", "", ""});
+                    }
+                };
+            }
+        }, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        check(!sequence.isEmpty(), "Missing method body: " + owner + "." + methodName);
     }
 
     private static void verifyCompiledMixin() throws IOException {
         List<String> methods = new ArrayList<>();
         List<String> targets = new ArrayList<>();
-        List<String> points = new ArrayList<>();
+        List<String> sliceFrom = new ArrayList<>();
+        int[] index = {-1};
         int[] require = {-1};
         int[] annotations = {0};
         read("dev/guizhou/mixin/entity/MixinLivingEntityTravel").accept(new ClassVisitor(Opcodes.ASM9) {
@@ -79,16 +259,17 @@ public final class ElytraHookTest {
             public MethodVisitor visitMethod(int access, String name, String descriptor,
                                              String signature, String[] exceptions) {
                 if (!name.equals("guizhouware$flightVelocity")) return null;
-                check(descriptor.equals(UPDATE_DESCRIPTOR), "Flight modifier signature changed");
+                check(descriptor.equals("(" + VECTOR + ")" + VECTOR), "Flight modifier signature changed");
                 return new MethodVisitor(Opcodes.ASM9) {
                     @Override
                     public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-                        if (!descriptor.equals(MODIFY_EXPRESSION)) return null;
+                        if (!descriptor.equals(MODIFY_ARG)) return null;
                         annotations[0]++;
                         return new AnnotationVisitor(Opcodes.ASM9) {
                             @Override
                             public void visit(String name, Object value) {
                                 if (name.equals("require")) require[0] = (Integer) value;
+                                if (name.equals("index")) index[0] = (Integer) value;
                             }
 
                             @Override
@@ -105,7 +286,8 @@ public final class ElytraHookTest {
                                     return new AnnotationVisitor(Opcodes.ASM9) {
                                         @Override
                                         public AnnotationVisitor visitAnnotation(String ignored, String descriptor) {
-                                            return descriptor.equals(AT) ? atVisitor(targets, points) : null;
+                                            return descriptor.equals(AT)
+                                                    ? atVisitor(targets, new ArrayList<String>()) : null;
                                         }
                                     };
                                 }
@@ -114,8 +296,24 @@ public final class ElytraHookTest {
 
                             @Override
                             public AnnotationVisitor visitAnnotation(String name, String descriptor) {
-                                return name.equals("at") && descriptor.equals(AT)
-                                        ? atVisitor(targets, points) : null;
+                                if (name.equals("at") && descriptor.equals(AT)) {
+                                    return atVisitor(targets, new ArrayList<String>());
+                                }
+                                if (name.equals("slice") && descriptor.equals(SLICE)) {
+                                    return new AnnotationVisitor(Opcodes.ASM9) {
+                                        @Override
+                                        public AnnotationVisitor visitAnnotation(String ignored, String inner) {
+                                            if (!inner.equals(AT)) return null;
+                                            return new AnnotationVisitor(Opcodes.ASM9) {
+                                                @Override
+                                                public void visit(String key, Object value) {
+                                                    if (key.equals("target")) sliceFrom.add((String) value);
+                                                }
+                                            };
+                                        }
+                                    };
+                                }
+                                return null;
                             }
                         };
                     }
@@ -123,10 +321,12 @@ public final class ElytraHookTest {
             }
         }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 
-        check(annotations[0] == 1, "Expected exactly one flight ModifyExpressionValue annotation");
-        check(methods.equals(List.of(TRAVEL)), "Flight modifier method target changed: " + methods);
-        check(targets.equals(List.of(TARGET)), "Flight modifier invocation target changed: " + targets);
-        check(points.equals(List.of("INVOKE")), "Flight modifier must replace the glide invocation result");
+        check(annotations[0] == 1, "Expected exactly one flight ModifyArg annotation");
+        check(methods.equals(List.of("travel")), "Flight modifier method target changed: " + methods);
+        check(targets.equals(List.of(MOVE_TARGET)), "Flight modifier invocation target changed: " + targets);
+        check(sliceFrom.equals(List.of(GLIDE_GATE)),
+                "Flight modifier must be sliced to the glide branch: " + sliceFrom);
+        check(index[0] == 1, "Flight modifier must capture the movement vector argument");
         check(require[0] == 1, "Missing flight hook must fail mixin application");
     }
 

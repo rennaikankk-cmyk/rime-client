@@ -6,7 +6,7 @@ import dev.guizhou.util.PacketSendUtil;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.player.Input;
+import net.minecraft.client.player.Input;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -352,8 +352,10 @@ public class RotationManager {
     public Input computeMoveFixInput(Input real, float realYawNow) {
         float delta = Mth.wrapDegrees(realYawNow - rotationYaw);
 
-        float inputX = (real.right() ? 1 : 0) - (real.left() ? 1 : 0);
-        float inputZ = (real.forward() ? 1 : 0) - (real.backward() ? 1 : 0);
+        // 1.21.1 Input encodes movement as impulses: forwardImpulse > 0 = forward,
+        // leftImpulse > 0 = left. KeyboardInput has already applied crouch slowdown.
+        float inputX = Math.signum(real.leftImpulse) * -1.0f;
+        float inputZ = Math.signum(real.forwardImpulse);
         if (inputX == 0 && inputZ == 0) return real;
 
         double moveAngle = Math.toDegrees(Math.atan2(inputX, inputZ));
@@ -371,7 +373,18 @@ public class RotationManager {
             case 6 -> l = true;
             case 7 -> { f = true; l = true; }
         }
-        return new Input(f, b, l, r, real.jump(), real.shift(), real.sprint());
+        Input fixed = new Input();
+        float magnitude = Math.max(Math.abs(real.leftImpulse), Math.abs(real.forwardImpulse));
+        fixed.forwardImpulse = ((f ? 1 : 0) - (b ? 1 : 0)) * magnitude;
+        // positive leftImpulse means strafing left
+        fixed.leftImpulse = ((l ? 1 : 0) - (r ? 1 : 0)) * magnitude;
+        fixed.left = l;
+        fixed.right = r;
+        fixed.up = f;
+        fixed.down = b;
+        fixed.jumping = real.jumping;
+        fixed.shiftKeyDown = real.shiftKeyDown;
+        return fixed;
     }
 
     private boolean performSilent(RotationRequest req) {
@@ -384,7 +397,7 @@ public class RotationManager {
 
         ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.PosRot(
                 mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                targetYaw, targetPitch, mc.player.onGround(), mc.player.horizontalCollision
+                targetYaw, targetPitch, mc.player.onGround()
         );
         long before = serverRevision;
         boolean sent = PacketSendUtil.send(packet);

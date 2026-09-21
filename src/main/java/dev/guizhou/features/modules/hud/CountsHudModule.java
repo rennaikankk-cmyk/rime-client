@@ -50,11 +50,11 @@ public class CountsHudModule extends HudModule {
             float ry = oy + PAD + i * ROW;
             ItemStack stack = new ItemStack(ITEMS[i], Math.max(count, 1));
             var pose = event.getContext().pose();
-            pose.pushMatrix();
-            pose.scale(scale, scale);
+            pose.pushPose();
+            pose.scale(scale, scale, scale);
             event.getContext().renderItem(stack,
                     Math.round((ox + PAD) / scale), Math.round(ry / scale));
-            pose.popMatrix();
+            pose.popPose();
             ShadcnDraw.text(event.getContext(), String.valueOf(count),
                     ox + PAD + ICON + 5f, ry + 2f, 11f, count > 0 ? ShadcnDraw.TEXT : 0xFFFF5555);
         }

@@ -19,9 +19,9 @@ public class TablistModule extends Module {
     }
 
     public boolean shouldShow(PlayerInfo info) {
-        String name = info.getProfile().name();
+        String name = info.getProfile().getName();
         if (name == null) return false;
-        if (mc.player != null && name.equalsIgnoreCase(mc.player.getGameProfile().name())) return true;
+        if (mc.player != null && name.equalsIgnoreCase(mc.player.getGameProfile().getName())) return true;
         if (friends.getValue() && GuizhouWare.friendManager.isFriend(name)) return true;
         if (enemies.getValue() && GuizhouWare.enemyManager.isEnemy(name)) return true;
         return false;

@@ -28,10 +28,10 @@ public final class FontRecoveryTest {
         catch(OutOfMemoryError expected){check(fatal.enabled(),"Fatal VM errors are not suppressed");}
         for(String owner:new String[]{"FontRenderer","HudFonts","FontFallback"}) {
             ClassNode node=read(owner);int scoped=0;
-            for(MethodNode method:node.methods)if(calls(method,"pushMatrix")){
+            for(MethodNode method:node.methods)if(calls(method,"pushPose")){
                 scoped++;
-                check(calls(method,"popMatrix"),owner+" restores render pose");
-                check(method.tryCatchBlocks.stream().anyMatch(block->block.type==null&&handlerCalls(block.handler,"popMatrix")),owner+" restores pose even when drawing throws");
+                check(calls(method,"popPose"),owner+" restores render pose");
+                check(method.tryCatchBlocks.stream().anyMatch(block->block.type==null&&handlerCalls(block.handler,"popPose")),owner+" restores pose even when drawing throws");
             }
             check(scoped>0,owner+" render scope exercised");
         }

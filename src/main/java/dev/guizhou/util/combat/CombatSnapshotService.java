@@ -33,7 +33,7 @@ public final class CombatSnapshotService implements Util {
         }
         var p = entity.position();
         var b = entity.getBoundingBox();
-        var effect = entity.getEffect(MobEffects.RESISTANCE);
+        var effect = entity.getEffect(MobEffects.DAMAGE_RESISTANCE);
         Key key = new Key(entity.getId(), p.x, p.y, p.z, b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ,
                 entity.getHealth(), entity.getAbsorptionAmount(),
                 (float)entity.getAttributeValue(Attributes.ARMOR),

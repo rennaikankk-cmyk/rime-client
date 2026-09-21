@@ -12,9 +12,6 @@ import net.minecraft.client.gui.screens.inventory.AbstractCommandBlockEditScreen
 import net.minecraft.client.gui.screens.inventory.AbstractSignEditScreen;
 import net.minecraft.client.gui.screens.inventory.AnvilScreen;
 import net.minecraft.client.gui.screens.inventory.StructureBlockEditScreen;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.input.MouseButtonInfo;
 import org.lwjgl.glfw.GLFW;
 
 public class GuiMove implements Util {
@@ -47,15 +44,15 @@ public class GuiMove implements Util {
         if (mc.screen instanceof GuizhouWareGui && isArrowKey(event.getKey())) return;
         
         boolean pressed = event.getAction() == GLFW.GLFW_PRESS;
-        KeyEvent ke = new KeyEvent(event.getKey(), 0, 0);
-        
-        if (mc.options.keyUp.matches(ke)) up = pressed;
-        else if (mc.options.keyDown.matches(ke)) down = pressed;
-        else if (mc.options.keyLeft.matches(ke)) left = pressed;
-        else if (mc.options.keyRight.matches(ke)) right = pressed;
-        else if (mc.options.keyJump.matches(ke)) jump = pressed;
-        else if (mc.options.keyShift.matches(ke)) shift = pressed;
-        else if (mc.options.keySprint.matches(ke)) sprint = pressed;
+        int key = event.getKey();
+
+        if (mc.options.keyUp.matches(key, 0)) up = pressed;
+        else if (mc.options.keyDown.matches(key, 0)) down = pressed;
+        else if (mc.options.keyLeft.matches(key, 0)) left = pressed;
+        else if (mc.options.keyRight.matches(key, 0)) right = pressed;
+        else if (mc.options.keyJump.matches(key, 0)) jump = pressed;
+        else if (mc.options.keyShift.matches(key, 0)) shift = pressed;
+        else if (mc.options.keySprint.matches(key, 0)) sprint = pressed;
     }
 
     @Subscribe
@@ -64,15 +61,15 @@ public class GuiMove implements Util {
         if (exclusiveInput()) { clearMovement(); return; }
         
         boolean pressed = event.getAction() == GLFW.GLFW_PRESS;
-        MouseButtonEvent me = new MouseButtonEvent(0, 0, new MouseButtonInfo(event.getButton(), 0));
-        
-        if (mc.options.keyUp.matchesMouse(me)) up = pressed;
-        else if (mc.options.keyDown.matchesMouse(me)) down = pressed;
-        else if (mc.options.keyLeft.matchesMouse(me)) left = pressed;
-        else if (mc.options.keyRight.matchesMouse(me)) right = pressed;
-        else if (mc.options.keyJump.matchesMouse(me)) jump = pressed;
-        else if (mc.options.keyShift.matchesMouse(me)) shift = pressed;
-        else if (mc.options.keySprint.matchesMouse(me)) sprint = pressed;
+        int button = event.getButton();
+
+        if (mc.options.keyUp.matchesMouse(button)) up = pressed;
+        else if (mc.options.keyDown.matchesMouse(button)) down = pressed;
+        else if (mc.options.keyLeft.matchesMouse(button)) left = pressed;
+        else if (mc.options.keyRight.matchesMouse(button)) right = pressed;
+        else if (mc.options.keyJump.matchesMouse(button)) jump = pressed;
+        else if (mc.options.keyShift.matchesMouse(button)) shift = pressed;
+        else if (mc.options.keySprint.matchesMouse(button)) sprint = pressed;
     }
 
     private static boolean isArrowKey(int key) {

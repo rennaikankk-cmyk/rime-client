@@ -95,7 +95,7 @@ public class DiscordRPCModule extends Module {
 
     private String getDimensionText() {
         if (mc.player == null) return "Unknown";
-        String dimPath = mc.player.level().dimension().identifier().getPath();
+        String dimPath = mc.player.level().dimension().location().getPath();
         return switch (dimPath) {
             case "overworld" -> "Overworld";
             case "the_nether" -> "The Nether";

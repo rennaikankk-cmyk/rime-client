@@ -3,6 +3,7 @@ package dev.guizhou.mixin.render;
 import dev.guizhou.features.modules.render.PopEffectsModule;
 import dev.guizhou.util.render.SeeThroughParticle;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.particle.SimpleAnimatedParticle;
 import net.minecraft.client.particle.SingleQuadParticle;
 import net.minecraft.client.particle.SpriteSet;
@@ -23,8 +24,8 @@ public abstract class MixinTotemParticle extends SimpleAnimatedParticle {
 
     @Inject(method = "<init>", at = @At("TAIL"))
     private void guizhouware$customizeTotem(ClientLevel level, double x, double y, double z,
-                                         double xSpeed, double ySpeed, double zSpeed,
-                                         SpriteSet sprites, CallbackInfo ci) {
+                                            double xSpeed, double ySpeed, double zSpeed,
+                                            SpriteSet sprites, CallbackInfo ci) {
         PopEffectsModule module = PopEffectsModule.get();
         if (module == null || !module.shouldCustomize(ParticleTypes.TOTEM_OF_UNDYING)) return;
 
@@ -35,13 +36,13 @@ public abstract class MixinTotemParticle extends SimpleAnimatedParticle {
     }
 
     @Override
-    public SingleQuadParticle.Layer getLayer() {
+    public ParticleRenderType getRenderType() {
         PopEffectsModule module = PopEffectsModule.get();
         if (module != null
                 && module.shouldCustomize(ParticleTypes.TOTEM_OF_UNDYING)
                 && module.throughWalls.getValue()) {
-            return SeeThroughParticle.TRANSLUCENT_LAYER;
+            return SeeThroughParticle.SEE_THROUGH_PARTICLE_SHEET;
         }
-        return super.getLayer();
+        return super.getRenderType();
     }
 }

@@ -281,7 +281,7 @@ public class TelemetryManager extends Feature {
         sessionStarted = lastFlush = System.nanoTime();
         JsonObject start = new JsonObject();
         start.addProperty("loader", "fabric");
-        start.addProperty("mc", "1.21.11");
+        start.addProperty("mc", "1.21.1");
         start.addProperty("telemetry_version", 1);
         enqueue("session_start", start);
     }
@@ -540,7 +540,7 @@ public class TelemetryManager extends Feature {
         Entity target = mc.level.getEntity(packet.entityId());
         JsonObject data = new JsonObject();
         data.addProperty("direction", incoming ? "incoming" : "outgoing");
-        data.addProperty("source_kind", packet.sourceType().unwrapKey().map(key -> key.identifier().toString()).orElse("unknown"));
+        data.addProperty("source_kind", packet.sourceType().unwrapKey().map(key -> key.location().toString()).orElse("unknown"));
         data.addProperty("target_kind", kind(target));
         if (target instanceof LivingEntity living) {
             data.addProperty("health", bounded(living.getHealth(), 0, 1_000_000));

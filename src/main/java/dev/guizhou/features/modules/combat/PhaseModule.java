@@ -42,7 +42,7 @@ public class PhaseModule extends Module {
             return;
         }
 
-        if (mc.player.getCooldowns().isOnCooldown(new ItemStack(Items.ENDER_PEARL))) {
+        if (mc.player.getCooldowns().isOnCooldown(Items.ENDER_PEARL)) {
             disable();
             return;
         }

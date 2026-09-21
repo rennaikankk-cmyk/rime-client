@@ -757,7 +757,7 @@ public class GuangxiElytraModule extends Module {
     private void sendRotationPacket(float yaw, float pitch) {
         mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
                 mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                yaw, pitch, mc.player.onGround(), mc.player.horizontalCollision));
+                yaw, pitch, mc.player.onGround()));
     }
 
     private void resetCruise() {
@@ -1309,11 +1309,11 @@ public class GuangxiElytraModule extends Module {
             case SIMULATION -> new ServerboundMovePlayerPacket.PosRot(
                     mc.player.getX(),
                     mc.player.getY() + 2.5 * (mc.player.tickCount % 3 + 1),
-                    mc.player.getZ(), yaw, pitch, mc.player.onGround(), hc);
+                    mc.player.getZ(), yaw, pitch, mc.player.onGround());
             case CRASH_PACKETS -> new ServerboundMovePlayerPacket.PosRot(
                     3.9999999E7,
                     mc.player.getY() + 2.5 * (mc.player.tickCount % 3 + 1),
-                    3.9999999E7, yaw, pitch, true, hc);
+                    3.9999999E7, yaw, pitch, true);
         };
     }
 
@@ -1335,7 +1335,7 @@ public class GuangxiElytraModule extends Module {
         if (event.getPacket() instanceof ClientboundSetEntityMotionPacket motion
                 && motion.getId() == mc.player.getId()
                 && mc.player.isFallFlying()) {
-            Vec3 packetVel = motion.getMovement();
+            Vec3 packetVel = new Vec3(motion.getXa(), motion.getYa(), motion.getZa());
             if (packetVel.horizontalDistanceSqr() < 0.01) {
                 event.cancel();
                 return;

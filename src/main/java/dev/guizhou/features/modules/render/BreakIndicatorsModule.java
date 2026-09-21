@@ -357,14 +357,14 @@ public class BreakIndicatorsModule extends Module {
                     chineseTextScale.getValue() * 8.0 / (dist + 8.0));
             int lineH = mc.font.lineHeight;
 
-            graphics.pose().pushMatrix();
-            graphics.pose().translate(screen[0], screen[1]);
-            graphics.pose().scale(s, s);
+            graphics.pose().pushPose();
+            graphics.pose().translate(screen[0], screen[1], 0);
+            graphics.pose().scale(s, s, s);
 
             graphics.drawString(mc.font, name, -mc.font.width(name) / 2, -lineH - 1, 0xFFFFFFFF);
             graphics.drawString(mc.font, status, -mc.font.width(status) / 2, 1, statusColor.getRGB() | 0xFF000000);
 
-            graphics.pose().popMatrix();
+            graphics.pose().popPose();
         }
 
         private void renderBlock(Render3DEvent event, long now) {

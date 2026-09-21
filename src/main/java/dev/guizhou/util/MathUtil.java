@@ -141,7 +141,7 @@ public class MathUtil
     public static double[] directionSpeed(double speed) {
         float forward = MathUtil.mc.player.input.getMoveVector().y;
         float side = MathUtil.mc.player.input.getMoveVector().x;
-        float yaw = MathUtil.mc.player.yRotO + (MathUtil.mc.player.getYRot() - MathUtil.mc.player.yRotO) * mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        float yaw = MathUtil.mc.player.yRotO + (MathUtil.mc.player.getYRot() - MathUtil.mc.player.yRotO) * mc.getTimer().getGameTimeDeltaPartialTick(false);
         if (forward != 0.0f) {
             if (side > 0.0f) {
                 yaw += (float) (forward > 0.0f ? -45 : 45);

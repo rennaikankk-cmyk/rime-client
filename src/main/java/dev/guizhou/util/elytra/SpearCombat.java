@@ -1,63 +1,64 @@
 package dev.guizhou.util.elytra;
 
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.Pose;
-import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.AttackRange;
-import net.minecraft.world.item.component.KineticWeapon;
-import net.minecraft.world.item.component.PiercingWeapon;
-import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Optional;
-
+/**
+ * 1.21.1 spear combat adapter. The public surface mirrors the 1.21.11 native
+ * implementation so the chase module and tests keep compiling; the internals resolve
+ * spears through {@link SpearCapability1211} (ViaBackwards-translated metadata with
+ * server overrides, native registry defaults otherwise). Held-charge contact combat
+ * is the only supported path; the stab packet is never emitted.
+ */
 public final class SpearCombat {
     private SpearCombat() {
     }
 
     public static boolean isSpear(ItemStack stack) {
-        return kineticWeapon(stack) != null;
+        return spec(stack) != null;
     }
 
     public static int chargeTicks(ItemStack stack) {
-        KineticWeapon weapon = kineticWeapon(stack);
+        SpearCapability1211.Spec weapon = spec(stack);
         return weapon == null ? 0 : weapon.delayTicks();
     }
 
-    /** Last usable damage tick measured from the start of item use, inclusive. */
+    /**
+     * Last usable damage tick measured from the start of item use, inclusive.
+     * Native semantics: delay + active damage window (computeDamageUseDuration).
+     */
     public static int damageDurationTicks(ItemStack stack) {
-        KineticWeapon weapon = kineticWeapon(stack);
-        return weapon == null ? 0 : weapon.computeDamageUseDuration();
+        SpearCapability1211.Spec weapon = spec(stack);
+        return weapon == null || weapon.damage() == null ? 0
+                : (int)Math.min(Integer.MAX_VALUE,(long)weapon.delayTicks()+weapon.activeDurationTicks());
     }
 
     /** Whether charge is complete and its damage window is still open. */
     public static boolean isReady(Player player) {
         if (player == null || !player.isUsingItem()) return false;
-        KineticWeapon weapon = kineticWeapon(player.getUseItem());
-        return weapon != null && weapon.damageConditions().isPresent()
-                && inUseWindow(player.getTicksUsingItem(), weapon.delayTicks(),
-                weapon.damageConditions().get().maxDurationTicks());
+        SpearCapability1211.Spec weapon = spec(player.getUseItem());
+        return weapon != null && weapon.damage() != null
+                && inUseWindow(player.getTicksUsingItem(), weapon.delayTicks(), weapon.activeDurationTicks());
     }
 
     public static boolean hasDamageWindowExpired(Player player) {
         if (player == null || !player.isUsingItem()) return false;
-        KineticWeapon weapon = kineticWeapon(player.getUseItem());
-        return weapon != null && weapon.damageConditions().isPresent()
-                && player.getTicksUsingItem() > (long) weapon.delayTicks()
-                + weapon.damageConditions().get().maxDurationTicks();
+        SpearCapability1211.Spec weapon = spec(player.getUseItem());
+        return weapon != null && weapon.damage() != null
+                && player.getTicksUsingItem() > (long) weapon.delayTicks() + weapon.activeDurationTicks();
     }
 
     /** Estimate for route planning only; the weapon controller still owns starting use. */
     public static int readyInTicks(Player player) {
         if (player == null) return Integer.MAX_VALUE;
         ItemStack stack = player.isUsingItem() ? player.getUseItem() : player.getMainHandItem();
-        KineticWeapon weapon = kineticWeapon(stack);
-        if (weapon == null || weapon.damageConditions().isEmpty()) return Integer.MAX_VALUE;
-        return remainingCharge(player.isUsingItem(), player.getTicksUsingItem(), weapon.delayTicks(),
-                weapon.damageConditions().get().maxDurationTicks());
+        SpearCapability1211.Spec weapon = spec(stack);
+        if (weapon == null || weapon.damage() == null) return Integer.MAX_VALUE;
+        return remainingCharge(player.isUsingItem(), player.getTicksUsingItem(),
+                weapon.delayTicks(), weapon.activeDurationTicks());
     }
 
     static int remainingCharge(boolean using, int useTicks, int delayTicks, int durationTicks) {
@@ -68,16 +69,20 @@ public final class SpearCombat {
     }
 
     public static double minRange(Player player, ItemStack stack) {
-        return player == null ? 0.0 : attackRange(player, stack).effectiveMinRange(player);
+        SpearCapability1211.Spec weapon = spec(stack);
+        if (weapon == null || player == null) return 0.0;
+        return player.getAbilities().instabuild ? weapon.minCreativeRange() : weapon.minRange();
     }
 
     public static double maxRange(Player player, ItemStack stack) {
-        return player == null ? 0.0 : attackRange(player, stack).effectiveMaxRange(player);
+        SpearCapability1211.Spec weapon = spec(stack);
+        if (weapon == null || player == null) return 0.0;
+        return player.getAbilities().instabuild ? weapon.maxCreativeRange() : weapon.maxRange();
     }
 
-    /** Armor flight keeps a local glide pose across the owned wing/chestplate cycle,
-     * while vanilla evaluates kinetic attacks after the chestplate restores standing
-     * dimensions. Aim from that attack origin; ordinary gliding keeps its real eye. */
+    /** Armor flight keeps a local glide pose across the owned wing/chestplate cycle;
+     * the server evaluates kinetic contact against standing dimensions. Aim from that
+     * attack origin; ordinary gliding keeps its real eye. */
     public static Vec3 attackEye(Player player, boolean armorSwapActive) {
         return selectAttackEye(player.position(), player.getEyePosition(),
                 player.getEyeHeight(Pose.STANDING), armorSwapActive, player.getPose() == Pose.FALL_FLYING);
@@ -89,39 +94,60 @@ public final class SpearCombat {
                 ? position.add(0.0, standingEyeHeight, 0.0) : localEye;
     }
 
-    /** Local threat estimate using the same component conditions and ray cast as kinetic attacks. */
+    /** All present kinetic effects, their active windows, and the unobstructed contact ray. */
     public static boolean threatens(Player attacker, Player defender, double extraReach, double extraMargin) {
         if (attacker == null || defender == null || attacker == defender
                 || attacker.level() != defender.level() || !attacker.isUsingItem()
-                || !attacker.isAlive() || !defender.isAlive()
-                || !PiercingWeapon.canHitEntity(attacker, defender)) return false;
-        KineticWeapon weapon = kineticWeapon(attacker.getUseItem());
+                || !attacker.isAlive() || !defender.isAlive() || attacker.isSpectator()
+                || defender.isSpectator() || attacker.isPassengerOfSameVehicle(defender)) return false;
+        SpearCapability1211.Spec weapon = spec(attacker.getUseItem());
         if (weapon == null || attacker.getTicksUsingItem() < weapon.delayTicks()) return false;
 
-        int activeTicks = attacker.getTicksUsingItem() - weapon.delayTicks();
         Vec3 look = attacker.getLookAngle();
-        double attackerSpeed = look.dot(KineticWeapon.getMotion(attacker));
-        double relativeSpeed = Math.max(0.0, attackerSpeed - look.dot(KineticWeapon.getMotion(defender)));
-        if (!satisfies(weapon.damageConditions(), activeTicks, attackerSpeed, relativeSpeed)
-                && !satisfies(weapon.knockbackConditions(), activeTicks, attackerSpeed, relativeSpeed)
-                && !satisfies(weapon.dismountConditions(), activeTicks, attackerSpeed, relativeSpeed)) return false;
+        Vec3 attackerMotion = knownMotion(attacker);
+        Vec3 defenderMotion = knownMotion(defender);
+        double speedPerSecond = look.dot(attackerMotion) * 20.0;
+        double relativeSpeedPerSecond = Math.max(0.0, look.dot(attackerMotion) - look.dot(defenderMotion)) * 20.0;
+        if (!weapon.threatens(attacker.getTicksUsingItem(),speedPerSecond,relativeSpeedPerSecond)) return false;
 
-        AttackRange actual = attackRange(attacker, attacker.getUseItem());
-        float reach = (float) nonnegativeFinite(extraReach);
-        float margin = (float) nonnegativeFinite(extraMargin);
-        AttackRange defensive = new AttackRange(actual.minRange(), actual.maxRange() + reach,
-                actual.minCreativeRange(), actual.maxCreativeRange() + reach,
-                actual.hitboxMargin() + margin, actual.mobFactor());
-        Vec3 rayDirection = attacker.getHeadLookAngle();
-        double movementExtension = Math.max(0.0, attacker.getKnownMovement().dot(rayDirection));
-        if (!intersectsRay(attacker.getEyePosition(), rayDirection, defender.getBoundingBox(),
-                defensive.effectiveMinRange(attacker), defensive.effectiveMaxRange(attacker) + movementExtension,
-                defensive.hitboxMargin())) return false;
+        double reach = nonnegativeFinite(extraReach);
+        double margin = weapon.hitboxMargin() + nonnegativeFinite(extraMargin);
+        double maxRange = (attacker.getAbilities().instabuild ? weapon.maxCreativeRange() : weapon.maxRange()) + reach;
+        double movementExtension = Math.max(0.0, attackerMotion.dot(look));
+        double minRange = attacker.getAbilities().instabuild ? weapon.minCreativeRange() : weapon.minRange();
+        Vec3 eye=attacker.getEyePosition().add(ObservedEntityPosition.offset(attacker));
+        AABB body=defender.getBoundingBox().move(ObservedEntityPosition.offset(defender));
+        if (!intersectsRay(eye,look,body,minRange,maxRange+movementExtension,margin)) return false;
+        Vec3 start=eye.add(look.scale(minRange)), end=eye.add(look.scale(maxRange+movementExtension));
+        AABB expanded=body.inflate(margin);
+        Vec3 contact=expanded.contains(start)?start:expanded.clip(start,end).orElse(null);
+        if (contact==null) return false;
+        return attacker.level().clip(new net.minecraft.world.level.ClipContext(eye,contact,
+                net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                net.minecraft.world.level.ClipContext.Fluid.NONE,attacker)).getType()
+                == net.minecraft.world.phys.HitResult.Type.MISS;
+    }
 
-        // Vanilla also clips the margin-to-hitbox segment, preventing hits through wall edges.
-        return ProjectileUtil.getHitEntitiesAlong(attacker, defensive,
-                entity -> entity == defender, ClipContext.Block.COLLIDER)
-                .right().map(hits -> !hits.isEmpty()).orElse(false);
+    private record MotionSample(Vec3 position,int tick,Vec3 velocity) {}
+    private static final java.util.Map<Player,MotionSample> MOTION = new java.util.WeakHashMap<>();
+
+    /** Old RemotePlayer delta movement often omits position-packet motion. */
+    private static Vec3 knownMotion(Player player) {
+        if (player instanceof net.minecraft.client.player.LocalPlayer) return player.getDeltaMovement();
+        Vec3 position=player.position().add(ObservedEntityPosition.offset(player));
+        MotionSample previous=MOTION.get(player);
+        int tick=player.tickCount;
+        if (previous!=null && tick==previous.tick()) return previous.velocity();
+        Vec3 velocity=player.getDeltaMovement();
+        if (previous!=null) {
+            int elapsed=tick-previous.tick();
+            Vec3 delta=position.subtract(previous.position());
+            velocity=elapsed>0 && elapsed<=5 && finite(delta) && delta.lengthSqr()<=400.0*elapsed*elapsed
+                    ? delta.scale(1.0/elapsed):Vec3.ZERO;
+        }
+        if (!finite(velocity) || velocity.lengthSqr()>400.0) velocity=Vec3.ZERO;
+        MOTION.put(player,new MotionSample(position,tick,velocity));
+        return velocity;
     }
 
     static boolean inUseWindow(int useTicks, int delayTicks, int activeDurationTicks) {
@@ -142,18 +168,8 @@ public final class SpearCombat {
         return expanded.contains(start) || expanded.clip(start, end).isPresent();
     }
 
-    private static KineticWeapon kineticWeapon(ItemStack stack) {
-        return stack == null || stack.isEmpty() ? null : stack.get(DataComponents.KINETIC_WEAPON);
-    }
-
-    private static AttackRange attackRange(Player player, ItemStack stack) {
-        AttackRange range = stack == null || stack.isEmpty() ? null : stack.get(DataComponents.ATTACK_RANGE);
-        return range == null ? AttackRange.defaultFor(player) : range;
-    }
-
-    private static boolean satisfies(Optional<KineticWeapon.Condition> condition, int ticks,
-                                     double attackerSpeed, double relativeSpeed) {
-        return condition.isPresent() && condition.get().test(ticks, attackerSpeed, relativeSpeed, 1.0);
+    private static SpearCapability1211.Spec spec(ItemStack stack) {
+        return SpearCapability1211.detect(stack);
     }
 
     private static double nonnegativeFinite(double value) {

@@ -14,7 +14,7 @@ import dev.guizhou.util.player.EatUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
-import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -515,17 +515,18 @@ public class PlacementManager extends Feature {
         if (!HeartbeatManager.authorized() || !canInteract(hit, eye, range, wallRange)) return false;
         try (var prediction = ((ClientLevelAccessor) mc.level)
                 .guizhouware$getBlockStatePredictionHandler().startPredicting()) {
-            if (sneak && !mc.player.getLastSentInput().shift()) {
+            boolean currentlySneaking = ((dev.guizhou.mixin.entity.LocalPlayerInputAccessor) mc.player)
+                    .guizhouware$lastSentSneaking();
+            if (sneak && !currentlySneaking) {
                 // Already-sneaking players stay sneaking; otherwise press, place, restore.
-                net.minecraft.world.entity.player.Input cur = mc.player.getLastSentInput();
-                net.minecraft.world.entity.player.Input flipped = new net.minecraft.world.entity.player.Input(
-                        cur.forward(), cur.backward(), cur.left(), cur.right(), cur.jump(),
-                        true, cur.sprint());
-                if (!dev.guizhou.util.PacketSendUtil.send(new ServerboundPlayerInputPacket(flipped))) return false;
+                // Native 1.21.1 ignores input packets outside vehicles. Sneak uses commands.
+                if (!dev.guizhou.util.PacketSendUtil.send(new ServerboundPlayerCommandPacket(
+                        mc.player, ServerboundPlayerCommandPacket.Action.PRESS_SHIFT_KEY))) return false;
                 try {
                     return dev.guizhou.util.PacketSendUtil.send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
                 } finally {
-                    mc.getConnection().send(new ServerboundPlayerInputPacket(cur));
+                    mc.getConnection().send(new ServerboundPlayerCommandPacket(
+                            mc.player, ServerboundPlayerCommandPacket.Action.RELEASE_SHIFT_KEY));
                 }
             } else {
                 return dev.guizhou.util.PacketSendUtil.send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));

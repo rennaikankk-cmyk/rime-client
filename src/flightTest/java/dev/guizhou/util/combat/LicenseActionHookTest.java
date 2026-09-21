@@ -41,7 +41,7 @@ public final class LicenseActionHookTest {
     private static void anchorCallbacks() throws IOException {
         String anchor = BASE + "combat/AutoAnchorModule";
         guarded(anchor, "onPreTick", null, "runCycle");
-        guarded(anchor, "onBlockUpdate", null, "schedule");
+        guarded(anchor, "onBlockUpdate", null, "tell");
         guarded(anchor, "lambda$onBlockUpdate$", null, "runCycle");
         guarded(anchor, "runCycle", null, "perform", "selectCandidate", "repeatCandidate");
         guarded(anchor, "sendUseItemOn", null, "sendUseItemOnDirect");
@@ -50,7 +50,7 @@ public final class LicenseActionHookTest {
 
     private static void crystalActions() throws IOException {
         guarded(CRYSTAL, "onCrystalSpawn", null, "sendCrystalAttack", "sendGhostAttacksAfter");
-        guarded(CRYSTAL, "onBlockUpdate", null, "schedule");
+        guarded(CRYSTAL, "onBlockUpdate", null, "tell");
         guarded(CRYSTAL, "lambda$onBlockUpdate$", null, "scanBlockUpdate");
         guarded(CRYSTAL, "scanBlockUpdate", null, "findBestCrystal", "findBestPlace", "breakCrystal", "doPlace");
         guarded(CRYSTAL, "preplaceCrystal", null, "doPlace");

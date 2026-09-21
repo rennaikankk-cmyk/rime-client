@@ -318,9 +318,9 @@ public class GuangxiProbeModule extends Module {
         // out-and-back in one tick: the server's move check (if any) answers
         // with a correction teleport; harmless on permissive servers
         mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(
-                away.x, away.y, away.z, false, false));
+                away.x, away.y, away.z, false));
         mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(
-                pos.x, pos.y, pos.z, false, false));
+                pos.x, pos.y, pos.z, false));
         moveWait = 0;
     }
 
@@ -391,7 +391,7 @@ public class GuangxiProbeModule extends Module {
         } else if (event.getPacket() instanceof ClientboundPlayerPositionPacket position) {
             // correction teleport while we are mid move-probe = the move check bit back
             if (phase == Phase.MOVE && !movePunished && moveWait > 0) {
-                double d = position.change().position().distanceTo(mc.player.position());
+                double d = guizhouware$absolutePosition(position).distanceTo(mc.player.position());
                 if (d > 1.0) {
                     movePunished = true;
                     moveWait = 0;
@@ -416,5 +416,12 @@ public class GuangxiProbeModule extends Module {
             case MOVE -> moveStepIndex < MOVE_STEPS.length ? String.format("Move %.0f", MOVE_STEPS[moveStepIndex]) : "Move";
             case REPORT -> "Done";
         };
+    }
+private Vec3 guizhouware$absolutePosition(net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket packet) {
+        var relative = packet.getRelativeArguments();
+        double x = relative.contains(net.minecraft.world.entity.RelativeMovement.X) ? mc.player.getX() + packet.getX() : packet.getX();
+        double y = relative.contains(net.minecraft.world.entity.RelativeMovement.Y) ? mc.player.getY() + packet.getY() : packet.getY();
+        double z = relative.contains(net.minecraft.world.entity.RelativeMovement.Z) ? mc.player.getZ() + packet.getZ() : packet.getZ();
+        return new Vec3(x, y, z);
     }
 }

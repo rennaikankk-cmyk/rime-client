@@ -4,11 +4,11 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectList;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.RenderPipelines;
+import dev.guizhou.util.render.GuiBlitCompat;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 
 import java.awt.Font;
@@ -28,7 +28,7 @@ public class FontRenderer implements Closeable {
     private static final float REF_TEXT_HEIGHT = 8f;
     private static final float TARGET_ASCENT = 7f;
 
-    private final Map<Identifier, ObjectList<DrawEntry>> glyphPages = new HashMap<>();
+    private final Map<ResourceLocation, ObjectList<DrawEntry>> glyphPages = new HashMap<>();
     private final GlyphMap.PageCache maps;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
@@ -93,7 +93,7 @@ public class FontRenderer implements Closeable {
                     GlyphMap.Glyph glyph = locateGlyph(ch);
                     if (glyph == null) continue;
                     if (glyph.width() > 0 && glyph.height() > 0 && ch != ' ') {
-                        Identifier pageId = glyph.parent().getTextureId();
+                        ResourceLocation pageId = glyph.parent().getTextureId();
                         glyphPages.computeIfAbsent(pageId, k -> new ObjectArrayList<>())
                                 .add(new DrawEntry(pen[0], 0, argb, glyph));
                     }
@@ -106,19 +106,19 @@ public class FontRenderer implements Closeable {
             float yTop = y + (this.targetAscent + 1f - blockGui) / 2f;
 
             var pose = graphics.pose();
-            pose.pushMatrix();
+            pose.pushPose();
             try {
-            pose.translate(x, yTop);
+            pose.translate(x, yTop, 0);
             float scale = 1.0f / this.multiplier;
-            pose.scale(scale, scale);
+            pose.scale(scale, scale, scale);
 
-            for (Map.Entry<Identifier, ObjectList<DrawEntry>> entry : glyphPages.entrySet()) {
-                Identifier pageId = entry.getKey();
+            for (Map.Entry<ResourceLocation, ObjectList<DrawEntry>> entry : glyphPages.entrySet()) {
+                ResourceLocation pageId = entry.getKey();
                 List<DrawEntry> entries = entry.getValue();
                 for (DrawEntry de : entries) {
                     GlyphMap.Glyph g = de.glyph;
                     GlyphMap parent = g.parent();
-                    graphics.blit(RenderPipelines.GUI_TEXTURED, pageId,
+                    GuiBlitCompat.blitTinted(graphics, pageId,
                             Math.round(de.dx), Math.round(de.dy),
                             (float) g.u(), (float) g.v(),
                             g.width(), g.height(),
@@ -127,7 +127,7 @@ public class FontRenderer implements Closeable {
                 }
             }
 
-            } finally { pose.popMatrix(); }
+            } finally { pose.popPose(); }
           } finally { glyphPages.clear(); }
         }
     }

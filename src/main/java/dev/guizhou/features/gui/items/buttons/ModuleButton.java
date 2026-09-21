@@ -159,7 +159,7 @@ public class ModuleButton extends Button {
             float trayBottom = trayTop + animatedSubHeight;
             boolean animating = Math.abs(animatedSubHeight - targetSubHeight) >= 0.5f;
             if (animating) {
-                context.enableScissor((int) this.x, (int) trayTop,
+                dev.guizhou.util.render.ScissorUtil.enableTransformed(context,(int) this.x, (int) trayTop,
                         (int) (this.x + this.width), (int) trayBottom);
             }
             RenderUtil.rect(context, this.x, trayTop, this.x + this.width, trayBottom,

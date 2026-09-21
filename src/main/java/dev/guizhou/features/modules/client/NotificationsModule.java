@@ -86,7 +86,7 @@ public class NotificationsModule extends Module {
             if (player.isDeadOrDying()) {
                 if (lastTickAlive.contains(id)) {
                     int pops = GuizhouWare.playerInfoManager.getTotemPops(id);
-                    String name = player.getGameProfile().name();
+                    String name = player.getGameProfile().getName();
                     String unit = pops == 1 ? "totem" : "totems";
                     Component message = Component.empty()
                             .append(Component.literal(name + " has died after popping "))
@@ -115,7 +115,7 @@ public class NotificationsModule extends Module {
         int pops = GuizhouWare.playerInfoManager.getTotemPops(id);
         String unit = pops == 1 ? "totem" : "totems";
         boolean self = player == mc.player;
-        String subject = self ? "You have" : player.getGameProfile().name() + " has";
+        String subject = self ? "You have" : player.getGameProfile().getName() + " has";
 
         Component body = Component.empty()
                 .append(Component.literal(subject + " popped "))

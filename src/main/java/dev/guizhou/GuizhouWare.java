@@ -8,14 +8,27 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.ModInitializer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.Registry;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class GuizhouWare implements ModInitializer, ClientModInitializer {
+
+    // Extra damage keys can arrive in registries from newer servers through a protocol bridge.
+    // Native 1.21.1 melee (including mace hits) still uses PLAYER_ATTACK;
+    // spear is a 1.21.11 server capability, not a native 1.21.1 item.
+    public static final net.minecraft.resources.ResourceKey<net.minecraft.world.damagesource.DamageType> MACE_SMASH_KEY =
+            net.minecraft.resources.ResourceKey.create(
+                    net.minecraft.core.registries.Registries.DAMAGE_TYPE,
+                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", "mace_smash"));
+    public static final net.minecraft.resources.ResourceKey<net.minecraft.world.damagesource.DamageType> SPEAR_KEY =
+            net.minecraft.resources.ResourceKey.create(
+                    net.minecraft.core.registries.Registries.DAMAGE_TYPE,
+                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", "spear"));
+
     public static float TIMER = 1f;
-    public static final Identifier AUTOHORSE_SOUND_ID = Identifier.fromNamespaceAndPath("guizhouware", "autohorse");
+    public static final ResourceLocation AUTOHORSE_SOUND_ID = ResourceLocation.fromNamespaceAndPath("guizhouware", "autohorse");
     public static final SoundEvent AUTOHORSE_SOUND = SoundEvent.createVariableRangeEvent(AUTOHORSE_SOUND_ID);
 
     public static final Logger LOGGER = LogManager.getLogger("GuizhouWare");
@@ -66,6 +79,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
     @Override
     public void onInitializeClient() {
         LOGGER.info("Initializing {}", BuildConfig.NAME);
+        dev.guizhou.util.render.PortRenderResources.init();
 
         long startTime = System.nanoTime();
 

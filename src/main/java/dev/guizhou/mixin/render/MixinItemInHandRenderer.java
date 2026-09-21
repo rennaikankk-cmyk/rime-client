@@ -7,13 +7,13 @@ import dev.guizhou.features.modules.render.ShadersModule;
 import dev.guizhou.features.modules.render.ViewModelModule;
 import dev.guizhou.mixin.entity.EntityRotationAccessor;
 import dev.guizhou.util.render.HandShaderRender;
-import dev.guizhou.util.render.HandSilhouetteCollector;
-import dev.guizhou.util.render.TeeSubmitCollector;
+import dev.guizhou.util.render.SilhouetteBufferSource;
+import dev.guizhou.util.render.TeeBufferSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.ItemInHandRenderer;
-import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.ItemStack;
@@ -25,7 +25,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ItemInHandRenderer.class)
 public class MixinItemInHandRenderer {
@@ -45,23 +44,29 @@ public class MixinItemInHandRenderer {
     @Shadow
     private float oOffHandHeight;
 
+    @Unique
     private float noSway$savedXBob;
+    @Unique
     private float noSway$savedXBobO;
+    @Unique
     private float noSway$savedYBob;
+    @Unique
     private float noSway$savedYBobO;
 
     @Inject(method = "renderHandsWithItems", at = @At("HEAD"))
-    private void noSway$pre(CallbackInfo ci) {
+    private void noSway$pre(float partialTick, PoseStack poseStack,
+                            MultiBufferSource.BufferSource bufferSource, LocalPlayer player,
+                            int packedLight, CallbackInfo ci) {
         if (!ViewModelModule.isActive(m -> m.noSway.getValue())) return;
-        LocalPlayer player = Minecraft.getInstance().player;
-        if (player == null) return;
-        EntityRotationAccessor acc = (EntityRotationAccessor) player;
+        LocalPlayer self = Minecraft.getInstance().player;
+        if (self == null) return;
+        EntityRotationAccessor acc = (EntityRotationAccessor) self;
         noSway$savedXBob = acc.guizhouware$getXBob();
         noSway$savedXBobO = acc.guizhouware$getXBobO();
         noSway$savedYBob = acc.guizhouware$getYBob();
         noSway$savedYBobO = acc.guizhouware$getYBobO();
-        float xRot = player.getXRot();
-        float yRot = player.getYRot();
+        float xRot = self.getXRot();
+        float yRot = self.getYRot();
         acc.guizhouware$setXBob(xRot);
         acc.guizhouware$setXBobO(xRot);
         acc.guizhouware$setYBob(yRot);
@@ -69,22 +74,17 @@ public class MixinItemInHandRenderer {
     }
 
     @Inject(method = "renderHandsWithItems", at = @At("RETURN"))
-    private void noSway$post(CallbackInfo ci) {
+    private void noSway$post(float partialTick, PoseStack poseStack,
+                             MultiBufferSource.BufferSource bufferSource, LocalPlayer player,
+                             int packedLight, CallbackInfo ci) {
         if (!ViewModelModule.isActive(m -> m.noSway.getValue())) return;
-        LocalPlayer player = Minecraft.getInstance().player;
-        if (player == null) return;
-        EntityRotationAccessor acc = (EntityRotationAccessor) player;
+        LocalPlayer self = Minecraft.getInstance().player;
+        if (self == null) return;
+        EntityRotationAccessor acc = (EntityRotationAccessor) self;
         acc.guizhouware$setXBob(noSway$savedXBob);
         acc.guizhouware$setXBobO(noSway$savedXBobO);
         acc.guizhouware$setYBob(noSway$savedYBob);
         acc.guizhouware$setYBobO(noSway$savedYBobO);
-    }
-
-    @Inject(method = "shouldInstantlyReplaceVisibleItem", at = @At("HEAD"), cancellable = true)
-    private void noSwap$instant(ItemStack visibleStack, ItemStack currentStack, CallbackInfoReturnable<Boolean> cir) {
-        if (ViewModelModule.isActive(m -> m.noSwapAnimation.getValue())) {
-            cir.setReturnValue(true);
-        }
     }
 
     @Inject(method = "tick", at = @At("TAIL"))
@@ -97,12 +97,13 @@ public class MixinItemInHandRenderer {
     }
 
     @Inject(
-        method = "renderArmWithItem(Lnet/minecraft/client/player/AbstractClientPlayer;FFLnet/minecraft/world/InteractionHand;FLnet/minecraft/world/item/ItemStack;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;I)V",
+        method = "renderArmWithItem(Lnet/minecraft/client/player/AbstractClientPlayer;FFLnet/minecraft/world/InteractionHand;FLnet/minecraft/world/item/ItemStack;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
         at = @At("HEAD")
     )
     private void viewModel$push(AbstractClientPlayer player, float partialTick, float interpolatedPitch,
                                 InteractionHand hand, float swingProgress, ItemStack stack, float equipProgress,
-                                PoseStack poseStack, SubmitNodeCollector collector, int light, CallbackInfo ci) {
+                                PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
+                                CallbackInfo ci) {
         viewModel$scaled = false;
         ViewModelModule mod = ViewModelModule.getInstance();
         if (mod == null || !mod.isEnabled()) return;
@@ -122,12 +123,13 @@ public class MixinItemInHandRenderer {
     }
 
     @Inject(
-        method = "renderArmWithItem(Lnet/minecraft/client/player/AbstractClientPlayer;FFLnet/minecraft/world/InteractionHand;FLnet/minecraft/world/item/ItemStack;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;I)V",
+        method = "renderArmWithItem(Lnet/minecraft/client/player/AbstractClientPlayer;FFLnet/minecraft/world/InteractionHand;FLnet/minecraft/world/item/ItemStack;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
         at = @At("RETURN")
     )
     private void viewModel$pop(AbstractClientPlayer player, float partialTick, float interpolatedPitch,
                                InteractionHand hand, float swingProgress, ItemStack stack, float equipProgress,
-                               PoseStack poseStack, SubmitNodeCollector collector, int light, CallbackInfo ci) {
+                               PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
+                               CallbackInfo ci) {
         if (!viewModel$scaled) return;
         viewModel$scaled = false;
         poseStack.popPose();
@@ -137,7 +139,7 @@ public class MixinItemInHandRenderer {
         method = "renderHandsWithItems",
         at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/ItemInHandRenderer;renderArmWithItem(Lnet/minecraft/client/player/AbstractClientPlayer;FFLnet/minecraft/world/InteractionHand;FLnet/minecraft/world/item/ItemStack;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;I)V"
+            target = "Lnet/minecraft/client/renderer/ItemInHandRenderer;renderArmWithItem(Lnet/minecraft/client/player/AbstractClientPlayer;FFLnet/minecraft/world/InteractionHand;FLnet/minecraft/world/item/ItemStack;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V"
         ),
         index = 5
     )
@@ -147,28 +149,67 @@ public class MixinItemInHandRenderer {
         return mod.getDisplayStack(original);
     }
 
-    @ModifyVariable(method = "renderHandsWithItems", at = @At("HEAD"), argsOnly = true, ordinal = 0)
-    private SubmitNodeCollector handShader$wrapCollector(SubmitNodeCollector original) {
+    @ModifyVariable(method = "renderHandsWithItems", at = @At("HEAD"), argsOnly = true)
+    private MultiBufferSource.BufferSource handShader$wrapCollector(MultiBufferSource.BufferSource original) {
         handShader$capturing = false;
         ShadersModule mod = GuizhouWare.moduleManager.getModuleByClass(ShadersModule.class);
         if (mod == null || !mod.wantsHandShader()
-                || (!mod.handOutline.getValue() && !mod.handFill.getValue())) {
+                || (!mod.handOutline.getValue() && !mod.handFill.getValue() && !mod.handGlow.getValue())) {
             return original;
         }
-        HandSilhouetteCollector secondary = HandShaderRender.beginCapture(mod.getHandRgb());
+        SilhouetteBufferSource secondary = HandShaderRender.beginCapture(mod.getHandRgb());
         if (secondary == null) return original;
 
         handShader$capturing = true;
         HandShaderRender.capturePaused = false;
-        return new TeeSubmitCollector(original, secondary);
+        return new TeeWrappedBufferSource(original, secondary);
     }
 
     @Inject(method = "renderHandsWithItems", at = @At("TAIL"))
-    private void handShader$flush(float partialTick, PoseStack poseStack, SubmitNodeCollector collector,
-                                  LocalPlayer player, int light, CallbackInfo ci) {
+    private void handShader$flush(float partialTick, PoseStack poseStack,
+                                  MultiBufferSource.BufferSource bufferSource, LocalPlayer player,
+                                  int packedLight, CallbackInfo ci) {
         if (!handShader$capturing) return;
         handShader$capturing = false;
         HandShaderRender.capturePaused = false;
         HandShaderRender.flush();
+    }
+
+    /** Bridges MultiBufferSource into the BufferSource-typed method parameter.
+     * 1.21.1 BufferSource is a class, so extend it; the shared builder is never
+     * written to because every accessor delegates. */
+    @Unique
+    static final class TeeWrappedBufferSource extends MultiBufferSource.BufferSource {
+        private static final com.mojang.blaze3d.vertex.ByteBufferBuilder UNUSED =
+                new com.mojang.blaze3d.vertex.ByteBufferBuilder(256);
+        private final MultiBufferSource.BufferSource primary;
+        private final MultiBufferSource secondary;
+
+        TeeWrappedBufferSource(MultiBufferSource.BufferSource primary, MultiBufferSource secondary) {
+            super(UNUSED, new java.util.LinkedHashMap<>());
+            this.primary = primary;
+            this.secondary = secondary;
+        }
+
+        @Override
+        public com.mojang.blaze3d.vertex.VertexConsumer getBuffer(net.minecraft.client.renderer.RenderType renderType) {
+            return new dev.guizhou.util.render.DualVertexConsumer(
+                    primary.getBuffer(renderType), secondary.getBuffer(renderType));
+        }
+
+        @Override
+        public void endLastBatch() {
+            primary.endLastBatch();
+        }
+
+        @Override
+        public void endBatch() {
+            primary.endBatch();
+        }
+
+        @Override
+        public void endBatch(net.minecraft.client.renderer.RenderType renderType) {
+            primary.endBatch(renderType);
+        }
     }
 }

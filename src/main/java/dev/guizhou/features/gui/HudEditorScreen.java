@@ -7,8 +7,9 @@ import dev.guizhou.util.render.ShadcnDraw;
 import dev.guizhou.util.render.font.HudFonts;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
+import dev.guizhou.util.compat.input.KeyEvent;
+import dev.guizhou.util.compat.input.MouseButtonEvent;
+import dev.guizhou.util.compat.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
@@ -85,8 +86,8 @@ public class HudEditorScreen extends Screen {
     }
 
     @Override
-    public void resize(int width, int height) {
-        super.resize(width, height);
+    public void resize(net.minecraft.client.Minecraft minecraft, int width, int height) {
+        super.resize(minecraft, width, height);
         if (hud != null) hud.endDrag();
         dragging = null;
         layout();
@@ -221,8 +222,12 @@ public class HudEditorScreen extends Screen {
     @Override public void renderBackground(GuiGraphics g, int mx, int my, float delta) {}
 
     @Override
+    public boolean mouseClicked(double mxRaw, double myRaw, int button) {
+        return mouseClicked(new MouseButtonEvent(mxRaw, myRaw, new MouseButtonInfo(button, 0)), false);
+    }
+
     public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
-        if (hud == null) return super.mouseClicked(click, doubled);
+        if (hud == null) return super.mouseClicked(click.x(), click.y(), click.button());
         double mx = click.x();
         double my = click.y();
         if (ShadcnDraw.contains(mx,my,panelX+panelW-29,panelY+3,25,19)) {
@@ -265,7 +270,7 @@ public class HudEditorScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(click, doubled);
+        return super.mouseClicked(click.x(), click.y(), click.button());
     }
 
     private void openAppearance(HudModule module) {
@@ -276,6 +281,10 @@ public class HudEditorScreen extends Screen {
     }
 
     @Override
+    public boolean mouseReleased(double mxRaw, double myRaw, int button) {
+        return mouseReleased(new MouseButtonEvent(mxRaw, myRaw, new MouseButtonInfo(button, 0)));
+    }
+
     public boolean mouseReleased(MouseButtonEvent click) {
         if (dragging != null && hud != null) {
             int[] live = hud.livePosition(dragging);
@@ -286,12 +295,16 @@ public class HudEditorScreen extends Screen {
             hud.endDrag();
             dragging = null;
         }
-        return super.mouseReleased(click);
+        return super.mouseReleased(click.x(), click.y(), click.button());
     }
 
     @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        return keyPressed(new KeyEvent(keyCode, scanCode, modifiers));
+    }
+
     public boolean keyPressed(KeyEvent input) {
-        if (hud == null) return super.keyPressed(input);
+        if (hud == null) return super.keyPressed(input.input(), input.scanCode(), input.modifiers());
         int k = input.input();
         if (k == GLFW.GLFW_KEY_ENTER || k == GLFW.GLFW_KEY_KP_ENTER) {
             onClose();
@@ -325,7 +338,7 @@ public class HudEditorScreen extends Screen {
             hud.savePosition(selected, r[0] + dx, r[1] + dy, r[2], r[3]);
             return true;
         }
-        return super.keyPressed(input);
+        return super.keyPressed(input.input(), input.scanCode(), input.modifiers());
     }
 
     @Override

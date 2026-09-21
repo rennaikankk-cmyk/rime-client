@@ -2,18 +2,14 @@ package dev.guizhou.util.render;
 
 import com.mojang.blaze3d.vertex.*;
 import com.mojang.math.Axis;
-import dev.guizhou.util.render.state.RectRenderState;
 import dev.guizhou.util.traits.Util;
 import net.minecraft.client.Camera;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.render.TextureSetup;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gizmos.GizmoStyle;
 import net.minecraft.gizmos.Gizmos;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix3x2f;
 import org.joml.Matrix4f;
 
 import java.awt.*;
@@ -82,12 +78,18 @@ public class RenderUtil implements Util {
     public static void gradient(GuiGraphics graphics,
                                 int x1, int y1, int x2, int y2,
                                 int topLeft, int bottomLeft, int bottomRight, int topRight) {
-        graphics.guiRenderState.submitGuiElement(new RectRenderState(
-                RenderPipelines.GUI, TextureSetup.noTexture(), new Matrix3x2f(graphics.pose()),
-                x1, y1, x2, y2,
-                GuiFade.apply(topLeft), GuiFade.apply(bottomLeft), GuiFade.apply(bottomRight), GuiFade.apply(topRight),
-                graphics.scissorStack.peek()
-        ));
+        // 1.21.1: no guiRenderState submit system; draw a per-corner-coloured quad
+        // immediately under the GUI pose. Any active GuiGraphics scissor is GL-level
+        // on this version and clips this draw automatically.
+        PoseStack pose = graphics.pose();
+        Matrix4f matrix = pose.last().pose();
+        BufferBuilder bufferBuilder = Tesselator.getInstance()
+                .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        bufferBuilder.addVertex(matrix, (float) x1, (float) y1, 0.0F).setColor(GuiFade.apply(topLeft));
+        bufferBuilder.addVertex(matrix, (float) x1, (float) y2, 0.0F).setColor(GuiFade.apply(bottomLeft));
+        bufferBuilder.addVertex(matrix, (float) x2, (float) y2, 0.0F).setColor(GuiFade.apply(bottomRight));
+        bufferBuilder.addVertex(matrix, (float) x2, (float) y1, 0.0F).setColor(GuiFade.apply(topRight));
+        Layers.quads().draw(bufferBuilder.buildOrThrow());
     }
 
     public static void rect(PoseStack stack, float x1, float y1, float x2, float y2, int color) {
@@ -229,7 +231,7 @@ public class RenderUtil implements Util {
 
     /** Flat horizontal quad at height {@code y} spanning [x1,z1]..[x2,z2]. */
     public static void quadHorizontal(PoseStack stack, double x1, double z1, double x2, double z2, double y, Color c) {
-        Vec3 cam = mc.gameRenderer.getMainCamera().position();
+        Vec3 cam = mc.gameRenderer.getMainCamera().getPosition();
         Matrix4f m = stack.last().pose();
         BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
         worldVertex(bb, m, cam, x1, y, z1, c);
@@ -245,7 +247,7 @@ public class RenderUtil implements Util {
      */
     public static void gradientQuadVertical(PoseStack stack, double x1, double z1, double x2, double z2,
                                             double yTop, double yBottom, Color top, Color bottom) {
-        Vec3 cam = mc.gameRenderer.getMainCamera().position();
+        Vec3 cam = mc.gameRenderer.getMainCamera().getPosition();
         Matrix4f m = stack.last().pose();
         BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
         worldVertex(bb, m, cam, x1, yTop, z1, top);
@@ -274,7 +276,7 @@ public class RenderUtil implements Util {
     /** One mesh for the top and four gradient faces; the depth policy is local to this overlay. */
     public static void placementGradient(PoseStack stack, AABB box, Color fill, Color line, float width, double height, boolean through) {
         if (fill.getAlpha() > 0 && height > 0) {
-            Vec3 cam = mc.gameRenderer.getMainCamera().position();
+            Vec3 cam = mc.gameRenderer.getMainCamera().getPosition();
             Matrix4f m = stack.last().pose();
             Color clear = new Color(fill.getRed(), fill.getGreen(), fill.getBlue(), 0);
             double bottom = box.maxY - Math.min(box.getYsize(), height);
@@ -297,9 +299,9 @@ public class RenderUtil implements Util {
     public static PoseStack matrixFrom(Vec3 pos) {
         PoseStack matrices = new PoseStack();
         Camera camera = mc.gameRenderer.getMainCamera();
-        matrices.mulPose(Axis.XP.rotationDegrees(camera.xRot()));
-        matrices.mulPose(Axis.YP.rotationDegrees(camera.yRot() + 180.0F));
-        matrices.translate(pos.x() - camera.position().x, pos.y() - camera.position().y, pos.z() - camera.position().z);
+        matrices.mulPose(Axis.XP.rotationDegrees(camera.getXRot()));
+        matrices.mulPose(Axis.YP.rotationDegrees(camera.getYRot() + 180.0F));
+        matrices.translate(pos.x() - camera.getPosition().x, pos.y() - camera.getPosition().y, pos.z() - camera.getPosition().z);
         return matrices;
     }
 }

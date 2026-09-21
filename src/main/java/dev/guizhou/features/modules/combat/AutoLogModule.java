@@ -58,7 +58,7 @@ public class AutoLogModule extends Module {
         updateTotemCount();
         nearbyPlayerNames = mc.level.players().stream()
                 .filter(p -> p != mc.player)
-                .map(p -> p.getGameProfile().name())
+                .map(p -> p.getGameProfile().getName())
                 .toList();
         if (!awaitingRechamber && isSurvival()) checkThresholds();
     }

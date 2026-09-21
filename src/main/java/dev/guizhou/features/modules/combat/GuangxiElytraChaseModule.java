@@ -1719,7 +1719,7 @@ public class GuangxiElytraChaseModule extends Module {
                 || EatUtil.shouldDefer() || mc.player.isUsingItem()
                 || !mc.player.getMainHandItem().is(Items.MACE)
                 || lastAttackTick == mc.player.tickCount
-                || GuizhouWare.swapManager.serverSlot() != mc.player.getInventory().getSelectedSlot()) return false;
+                || GuizhouWare.swapManager.serverSlot() != mc.player.getInventory().selected) return false;
         double reach = mc.player.entityInteractionRange();
         Vec3 eye = mc.player.getEyePosition();
         AABB box = observedTargetBox();
@@ -1750,7 +1750,7 @@ public class GuangxiElytraChaseModule extends Module {
                 || !AerialAttackGeometry.canHit(eye,box,reach,yaw,pitch,this::visibleSegment)) return false;
         // A synchronous rotation listener may have changed the target, world or held item.
         if (!isValid(entity) || entity != target || !mc.player.getMainHandItem().is(Items.MACE)
-                || GuizhouWare.swapManager.serverSlot() != mc.player.getInventory().getSelectedSlot()) return false;
+                || GuizhouWare.swapManager.serverSlot() != mc.player.getInventory().selected) return false;
         if (mc.player != trackedPlayer || mc.level != trackedLevel
                 || !AerialAttackGeometry.canHit(mc.player.getEyePosition(),observedTargetBox(),reach,
                     rotation.getServerYaw(),rotation.getServerPitch(),this::visibleSegment)) return false;
@@ -1813,11 +1813,7 @@ public class GuangxiElytraChaseModule extends Module {
     }
 
     private Vec3 targetPacketOffset() {
-        var interpolation = target.getInterpolation();
-        if (interpolation == null || !interpolation.hasActiveInterpolation()) return Vec3.ZERO;
-        Vec3 offset = interpolation.position().subtract(target.position());
-        // A teleport/discontinuity is not a reliable short-range attack estimate.
-        return Double.isFinite(offset.lengthSqr()) && offset.lengthSqr() <= 144.0 ? offset : Vec3.ZERO;
+        return dev.guizhou.util.elytra.ObservedEntityPosition.offset(target);
     }
 
     private void clearSpearAim() {
@@ -1850,7 +1846,7 @@ public class GuangxiElytraChaseModule extends Module {
             ClientLevel expectedLevel = mc.level;
             LocalPlayer expectedPlayer = mc.player;
             long expectedSession = session;
-            if (expectedTarget == null || teleport.id() != expectedTarget.getId()) return;
+            if (expectedTarget == null || teleport.getId() != expectedTarget.getId()) return;
             mc.execute(() -> {
                 if (!isEnabled() || session != expectedSession || target != expectedTarget
                         || mc.level != expectedLevel || mc.player != expectedPlayer) return;
@@ -1907,12 +1903,12 @@ public class GuangxiElytraChaseModule extends Module {
                     behavior.onHit(2);
                 } else if (damage.entityId() == expectedTarget.getId()
                         && damage.sourceDirectId() == mc.player.getId()) {
-                    if ((damage.sourceType().is(DamageTypes.MACE_SMASH)
+                    if ((damage.sourceType().is(GuizhouWare.MACE_SMASH_KEY)
                             || damage.sourceType().is(DamageTypes.PLAYER_ATTACK))
                             && expectedAttack == attackGeneration
                             && maceFeedback.consume(expectedTarget.getId(), mc.player.tickCount)) {
                         behavior.onHit(1);
-                    } else if (damage.sourceType().is(DamageTypes.SPEAR) && spearPhase()) {
+                    } else if (damage.sourceType().is(GuizhouWare.SPEAR_KEY) && spearPhase()) {
                         behavior.onHit(3);
                     }
                 }

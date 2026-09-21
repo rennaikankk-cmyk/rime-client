@@ -114,7 +114,7 @@ public class Item
         } else {
             offset = overflow - (t - pause - scrollDurationMs - pause) * 0.03f;
         }
-        context.enableScissor((int) x, (int) y - 2, (int) (x + maxWidth + 2), (int) (y + Fonts.lineHeight() + 2));
+        dev.guizhou.util.render.ScissorUtil.enableTransformed(context,(int) x, (int) y - 2, (int) (x + maxWidth + 2), (int) (y + Fonts.lineHeight() + 2));
         drawString(text, x - offset, y, color);
         context.disableScissor();
     }

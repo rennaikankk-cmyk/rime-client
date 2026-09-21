@@ -30,7 +30,7 @@ public final class DamageUtil implements Util {
         float toughness = (float) mc.player.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
         dmg = armorAbsorb(dmg, armor, toughness);
 
-        MobEffectInstance resistance = mc.player.getEffect(MobEffects.RESISTANCE);
+        MobEffectInstance resistance = mc.player.getEffect(MobEffects.DAMAGE_RESISTANCE);
         if (resistance != null) dmg *= 1.0f - 0.2f * (resistance.getAmplifier() + 1);
 
         dmg = protectionAbsorb(dmg);

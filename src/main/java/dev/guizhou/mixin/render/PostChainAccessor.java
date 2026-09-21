@@ -7,9 +7,9 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 import java.util.List;
 
+/** 1.21.1: exposes the pass list of a programmatic post chain. */
 @Mixin(PostChain.class)
-public interface PostChainAccessor
-{
-    @Accessor(value = "passes")
+public interface PostChainAccessor {
+    @Accessor("passes")
     List<PostPass> guizhouware$getPasses();
 }

@@ -152,6 +152,12 @@ public final class ElytraCombatHookTest {
                     double left = ((Number) pop(stack)).doubleValue();
                     stack.add(Double.compare(left, right));
                 }
+                // 1.21.1 compares fallDistance as float (fcmpl) instead of double.
+                case Opcodes.FCMPL, Opcodes.FCMPG -> {
+                    double right = ((Number) pop(stack)).doubleValue();
+                    double left = ((Number) pop(stack)).doubleValue();
+                    stack.add(Double.compare(left, right));
+                }
                 case Opcodes.IFEQ, Opcodes.IFNE, Opcodes.IFLE, Opcodes.IFLT,
                      Opcodes.IFGE, Opcodes.IFGT -> {
                     int value = ((Number) pop(stack)).intValue();
@@ -400,11 +406,18 @@ public final class ElytraCombatHookTest {
         Set<String> sources = new HashSet<>();
         for (Step step : feedback.steps) {
             if (step.opcode == Opcodes.GETSTATIC
-                    && "net/minecraft/world/damagesource/DamageTypes".equals(step.owner)) {
+                    && ("net/minecraft/world/damagesource/DamageTypes".equals(step.owner)
+                        // 1.21.1: MACE_SMASH/SPEAR exist only as GuizhouWare keys
+                        || "dev/guizhou/GuizhouWare".equals(step.owner))) {
                 sources.add(step.name);
             }
         }
-        check(sources.containsAll(Set.of("MACE_SMASH", "PLAYER_ATTACK", "SPEAR")),
+        // 1.21.1's DamageTypes class exposes neither MACE_SMASH nor SPEAR constants
+        // (compile-probe verified), so GuizhouWare carries both ResourceKeys
+        // (MACE_SMASH_KEY/SPEAR_KEY) matched by resource location through
+        // DamageType holder.is(ResourceKey). PLAYER_ATTACK stays on the vanilla
+        // constant.
+        check(sources.containsAll(Set.of("MACE_SMASH_KEY", "PLAYER_ATTACK", "SPEAR_KEY")),
                 "Feedback must recognize actual smash, ordinary melee and spear damage types");
         int direct = feedback.call(DAMAGE, "sourceDirectId");
         int typed = feedback.call(DAMAGE, "sourceType");

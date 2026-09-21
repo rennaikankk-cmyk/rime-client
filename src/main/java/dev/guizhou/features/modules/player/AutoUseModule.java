@@ -132,7 +132,7 @@ public class AutoUseModule extends Module {
     }
 
     private boolean usable(AutoUseWhitelist rules, ItemStack stack) {
-        if (stack == null || stack.isEmpty() || mc.player.getCooldowns().isOnCooldown(stack)) return false;
+        if (stack == null || stack.isEmpty() || mc.player.getCooldowns().isOnCooldown(stack.getItem())) return false;
         var id = BuiltInRegistries.ITEM.getKey(stack.getItem());
         if (id == null) return false;
         if (!rules.matches(id.getPath()) && !rules.matches(id.toString())) return false;

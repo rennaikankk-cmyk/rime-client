@@ -1,7 +1,7 @@
 package dev.guizhou.mixin.network;
 
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
+import net.minecraft.network.PacketSendListener;
 import io.netty.channel.ChannelHandlerContext;
 import dev.guizhou.event.impl.network.PacketEvent;
 import net.minecraft.client.Minecraft;
@@ -68,7 +68,7 @@ public class MixinClientConnection {
     }
 
     @Inject(method = "sendPacket", at = @At("HEAD"), cancellable = true)
-    private void sendImmediately(Packet<?> packet, ChannelFutureListener callbacks, boolean flush, CallbackInfo ci) {
+    private void sendImmediately(Packet<?> packet, PacketSendListener callbacks, boolean flush, CallbackInfo ci) {
         if (this.receiving != PacketFlow.CLIENTBOUND) return;
         try {
             if (EVENT_BUS.post(new PacketEvent.Send(packet))) {

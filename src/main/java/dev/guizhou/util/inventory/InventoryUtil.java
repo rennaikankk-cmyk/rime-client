@@ -30,7 +30,7 @@ public final class InventoryUtil implements Util {
     }
 
     public static int selected() {
-        return mc.player.getInventory().getSelectedSlot();
+        return mc.player.getInventory().selected;
     }
 
     public static int fireworkRefireTicks(ItemStack stack) {
@@ -46,7 +46,7 @@ public final class InventoryUtil implements Util {
 
     public static void swap(int to) {
         if (to < 0 || to > 8) return;
-        mc.player.getInventory().setSelectedSlot(to);
+        mc.player.getInventory().selected = to;
         mc.gameMode.ensureHasSentCarriedItem();
     }
 

@@ -2,7 +2,8 @@ package dev.guizhou.features.modules.render;
 
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
-import net.minecraft.client.renderer.entity.state.EntityRenderState;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -31,24 +32,25 @@ public class SeeThroughModule extends Module {
         super("SeeThrough", "Render selected entities through walls", Category.RENDER);
     }
 
-    public boolean shouldSeeThrough(EntityRenderState state) {
-        if (state == null) return false;
+    /** 1.21.1: works directly on the entity; distance measured against the camera. */
+    public boolean shouldSeeThrough(Entity entity) {
+        if (entity == null) return false;
 
-        EntityType<?> type = state.entityType;
-        if (type == null) return false;
+        EntityType<?> type = entity.getType();
 
-        if (type == EntityType.PLAYER)      return inRange(state, players, playersRange);
-        if (type == EntityType.ITEM)        return inRange(state, items, itemsRange);
-        if (type == EntityType.END_CRYSTAL) return inRange(state, crystals, crystalsRange);
-        if (Projectile.class.isAssignableFrom(type.getBaseClass())) return inRange(state, projectiles, projectilesRange);
-        if (type.getCategory() == MobCategory.MONSTER) return inRange(state, monsters, monstersRange);
-        if (type.getCategory() != MobCategory.MISC)    return inRange(state, animals, animalsRange);
+        if (type == EntityType.PLAYER)      return inRange(entity, players, playersRange);
+        if (type == EntityType.ITEM)        return inRange(entity, items, itemsRange);
+        if (type == EntityType.END_CRYSTAL) return inRange(entity, crystals, crystalsRange);
+        if (Projectile.class.isAssignableFrom(type.getBaseClass())) return inRange(entity, projectiles, projectilesRange);
+        if (type.getCategory() == MobCategory.MONSTER) return inRange(entity, monsters, monstersRange);
+        if (type.getCategory() != MobCategory.MISC)    return inRange(entity, animals, animalsRange);
         return false;
     }
 
-    private boolean inRange(EntityRenderState state, Setting<Boolean> enabled, Setting<Float> range) {
+    private boolean inRange(Entity entity, Setting<Boolean> enabled, Setting<Float> range) {
         if (!enabled.getValue()) return false;
         float r = range.getValue();
-        return state.distanceToCameraSq <= (double) r * r;
+        var camera = Minecraft.getInstance().gameRenderer.getMainCamera();
+        return entity.position().distanceToSqr(camera.getPosition()) <= (double) r * r;
     }
 }

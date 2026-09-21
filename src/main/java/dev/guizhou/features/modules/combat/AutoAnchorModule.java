@@ -48,7 +48,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -187,7 +186,7 @@ public class AutoAnchorModule extends Module {
         long generation = lifecycleGeneration;
         var level = mc.level;
         var player = mc.player;
-        mc.schedule(() -> {
+        mc.tell(() -> {
             if (generation != lifecycleGeneration || !isEnabled() || mc.level != level || mc.player != player) return;
             reactiveScheduled = false;
             if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
@@ -284,7 +283,7 @@ public class AutoAnchorModule extends Module {
                     || mc.player.getEyePosition().distanceToSqr(center) > placeRange.getValue() * placeRange.getValue()) {
                 stageDiagnostics.blocked("safety"); abandonActive(); return;
             }
-            if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, activePos)
+            if (!mc.level.dimensionType().respawnAnchorWorks()
                     || !canSupply(action, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)) {
                 stageDiagnostics.blocked("materialOrDimension"); abandonActive(); return;
             }
@@ -584,7 +583,7 @@ public class AutoAnchorModule extends Module {
                 int charges = state.getValue(RespawnAnchorBlock.CHARGE);
                 if (charges == 0 && !charge || charges > 0 && charges < 4 && !detonate) continue;
             } else if (!place || !charge || !detonate || !state.canBeReplaced() || !PlaceUtil.canPlace(cursor, placeRange.getValue())) continue;
-            if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, cursor)) continue;
+            if (mc.level.dimensionType().respawnAnchorWorks()) continue;
             out.add(new AnchorPlanner.Candidate(cursor.getX(), cursor.getY(), cursor.getZ(), horizon(cursor)));
         }
         ClientDiagnostics.count("combat.AutoAnchor.async.candidates", out.size());
@@ -594,7 +593,7 @@ public class AutoAnchorModule extends Module {
     private boolean usableCandidate(BlockPos pos) {
         if (miningBlocked(pos)) return false;
         if (mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) > placeRange.getValue() * placeRange.getValue()
-                || mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, pos)) return false;
+                || mc.level.dimensionType().respawnAnchorWorks()) return false;
         BlockState state = mc.level.getBlockState(pos);
         if (!hasInteraction(pos, state.is(Blocks.RESPAWN_ANCHOR))) return false;
         if (state.is(Blocks.RESPAWN_ANCHOR)) {
@@ -647,7 +646,7 @@ public class AutoAnchorModule extends Module {
                         int charges = state.getValue(RespawnAnchorBlock.CHARGE);
                         if (charges == 0 && !canChargeAnchor || charges > 0 && charges < 4 && !canDetonateAnchor) continue;
                     }
-                    if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, cursor)) continue;
+                    if (mc.level.dimensionType().respawnAnchorWorks()) continue;
                     BlockPos pos = null;
                     // Sum upper bounds using the same group-damage scoring as the exact pass.
                     float upper = 0f;

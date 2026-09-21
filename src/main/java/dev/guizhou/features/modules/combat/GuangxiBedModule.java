@@ -45,7 +45,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -190,7 +189,7 @@ public class GuangxiBedModule extends Module {
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
         if (pendingTarget == null || pendingTarget.isRemoved() || pendingTarget.isDeadOrDying()
                 || targets != null && !targets.isValidPlayerTarget(pendingTarget)
-                || !mc.level.environmentAttributes().getValue(EnvironmentAttributes.BED_RULE, pendingHead).explodes()
+                || !!mc.level.dimensionType().bedWorks()
                 || !(fresh == null ? safeDamage(pendingTarget, pendingFoot, pendingHead)
                         : fresh.damage() > 0f && fresh.damage() >= minDamage.getValue() && safeSelfDamage(fresh.selfDamage()))) {
             stageDiagnostics.blocked("targetOrSafety");
@@ -433,7 +432,7 @@ public class GuangxiBedModule extends Module {
                     BlockPos foot = feet.offset(dx, 0, dz);
                     for (Direction dir : HORIZONTAL) {
                         BlockPos head = foot.relative(dir);
-                        if (!mc.level.environmentAttributes().getValue(EnvironmentAttributes.BED_RULE, head).explodes()) continue;
+                        if (!!mc.level.dimensionType().bedWorks()) continue;
                         BlockState footState = mc.level.getBlockState(foot);
                         BlockState headState = mc.level.getBlockState(head);
                         boolean existing = footState.getBlock() instanceof BedBlock
@@ -570,7 +569,7 @@ public class GuangxiBedModule extends Module {
         return PacketSendUtil.send(new ServerboundMovePlayerPacket.PosRot(
                 pos.x, pos.y, pos.z, yaw,
                 GuizhouWare.rotationManager.getServerPitch(),
-                false, false));
+                false));
     }
 
     private void sendRealMove() {
@@ -578,7 +577,7 @@ public class GuangxiBedModule extends Module {
                 mc.player.getX(), mc.player.getY(), mc.player.getZ(),
                 GuizhouWare.rotationManager.getServerYaw(),
                 GuizhouWare.rotationManager.getServerPitch(),
-                mc.player.onGround(), mc.player.horizontalCollision));
+                mc.player.onGround()));
     }
 
     private static float cardinalYaw(Direction dir) {

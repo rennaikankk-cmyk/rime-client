@@ -31,7 +31,7 @@ public abstract class MixinPlayerTabOverlay {
         List<PlayerInfo> all = conn.getListedOnlinePlayers().stream().toList();
         List<PlayerInfo> filtered = all.stream()
                 .filter(module::shouldShow)
-                .sorted(Comparator.comparing(p -> p.getProfile().name(), String.CASE_INSENSITIVE_ORDER))
+                .sorted(Comparator.comparing(p -> p.getProfile().getName(), String.CASE_INSENSITIVE_ORDER))
                 .limit(80L)
                 .toList();
         cir.setReturnValue(filtered);
@@ -42,7 +42,7 @@ public abstract class MixinPlayerTabOverlay {
         TablistModule module = GuizhouWare.moduleManager.getModuleByClass(TablistModule.class);
         if (module == null || !module.isEnabled()) return;
 
-        String name = info.getProfile().name();
+        String name = info.getProfile().getName();
         if (name == null) return;
 
         Color color;

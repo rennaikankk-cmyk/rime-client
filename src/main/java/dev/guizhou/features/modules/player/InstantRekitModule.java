@@ -14,7 +14,7 @@ import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.Item;
@@ -184,10 +184,10 @@ public class InstantRekitModule extends Module {
     private static Item item(String id) {
         if (id == null) return null;
         int colon = id.indexOf(':');
-        Identifier key = colon < 0
-                ? Identifier.fromNamespaceAndPath("minecraft", id)
-                : Identifier.fromNamespaceAndPath(id.substring(0, colon), id.substring(colon + 1));
-        return BuiltInRegistries.ITEM.getValue(key);
+        ResourceLocation key = colon < 0
+                ? ResourceLocation.fromNamespaceAndPath("minecraft", id)
+                : ResourceLocation.fromNamespaceAndPath(id.substring(0, colon), id.substring(colon + 1));
+        return BuiltInRegistries.ITEM.get(key);
     }
 
     private record Move(int source, int target, boolean topUp) {}

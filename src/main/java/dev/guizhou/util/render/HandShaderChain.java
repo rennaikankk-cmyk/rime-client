@@ -1,176 +1,175 @@
 package dev.guizhou.util.render;
 
-import dev.guizhou.GuizhouWare;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.shaders.Uniform;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.CachedOrthoProjectionMatrixBuffer;
-import net.minecraft.client.renderer.LevelTargetBundle;
-import net.minecraft.client.renderer.PostChain;
-import net.minecraft.client.renderer.PostChainConfig;
-import net.minecraft.client.renderer.UniformValue;
-import net.minecraft.resources.Identifier;
+import net.minecraft.client.renderer.PostPass;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
+/**
+ * 1.21.1 hand outline/glow pipeline built from real PostPasses over the offscreen
+ * hand silhouette. Ping-pong targets are owned here; the final pass writes an
+ * offscreen result which is then blended onto the main framebuffer (PostPass clears
+ * its output, so no pass may target main directly). Programs live under
+ * assets/minecraft/shaders/program/gzwx_* (EffectInstance resolves that fixed path);
+ * the DiffuseSampler/aux samplers and ProjMat/InSize/OutSize/ScreenSize uniforms are
+ * supplied by PostPass itself.
+ */
 public final class HandShaderChain {
 
-    private static final Identifier SCREENQUAD        = Identifier.fromNamespaceAndPath("minecraft", "core/screenquad");
-    private static final Identifier DILATE_H_FSH      = Identifier.fromNamespaceAndPath("guizhouware", "post/hand_outline_h");
-    private static final Identifier OUTLINE_FSH       = Identifier.fromNamespaceAndPath("guizhouware", "post/hand_outline");
-    private static final Identifier GLOW_H_FSH        = Identifier.fromNamespaceAndPath("guizhouware", "post/hand_glow_h");
-    private static final Identifier OUTLINE_GLOW_FSH  = Identifier.fromNamespaceAndPath("guizhouware", "post/hand_outline_glow");
-    private static final Identifier DILATED           = Identifier.fromNamespaceAndPath("guizhouware", "hand_dilated");
-    private static final Identifier GLOW_H            = Identifier.fromNamespaceAndPath("guizhouware", "hand_glow_h");
-    private static final Identifier CHAIN_NAME        = Identifier.fromNamespaceAndPath("guizhouware", "hand_shader_runtime");
-    private static final UniformWriter UNIFORM_WRITER = new UniformWriter();
-
     private static final float FILL_ALPHA = 0.35f;
+    private static final float OUTLINE_ALPHA = 1.0f;
 
-    private static CachedOrthoProjectionMatrixBuffer projection;
-    private static PostChain cached;
-    private static int   lastLineWidth     = Integer.MIN_VALUE;
-    private static boolean lastFill        = false;
-    private static int   lastGlowRadius    = Integer.MIN_VALUE;
+    private static RenderTarget tmpA;
+    private static RenderTarget tmpB;
+    private static RenderTarget tmpC;
+    private static PostPass dilateH;
+    private static PostPass outline;
+    private static PostPass glowH;
+    private static PostPass outlineGlow;
+    private static int lastWidth, lastHeight;
+    private static RenderTarget boundHand;
+    private static boolean healthy;
+    private static String failure;
+
+    private static int lastLineWidth = Integer.MIN_VALUE;
+    private static boolean lastFill;
+    private static int lastGlowRadius = Integer.MIN_VALUE;
     private static float lastGlowIntensity = Float.NaN;
 
     private HandShaderChain() {}
 
-    public static PostChain get(boolean outline, int thickness, boolean fill,
-                                boolean glow, int glowRadius, float glowIntensity) {
-        int lineWidth = outline ? Math.max(1, thickness) : 0;
+    public static boolean healthy() {
+        return healthy;
+    }
+
+    public static String failure() {
+        return failure;
+    }
+
+    /** Returns true when the chain is ready for {@link #processAndComposite(float)}. */
+    public static boolean get(boolean outlineWanted, int thickness, boolean fill,
+                              boolean glow, int glowRadius, float glowIntensity) {
+        int lineWidth = outlineWanted ? Math.max(1, thickness) : 0;
         int glowR = glow ? Math.max(0, glowRadius) : 0;
-        if (lineWidth == 0 && !fill && glowR == 0) return null;
+        if (lineWidth == 0 && !fill && glowR == 0) return false;
 
-        if (cached != null && lineWidth == lastLineWidth && fill == lastFill
+        if (healthy && boundHand == HandShaderRender.captureTarget()
+                && lastWidth == Minecraft.getInstance().getWindow().getWidth()
+                && lastHeight == Minecraft.getInstance().getWindow().getHeight()
+                && lineWidth == lastLineWidth && fill == lastFill
                 && glowR == lastGlowRadius && glowIntensity == lastGlowIntensity) {
-            return cached;
-        }
-        else if (cached != null && lastGlowRadius == glowR) // if glow was just toggled we need to recreate the postchain.
-        {
-            lastLineWidth = lineWidth;
-            lastFill = fill;
-            lastGlowRadius = glowR;
-            lastGlowIntensity = glowIntensity;
-
-            float fillA = fill ? FILL_ALPHA : 0.0f;
-
-            Map<String, List<UniformValue>> configs = new HashMap<>();
-            List<UniformValue> dilateConfig = List.of(integer(lineWidth));
-            List<UniformValue> outlineConfig;
-            List<UniformValue> glowConfig = List.of(integer(glowRadius));
-            if (glowRadius > 0)
-            {
-                outlineConfig = List.of(
-                        flt(fillA),
-                        flt(1.0f),
-                        flt(glowIntensity),
-                        integer(lineWidth),
-                        integer(glowRadius));
-            }
-            else
-            {
-                outlineConfig = List.of(flt(fillA), flt(1.0f), integer(lineWidth));
-            }
-
-            configs.put("DilateConfig", dilateConfig);
-            configs.put("OutlineConfig", outlineConfig);
-            configs.put("GlowConfig", glowConfig);
-            UNIFORM_WRITER.setUniforms(cached, configs);
-            return cached;
+            return true;
         }
 
-        PostChain rebuilt = build(lineWidth, fill, glowR, glowIntensity);
-        if (rebuilt == null) return cached;
-        if (cached != null) cached.close();
-        cached = rebuilt;
+        if (!rebuild(lineWidth, fill, glowR, glowIntensity)) {
+            PostPipelineSupport.warnThrottled("hand-chain",
+                    "Hand shader chain rebuild failed: " + failure, null);
+            return healthy;
+        }
         lastLineWidth = lineWidth;
         lastFill = fill;
         lastGlowRadius = glowR;
         lastGlowIntensity = glowIntensity;
-        return cached;
+        return true;
     }
 
-    private static PostChain build(int lineWidth, boolean fill, int glowRadius, float glowIntensity) {
+    private static boolean rebuild(int lineWidth, boolean fill, int glowRadius, float glowIntensity) {
         try {
-            if (projection == null) {
-                projection = new CachedOrthoProjectionMatrixBuffer("guizhouware_hand", 0.1f, 1000.0f, false);
+            Minecraft mc = Minecraft.getInstance();
+            RenderTarget hand = HandShaderRender.captureTarget();
+            if (hand == null) {
+                failure = "capture target not initialised";
+                return false;
             }
+            int w = Math.max(1, mc.getWindow().getWidth());
+            int h = Math.max(1, mc.getWindow().getHeight());
+            if (tmpA == null) {
+                tmpA = PostPipelineSupport.screenSizedTarget("guizhouware_hand_tmp_a");
+                tmpB = PostPipelineSupport.screenSizedTarget("guizhouware_hand_tmp_b");
+                tmpC = PostPipelineSupport.screenSizedTarget("guizhouware_hand_tmp_c");
+            }
+            PostPipelineSupport.resizeIfNeeded(tmpA, w, h);
+            PostPipelineSupport.resizeIfNeeded(tmpB, w, h);
+            PostPipelineSupport.resizeIfNeeded(tmpC, w, h);
 
-            float fillA = fill ? FILL_ALPHA : 0.0f;
+            closePasses();
+            dilateH = new PostPass(mc.getResourceManager(), "gzwx_hand_outline_h", hand, tmpA, false);
+            setInt(dilateH, "LineWidth", lineWidth);
 
-            PostChainConfig.Pass dilateH = new PostChainConfig.Pass(
-                    SCREENQUAD, DILATE_H_FSH,
-                    List.of(new PostChainConfig.TargetInput("In", PostChain.MAIN_TARGET_ID, false, false)),
-                    DILATED,
-                    Map.of("DilateConfig", List.<UniformValue>of(integer(lineWidth))));
-
-            PostChainConfig config = glowRadius > 0
-                    ? buildGlow(dilateH, fillA, lineWidth, glowRadius, glowIntensity)
-                    : buildPlain(dilateH, fillA, lineWidth);
-
-            return PostChain.load(config, Minecraft.getInstance().getTextureManager(),
-                    LevelTargetBundle.MAIN_TARGETS, CHAIN_NAME, projection);
+            if (glowRadius > 0) {
+                glowH = new PostPass(mc.getResourceManager(), "gzwx_hand_glow_h", hand, tmpB, false);
+                setInt(glowH, "GlowRadius", glowRadius);
+                outlineGlow = new PostPass(mc.getResourceManager(), "gzwx_hand_outline_glow", tmpA, tmpC, false);
+                outlineGlow.addAuxAsset("OrigSampler", hand::getColorTextureId, w, h);
+                outlineGlow.addAuxAsset("GlowSampler", tmpB::getColorTextureId, w, h);
+                setFloat(outlineGlow, "FillAlpha", fill ? FILL_ALPHA : 0.0f);
+                setFloat(outlineGlow, "OutlineAlpha", OUTLINE_ALPHA);
+                setFloat(outlineGlow, "GlowIntensity", glowIntensity);
+                setInt(outlineGlow, "LineWidth", lineWidth);
+                setInt(outlineGlow, "GlowRadius", glowRadius);
+            } else {
+                outline = new PostPass(mc.getResourceManager(), "gzwx_hand_outline", tmpA, tmpB, false);
+                outline.addAuxAsset("OrigSampler", hand::getColorTextureId, w, h);
+                setFloat(outline, "FillAlpha", fill ? FILL_ALPHA : 0.0f);
+                setFloat(outline, "OutlineAlpha", OUTLINE_ALPHA);
+                setInt(outline, "LineWidth", lineWidth);
+            }
+            boundHand = hand;
+            lastWidth = w; lastHeight = h;
+            healthy = true;
+            failure = null;
+            return true;
         } catch (Exception e) {
-            return null;
+            healthy = false;
+            failure = e.toString();
+            PostPipelineSupport.warnThrottled("hand-chain-build", "Hand shader chain build failed", e);
+            return false;
         }
     }
 
-    private static PostChainConfig buildPlain(PostChainConfig.Pass dilateH, float fillA, int lineWidth) {
-
-        List<UniformValue> outlineConfig = List.of(
-                flt(fillA),
-                flt(1.0f),
-                integer(lineWidth)
-        );
-        PostChainConfig.Pass outline = new PostChainConfig.Pass(
-                SCREENQUAD, OUTLINE_FSH,
-                List.of(new PostChainConfig.TargetInput("In", DILATED, false, false),
-                        new PostChainConfig.TargetInput("Orig", PostChain.MAIN_TARGET_ID, false, false)),
-                PostChain.MAIN_TARGET_ID,
-                Map.of("OutlineConfig", outlineConfig));
-
-        return new PostChainConfig(
-                Map.of(DILATED, new PostChainConfig.InternalTarget(Optional.empty(), Optional.empty(), false, 0)),
-                List.of(dilateH, outline));
+    public static void processAndComposite(float partialTick) {
+        if (!healthy || !HandShaderRender.hasFreshCapture()) return;
+        HandShaderRender.clearFreshCapture();
+        int w = Math.max(1, Minecraft.getInstance().getWindow().getWidth());
+        int h = Math.max(1, Minecraft.getInstance().getWindow().getHeight());
+        try {
+            dilateH.setOrthoMatrix(PostPipelineSupport.ortho(w, h));
+            dilateH.process(partialTick);
+            if (outlineGlow != null && glowH != null) {
+                glowH.setOrthoMatrix(PostPipelineSupport.ortho(w, h));
+                glowH.process(partialTick);
+                outlineGlow.setOrthoMatrix(PostPipelineSupport.ortho(w, h));
+                outlineGlow.process(partialTick);
+                PostPipelineSupport.blendOntoMain(tmpC);
+            } else if (outline != null) {
+                outline.setOrthoMatrix(PostPipelineSupport.ortho(w, h));
+                outline.process(partialTick);
+                PostPipelineSupport.blendOntoMain(tmpB);
+            }
+        } catch (Exception e) {
+            healthy = false;
+            PostPipelineSupport.warnThrottled("hand-chain-run", "Hand shader chain failed at runtime", e);
+        }
     }
 
-    private static PostChainConfig buildGlow(PostChainConfig.Pass dilateH, float fillA,
-                                             int lineWidth, int glowRadius, float glowIntensity) {
-
-        PostChainConfig.Pass glowH = new PostChainConfig.Pass(
-                SCREENQUAD, GLOW_H_FSH,
-                List.of(new PostChainConfig.TargetInput("In", PostChain.MAIN_TARGET_ID, false, false)),
-                GLOW_H,
-                Map.of("GlowConfig", List.<UniformValue>of(integer(glowRadius))));
-
-        List<UniformValue> outlineConfig = List.of(
-                flt(fillA),
-                flt(1.0f),
-                flt(glowIntensity),
-                integer(lineWidth),
-                integer(glowRadius)
-        );
-        PostChainConfig.Pass outline = new PostChainConfig.Pass(
-                SCREENQUAD, OUTLINE_GLOW_FSH,
-                List.of(new PostChainConfig.TargetInput("In", DILATED, false, false),
-                        new PostChainConfig.TargetInput("Glow", GLOW_H, false, false),
-                        new PostChainConfig.TargetInput("Orig", PostChain.MAIN_TARGET_ID, false, false)),
-                PostChain.MAIN_TARGET_ID,
-                Map.of("OutlineConfig", outlineConfig));
-
-        return new PostChainConfig(
-                Map.of(DILATED, new PostChainConfig.InternalTarget(Optional.empty(), Optional.empty(), false, 0),
-                       GLOW_H,  new PostChainConfig.InternalTarget(Optional.empty(), Optional.empty(), false, 0)),
-                List.of(dilateH, glowH, outline));
+    public static void invalidate() {
+        healthy = false; boundHand = null; closePasses();
     }
 
-    private static UniformValue flt(float v) {
-        return new UniformValue.FloatUniform(v);
+    private static void closePasses() {
+        if (dilateH != null) { dilateH.close(); dilateH = null; }
+        if (outline != null) { outline.close(); outline = null; }
+        if (glowH != null) { glowH.close(); glowH = null; }
+        if (outlineGlow != null) { outlineGlow.close(); outlineGlow = null; }
     }
 
-    private static UniformValue integer(int v) {
-        return new UniformValue.IntUniform(v);
+    private static void setInt(PostPass pass, String name, int value) {
+        Uniform uniform = pass.getEffect().getUniform(name);
+        if (uniform != null) uniform.set(value);
+    }
+
+    private static void setFloat(PostPass pass, String name, float value) {
+        Uniform uniform = pass.getEffect().getUniform(name);
+        if (uniform != null) uniform.set(value);
     }
 }

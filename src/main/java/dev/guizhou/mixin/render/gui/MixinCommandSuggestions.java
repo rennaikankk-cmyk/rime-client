@@ -10,7 +10,6 @@ import dev.guizhou.manager.CommandManager;
 import net.minecraft.client.gui.components.CommandSuggestions;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.multiplayer.ClientSuggestionProvider;
-import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -25,9 +24,9 @@ public abstract class MixinCommandSuggestions {
     @Shadow
     private CommandSuggestions.SuggestionsList suggestions;
     @Shadow
-    private @Nullable CompletableFuture<Suggestions> pendingSuggestions;
+    private CompletableFuture<Suggestions> pendingSuggestions;
     @Shadow
-    private @Nullable ParseResults<ClientSuggestionProvider> currentParse;
+    private ParseResults<ClientSuggestionProvider> currentParse;
     @Shadow
     boolean keepSuggestions;
     @Shadow

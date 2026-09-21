@@ -20,7 +20,7 @@ import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
-import net.minecraft.world.item.equipment.Equippable;
+import dev.guizhou.util.VersionCompat;
 
 import static dev.guizhou.util.traits.Util.EVENT_BUS;
 import static dev.guizhou.util.traits.Util.mc;
@@ -180,7 +180,7 @@ public final class ArmorSwapController {
     private boolean canSwapWhileUsing() {
         boolean using = player.isUsingItem();
         ItemStack used = player.getUseItem();
-        return preservesHeldUse(using, used.has(DataComponents.KINETIC_WEAPON), used,
+        return preservesHeldUse(using, dev.guizhou.util.elytra.SpearCombat.isSpear(used), used,
                 using ? player.getItemInHand(player.getUsedItemHand()) : ItemStack.EMPTY);
     }
 
@@ -207,19 +207,16 @@ public final class ArmorSwapController {
     }
 
     private boolean wearableChest(ItemStack stack) {
-        Equippable equippable = stack.get(DataComponents.EQUIPPABLE);
-        return !stack.isEmpty() && stack.getCount() == 1 && equippable != null
-                && equippable.slot() == EquipmentSlot.CHEST && equippable.canBeEquippedBy(player.getType())
-                && !EnchantmentHelper.has(stack, EnchantmentEffectComponents.PREVENT_ARMOR_CHANGE);
+        return VersionCompat.swappableChest(player, stack);
     }
 
     private boolean usableWings(ItemStack stack) {
-        return wearableChest(stack) && stack.has(DataComponents.GLIDER)
+        return wearableChest(stack) && VersionCompat.isGlider(stack)
                 && (!stack.isDamageableItem() || stack.getDamageValue() < stack.getMaxDamage() - 1);
     }
 
     private boolean chestArmor(ItemStack stack) {
-        return wearableChest(stack) && !stack.has(DataComponents.GLIDER)
+        return wearableChest(stack) && !VersionCompat.isGlider(stack)
                 && stack.has(DataComponents.ATTRIBUTE_MODIFIERS);
     }
 

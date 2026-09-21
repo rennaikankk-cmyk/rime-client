@@ -42,11 +42,11 @@ public final class FontFallback {
     public static void drawScaled(GuiGraphics graphics, String text, float x, float y, float size, int color) {
         float scale = size / Math.max(1, Minecraft.getInstance().font.lineHeight);
         var pose = graphics.pose();
-        pose.pushMatrix();
+        pose.pushPose();
         try {
-            pose.translate(x, y);
-            pose.scale(scale, scale);
+            pose.translate(x, y, 0);
+            pose.scale(scale, scale, scale);
             draw(graphics, text, 0, 0, color, false);
-        } finally { pose.popMatrix(); }
+        } finally { pose.popPose(); }
     }
 }

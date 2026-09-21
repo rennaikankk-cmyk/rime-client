@@ -5,7 +5,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.guizhou.util.traits.Util;
-import net.minecraft.client.input.KeyEvent;
 import org.lwjgl.glfw.GLFW;
 
 public class Bind implements Util {
@@ -46,7 +45,7 @@ public class Bind implements Util {
         if (isMouseButton(this.key)) {
             return "M" + (this.key - MOUSE_BUTTON_OFFSET + 1);
         }
-        String raw = InputConstants.getKey(new KeyEvent(this.key, 0, 0)).getName();
+        String raw = InputConstants.getKey(this.key, 0).getName();
         String cleaned = raw.replace("key.keyboard.", "").replace("key.mouse.", "").replace('.', ' ').trim();
         StringBuilder out = new StringBuilder(cleaned.length());
         for (String part : cleaned.split(" ")) {
@@ -60,9 +59,9 @@ public class Bind implements Util {
     public boolean isDown() {
         if (this.isEmpty()) return false;
         if (isMouseButton(this.key)) {
-            return GLFW.glfwGetMouseButton(mc.getWindow().handle(), this.key - MOUSE_BUTTON_OFFSET) == GLFW.GLFW_PRESS;
+            return GLFW.glfwGetMouseButton(mc.getWindow().getWindow(), this.key - MOUSE_BUTTON_OFFSET) == GLFW.GLFW_PRESS;
         }
-        return GLFW.glfwGetKey(mc.getWindow().handle(), this.getKey()) == 1;
+        return GLFW.glfwGetKey(mc.getWindow().getWindow(), this.getKey()) == 1;
     }
 
     private String capitalise(String str) {

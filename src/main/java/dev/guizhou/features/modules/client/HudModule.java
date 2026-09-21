@@ -23,10 +23,10 @@ public abstract class HudModule implements Util {
         drawing = event.getContext();
         drawScale = 1;
         var previous = dev.guizhou.util.render.HudAppearance.use(hud.appearanceOf(this));
-        drawing.pose().pushMatrix();
+        drawing.pose().pushPose();
         try { render(event); }
         finally {
-            drawing.pose().popMatrix();
+            drawing.pose().popPose();
             drawing = null;
             dev.guizhou.util.render.HudAppearance.use(previous);
         }
@@ -139,9 +139,9 @@ public abstract class HudModule implements Util {
         if (w > 0) x = Math.max(0, Math.min(x, Math.max(0, screenWidth() - scaledW)));
         if (h > 0) y = Math.max(0, Math.min(y, Math.max(0, screenHeight() - scaledH)));
         if (drawing != null) {
-            drawing.pose().translate(x,y);
-            drawing.pose().scale(drawScale,drawScale);
-            drawing.pose().translate(-x,-y);
+            drawing.pose().translate(x, y, 0);
+            drawing.pose().scale(drawScale, drawScale, drawScale);
+            drawing.pose().translate(-x, -y, 0);
         }
         return new int[]{x, y};
     }

@@ -12,7 +12,7 @@ public final class MatrixCapture {
     public static float[] worldToScreen(double worldX, double worldY, double worldZ) {
         if (projection == null || view == null) return null;
 
-        Vec3 camPos = Util.mc.gameRenderer.getMainCamera().position();
+        Vec3 camPos = Util.mc.gameRenderer.getMainCamera().getPosition();
         Matrix4f mvp = projection.mul(view, new Matrix4f());
 
         Vector4f point = new Vector4f(

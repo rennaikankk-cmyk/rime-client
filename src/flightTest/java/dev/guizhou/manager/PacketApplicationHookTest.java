@@ -35,7 +35,8 @@ public final class PacketApplicationHookTest {
     private static void verifyVanillaApplicationOrder() throws IOException {
         Code code = method("net/minecraft/client/multiplayer/ClientPacketListener", "handleBlockUpdate", "(" + PACKET + ")V");
         int thread = code.call("net/minecraft/network/protocol/PacketUtils", "ensureRunningOnSameThread",
-                "(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketListener;Lnet/minecraft/network/PacketProcessor;)V");
+                // 1.21.1: the executor overload takes a BlockableEventLoop, not PacketProcessor.
+                "(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketListener;Lnet/minecraft/util/thread/BlockableEventLoop;)V");
         int update = code.call("net/minecraft/client/multiplayer/ClientLevel", "setServerVerifiedBlockState",
                 "(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)V");
         List<Integer> returns = code.indices("return");

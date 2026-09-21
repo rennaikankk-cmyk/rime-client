@@ -1,26 +1,33 @@
 package dev.guizhou.mixin.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import dev.guizhou.GuizhouWare;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.guizhou.event.impl.render.RenderBlockOutlineEvent;
 import dev.guizhou.features.modules.render.NoRenderModule;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.state.LevelRenderState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import static dev.guizhou.util.traits.Util.EVENT_BUS;
 
+/**
+ * 1.21.1: the block outline is drawn through renderHitOutline and the darkness check
+ * lives in doesMobEffectBlockSky (both kept from this version).
+ */
 @Mixin(LevelRenderer.class)
 public class MixinLevelRenderer {
-    @Inject(method = "renderBlockOutline", at = @At("HEAD"), cancellable = true)
-    public void renderBlockOutline(MultiBufferSource.BufferSource bufferSource, PoseStack poseStack, boolean bl, LevelRenderState levelRenderState, CallbackInfo ci) {
+
+    @Inject(method = "renderHitOutline", at = @At("HEAD"), cancellable = true)
+    public void renderBlockOutline(PoseStack poseStack, VertexConsumer consumer, Entity entity,
+                                   double x, double y, double z, BlockPos pos, BlockState state,
+                                   CallbackInfo ci) {
         if (EVENT_BUS.post(new RenderBlockOutlineEvent())) {
             ci.cancel();
         }
@@ -32,5 +39,4 @@ public class MixinLevelRenderer {
             cir.setReturnValue(false);
         }
     }
-
 }

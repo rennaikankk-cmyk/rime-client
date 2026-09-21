@@ -30,7 +30,7 @@ public class FriendManager implements Jsonable {
     }
 
     public boolean isFriend(Player player) {
-        return this.isFriend(player.getGameProfile().name());
+        return this.isFriend(player.getGameProfile().getName());
     }
 
     public void addFriend(String name) {

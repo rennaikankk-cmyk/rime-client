@@ -54,11 +54,11 @@ public final class HudFonts {
             float s = sizePx / r.emGuiHeight();
             if (!Float.isFinite(s) || s <= 0f) throw new IllegalStateException("Invalid custom font scale");
             var pose = g.pose();
-            pose.pushMatrix();
+            pose.pushPose();
             try {
-                pose.scale(s, s);
+                pose.scale(s, s, s);
                 r.drawString(g, text, x / s, y / s, color, false);
-            } finally { pose.popMatrix(); }
+            } finally { pose.popPose(); }
             return null;
         }, () -> { FontFallback.drawScaled(g,text,x,y,sizePx,color); return null; });
     }

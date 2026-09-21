@@ -14,7 +14,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl;
+import net.minecraft.world.entity.projectile.ThrownEnderpearl;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionContents;
@@ -159,7 +159,7 @@ public class NametagsModule extends Module {
             }
             ItemStack mainHand = GuizhouWare.playerInfoManager.getMainHandItem(player);
             ItemStack offHand  = GuizhouWare.playerInfoManager.getOffHandItem(player);
-            String name = player.getGameProfile().name();
+            String name = player.getGameProfile().getName();
             // Lead icons render left-to-right before the name; order here is their left-to-right order,
             // so Strength sits to the right of any resistance potion icon.
             List<ItemStack> leadIcons = new ArrayList<>(2);
@@ -186,7 +186,7 @@ public class NametagsModule extends Module {
                 UUID uuid = pearl.getUUID();
 
                 if (pearl.getOwner() instanceof Player thrower) {
-                    pearlOwnerCache.put(uuid, new PearlEntry(thrower.getGameProfile().name(), now));
+                    pearlOwnerCache.put(uuid, new PearlEntry(thrower.getGameProfile().getName(), now));
                 } else {
                     PearlEntry existing = pearlOwnerCache.get(uuid);
                     if (existing != null) {
@@ -236,14 +236,14 @@ public class NametagsModule extends Module {
         int textH = Fonts.nametagLineHeight();
         int textTopY = -textH;
 
-        graphics.pose().pushMatrix();
-        graphics.pose().translate(anchorX, anchorY);
-        graphics.pose().scale(s, s);
+        graphics.pose().pushPose();
+        graphics.pose().translate(anchorX, anchorY, 0);
+        graphics.pose().scale(s, s, s);
 
         graphics.fill(-halfW - 2, textTopY - 1, halfW + 2, 1, bgColor.getValue().getRGB());
         Fonts.drawNametagString(graphics, name, -halfW, textTopY, nameArgb);
 
-        graphics.pose().popMatrix();
+        graphics.pose().popPose();
     }
 
     public void renderNametag(GuiGraphics graphics,
@@ -281,9 +281,9 @@ public class NametagsModule extends Module {
         int halfW    = totalW / 2;
         int nameX    = -halfW + leadW;
 
-        graphics.pose().pushMatrix();
-        graphics.pose().translate(anchorX, anchorY);
-        graphics.pose().scale(s, s);
+        graphics.pose().pushPose();
+        graphics.pose().translate(anchorX, anchorY, 0);
+        graphics.pose().scale(s, s, s);
 
         graphics.fill(-halfW - 2, textTopY - 1, halfW + 2, 1, bgColor.getValue().getRGB());
 
@@ -291,11 +291,11 @@ public class NametagsModule extends Module {
             float itemScale = iconSize / 16.0f;
             int iconY = textTopY + (textH - iconSize) / 2;
             for (int k = 0; k < iconCount; k++) {
-                graphics.pose().pushMatrix();
-                graphics.pose().translate(-halfW + k * (iconSize + iconGap), iconY);
-                graphics.pose().scale(itemScale, itemScale);
+                graphics.pose().pushPose();
+                graphics.pose().translate(-halfW + k * (iconSize + iconGap), iconY, 0);
+                graphics.pose().scale(itemScale, itemScale, itemScale);
                 graphics.renderItem(leadIcons.get(k), 0, 0);
-                graphics.pose().popMatrix();
+                graphics.pose().popPose();
             }
         }
 
@@ -318,11 +318,11 @@ public class NametagsModule extends Module {
                 for (int i = 0; i < 4; i++) {
                     ItemStack armorStack = armor.get(ARMOR_SLOTS[i]);
                     int slotX = -(slotSize * 4) / 2 + i * slotSize;
-                    graphics.pose().pushMatrix();
-                    graphics.pose().translate(slotX, armorTopY);
+                    graphics.pose().pushPose();
+                    graphics.pose().translate(slotX, armorTopY, 0);
                     graphics.renderItem(armorStack, 0, 0);
                     graphics.renderItemDecorations(mc.font, armorStack, 0, 0);
-                    graphics.pose().popMatrix();
+                    graphics.pose().popPose();
                 }
             }
         }
@@ -349,6 +349,6 @@ public class NametagsModule extends Module {
             }
         }
 
-        graphics.pose().popMatrix();
+        graphics.pose().popPose();
     }
 }

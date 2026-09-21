@@ -18,7 +18,7 @@ import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.ItemUseAnimation;
+import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -91,7 +91,7 @@ public class NoSlowModule extends Module {
             sessionPlayer = mc.player;
             sessionWorld = mc.level;
             sessionItem = mc.player.getMainHandItem().copy();
-            sessionSlot = mc.player.getInventory().getSelectedSlot();
+            sessionSlot = mc.player.getInventory().selected;
             sessionStartTick = mc.player.tickCount;
             observedConsumption = false;
             spoof.begin(sessionStartTick, sessionSlot, spoofDelay.getValue(), spoofPackets.getValue(),
@@ -113,7 +113,7 @@ public class NoSlowModule extends Module {
             try {
                 PacketSendUtil.forward(event, new ServerboundMovePlayerPacket.PosRot(
                         move.getX(mc.player.getX()), move.getY(mc.player.getY()), move.getZ(mc.player.getZ()),
-                        yaw, pitch, move.isOnGround(), move.horizontalCollision()));
+                        yaw, pitch, move.isOnGround()));
             } finally { forwardingMovement = false; }
             return;
         }
@@ -135,7 +135,7 @@ public class NoSlowModule extends Module {
     }
 
     private boolean validateSession() {
-        if (!validSession() || !slotResendEnabled() || mc.player.getInventory().getSelectedSlot() != sessionSlot
+        if (!validSession() || !slotResendEnabled() || mc.player.getInventory().selected != sessionSlot
                 || !ItemStack.isSameItemSameComponents(sessionItem, mc.player.getMainHandItem())) {
             resetState();
             return false;
@@ -151,7 +151,7 @@ public class NoSlowModule extends Module {
 
     private boolean serverHoldsSelectedSlot() {
         return GuizhouWare.swapManager == null
-                || GuizhouWare.swapManager.serverSlot() == mc.player.getInventory().getSelectedSlot();
+                || GuizhouWare.swapManager.serverSlot() == mc.player.getInventory().selected;
     }
 
     private void resetState() {
@@ -171,7 +171,9 @@ public class NoSlowModule extends Module {
     }
 
     private static boolean isConsumable(ItemStack stack) {
-        return !stack.isEmpty() && stack.has(DataComponents.CONSUMABLE);
+        // Drinks such as potions and milk do not carry FOOD in 1.21.1.
+        return !stack.isEmpty() && (stack.has(DataComponents.FOOD)
+                || stack.getUseAnimation() == UseAnim.DRINK);
     }
 
     public static boolean shouldCancelConsumeSlow() {
@@ -184,7 +186,7 @@ public class NoSlowModule extends Module {
                     || module.slotResendEnabled() && module.validSession()
                             && module.isConsumingMainHandItem() && module.serverHoldsSelectedSlot());
         }
-        return used.getUseAnimation() == ItemUseAnimation.BLOCK
+        return used.getUseAnimation() == UseAnim.BLOCK
                 ? module.shields.getValue() : module.items.getValue();
     }
 

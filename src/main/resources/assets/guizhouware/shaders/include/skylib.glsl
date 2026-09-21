@@ -1,8 +1,9 @@
-#version 330
+#version 150
 
-#moj_import <minecraft:projection.glsl>
-#moj_import <minecraft:dynamictransforms.glsl>
-#moj_import <minecraft:globals.glsl>
+// 1.21.1 flat core uniforms replace the 1.21.5+ UBO includes (review 16).
+uniform mat4 ModelViewMat;
+uniform mat4 ProjMat;
+
 
 vec3 sky_view_dir(vec2 ndc) {
     mat4 invVP = inverse(ProjMat * ModelViewMat);

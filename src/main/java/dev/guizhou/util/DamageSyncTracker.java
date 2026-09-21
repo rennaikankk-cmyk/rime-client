@@ -14,11 +14,11 @@ public final class DamageSyncTracker {
 
     private DamageSyncTracker() {}
 
-    private static final int RESISTANCE_COLOR = MobEffects.RESISTANCE.value().getColor() & 0xFFFFFF;
+    private static final int RESISTANCE_COLOR = MobEffects.DAMAGE_RESISTANCE.value().getColor() & 0xFFFFFF;
 
-    private static final int SLOWNESS_COLOR = MobEffects.SLOWNESS.value().getColor() & 0xFFFFFF;
+    private static final int SLOWNESS_COLOR = MobEffects.MOVEMENT_SLOWDOWN.value().getColor() & 0xFFFFFF;
 
-    private static final int STRENGTH_COLOR = MobEffects.STRENGTH.value().getColor() & 0xFFFFFF;
+    private static final int STRENGTH_COLOR = MobEffects.DAMAGE_BOOST.value().getColor() & 0xFFFFFF;
 
     private static final int FULL_HIT_THRESHOLD = 10;
 
