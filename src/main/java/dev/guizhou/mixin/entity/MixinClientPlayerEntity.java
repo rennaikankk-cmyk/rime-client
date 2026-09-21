@@ -12,14 +12,12 @@ import dev.guizhou.features.modules.movement.SprintModule;
 import dev.guizhou.features.modules.render.NoRenderModule;
 import dev.guizhou.features.modules.world.ScaffoldModule;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.Vec2;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -128,14 +126,15 @@ public class MixinClientPlayerEntity {
         }
     }
 
-    @Redirect(
+    @ModifyExpressionValue(
+        require = 0, // Portal screens are optional and may be replaced by another client.
         method = "handleConfusionTransitionEffect",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screens/Screen;isPauseScreen()Z")
     )
-    private boolean guizhouware$portalGui(Screen screen) {
+    private boolean guizhouware$portalGui(boolean original) {
         if (NoRenderModule.isActive(m -> m.portalGui.getValue())) {
             return false;
         }
-        return screen.isPauseScreen();
+        return original;
     }
 }

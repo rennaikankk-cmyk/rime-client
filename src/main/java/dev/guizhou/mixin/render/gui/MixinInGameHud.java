@@ -13,7 +13,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import static dev.guizhou.util.traits.Util.EVENT_BUS;
@@ -70,20 +71,21 @@ public abstract class MixinInGameHud {
         }
     }
 
-    @Redirect(
+    @WrapOperation(
+        require = 0, // Optional visual hook: a foreign overwrite may remove the vanilla invocation.
         method = "renderCameraOverlays",
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/client/gui/Gui;renderTextureOverlay(Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/resources/ResourceLocation;F)V"
         )
     )
-    private void guizhouware$noCameraOverlay(Gui instance, GuiGraphics context, ResourceLocation texture, float alpha) {
+    private void guizhouware$noCameraOverlay(Gui instance, GuiGraphics context, ResourceLocation texture, float alpha, Operation<Void> original) {
         if (NoRenderModule.isActive(m -> m.noPowderedSnow.getValue()) && POWDER_SNOW_OUTLINE_LOCATION.equals(texture)) {
             return;
         }
         if (NoRenderModule.isActive(m -> m.noPumpkin.getValue()) && texture.getPath().contains("pumpkin")) {
             return;
         }
-        renderTextureOverlay(context, texture, alpha);
+        original.call(instance, context, texture, alpha);
     }
 }

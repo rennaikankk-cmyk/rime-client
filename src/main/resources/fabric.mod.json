@@ -27,6 +27,7 @@
     "java": ">=21",
     "fabricloader": ">=${loader_version}",
     "fabric": "*",
+    "mixinextras": ">=0.5.5",
     "minecraft": "${minecraft_version}"
   }
 }

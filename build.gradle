@@ -57,6 +57,9 @@ dependencies {
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
+    // 0.5.5 fixes wrapping Redirects compiled with Fabric Mixin 0.17.4.
+    include implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:0.5.5"))
+
     // Fabric API
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
@@ -141,6 +144,7 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        compatibilityHookTest: 'dev.guizhou.util.render.CompatibilityHookTest',
         aerialAttackGeometryTest: 'dev.guizhou.util.elytra.AerialAttackGeometryTest',
         auraPolicyTest: 'dev.guizhou.util.combat.AuraPolicyTest',
         rotationMathTest: 'dev.guizhou.manager.RotationMathTest',

@@ -9,13 +9,14 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * 1.21.1: the entity outline chain is LevelRenderer.entityEffect, processed inside
  * renderLevel. The shader module forces the outline pass on and, in Default mode,
- * redirects that process call to the locally built chams chain.
+ * wraps that process call to the locally built chams chain.
  */
 @Mixin(LevelRenderer.class)
 public class MixinShaderLevelRenderer {
@@ -33,7 +34,8 @@ public class MixinShaderLevelRenderer {
         }
     }
 
-    @Redirect(
+    @WrapOperation(
+        require = 0, // Optional visual hook: a foreign overwrite may remove the vanilla invocation.
         method = "renderLevel",
         at = @At(
             value = "INVOKE",
@@ -41,7 +43,7 @@ public class MixinShaderLevelRenderer {
             ordinal = 0
         )
     )
-    private void guizhouware$swapEntityOutlineChain(PostChain vanilla, float partialTick) {
+    private void guizhouware$swapEntityOutlineChain(PostChain vanilla, float partialTick, Operation<Void> original) {
         ShadersModule shaders = GuizhouWare.moduleManager == null
                 ? null
                 : GuizhouWare.moduleManager.getModuleByClass(ShadersModule.class);
@@ -56,6 +58,6 @@ public class MixinShaderLevelRenderer {
             WorldChamsChain.process(vanilla, partialTick);
             return;
         }
-        vanilla.process(partialTick);
+        original.call(vanilla, partialTick);
     }
 }
