@@ -10,6 +10,11 @@ import static net.minecraft.client.renderer.RenderPipelines.DEBUG_FILLED_SNIPPET
 import static net.minecraft.client.renderer.RenderPipelines.LINES_SNIPPET;
 
 class Pipelines {
+    static final RenderPipeline PLACEMENT_DEPTH_QUADS = RenderPipeline.builder(DEBUG_FILLED_SNIPPET)
+            .withLocation("pipeline/placement_depth_fill")
+            .withVertexFormat(DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.QUADS)
+            .withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST)
+            .withBlend(BlendFunction.TRANSLUCENT).withDepthWrite(false).withCull(false).build();
     static final RenderPipeline GLOBAL_QUADS_PIPELINE = RenderPipeline.builder(DEBUG_FILLED_SNIPPET)
             .withLocation("pipeline/global_fill_pipeline")
             .withVertexFormat(DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.QUADS)

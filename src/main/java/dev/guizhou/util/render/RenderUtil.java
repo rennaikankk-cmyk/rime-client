@@ -255,6 +255,45 @@ public class RenderUtil implements Util {
         Layers.quads().draw(bb.buildOrThrow());
     }
 
+    public static void placementLine(Vec3 from, Vec3 to, Color color, float width, boolean through) {
+        var gizmo = Gizmos.line(from, to, color.getRGB(), width);
+        if (through) gizmo.setAlwaysOnTop();
+    }
+
+    public static void placementBox(AABB box, Color fill, Color line, float width, boolean through, boolean filled, boolean outlined) {
+        if (filled) {
+            var gizmo = Gizmos.cuboid(box, GizmoStyle.fill(fill.getRGB()));
+            if (through) gizmo.setAlwaysOnTop();
+        }
+        if (outlined) {
+            var gizmo = Gizmos.cuboid(box, GizmoStyle.stroke(line.getRGB(), width));
+            if (through) gizmo.setAlwaysOnTop();
+        }
+    }
+
+    /** One mesh for the top and four gradient faces; the depth policy is local to this overlay. */
+    public static void placementGradient(PoseStack stack, AABB box, Color fill, Color line, float width, double height, boolean through) {
+        if (fill.getAlpha() > 0 && height > 0) {
+            Vec3 cam = mc.gameRenderer.getMainCamera().position();
+            Matrix4f m = stack.last().pose();
+            Color clear = new Color(fill.getRed(), fill.getGreen(), fill.getBlue(), 0);
+            double bottom = box.maxY - Math.min(box.getYsize(), height);
+            BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+            double[][] corners = {{box.minX,box.minZ},{box.maxX,box.minZ},{box.maxX,box.maxZ},{box.minX,box.maxZ}};
+            for (double[] c : corners) worldVertex(bb,m,cam,c[0],box.maxY,c[1],fill);
+            for (int i=0;i<4;i++) {
+                double[] a=corners[i], b=corners[(i+1)%4];
+                worldVertex(bb,m,cam,a[0],box.maxY,a[1],fill);
+                worldVertex(bb,m,cam,b[0],box.maxY,b[1],fill);
+                worldVertex(bb,m,cam,b[0],bottom,b[1],clear);
+                worldVertex(bb,m,cam,a[0],bottom,a[1],clear);
+            }
+            Layers.placementQuads(through).draw(bb.buildOrThrow());
+        }
+        if (line.getAlpha()>0) placementBox(new AABB(box.minX,box.maxY-Math.min(box.getYsize(),height),box.minZ,
+                box.maxX,box.maxY,box.maxZ),fill,line,width,through,false,true);
+    }
+
     public static PoseStack matrixFrom(Vec3 pos) {
         PoseStack matrices = new PoseStack();
         Camera camera = mc.gameRenderer.getMainCamera();

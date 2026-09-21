@@ -39,6 +39,7 @@ public class MixinWorldRenderer {
         profiler.push("guizhouware-render-3d");
 
         Render3DEvent event = new Render3DEvent(stack, tickCounter.getGameTimeDeltaPartialTick(true));
+        dev.guizhou.util.render.placement.PlacementLabels.beginFrame();
         EVENT_BUS.post(event);
         stack.popPose();
         profiler.pop();

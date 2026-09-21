@@ -141,6 +141,7 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        placementVisualTest: 'dev.guizhou.util.render.placement.PlacementVisualTest',
         placementGeometryTest: 'dev.guizhou.manager.PlacementGeometryTest',
         licenseLeaseTest: 'dev.guizhou.util.license.LicenseLeaseTest',
         signedHeartbeatTest: 'dev.guizhou.util.license.SignedHeartbeatTest',

@@ -18,6 +18,7 @@ import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.inventory.SwapMode;
 import dev.guizhou.util.inventory.SwapPriority;
 import dev.guizhou.util.render.RenderUtil;
+import dev.guizhou.util.render.placement.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
@@ -70,6 +71,12 @@ public class GuangxiMineModule extends Module implements MineApi {
     private final Setting<Color> sideColor = color("SideColor", 255, 255, 255, 40).setPage("Render");
     private final Setting<Color> primaryColor = color("PrimaryColor", 255, 180, 255, 60).setPage("Render");
 
+    private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, false, false, false);
+    private final PlacementVisuals visuals = new PlacementVisuals("发包挖");
+    private final Setting<Float> fadeTime = num("FadeTime", .3f, .05f, 2f).setPage("Render");
+    private final Setting<Boolean> progressText = bool("ProgressText", true).setPage("Render");
+    private final Setting<Boolean> remainingText = bool("RemainingText", true).setPage("Render");
+    private final Setting<Boolean> progressBox = bool("ProgressBox", true).setPage("Render");
     private BlockPos pos;
     private Direction direction;
     private int ticks;
@@ -146,6 +153,7 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     @Override
     public void onDisable() {
+        visuals.clear();
         GuizhouWare.placementManager.removeListener(blockListener);
         if (!nullCheck() && mc.level == sessionLevel && mc.player == sessionPlayer
                 && pos != null && started && !finished) {
@@ -599,9 +607,10 @@ public class GuangxiMineModule extends Module implements MineApi {
     private BlockPos renderPrimaryPos;
     private BlockPos renderSecondaryPos;
 
-    @Subscribe
-    private void onRender(Render3DEvent event) {
-        if (nullCheck() || !render.getValue()) {
+    @Override
+    public void onRender3D(Render3DEvent event) {
+        if (nullCheck() || !render.getValue() || sessionLevel != mc.level || sessionPlayer != mc.player) {
+            visuals.clear();
             lastRenderNs = 0L;
             return;
         }
@@ -617,7 +626,7 @@ public class GuangxiMineModule extends Module implements MineApi {
             renderPrimaryPos = primaryActive ? pos.immutable() : null;
             renderProgress = primaryTarget;
         } else {
-            renderProgress = easeProgress(renderProgress, primaryTarget, lastRenderDt);
+            renderProgress = visualOptions.smooth.getValue() ? easeProgress(renderProgress, primaryTarget, lastRenderDt) : primaryTarget;
         }
 
         boolean secondaryActive = secondaryPos != null;
@@ -625,34 +634,46 @@ public class GuangxiMineModule extends Module implements MineApi {
             renderSecondaryPos = secondaryActive ? secondaryPos.immutable() : null;
             renderSecondaryProgress = secondaryActive ? secondaryProgress : 0;
         } else {
-            renderSecondaryProgress = easeProgress(renderSecondaryProgress, secondaryProgress, lastRenderDt);
+            renderSecondaryProgress = visualOptions.smooth.getValue() ? easeProgress(renderSecondaryProgress, secondaryProgress, lastRenderDt) : secondaryProgress;
         }
 
         if (primaryActive && renderProgress > 0.004) {
-            drawBlock(event, pos, primaryColor.getValue(), renderProgress);
+            drawBlock(event, pos, primaryColor.getValue(), renderProgress, true);
         }
         if (secondaryActive && renderSecondaryProgress > 0.004) {
-            drawBlock(event, secondaryPos, sideColor.getValue(), renderSecondaryProgress);
+            drawBlock(event, secondaryPos, sideColor.getValue(), renderSecondaryProgress, false);
         }
+        // Progress is already eased above; do not apply another lagging interpolation to its box.
+        visuals.render(event, visualOptions, primaryColor.getValue(), lineColor.getValue(), lineWidth.getValue(), fadeTime.getValue(),
+                visualOptions.style.getValue(), 1, .7, lineColor.getValue(), 2, .12);
     }
 
-    private static double easeProgress(double current, double target, double dtSeconds) {
+    private double easeProgress(double current, double target, double dtSeconds) {
         if (dtSeconds <= 0) return target;
-        double f = 1.0 - Math.exp(-dtSeconds * 30.0);
+        double f = 1.0 - Math.exp(-dtSeconds * 300.0 / visualOptions.smoothness.getValue());
         return current + (target - current) * f;
     }
 
-    private void drawBlock(Render3DEvent event, BlockPos target, Color side, double progress) {
-        if (mc.level.getBlockState(target).isAir()) return;
-
-        float t = (float) Mth.clamp(progress, 0, 1);
-        double cx = target.getX() + 0.5;
-        double cy = target.getY() + 0.5;
-        double cz = target.getZ() + 0.5;
-        double half = 0.5 * t;
-        AABB box = new AABB(cx - half, cy - half, cz - half, cx + half, cy + half, cz + half);
-        RenderUtil.drawBoxFilled(event.getMatrix(), box, side);
-        RenderUtil.drawBox(event.getMatrix(), box, lineColor.getValue(), lineWidth.getValue());
+    private void drawBlock(Render3DEvent event, BlockPos target, Color side, double eased, boolean primary) {
+        String id=(primary?"primary:":"secondary:")+target.asLong();
+        if (mc.level.getBlockState(target).isAir()) {
+            visuals.stage(id, primary && rebreak.getValue() ? "已观察到空气 · 等待重挖" : "已观察到方块消失");
+            return;
+        }
+        double t = progressBox.getValue() ? Mth.clamp(eased, .02, 1) : 1;
+        Vec3 center=Vec3.atCenterOf(target);
+        AABB box=new AABB(center.x-t/2,center.y-t/2,center.z-t/2,center.x+t/2,center.y+t/2,center.z+t/2);
+        String state=primary ? (finished ? "等待方块消失" : "挖掘中") : (secondaryHolding ? "副挖 · 工具保持" : "副挖 · 等待完成");
+        if (primary && paused()) state="暂停 · 等待操作条件";
+        String role=primary ? "主挖" : "副挖";
+        visuals.mark(id,box,target,center,Float.NaN,Float.NaN,role+" · "+state,true,side);
+        visuals.colors(id,side,lineColor.getValue());
+        double raw=primary ? (finished?1:Math.min(progress/threshold.getValue(),1)) : Math.min(secondaryProgress,1);
+        String info=progressText.getValue()?String.format(java.util.Locale.ROOT,"%s %.0f%%",role,raw*100):"";
+        double effectiveTicks=primary ? Math.max(0,ticks-fudgeTicks.getValue()) : secondaryTicks;
+        if(remainingText.getValue() && raw>0 && raw<1 && effectiveTicks>0 && !(primary && paused()))
+            info+=(info.isEmpty()?"":" · ")+String.format(java.util.Locale.ROOT,"预计 %.2fs",Math.min(99,(1-raw)/raw*effectiveTicks*.05));
+        visuals.info(id,info);
     }
 
     private boolean stopBreak(int slot) {

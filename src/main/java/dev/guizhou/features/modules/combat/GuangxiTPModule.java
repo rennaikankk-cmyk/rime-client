@@ -16,6 +16,7 @@ import dev.guizhou.util.inventory.SwapMode;
 import dev.guizhou.util.inventory.SwapPriority;
 import dev.guizhou.util.models.Timer;
 import dev.guizhou.util.render.RenderUtil;
+import dev.guizhou.util.render.placement.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
@@ -67,8 +68,8 @@ public class GuangxiTPModule extends Module {
      */
     private final Setting<Boolean> legacy112  = bool("1.12", false);
 
-    private final Setting<Boolean> render      = bool("Render", true);
-    private final Setting<Color>   renderColor = color("Color", 130, 80, 255, 60);
+    private final Setting<Boolean> render      = bool("Render", true).setPage("Render");
+    private final Setting<Color>   renderColor = color("Color", 130, 80, 255, 60).setPage("Render");
 
     /** Per-second decision diagnostics: which gate killed the placement attempt. */
     private final Setting<Boolean> debug = bool("Debug", false);
@@ -115,8 +116,12 @@ public class GuangxiTPModule extends Module {
      */
     private static final float SELECT_EPSILON = 1.0f;
 
-    private BlockPos renderPos = null;
-    private long renderStartMs = 0L;
+    private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, false);
+    private final PlacementVisuals visuals = new PlacementVisuals("TP水晶");
+    private final Setting<Float> fadeTime = num("FadeTime", .8f, .05f, 2f).setPage("Render");
+    private final Setting<Float> lineWidth = num("LineWidth", 1.5f, .5f, 5f).setPage("Render");
+    private final Setting<Color> outlineColor = color("OutlineColor", 130, 80, 255, 220).setPage("Render");
+    private float visualDamage = Float.NaN, visualSelf = Float.NaN;
 
     public GuangxiTPModule() {
         super("GuangxiTP", "Long-range crystal placement via desync move packets. Lenient-move-check servers only.", Category.COMBAT);
@@ -135,7 +140,7 @@ public class GuangxiTPModule extends Module {
 
     @Override
     public void onDisable() {
-        renderPos = null;
+        visuals.clear();
     }
 
     @Subscribe
@@ -146,7 +151,6 @@ public class GuangxiTPModule extends Module {
 
         Player target = findTarget();
         if (target == null) {
-            renderPos = null;
             dNoTarget++;
             return;
         }
@@ -157,8 +161,7 @@ public class GuangxiTPModule extends Module {
             if (base != null) {
                 if (tpPlace(base)) {
                     placeTimer.reset();
-                    renderPos = base.above();
-                    renderStartMs = System.currentTimeMillis();
+                    noteRender(base, visualDamage, visualSelf);
                 }
             } else {
                 dBaseNull++;
@@ -169,6 +172,7 @@ public class GuangxiTPModule extends Module {
                     BaseOpportunity opp = findBaseOpportunity(target);
                     if (opp == null) dOppNull++;
                     else if (!tpBasePlaceChain(opp)) dObsFail++;
+                    else noteRender(opp.base(), opp.damage(), opp.selfDamage());
                 }
             }
         }
@@ -216,11 +220,13 @@ public class GuangxiTPModule extends Module {
                     Vec3 center = new Vec3(airPos.getX() + 0.5, airPos.getY(), airPos.getZ() + 0.5);
                     float dmg = estimateDamage(target, center);
                     if (dmg < minDamage.getValue()) { dDmgRej++; continue; }
-                    if (DamageUtil.crystalMaxSelfDamage(center) > maxSelf.getValue()) { dSelfRej++; continue; }
+                    float self = DamageUtil.crystalMaxSelfDamage(center);
+                    if (self > maxSelf.getValue()) { dSelfRej++; continue; }
 
                     if (dmg > bestDmg + SELECT_EPSILON) {
                         bestDmg = dmg;
                         best = cursor.immutable();
+                        visualDamage = dmg; visualSelf = self;
                     }
                 }
             }
@@ -245,7 +251,7 @@ public class GuangxiTPModule extends Module {
         return best;
     }
 
-    private record BaseOpportunity(BlockPos base, BlockPos clickNeighbor, Direction clickFace, float damage) {}
+    private record BaseOpportunity(BlockPos base, BlockPos clickNeighbor, Direction clickFace, float damage, float selfDamage) {}
 
     private static final Direction[] BASE_CLICK_DIRS = {
             Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN, Direction.UP
@@ -282,10 +288,11 @@ public class GuangxiTPModule extends Module {
                     Vec3 crystalCenter = new Vec3(cursor.getX() + 0.5, cursor.getY() + 1.0, cursor.getZ() + 0.5);
                     float dmg = estimateDamage(target, crystalCenter);
                     if (dmg < minDamage.getValue()) continue;
-                    if (DamageUtil.crystalMaxSelfDamage(crystalCenter) > maxSelf.getValue()) continue;
+                    float self = DamageUtil.crystalMaxSelfDamage(crystalCenter);
+                    if (self > maxSelf.getValue()) continue;
 
                     if (best == null || dmg > best.damage() + SELECT_EPSILON) {
-                        best = new BaseOpportunity(cursor.immutable(), neighbor.immutable(), face, dmg);
+                        best = new BaseOpportunity(cursor.immutable(), neighbor.immutable(), face, dmg, self);
                     }
                 }
             }
@@ -399,14 +406,14 @@ public class GuangxiTPModule extends Module {
         return dmg * (1.0f - j / 25.0f);
     }
 
+    private void noteRender(BlockPos base, float damage, float self) {
+        if (render.getValue()) visuals.main(base, new AABB(base), Vec3.atCenterOf(base), damage, self,
+                "TP交互已提交 · 等待生成");
+    }
+
     @Override
     public void onRender3D(Render3DEvent event) {
-        if (!render.getValue() || renderPos == null || nullCheck()) return;
-        if (System.currentTimeMillis() - renderStartMs > 800L) {
-            renderPos = null;
-            return;
-        }
-        RenderUtil.drawBoxFilled(event.getMatrix(), new AABB(renderPos), renderColor.getValue());
-        RenderUtil.drawBox(event.getMatrix(), new AABB(renderPos), renderColor.getValue(), 1.5f);
+        if (!render.getValue()) { visuals.clear(); return; }
+        visuals.render(event, visualOptions, renderColor.getValue(), outlineColor.getValue(), lineWidth.getValue(), fadeTime.getValue());
     }
 }

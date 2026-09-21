@@ -29,6 +29,7 @@ import dev.guizhou.util.inventory.SwapPriority;
 import dev.guizhou.util.models.Timer;
 import dev.guizhou.util.player.ChatUtil;
 import dev.guizhou.util.render.RenderUtil;
+import dev.guizhou.util.render.placement.*;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.screens.inventory.CraftingScreen;
 import net.minecraft.core.BlockPos;
@@ -85,8 +86,8 @@ public class GuangxiBedModule extends Module {
     /** Stretches the cooldown by measured TPS and pauses placements right after a rubberband. */
     private final Setting<Boolean> tpsSync = bool("TpsSync", true);
 
-    private final Setting<Boolean> render      = bool("Render", true);
-    private final Setting<Color>   renderColor = color("Color", 255, 60, 60, 60);
+    private final Setting<Boolean> render      = bool("Render", true).setPage("Render");
+    private final Setting<Color>   renderColor = color("Color", 255, 60, 60, 60).setPage("Render");
 
     private final Timer timer = new Timer();
 
@@ -98,10 +99,15 @@ public class GuangxiBedModule extends Module {
     private final BlastStageDiagnostics stageDiagnostics = new BlastStageDiagnostics("GuangxiBed");
     private ClientLevel sessionLevel;
     private LocalPlayer sessionPlayer;
-    private BlockPos renderHead;
+    private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, false);
+    private final PlacementVisuals visuals = new PlacementVisuals("床");
+    private final Setting<Float> fadeTime = num("FadeTime", 1f, .05f, 2f).setPage("Render");
+    private final Setting<Float> lineWidth = num("LineWidth", 1.5f, .5f, 5f).setPage("Render");
+    private final Setting<Color> outlineColor = color("OutlineColor", 255, 80, 80, 220).setPage("Render");
+    private float visualDamage = Float.NaN, visualSelf = Float.NaN;
+    private String visualStage = "等待放置确认";
 
-    private BlockPos renderPos = null;
-    private long renderStartMs = 0L;
+
 
     public GuangxiBedModule() {
         super("GuangxiBed", "Nether/End bed aura with confirmed placement, safe damage checks and automatic crafting.", Category.COMBAT);
@@ -118,8 +124,8 @@ public class GuangxiBedModule extends Module {
 
     private void resetSession() {
         clearPending();
-        renderPos = null;
-        renderHead = null;
+        visuals.clear();
+        visualDamage = visualSelf = Float.NaN;
         craftPhase = 0;
         craftTimeoutTick = 0;
         craftContainerId = -1;
@@ -166,14 +172,16 @@ public class GuangxiBedModule extends Module {
     private void tickPending() { tickPending(null); }
 
     private void tickPending(BedSpot fresh) {
+        if (fresh != null) { visualDamage = fresh.damage(); visualSelf = fresh.selfDamage(); }
         boolean existing = matchingBed();
         BedSequence.Action action = sequence.next(existing,
                 mc.level.getBlockState(pendingHead).getBlock() instanceof BedBlock,
                 existing || spotStillValid(pendingFoot, pendingHead), mc.player.tickCount,
                 confirmTicks.getValue(), retries.getValue());
         stageDiagnostics.decision(action.name(), mc.player.tickCount, confirmTicks.getValue());
-        if (action == BedSequence.Action.WAIT) return;
+        if (action == BedSequence.Action.WAIT) { visuals.touch("main"); return; }
         if (action == BedSequence.Action.COMPLETE || action == BedSequence.Action.ABORT) {
+            visuals.stage("main", action == BedSequence.Action.COMPLETE ? "已观察到床移除" : "操作中止");
             clearPending();
             timer.reset();
             return;
@@ -188,6 +196,7 @@ public class GuangxiBedModule extends Module {
             clearPending();
             return;
         }
+        visualStage = action == BedSequence.Action.DETONATE ? "等待引爆确认" : "等待放置确认";
         if (action == BedSequence.Action.DETONATE) {
             if (detonate()) {
                 sequence.sent(action, mc.player.tickCount);
@@ -458,8 +467,10 @@ public class GuangxiBedModule extends Module {
     private boolean safeDamage(Player target, BlockPos foot, BlockPos head) {
         Vec3 center = Vec3.atCenterOf(head);
         float damage = AnchorDamageUtil.damage(AnchorDamageUtil.Target.of(target, assumeBestArmor.getValue()), center, foot, head);
-        return damage > 0f && damage >= minDamage.getValue()
-                && safeSelfDamage(AnchorDamageUtil.damage(AnchorDamageUtil.Target.of(mc.player), center, foot, head));
+        visualDamage = damage;
+        if (damage <= 0f || damage < minDamage.getValue()) { visualSelf = Float.NaN; return false; }
+        visualSelf = AnchorDamageUtil.damage(AnchorDamageUtil.Target.of(mc.player), center, foot, head);
+        return safeSelfDamage(visualSelf);
     }
 
     private boolean safeSelfDamage(float damage) {
@@ -548,9 +559,10 @@ public class GuangxiBedModule extends Module {
     }
 
     private void noteRender() {
-        renderPos = pendingFoot;
-        renderHead = pendingHead;
-        renderStartMs = System.currentTimeMillis();
+        if (!render.getValue() || pendingFoot == null || pendingHead == null) return;
+        AABB box = PlacementVisuals.bed(pendingFoot, pendingHead);
+        visuals.main(pendingFoot, box, new Vec3(box.getCenter().x, box.maxY + .2, box.getCenter().z),
+                visualDamage, visualSelf, (tpMode.getValue() ? "TP床 · " : "") + visualStage);
     }
 
     private boolean sendFakeMove(Vec3 pos, float yaw) {
@@ -588,15 +600,7 @@ public class GuangxiBedModule extends Module {
 
     @Override
     public void onRender3D(Render3DEvent event) {
-        if (!render.getValue() || renderPos == null || nullCheck()) return;
-        if (System.currentTimeMillis() - renderStartMs > 1000L) {
-            renderPos = null;
-            return;
-        }
-        AABB box = new AABB(renderPos).expandTowards(
-                renderHead != null ? renderHead.getX() - renderPos.getX() : 0, 0,
-                renderHead != null ? renderHead.getZ() - renderPos.getZ() : 0);
-        RenderUtil.drawBoxFilled(event.getMatrix(), box, renderColor.getValue());
-        RenderUtil.drawBox(event.getMatrix(), box, renderColor.getValue(), 1.5f);
+        if (!render.getValue()) { visuals.clear(); return; }
+        visuals.render(event, visualOptions, renderColor.getValue(), outlineColor.getValue(), lineWidth.getValue(), fadeTime.getValue());
     }
 }

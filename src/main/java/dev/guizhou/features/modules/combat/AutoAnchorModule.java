@@ -35,6 +35,7 @@ import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.render.RenderUtil;
+import dev.guizhou.util.render.placement.*;
 import dev.guizhou.util.player.EatUtil;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.core.BlockPos;
@@ -123,8 +124,9 @@ public class AutoAnchorModule extends Module {
     private ClientLevel sessionLevel;
     private LocalPlayer sessionPlayer;
     private float lastDamage = 0f;
-    private BlockPos renderPos = null;
-    private long renderStart = 0L;
+    private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, false);
+    private final PlacementVisuals visuals = new PlacementVisuals("锚");
+    private final Setting<Float> lineWidth = num("LineWidth", 1.5f, .5f, 5f).setPage("Render");
 
     public AutoAnchorModule() {
         super("AutoAnchor", "Places, charges and detonates anchors after observing each block state.", Category.COMBAT);
@@ -160,7 +162,7 @@ public class AutoAnchorModule extends Module {
         syncUntilTick = 0;
         capturedTick = Integer.MIN_VALUE;
         lastDamage = 0f;
-        renderPos = null;
+        visuals.clear();
         activePos = null;
         sequence.reset();
         sessionLevel = mc.level;
@@ -247,8 +249,14 @@ public class AutoAnchorModule extends Module {
             stageDiagnostics.decision(action.name(), tick, confirmTicks.getValue());
             if (awaited != null && action != AnchorSequence.Action.WAIT && action != AnchorSequence.Action.ABORT
                     && action != awaited) timing.observed(awaited, tick - sentTick);
-            if (action == AnchorSequence.Action.WAIT) return;
+            if (action == AnchorSequence.Action.WAIT) {
+                visuals.touch("main");
+                visuals.stage("main", "充能 " + (anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)
+                        + " · " + anchorStage(awaited));
+                return;
+            }
             if (action == AnchorSequence.Action.COMPLETE || action == AnchorSequence.Action.ABORT) {
+                visuals.stage("main", action == AnchorSequence.Action.COMPLETE ? "已观察到锚移除" : "操作中止");
                 if (action == AnchorSequence.Action.COMPLETE && spamPlace.getValue()
                         && state.canBeReplaced() && !miningBlocked(activePos)) {
                     repeatPos = activePos.immutable();
@@ -285,7 +293,8 @@ public class AutoAnchorModule extends Module {
                 lastActionTick = tick;
                 actionsThisTick++;
                 lastDamage = damage;
-                if (render.getValue()) { renderPos = activePos; renderStart = System.currentTimeMillis(); }
+                if (render.getValue()) visuals.main(activePos, new AABB(activePos), Vec3.atCenterOf(activePos),
+                        damage, local, "充能 " + (anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0) + " · " + anchorStage(action));
             } else stageDiagnostics.blocked("actionDeferred");
             return;
         }
@@ -721,26 +730,20 @@ public class AutoAnchorModule extends Module {
         return Math.max(current, AnchorDamageUtil.damage(predicted, center, pos));
     }
 
-    @Override
-    public void onRender3D(Render3DEvent event) {
-        if (!render.getValue() || renderPos == null) return;
-        long age = System.currentTimeMillis() - renderStart;
-        double fadeMs = fadeTime.getValue() * 1000.0;
-        if (age > fadeMs) {
-            renderPos = null;
-            return;
-        }
-        double t = age / fadeMs;
-        Color fc = fillColor.getValue();
-        Color oc = outlineColor.getValue();
-        RenderUtil.drawBoxFilled(event.getMatrix(), renderPos,
-                withAlpha(fc, (int) (fc.getAlpha() * (1 - t))));
-        RenderUtil.drawBox(event.getMatrix(), renderPos,
-                withAlpha(oc, (int) (oc.getAlpha() * (1 - t))), 1.0f);
+    private static String anchorStage(AnchorSequence.Action action) {
+        if (action == null) return "等待确认";
+        return switch(action) {
+            case PLACE -> "等待放置确认";
+            case CHARGE -> "等待充能确认";
+            case DETONATE -> "等待引爆确认";
+            default -> "等待确认";
+        };
     }
 
-    private static Color withAlpha(Color c, int a) {
-        return new Color(c.getRed(), c.getGreen(), c.getBlue(), Mth.clamp(a, 0, 255));
+    @Override
+    public void onRender3D(Render3DEvent event) {
+        if (!render.getValue()) { visuals.clear(); return; }
+        visuals.render(event, visualOptions, fillColor.getValue(), outlineColor.getValue(), lineWidth.getValue(), fadeTime.getValue());
     }
 
     @Override

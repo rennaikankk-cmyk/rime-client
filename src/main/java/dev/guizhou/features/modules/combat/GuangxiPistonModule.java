@@ -28,6 +28,7 @@ import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.render.RenderUtil;
+import dev.guizhou.util.render.placement.*;
 import dev.guizhou.util.player.EatUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -84,7 +85,14 @@ public class GuangxiPistonModule extends Module {
     private final Setting<Color>   fillColor   = color("FillColor",  0, 62, 122, 148).setPage("Render");
     private final Setting<Color>   outlineColor = color("OutlineColor", 0, 62, 122, 148).setPage("Render");
 
-    private final Map<BlockPos, Integer> renderMap = new HashMap<>();
+    private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, false, true, true);
+    private final PlacementVisuals visuals = new PlacementVisuals("活塞水晶");
+    private final Setting<Float> lineWidth = num("LineWidth", 1.5f, .5f, 5f).setPage("Render");
+    private final Setting<Color> pistonColor = color("PistonColor", 90, 220, 240, 220).setPage("Render");
+    private final Setting<Color> powerColor = color("PowerColor", 255, 195, 65, 220).setPage("Render");
+    private final Setting<Boolean> pushArrow = bool("PushArrow", true).setPage("Render");
+    private float visualSelf = Float.NaN;
+    private Setup visualSetup;
 
     private Setup   pending;
     private Setup   active;
@@ -131,7 +139,8 @@ public class GuangxiPistonModule extends Module {
         rotateHeld = 0;
         waitTicks  = 0;
         lastDamage = 0;
-        renderMap.clear();
+        visuals.clear();
+        visualSetup = null;
         attacks.clear();
         trackedCrystal = -1;
         stageAttempts = 0;
@@ -150,7 +159,7 @@ public class GuangxiPistonModule extends Module {
         if (nullCheck() || mc.player.isDeadOrDying()) return;
         selfProfile = profileOf(mc.player);
         attacks.expire(System.currentTimeMillis(), 5000);
-        renderMap.entrySet().removeIf(e -> mc.player.tickCount - e.getValue() > Math.max(1, (int)(fadeTime.getValue() * 20)));
+
         if (active != null) {
             // Timeouts still advance while resources are owned by another module.
             if (++waitTicks > actionTimeout.getValue() || !validTarget(active)) { clearActive(); return; }
@@ -179,6 +188,12 @@ public class GuangxiPistonModule extends Module {
     }
 
     private void clearActive() {
+        if (active != null) {
+            boolean removed = stage == Stage.CONFIRM && trackedCrystal >= 0 && mc.level != null
+                    && (mc.level.getEntity(trackedCrystal) == null || mc.level.getEntity(trackedCrystal).isRemoved());
+            visuals.stage("main", removed ? "已观察到水晶移除" : "操作结束 · 等待重新选点");
+            visuals.info("main", "");
+        }
         releasePowerMine();
         active = null;
         trackedCrystal = -1;
@@ -204,6 +219,7 @@ public class GuangxiPistonModule extends Module {
 
     private void enterStage(Stage next) {
         stage = next;
+        showVisualSetup();
         stageAttempts = 0;
         lastStageSubmit = Long.MIN_VALUE;
     }
@@ -216,7 +232,7 @@ public class GuangxiPistonModule extends Module {
     private void submitted(BlockPos pos) {
         stageAttempts++;
         lastStageSubmit = mc.player.tickCount;
-        renderMap.put(pos, mc.player.tickCount);
+        showVisualSetup();
     }
 
     private void tickActive() {
@@ -231,6 +247,7 @@ public class GuangxiPistonModule extends Module {
         }
         if (trackedCrystal >= 0 && mc.level.getEntity(trackedCrystal) == null) { clearActive(); return; }
         if (!selfSafe(setup.explosion(), needsBase(setup.base()) ? setup.base() : null)) { clearActive(); return; }
+        showVisualSetup();
         // Several already-observed stages may advance in one tick; a submitted packet never counts as observation.
         for (int steps = 0; steps < Stage.values().length && active != null; steps++) {
             BlockPos interaction = switch (stage) {
@@ -388,6 +405,7 @@ public class GuangxiPistonModule extends Module {
 
     private boolean selfSafe(Vec3 explosion, BlockPos phantomBase) {
         float damage = calcDamage(mc.player, explosion, phantomBase);
+        visualSelf = damage;
         return Float.isFinite(damage) && damage <= maxSelfDamage.getValue()
                 && mc.player.getHealth() + mc.player.getAbsorptionAmount() - damage >= reserve.getValue()
                 && damage < mc.player.getHealth() + mc.player.getAbsorptionAmount();
@@ -747,26 +765,42 @@ public class GuangxiPistonModule extends Module {
         return (r.found() && r.type() != ResultType.OFFHAND) ? r.slot() : -1;
     }
 
-    @Override
-    public void onRender3D(Render3DEvent event) {
-        if (nullCheck() || !render.getValue()) return;
-        int  fadeTicks = Math.max(1, (int)(fadeTime.getValue() * 20));
-        int  now       = mc.player.tickCount;
-        for (Map.Entry<BlockPos, Integer> entry : renderMap.entrySet()) {
-            int age = now - entry.getValue();
-            if (age > fadeTicks) continue;
-            double t   = (double) age / fadeTicks;
-            Color  fc  = fillColor.getValue();
-            Color  oc  = outlineColor.getValue();
-            RenderUtil.drawBoxFilled(event.getMatrix(), entry.getKey(),
-                    withAlpha(fc, (int)(fc.getAlpha() * (1 - t))));
-            RenderUtil.drawBox(event.getMatrix(), entry.getKey(),
-                    withAlpha(oc, (int)(oc.getAlpha() * (1 - t))), 1.0f);
-        }
+    private void showVisualSetup() {
+        if (active == null || !render.getValue()) return;
+        visualSetup = active;
+        Setup s = active;
+        String text = switch(stage) {
+            case RESET_PISTON -> "重置活塞 · 保留红石";
+            case BASE -> "等待底座";
+            case PISTON -> "等待活塞";
+            case CRYSTAL -> "等待水晶生成";
+            case POWER -> s.keepPower() ? "现有红石 · 复用" : "等待红石放置";
+            case EXTEND -> "等待实际推动";
+            case ATTACK -> "准备攻击";
+            case CONFIRM -> "等待水晶移除";
+        };
+        visuals.main(s.base(), new AABB(s.base()), Vec3.atCenterOf(s.base()), s.damage(), visualSelf,
+                "推动后估算 · " + text);
+        visuals.info("main", (needsBase(s.base()) ? "底座待放置" : "底座已就位") + " · "
+                + (trackedCrystal >= 0 && mc.level.getEntity(trackedCrystal) != null ? "水晶已生成" : "等待水晶"));
+        String piston = mc.level.getBlockState(s.piston()).isAir() ? "活塞 · 待放置" : "活塞 · 已就位";
+        String power = s.keepPower() ? "现有红石 · 复用"
+                : mc.level.getBlockState(s.redstone()).is(Blocks.REDSTONE_BLOCK) ? "红石 · 已就位" : "红石 · 待放置";
+        visuals.mark("piston", new AABB(s.piston()), s.piston(), Vec3.atCenterOf(s.piston()).add(0,.65,0),
+                Float.NaN, Float.NaN, piston, false, pistonColor.getValue());
+        visuals.mark("power", new AABB(s.redstone()), s.redstone(), Vec3.atCenterOf(s.redstone()).add(0,.65,0),
+                Float.NaN, Float.NaN, power, false, powerColor.getValue());
     }
 
-    private static Color withAlpha(Color c, int a) {
-        return new Color(c.getRed(), c.getGreen(), c.getBlue(), Mth.clamp(a, 0, 255));
+    @Override
+    public void onRender3D(Render3DEvent event) {
+        if (!render.getValue()) { visuals.clear(); visualSetup = null; return; }
+        visuals.render(event, visualOptions, fillColor.getValue(), outlineColor.getValue(), lineWidth.getValue(), fadeTime.getValue());
+        if (active != null && visualSetup == active && pushArrow.getValue() && !nullCheck()) {
+            Vec3 from = Vec3.atCenterOf(active.piston()).add(0,.65,0);
+            Vec3 toward = Vec3.atCenterOf(active.crystal()).add(0,.65,0);
+            visuals.arrow(from, toward, pistonColor.getValue(), lineWidth.getValue(), visualOptions);
+        }
     }
 
     @Override

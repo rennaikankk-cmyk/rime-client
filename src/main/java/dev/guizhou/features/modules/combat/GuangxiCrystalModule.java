@@ -22,6 +22,7 @@ import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.PredictUtil;
 import dev.guizhou.util.render.RenderUtil;
+import dev.guizhou.util.render.placement.*;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
@@ -173,10 +174,8 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<Double>  pulseSpeed    = num("PulseSpeed", 2.0, 0.2, 6.0).setPage("Render");
     private final Setting<Double>  pulseExpand   = num("PulseExpand", 0.35, 0.0, 1.0).setPage("Render");
 
-    private BlockPos renderPos = null;
-    private long     renderStartMs = 0L;
-    private AABB     smoothBox = null;
-
+    private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, true);
+    private final PlacementVisuals visuals = new PlacementVisuals("水晶");
     private enum RenderMode { NONE, GRADIENT, GRADIENT_SMOOTH, BOX_SMOOTH, PULSE }
 
     private enum RangePreset { B2B2T, VANILLA, CUSTOM }
@@ -424,8 +423,7 @@ public class GuangxiCrystalModule extends Module {
         miningCheck.clear();
         candidates.clear();
         explodeTimes.clear();
-        renderPos = null;
-        smoothBox = null;
+        visuals.clear();
         resetDiag();
     }
 
@@ -445,109 +443,19 @@ public class GuangxiCrystalModule extends Module {
         sessionPlayer = null;
     }
 
-    private void markRender(BlockPos crystalPos) {
-        if (renderMode.getValue() == RenderMode.NONE) return;
-        renderPos = crystalPos;
-        renderStartMs = System.currentTimeMillis();
-    }
-
     @Override
     public void onRender3D(Render3DEvent event) {
-        if (nullCheck() || renderMode.getValue() == RenderMode.NONE || renderPos == null) return;
-
-        long elapsed = System.currentTimeMillis() - renderStartMs;
-        long life = renderTime.getValue() * 50L;
-        if (elapsed > life) {
-            renderPos = null;
-            smoothBox = null;
-            return;
-        }
-
-        switch (renderMode.getValue()) {
-            case GRADIENT        -> drawGradient(event, false);
-            case GRADIENT_SMOOTH -> drawGradient(event, true);
-            case BOX_SMOOTH      -> drawBoxSmooth(event);
-            case PULSE           -> drawPulse(event, elapsed, life);
-            default -> { }
-        }
-    }
-
-    private void updateSmoothBox(AABB target) {
-        if (smoothBox == null) {
-            smoothBox = target;
-        } else {
-            double f = 1.0 / smoothness.getValue();
-            smoothBox = new AABB(
-                    lerp(smoothBox.minX, target.minX, f), lerp(smoothBox.minY, target.minY, f), lerp(smoothBox.minZ, target.minZ, f),
-                    lerp(smoothBox.maxX, target.maxX, f), lerp(smoothBox.maxY, target.maxY, f), lerp(smoothBox.maxZ, target.maxZ, f));
-        }
-    }
-
-    private void drawBoxSmooth(Render3DEvent event) {
-        updateSmoothBox(new AABB(renderPos.below()));
-        RenderUtil.drawBoxFilled(event.getMatrix(), smoothBox, sideColor.getValue());
-        RenderUtil.drawBox(event.getMatrix(), smoothBox, lineColor.getValue(), lineWidth.getValue());
-    }
-
-    private void drawGradient(Render3DEvent event, boolean smooth) {
-        Color side = sideColor.getValue();
-        Color line = lineColor.getValue();
-        Color clear = new Color(side.getRed(), side.getGreen(), side.getBlue(), 0);
-        double height = gradientHeight.getValue();
-        float lw = lineWidth.getValue();
-
-        BlockPos basePos = renderPos.below();
-
-        double x1, z1, x2, z2, yTop;
-        if (smooth) {
-            updateSmoothBox(new AABB(basePos));
-            x1 = smoothBox.minX; z1 = smoothBox.minZ;
-            x2 = smoothBox.maxX; z2 = smoothBox.maxZ;
-            yTop = smoothBox.maxY;
-        } else {
-            x1 = basePos.getX(); z1 = basePos.getZ();
-            x2 = x1 + 1;         z2 = z1 + 1;
-            yTop = basePos.getY() + 1;
-        }
-        double yBottom = yTop - height;
-        var m = event.getMatrix();
-
-        RenderUtil.quadHorizontal(m, x1, z1, x2, z2, yTop, side);
-        RenderUtil.gradientQuadVertical(m, x1, z1, x2, z1, yTop, yBottom, side, clear);
-        RenderUtil.gradientQuadVertical(m, x2, z1, x2, z2, yTop, yBottom, side, clear);
-        RenderUtil.gradientQuadVertical(m, x2, z2, x1, z2, yTop, yBottom, side, clear);
-        RenderUtil.gradientQuadVertical(m, x1, z2, x1, z1, yTop, yBottom, side, clear);
-
-        RenderUtil.drawLine(new Vec3(x1, yTop, z1), new Vec3(x2, yTop, z1), line, lw);
-        RenderUtil.drawLine(new Vec3(x2, yTop, z1), new Vec3(x2, yTop, z2), line, lw);
-        RenderUtil.drawLine(new Vec3(x2, yTop, z2), new Vec3(x1, yTop, z2), line, lw);
-        RenderUtil.drawLine(new Vec3(x1, yTop, z2), new Vec3(x1, yTop, z1), line, lw);
-
-        RenderUtil.drawLine(new Vec3(x1, yTop, z1), new Vec3(x1, yBottom, z1), line, lw);
-        RenderUtil.drawLine(new Vec3(x2, yTop, z1), new Vec3(x2, yBottom, z1), line, lw);
-        RenderUtil.drawLine(new Vec3(x2, yTop, z2), new Vec3(x2, yBottom, z2), line, lw);
-        RenderUtil.drawLine(new Vec3(x1, yTop, z2), new Vec3(x1, yBottom, z2), line, lw);
-    }
-
-    private void drawPulse(Render3DEvent event, long elapsed, long life) {
-        double fade = 1.0 - (double) elapsed / life;
-        double phase = elapsed / 1000.0 * pulseSpeed.getValue();
-        double pulse = (Math.sin(phase * Math.PI * 2.0) + 1.0) * 0.5;
-        double grow = pulse * pulseExpand.getValue();
-
-        Color base = pulseColor.getValue();
-        Color fill = new Color(base.getRed(), base.getGreen(), base.getBlue(),
-                Math.clamp((int) (base.getAlpha() * fade), 0, 255));
-        Color line = new Color(base.getRed(), base.getGreen(), base.getBlue(),
-                Math.clamp((int) (255 * fade), 0, 255));
-
-        AABB box = new AABB(renderPos).inflate(grow);
-        RenderUtil.drawBoxFilled(event.getMatrix(), box, fill);
-        RenderUtil.drawBox(event.getMatrix(), box, line, lineWidth.getValue());
-    }
-
-    private static double lerp(double a, double b, double f) {
-        return a + (b - a) * f;
+        if (nullCheck() || renderMode.getValue() == RenderMode.NONE) { visuals.clear(); return; }
+        PlacementVisualOptions.Style style = switch(renderMode.getValue()) {
+            case GRADIENT, GRADIENT_SMOOTH -> PlacementVisualOptions.Style.GRADIENT;
+            case PULSE -> PlacementVisualOptions.Style.PULSE;
+            default -> PlacementVisualOptions.Style.BOX;
+        };
+        double smoothing = renderMode.getValue() == RenderMode.BOX_SMOOTH
+                || renderMode.getValue() == RenderMode.GRADIENT_SMOOTH ? smoothness.getValue() : 1;
+        visuals.render(event, visualOptions, sideColor.getValue(), lineColor.getValue(), lineWidth.getValue(),
+                renderTime.getValue() * .05, style, smoothing, gradientHeight.getValue(),
+                pulseColor.getValue(), pulseSpeed.getValue(), pulseExpand.getValue());
     }
 
     @Subscribe
@@ -601,6 +509,8 @@ public class GuangxiCrystalModule extends Module {
         }
 
         if (packet instanceof ClientboundAddEntityPacket pkt) {
+            if (pkt.getType() == EntityType.END_CRYSTAL)
+                visuals.stageAt(BlockPos.containing(pkt.getX(),pkt.getY(),pkt.getZ()).below(), "已收到水晶生成包");
             entitySnapshotTick = -1;
             entitySnapshot = List.of();
             attackRetries.removed(pkt.getId());
@@ -1743,6 +1653,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (sent) {
             diagPlaceSent++;
             recordPlace(air);
+            if (renderMode.getValue() != RenderMode.NONE) {
+                BlockPos base = air.below();
+                Vec3 source = Vec3.atBottomCenterOf(air);
+                visuals.main(base, new AABB(base), Vec3.atCenterOf(base),
+                        target.damage > 0 ? target.damage : Float.NaN,
+                        calcDamageSelf(source, trustBase ? base : null), "已提交 · 等待水晶生成");
+            }
             // The spawn for this placement takes the next sequential entity id.
             sendGhostAttacksAfter(lastMaxEntityId);
         }
@@ -1800,7 +1717,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     private void recordPlace(BlockPos airPos) {
         crystalPlaces.put(airPos.asLong(), System.currentTimeMillis());
-        markRender(airPos);
+
         lastPlaceAir = airPos;
     }
 

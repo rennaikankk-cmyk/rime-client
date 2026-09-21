@@ -15,6 +15,7 @@ import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.inventory.SwapMode;
 import dev.guizhou.util.render.RenderUtil;
+import dev.guizhou.util.render.placement.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
@@ -75,6 +76,13 @@ public class AutoMineModule extends Module {
             .setVisibility(v -> glassRender.getValue());
     private final Setting<Boolean> renderDebugScores = bool("DebugScores", false).setPage("Render");
 
+    private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, false, false, false);
+    private final PlacementVisuals mineVisuals = new PlacementVisuals("自动挖");
+    private final PlacementVisuals glassVisuals = new PlacementVisuals("补玻璃");
+    private final Setting<Boolean> targetRender = bool("TargetRender", true).setPage("Render");
+    private final Setting<Boolean> scoreText = bool("ScoreText", false).setPage("Render");
+    private final Setting<Float> lineWidth = num("LineWidth", 1.5f, .5f, 5f).setPage("Render");
+    private final Setting<Color> targetColor = color("TargetColor", 255, 180, 95, 160).setPage("Render");
     private Player targetPlayer = null;
     private CityBlock target1 = null;
     private CityBlock target2 = null;
@@ -139,6 +147,8 @@ public class AutoMineModule extends Module {
         enemyBreaking.clear();
         resetGlass();
         glassRenderPos = null;
+        glassVisuals.clear();
+        mineVisuals.clear();
         debugScores.clear();
         sessionLevel = null;
         sessionPlayer = null;
@@ -243,6 +253,8 @@ public class AutoMineModule extends Module {
             enemyBreaking.clear();
             resetGlass();
             glassRenderPos = null;
+            glassVisuals.clear();
+            mineVisuals.clear();
             return;
         }
         ensureSession();
@@ -260,6 +272,8 @@ public class AutoMineModule extends Module {
         debugScores.clear();
         resetGlass();
         glassRenderPos = null;
+        glassVisuals.clear();
+        mineVisuals.clear();
         lastOuterPlaceTime = 0;
         sessionLevel = mc.level;
         sessionPlayer = mc.player;
@@ -447,6 +461,8 @@ public class AutoMineModule extends Module {
             mine.holdRebreak(pos, glassWaitTicks.getValue());
             glassRenderPos = pos.immutable();
             glassRenderStart = System.currentTimeMillis();
+            if (glassRender.getValue()) glassVisuals.main(glassRenderPos, new AABB(glassRenderPos), Vec3.atCenterOf(glassRenderPos),
+                    Float.NaN, Float.NaN, "玻璃已提交 · 等待放置确认");
         }
     }
 
@@ -788,21 +804,31 @@ public class AutoMineModule extends Module {
 
     @Override
     public void onRender3D(Render3DEvent event) {
-        if (nullCheck() || !glassRender.getValue() || glassRenderPos == null) return;
+        if (nullCheck() || sessionLevel != mc.level || sessionPlayer != mc.player) { mineVisuals.clear(); glassVisuals.clear(); return; }
+        if (targetRender.getValue()) {
+            showMineTarget(target1,"主目标"); showMineTarget(target2,"副目标");
+            Color c=targetColor.getValue();
+            mineVisuals.render(event,visualOptions,new Color(c.getRed(),c.getGreen(),c.getBlue(),35),c,lineWidth.getValue(),.25);
+        } else mineVisuals.clear();
+        if (glassRender.getValue()) {
+            if (glassStage == GlassStage.AwaitBreak) glassVisuals.stage("main","玻璃已就位 · 等待挖除");
+            glassVisuals.render(event,visualOptions,glassFillColor.getValue(),glassOutlineColor.getValue(),lineWidth.getValue(),glassFadeTime.getValue());
+        } else glassVisuals.clear();
+    }
 
-        long age = System.currentTimeMillis() - glassRenderStart;
-        double fadeMs = glassFadeTime.getValue() * 1000.0;
-        if (age > fadeMs) {
-            glassRenderPos = null;
-            return;
-        }
-        double t = age / fadeMs;
-        Color fc = glassFillColor.getValue();
-        Color oc = glassOutlineColor.getValue();
-        RenderUtil.drawBoxFilled(event.getMatrix(), glassRenderPos,
-                new Color(fc.getRed(), fc.getGreen(), fc.getBlue(), (int) (fc.getAlpha() * (1 - t))));
-        RenderUtil.drawBox(event.getMatrix(), glassRenderPos,
-                new Color(oc.getRed(), oc.getGreen(), oc.getBlue(), (int) (oc.getAlpha() * (1 - t))), 1.5f);
+    private void showMineTarget(CityBlock selected,String role) {
+        if(selected==null) return;
+        BlockPos p=selected.blockPos;
+        var mine=speedMine();
+        if (mc.level.getBlockState(p).isAir()) { mineVisuals.stage(role,"已观察到方块消失"); return; }
+        String type=switch(selected.type) {
+            case Feet -> "脚部"; case Surround -> "包围"; case Extend -> "延伸";
+            case FacePlace -> "贴身"; case Head -> "头部"; case Below -> "脚下"; case TerrainBase -> "地形底座";
+        };
+        String state=mine!=null && mine.isMining(p)?"已交给发包挖":"等待挖掘";
+        mineVisuals.mark(role,new AABB(p),p,Vec3.atCenterOf(p),Float.NaN,Float.NaN,
+                role+" · "+type+" · "+state,true,null);
+        mineVisuals.info(role,scoreText.getValue()?String.format(java.util.Locale.ROOT,"策略分 %.2f",selected.score):"");
     }
 
     @Subscribe
@@ -816,7 +842,11 @@ public class AutoMineModule extends Module {
         for (CityBlock cp : debugScores) {
             double s = cp.score;
             int alpha = (int) Math.min(200, Math.max(20, 200 * (s / bestScore)));
-            RenderUtil.drawBox(event.getMatrix(), cp.blockPos, new Color(255, 40, 40, alpha), 1.0f);
+            RenderUtil.placementBox(new AABB(cp.blockPos), new Color(0,0,0,0), new Color(255,40,40,alpha),1.0f,
+                    visualOptions.occlusion.getValue() == PlacementVisualOptions.Occlusion.THROUGH,false,true);
+            if (visualOptions.occlusion.getValue() == PlacementVisualOptions.Occlusion.FADED)
+                RenderUtil.placementBox(new AABB(cp.blockPos), new Color(0,0,0,0),
+                        new Color(255,40,40,(int)(alpha*visualOptions.hiddenAlpha.getValue())),1.0f,true,false,true);
         }
     }
 

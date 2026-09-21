@@ -57,6 +57,7 @@ public class EventManager extends Feature {
     public void onRenderGameOverlayEvent(Render2DEvent event) {
         ClientDiagnostics.recordFrame();
         GuizhouWare.moduleManager.onRender2D(event);
+        dev.guizhou.util.render.placement.PlacementLabels.draw(event.getContext());
     }
 
     @Subscribe
