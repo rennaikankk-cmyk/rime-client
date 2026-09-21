@@ -12,6 +12,8 @@ public final class ModuleNames {
             "GuangxiBed", "AutoBed",
             "GuangxiMine", "PacketMine",
             "AutoAnchor", "AnchorAura",
+            "AutoSword", "Aura",
+            "AutoTotem", "Offhand",
             "GuangxiElytraChase", "AerialCombat",
             "GuangxiElytra", "ElytraFlight");
 

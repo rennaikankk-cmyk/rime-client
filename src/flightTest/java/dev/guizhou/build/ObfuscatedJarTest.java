@@ -270,6 +270,8 @@ public final class ObfuscatedJarTest {
         requiredMethod(heartbeat, authorized + "()Z");
         requiredMethod(heartbeat, denied + "()V");
         Map<String, List<String>> checkpoints = Map.ofEntries(
+                Map.entry("AutoSwordModule", List.of("onPreTick", "attack", "sendTeleport")),
+                Map.entry("AutoTotemModule", List.of("onTick", "refillOffhandTotem")),
                 Map.entry("GuangxiCrystalModule", List.of("onPreTick", "onCrystalSpawn", "onBlockUpdate",
                         "lambda$onBlockUpdate$", "scanBlockUpdate", "preplaceCrystal", "breakCrystal",
                         "sendCrystalAttack", "sendGhostAttack", "doPlace", "placeCrystalShared")),

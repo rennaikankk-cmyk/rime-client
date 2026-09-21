@@ -1,0 +1,22 @@
+allprojects {
+    afterEvaluate {
+        tasks.register('writeAuraFixtureClasspath') {
+            dependsOn classes
+            doLast {
+                def output = layout.buildDirectory.file('aura-fixture/classpath.txt').get().asFile
+                output.parentFile.mkdirs()
+                output.text = sourceSets.main.runtimeClasspath.asPath
+            }
+        }
+        if (project.hasProperty('auraFixtureRun')) {
+            dependencies { modRuntimeOnly files(layout.buildDirectory.file('aura-fixture/fixture.jar')) }
+            loom.runs.client {
+                runDir 'build/aura-fixture/game'
+                vmArg '-Dfabric.client.gametest=true'
+                vmArg '-Dfabric.client.gametest.disableNetworkSynchronizer=true'
+                vmArg '-Dfabric.client.gametest.modid=gzw_aura_fixture'
+                programArgs '--username', 'AuraFixture', '--width', '960', '--height', '540'
+            }
+        }
+    }
+}

@@ -21,6 +21,12 @@ public final class LicenseActionHookTest {
     private static int checks;
 
     public static void main(String[] args) throws IOException {
+        guarded(BASE + "combat/AutoSwordModule", "onPreTick", null, "findTarget", "tryAction", "withSwap");
+        guarded(BASE + "combat/AutoSwordModule", "attack", null, "send");
+        guarded(BASE + "combat/AutoSwordModule", "sendTeleport", null, "moveTo");
+        check(!method(BASE + "combat/AutoSwordModule", "moveTo", null).hasAuthorization(), "TP return survives revocation");
+        guarded(BASE + "combat/AutoTotemModule", "onTick", null, "refillOffhandTotem");
+        guarded(BASE + "combat/AutoTotemModule", "refillOffhandTotem", null, "swapToOffhand");
         crystalActions();
         miningActionsAndCleanup();
         autoMineCallbacks();

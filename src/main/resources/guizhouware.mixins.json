@@ -23,6 +23,7 @@
     "entity.ColorParticleOptionAccessor",
     "entity.FireworkRocketEntityAccessor",
     "entity.LivingEntityEffectParticlesAccessor",
+    "entity.LivingEntityAttackAccessor",
     "entity.MixinAvatarRenderer",
     "entity.MixinClientPlayerEntity",
     "entity.MixinEntity",
