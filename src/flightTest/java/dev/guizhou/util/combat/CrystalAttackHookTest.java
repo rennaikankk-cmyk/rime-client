@@ -25,7 +25,7 @@ public final class CrystalAttackHookTest {
 
     public static void main(String[] args) throws IOException {
         Trace breaker = method("breakCrystal");
-        int submit = breaker.first("call", "submit");
+        int submit = breaker.first("call", "tryAction");
         int accept = breaker.first("call", "acceptPendingRotation");
         int finalRay = breaker.last("call", "canBreakCrystal");
         int send = breaker.first("call", "sendCrystalAttack");

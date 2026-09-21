@@ -67,6 +67,7 @@ public class AutoAnchorModule extends Module {
     private final Setting<Double> wallRange = num("WallRange", 5.0, 0.0, 6.0).setPage("General");
     private final Setting<Boolean> airPlace = bool("AirPlace", true).setPage("General");
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
+    private final dev.guizhou.manager.RotationOptions rotationOptions = new dev.guizhou.manager.RotationOptions(this, rotate);
     private final Setting<Boolean> assumeBestArmor = bool("AssumeBestArmor", false).setPage("General");
     private enum AnchorSwap { SILENT, INVENTORY }
     private final Setting<AnchorSwap> autoSwap = mode("AutoSwap", AnchorSwap.SILENT).setPage("General");
@@ -412,7 +413,7 @@ public class AutoAnchorModule extends Module {
         if (mc.player.getEyePosition().distanceToSqr(hit.getLocation()) > placeRange.getValue() * placeRange.getValue()) return false;
         if (rotate.getValue()) {
             float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
-            if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+            if (!GuizhouWare.rotationManager.tryAction(rotationOptions.request(
                     "AutoAnchor", 62, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
         }
         if (action == AnchorSequence.Action.DETONATE)

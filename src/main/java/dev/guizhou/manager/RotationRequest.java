@@ -18,6 +18,12 @@ public class RotationRequest {
     public float targetYaw;
     public float targetPitch;
 
+    /** Degrees per movement tick. Each module supplies its own setting. */
+    public float yawStep = 180f;
+    public boolean moveFix = true;
+    public RotationManager.JitterMode jitter = RotationManager.JitterMode.NONE;
+    public java.util.function.BooleanSupplier continueWhile = () -> true;
+
     public enum Mode {
 
         MOTION,

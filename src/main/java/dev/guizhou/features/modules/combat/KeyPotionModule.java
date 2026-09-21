@@ -26,15 +26,15 @@ public class KeyPotionModule extends Module {
 
     @Subscribe
     public void onEnable() {
-        if (onGround.getValue() && !mc.player.onGround()) return;
+        if (nullCheck() || onGround.getValue() && !mc.player.onGround()) { disable(); return; }
 
         Result potion = InventoryUtil.find(Items.SPLASH_POTION, FULL_SCOPE);
         if (potion.found()) {
             float yaw = mc.player.getYRot();
             float pitch = 90f;
-            GuizhouWare.rotationManager.submit(new RotationRequest(
-                    "KeyPotion", 20, yaw, pitch, RotationRequest.Mode.SILENT
-            ));
+            if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                    "KeyPotion", 20, yaw, pitch, RotationRequest.Mode.SILENT, false, true
+            ))) { disable(); return; }
             mc.gameMode.ensureHasSentCarriedItem();
             GuizhouWare.swapManager.withSwap(potion, SwapMode.ALTSILENT, SwapPriority.USER_ACTION, () -> {
                 try (var handler = ((ClientLevelAccessor) mc.level).guizhouware$getBlockStatePredictionHandler().startPredicting()) {

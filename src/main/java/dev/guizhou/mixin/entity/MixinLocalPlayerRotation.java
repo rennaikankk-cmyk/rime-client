@@ -3,7 +3,6 @@ package dev.guizhou.mixin.entity;
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.manager.RotationManager;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.util.Mth;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -39,13 +38,11 @@ public class MixinLocalPlayerRotation {
         if (motion) {
             outYaw = rm.getRotationYaw();
             outPitch = rm.getRotationPitch();
-            rm.setServerDeltaYaw(outYaw - rm.getServerYaw());
-            rm.setServerYaw(outYaw);
-            rm.setServerPitch(outPitch);
-        } else {
+        }
+        // Vanilla updates its last-sent fields even if another module cancels that packet.
+        // Force a retry until the actual submitted orientation matches the desired one.
+        if (silent || !rm.isSynchronized(outYaw, outPitch)) {
             xRotLast -= 4;
-            float f = (float) ((Math.random() * 2.0 - 1.0) * 0.001f);
-            outPitch = Mth.clamp(outPitch + f, -90.0f, 90.0f);
         }
 
         mc.player.setYRot(outYaw);
@@ -58,10 +55,7 @@ public class MixinLocalPlayerRotation {
         RotationManager rm = GuizhouWare.rotationManager;
         if (rm == null) return;
 
-        if (rm.isRotating()) {
-            rm.setServerYaw(mc.player.getYRot());
-            rm.setServerPitch(mc.player.getXRot());
-        }
+        boolean synchronizedRotation = rm.isSynchronized(mc.player.getYRot(), mc.player.getXRot());
 
         if (guizhouware$spoofed) {
             mc.player.setYRot(guizhouware$savedYaw);
@@ -69,7 +63,7 @@ public class MixinLocalPlayerRotation {
             guizhouware$spoofed = false;
         }
 
-        rm.setSilentSyncRequired(false);
+        rm.setSilentSyncRequired(!synchronizedRotation);
         rm.resetSilentTick();
     }
 }

@@ -357,11 +357,11 @@ public class GuangxiTPModule extends Module {
         Vec3 fake = new Vec3(cp.x, cp.y + 2.2, cp.z);
 
         if (rotate.getValue()) {
-            GuizhouWare.rotationManager.submit(new RotationRequest(
+            if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
                     "GuangxiTP_break", 40,
                     GuizhouWare.rotationManager.getServerYaw(),
                     GuizhouWare.rotationManager.getServerPitch(),
-                    RotationRequest.Mode.SILENT));
+                    RotationRequest.Mode.SILENT))) return false;
         }
 
         boolean sent = sandwich(fake, () -> PacketSendUtil.send(

@@ -43,9 +43,9 @@ public class MiddleClickExtraModule extends Module {
         Result pearl = InventoryUtil.find(Items.ENDER_PEARL, FULL_SCOPE);
         if (pearl.found()) {
 
-            GuizhouWare.rotationManager.submit(new RotationRequest("MiddleClick.pearl", ROTATION_PRIORITY,
+            if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest("MiddleClick.pearl", ROTATION_PRIORITY,
                     GuizhouWare.rotationManager.getRealYaw(), GuizhouWare.rotationManager.getRealPitch(),
-                    RotationRequest.Mode.SILENT));
+                    RotationRequest.Mode.SILENT, false, true))) return;
             GuizhouWare.swapManager.withSwap(pearl, SwapMode.ALTSILENT, SwapPriority.USER_ACTION,
                     () -> {
 

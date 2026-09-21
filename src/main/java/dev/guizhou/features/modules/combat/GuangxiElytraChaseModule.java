@@ -1702,8 +1702,8 @@ if (nullCheck() || mc.player == null) {
                 .lerp(box.getCenter(), 0.05);
         float[] angles = MathUtil.calcAngle(eye, aim);
         var rotation = GuizhouWare.rotationManager;
-        rotation.submit(new RotationRequest("ElytraChase_attack", 70, angles[0], angles[1],
-                RotationRequest.Mode.SILENT));
+        if (!rotation.trySubmit(new RotationRequest("ElytraChase_attack", 70, angles[0], angles[1],
+                RotationRequest.Mode.SILENT, false, true))) return false;
         acceptPendingRotation();
         if (!sentRotationKnown) return false;
         Vec3 actualLook = Vec3.directionFromRotation(sentPitch, sentYaw);

@@ -2,6 +2,8 @@ package dev.guizhou.manager;
 
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.system.Subscribe;
+import dev.guizhou.util.PacketSendUtil;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Input;
@@ -22,8 +24,6 @@ public class RotationManager {
     private static final float THRESHOLD = 5f;
 
     private static final int HOLD_TICKS = 0;
-    private static final JitterMode JITTER = JitterMode.NORMAL;
-    private static final boolean MOVE_FIX = true;
 
     public enum JitterMode { NONE, GRIM, NORMAL }
 
@@ -40,6 +40,10 @@ public class RotationManager {
     private final SilentArbitration silentWindow = new SilentArbitration();
     private int silentSentPriority;
     private long lastSilentMs;
+    private Object sessionPlayer, sessionLevel, sessionConnection;
+    private boolean serverKnown;
+    private long serverRevision;
+    private final java.util.Map<String, Integer> actionExpiry = new java.util.HashMap<>();
 
     /**
      * Arbitration window for silent packets: the first accepted send of a window owns it,
@@ -72,9 +76,91 @@ public class RotationManager {
     private float currentYawSpeed, currentPitchSpeed;
     private int ticksHolding;
     private boolean returning;
+    private float returnYawStep = 180f;
+    private boolean returnMoveFix = true;
 
     public void init() {
         EVENT_BUS.register(this, "RotationManager");
+        PacketSendUtil.addSubmissionListener(this::onSubmitted);
+    }
+
+    private void ensureSession() {
+        if (sessionPlayer == mc.player && sessionLevel == mc.level && sessionConnection == mc.getConnection()) return;
+        sessionPlayer = mc.player;
+        sessionLevel = mc.level;
+        sessionConnection = mc.getConnection();
+        requests.clear();
+        actionExpiry.clear();
+        silentWindow.close();
+        silentSyncRequired = false;
+        silentSentPriority = 0;
+        lastSilentMs = 0;
+        bypassUseSpoof = false;
+        returning = false;
+        lastActiveId = null;
+        ticksHolding = 0;
+        currentYawSpeed = currentPitchSpeed = 0;
+        returnYawStep = 180f;
+        returnMoveFix = true;
+        serverKnown = false;
+        serverRevision = 0;
+        realYaw = mc.player == null ? 0 : mc.player.getYRot();
+        realPitch = mc.player == null ? 0 : mc.player.getXRot();
+        rotationYaw = rotationYaw0 = serverYaw = serverYaw0 = realYaw;
+        rotationPitch = rotationPitch0 = serverPitch = realPitch;
+        serverDeltaYaw = 0;
+    }
+
+    /** This sees the final packet after cancellation/replacement policies, not a server ACK. */
+    private void onSubmitted(Packet<?> packet) {
+        if (!mc.isSameThread() || !(packet instanceof ServerboundMovePlayerPacket move) || !move.hasRotation()) return;
+        ensureSession();
+        if (mc.player == null) return;
+        float yaw = move.getYRot(serverYaw), pitch = move.getXRot(serverPitch);
+        if (!RotationMath.finite(yaw, pitch)) return;
+        setServerDeltaYaw(RotationMath.difference(yaw, serverYaw));
+        setServerYaw(yaw);
+        setServerPitch(pitch);
+        serverKnown = true;
+        serverRevision++;
+    }
+
+    /** Queue a short-lived turn when stepping is required. Callers retry/revalidate next tick;
+     * no inventory, interaction or attack callback is retained by the manager. */
+    public boolean tryAction(RotationRequest request) {
+        if (!mc.isSameThread() || mc.player == null || mc.getConnection() == null) return false;
+        ensureSession();
+        if (!valid(request) || request.mode != RotationRequest.Mode.SILENT) return false;
+        request.targetPitch = Mth.clamp(request.targetPitch, -90f, 90f);
+        float limit = Float.isFinite(request.yawStep) ? Math.clamp(request.yawStep, 5f, 180f) : 180f;
+        RotationRequest active = getActiveRequest();
+        if (active != null && !active.id.equals(request.id) && active.priority > request.priority) return false;
+        // Waiting for the exact submitted target prevents a final extra step in the same tick.
+        if (limit < 180f && !isSynchronized(request.targetYaw, request.targetPitch)) {
+            RotationRequest turn = new RotationRequest(request.id, request.priority,
+                    request.targetYaw, request.targetPitch, RotationRequest.Mode.MOTION, true, true);
+            turn.yawStep = limit;
+            turn.moveFix = request.moveFix;
+            turn.continueWhile = request.continueWhile;
+            if (!trySubmit(turn)) return false;
+            actionExpiry.put(request.id, mc.player.tickCount + 3);
+            return false;
+        }
+        // Action geometry uses the requested angle, so never add optional display jitter here.
+        RotationRequest exact = new RotationRequest(request.id, request.priority,
+                request.targetYaw, request.targetPitch, RotationRequest.Mode.SILENT, false, true);
+        if (!trySubmit(exact)) return false;
+        cancel(request.id);
+        return true;
+    }
+
+    private static boolean valid(RotationRequest request) {
+        return request != null && request.id != null && !request.id.isBlank() && request.mode != null
+                && RotationMath.finite(request.targetYaw, request.targetPitch) && request.continueWhile.getAsBoolean();
+    }
+
+    public boolean isSynchronized(float yaw, float pitch) {
+        return serverKnown && RotationMath.matches(serverYaw, serverPitch, yaw, pitch, 0.01f);
     }
 
     public void submit(RotationRequest request) {
@@ -84,6 +170,9 @@ public class RotationManager {
     /** SILENT returns true only after an uncancelled local send; other modes are queued. */
     public boolean trySubmit(RotationRequest request) {
         if (!mc.isSameThread() || mc.player == null || mc.getConnection() == null) return false;
+        ensureSession();
+        if (!valid(request)) return false;
+        request.targetPitch = Mth.clamp(request.targetPitch, -90f, 90f);
         if (request.mode == RotationRequest.Mode.SILENT) {
             if (silentWindow.blocks(request.priority)) return false;
             if (!performSilent(request)) return false;
@@ -94,14 +183,16 @@ public class RotationManager {
             return true;
         }
 
-        requests.removeIf(r -> r.id.equals(request.id));
-        requests.add(request);
+        int index = requests.indexOf(request);
+        if (index >= 0) requests.set(index, request);
+        else requests.add(request);
         requests.sort(Comparator.comparingInt((RotationRequest r) -> r.priority).reversed());
         return true;
     }
 
     public void cancel(String id) {
         requests.removeIf(r -> r.id.equals(id));
+        actionExpiry.remove(id);
     }
 
     public boolean hasRequest(String id) {
@@ -109,12 +200,8 @@ public class RotationManager {
     }
 
     public boolean isCompleted(String id) {
-        return requests.stream()
-                .filter(r -> r.id.equals(id))
-                .findFirst()
-                .map(r -> Math.abs(yawDifference(r.targetYaw, rotationYaw)) <= THRESHOLD
-                        && Math.abs(r.targetPitch - rotationPitch) <= THRESHOLD)
-                .orElse(false);
+        RotationRequest active = getActiveRequest();
+        return active != null && active.id.equals(id) && isSynchronized(active.targetYaw, active.targetPitch);
     }
 
     /** First listener of every tick: the post-movement silent window died with the old
@@ -122,6 +209,12 @@ public class RotationManager {
      * pending orientation sync and its priority stay untouched until sendPosition. */
     @Subscribe(priority = Integer.MAX_VALUE)
     private void onTickBoundary(PreTickEvent event) {
+        ensureSession();
+        if (mc.player != null) {
+            requests.removeIf(r -> !r.continueWhile.getAsBoolean()
+                    || actionExpiry.containsKey(r.id) && actionExpiry.get(r.id) < mc.player.tickCount);
+            actionExpiry.entrySet().removeIf(e -> e.getValue() < mc.player.tickCount);
+        }
         silentWindow.close();
     }
 
@@ -145,6 +238,8 @@ public class RotationManager {
     }
 
     private void processRequest(RotationRequest request) {
+        returnYawStep = Float.isFinite(request.yawStep) ? Math.clamp(request.yawStep, 5f, 180f) : 180f;
+        returnMoveFix = request.moveFix;
 
         if (!request.id.equals(lastActiveId)) {
             resetRotationToReal();
@@ -156,7 +251,9 @@ public class RotationManager {
             float oldYaw = request.targetYaw;
             float oldPitch = request.targetPitch;
             request.updateTarget();
-            updated = Math.abs(oldYaw - request.targetYaw) > 0.001f
+            if (!valid(request)) { cancel(request.id); returning = true; return; }
+            request.targetPitch = Mth.clamp(request.targetPitch, -90f, 90f);
+            updated = Math.abs(yawDifference(oldYaw, request.targetYaw)) > 0.001f
                     || Math.abs(oldPitch - request.targetPitch) > 0.001f;
             if (updated) ticksHolding = 0;
         }
@@ -164,7 +261,8 @@ public class RotationManager {
         float yawDiff = yawDifference(request.targetYaw, rotationYaw);
         float pitchDiff = request.targetPitch - rotationPitch;
 
-        boolean reached = Math.abs(yawDiff) <= THRESHOLD && Math.abs(pitchDiff) <= THRESHOLD;
+        boolean reached = serverKnown && RotationMath.matches(serverYaw, serverPitch,
+                request.targetYaw, request.targetPitch, request.noJitter ? 0.01f : THRESHOLD);
 
         if (reached && !updated) {
             if (request.sticky) {
@@ -186,8 +284,8 @@ public class RotationManager {
         float targetYaw = alignYaw(realYaw, rotationYaw);
         realYaw = targetYaw;
         mc.player.setYRot(targetYaw);
-        rotationYaw = realYaw;
-        rotationPitch = realPitch;
+        rotationYaw = serverKnown ? serverYaw : realYaw;
+        rotationPitch = serverKnown ? serverPitch : realPitch;
         currentYawSpeed = 0f;
         currentPitchSpeed = 0f;
         ticksHolding = 0;
@@ -216,13 +314,16 @@ public class RotationManager {
         currentYawSpeed = lerp(currentYawSpeed, yawDiff, EASE);
         currentPitchSpeed = lerp(currentPitchSpeed, pitchDiff, EASE);
 
-        float yawSpeed = Mth.clamp(currentYawSpeed, -SPEED, SPEED);
+        RotationRequest active = getActiveRequest();
+        float limit = active != null && Float.isFinite(active.yawStep) ? Math.clamp(active.yawStep, 5f, 180f)
+                : returnYawStep;
         float pitchSpeed = Mth.clamp(currentPitchSpeed, -SPEED, SPEED);
 
-        float newYaw = rotationYaw + yawSpeed;
+        float newYaw = rotationYaw + currentYawSpeed;
         float newPitch = rotationPitch + pitchSpeed;
 
-        if (jitter && JITTER == JitterMode.NORMAL) {
+        JitterMode jitterMode = active == null ? JitterMode.NONE : active.jitter;
+        if (jitter && jitterMode == JitterMode.NORMAL) {
             float minJitter = THRESHOLD / 4f;
             float maxJitter = THRESHOLD / 2f;
             float jitterYaw = minJitter + (float) (Math.random() * (maxJitter - minJitter));
@@ -231,12 +332,12 @@ public class RotationManager {
             jitterPitch *= Math.random() < 0.5 ? -1 : 1;
             newYaw += jitterYaw;
             newPitch = Mth.clamp(newPitch + jitterPitch, -90f, 90f);
-        } else if (jitter && JITTER == JitterMode.GRIM) {
+        } else if (jitter && jitterMode == JitterMode.GRIM) {
             float f = (float) ((Math.random() * 2.0 - 1.0) * 0.001f);
             newPitch = Mth.clamp(newPitch + f, -90f, 90f);
         }
 
-        rotationYaw = newYaw;
+        rotationYaw = RotationMath.step(serverKnown ? serverYaw : rotationYaw, newYaw, limit);
         rotationPitch = Mth.clamp(newPitch, -90f, 90f);
     }
 
@@ -277,19 +378,19 @@ public class RotationManager {
         float targetYaw = req.targetYaw;
         float targetPitch = req.targetPitch;
 
-        float f = (float) ((Math.random() * 2.0 - 1.0) * 0.001f);
+        float f = req.noJitter || req.jitter == JitterMode.NONE
+                ? 0f : (float) ((Math.random() * 2.0 - 1.0) * 0.001f);
         targetPitch = Mth.clamp(targetPitch + f, -90.0f, 90.0f);
 
         ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.PosRot(
                 mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                targetYaw, targetPitch, mc.player.onGround(), true
+                targetYaw, targetPitch, mc.player.onGround(), mc.player.horizontalCollision
         );
-        boolean sent = dev.guizhou.util.PacketSendUtil.send(packet);
-        if (sent) {
-            setServerYaw(packet.getYRot(targetYaw));
-            setServerPitch(packet.getXRot(targetPitch));
-        }
-        return sent;
+        long before = serverRevision;
+        boolean sent = PacketSendUtil.send(packet);
+        // A replacement may have different angles, or may omit rotation entirely.
+        if (serverRevision != before) silentSyncRequired = true;
+        return sent && serverRevision != before && isSynchronized(targetYaw, targetPitch);
     }
 
     private RotationRequest getActiveRequest() {
@@ -315,7 +416,8 @@ public class RotationManager {
     }
 
     public boolean isMoveFixEnabled() {
-        return MOVE_FIX;
+        RotationRequest active = getActiveRequest();
+        return active == null ? returnMoveFix : active.moveFix;
     }
 
     public float getRealYaw() { return realYaw; }
@@ -363,7 +465,7 @@ public class RotationManager {
     public boolean isSilentActive() { return System.currentTimeMillis() - lastSilentMs < 500; }
 
     private static float yawDifference(float target, float current) {
-        return Mth.wrapDegrees(target - current);
+        return RotationMath.difference(target, current);
     }
 
     private static float alignYaw(float base, float reference) {

@@ -119,8 +119,11 @@ public class GuangxiSpearTPModule extends Module {
         mc.player.connection.send(buildMove(mc.player.position(), yaw, pitch));
 
         // rotation bookkeeping + the stab itself, inside the freeze window
-        GuizhouWare.rotationManager.submit(new RotationRequest(
-                ID, ROTATION_PRIORITY, yaw, pitch, RotationRequest.Mode.SILENT));
+        if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                ID, ROTATION_PRIORITY, yaw, pitch, RotationRequest.Mode.SILENT, false, true))) {
+            disable();
+            return;
+        }
         mc.gameMode.attack(mc.player, target);
         mc.player.swing(InteractionHand.MAIN_HAND);
 

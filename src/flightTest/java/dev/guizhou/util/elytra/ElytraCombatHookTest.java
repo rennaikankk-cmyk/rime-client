@@ -188,7 +188,7 @@ public final class ElytraCombatHookTest {
 
     private static void verifyAttackRotation() throws IOException {
         Trace attack = method(read(CHASE), "attack");
-        int submit = attack.call(ROTATION, "submit");
+        int submit = attack.call(ROTATION, "trySubmit");
         int accepted = attack.call(CHASE, "acceptPendingRotation");
         int pitch = attack.field(CHASE, "sentPitch", Opcodes.GETFIELD);
         int yaw = attack.field(CHASE, "sentYaw", Opcodes.GETFIELD);
@@ -291,8 +291,8 @@ public final class ElytraCombatHookTest {
             check(step.opcode != Opcodes.PUTFIELD || !"silentSyncRequired".equals(step.name),
                     "The tick boundary must not write the orientation sync marker");
         }
-        check(closes == 1 && boundary.hasCall(SILENT_WINDOW, "close"),
-                "The tick boundary does nothing but close the arbitration window");
+        check(boundary.hasCall(SILENT_WINDOW, "close") && boundary.hasCall(ROTATION, "ensureSession"),
+                "The tick boundary resets session/expired actions and closes arbitration");
         check(updater != null, "The MIN_VALUE rotation updater stays the last pre-tick listener");
 
         Map<String, Trace> mixinRotation = read("dev/guizhou/mixin/entity/MixinLocalPlayerRotation");

@@ -126,6 +126,7 @@ public class GuangxiCrystalModule extends Module {
     private enum AutoSwapMode { NONE, SILENT, INVENTORY }
     private final Setting<AutoSwapMode> autoSwap = mode("AutoSwap", AutoSwapMode.SILENT).setPage("General");
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
+    private final dev.guizhou.manager.RotationOptions rotationOptions = new dev.guizhou.manager.RotationOptions(this, rotate);
 
     private final Setting<Boolean> predict          = bool("Predict", true).setPage("Sync");
     private final Setting<Integer> predictTicks     = num("PredictTicks", 4, 0, 20).setPage("Sync");
@@ -1042,9 +1043,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             Vec3 hit = getClosestPointToEye(eyePos, crystal.getBoundingBox());
             float[] angles = MathUtil.calcAngle(eyePos, hit);
             if (!canBreakCrystal(crystal, angles[0], angles[1])) return false;
-            GuizhouWare.rotationManager.submit(new RotationRequest(
+            if (!GuizhouWare.rotationManager.tryAction(rotationOptions.request(
                 "AutoCrystal_break", 60, angles[0], angles[1], RotationRequest.Mode.SILENT
-            ));
+            ))) return false;
         }
         acceptPendingRotation();
         if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) return false;
@@ -1646,7 +1647,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (hit == null) return false;
         if (rotate.getValue()) {
             float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
-            if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+            if (!GuizhouWare.rotationManager.tryAction(rotationOptions.request(
                     "AutoCrystal_place", 60, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
         }
         boolean sent = placeCrystalShared(target.base, trustBase, target.faceEntity(), options);

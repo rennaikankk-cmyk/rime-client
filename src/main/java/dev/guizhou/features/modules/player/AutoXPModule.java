@@ -115,7 +115,7 @@ public class AutoXPModule extends Module {
 
         float yaw = mc.player.getYRot();
         float pitch = 90f;
-        GuizhouWare.rotationManager.submit(new RotationRequest("AutoXP", 40, yaw, pitch, RotationRequest.Mode.SILENT));
+        if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest("AutoXP", 40, yaw, pitch, RotationRequest.Mode.SILENT, false, true))) return;
         mc.gameMode.ensureHasSentCarriedItem();
         GuizhouWare.swapManager.withSwap(xp, SwapMode.ALTSILENT, SwapPriority.UTILITY, () -> {
             for (int i = 0; i < amount; i++) {

@@ -63,6 +63,7 @@ public class GuangxiBedModule extends Module {
     private final Setting<Double>  maxSelf   = num("MaxSelfDamage", 12.0, 0.0, 36.0);
     private final Setting<Integer> cooldown  = num("Cooldown", 500, 0, 5000);
     private final Setting<Boolean> rotate    = bool("Rotate", true);
+    private final dev.guizhou.manager.RotationOptions rotationOptions = new dev.guizhou.manager.RotationOptions(this, rotate);
     private final Setting<Integer> confirmTicks = num("ConfirmTicks", 8, 2, 40);
     private final Setting<Integer> retries = num("Retries", 2, 1, 5);
     private final Setting<Boolean> assumeBestArmor = bool("AssumeBestArmor", false);
@@ -535,7 +536,7 @@ public class GuangxiBedModule extends Module {
         if (mc.player.getEyePosition().distanceToSqr(hit.getLocation()) > bedRange.getValue() * bedRange.getValue()) return false;
         if (!rotate.getValue()) return !placing || facingFromYaw(GuizhouWare.rotationManager.getServerYaw()) == facingFromYaw(desiredYaw);
         float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
-        return GuizhouWare.rotationManager.trySubmit(new RotationRequest("GuangxiBed", 70,
+        return GuizhouWare.rotationManager.tryAction(rotationOptions.request("GuangxiBed", 70,
                 placing ? desiredYaw : angles[0], angles[1], RotationRequest.Mode.SILENT));
     }
 

@@ -54,6 +54,7 @@ public class GuangxiMineModule extends Module implements MineApi {
     private final Setting<Boolean> pauseInFluid = bool("PauseInFluid", false);
     private final Setting<Boolean> startRotate = bool("StartRotate", false);
     private final Setting<Boolean> endRotate = bool("EndRotate", false);
+    private final dev.guizhou.manager.RotationOptions rotationOptions = new dev.guizhou.manager.RotationOptions(this, () -> startRotate.getValue() || endRotate.getValue(), "General");
     private final Setting<ToolSwitch> swapAction = mode("SwapAction", ToolSwitch.Silent);
     private final Setting<Integer> holdTicks = num("HoldTicks", 10, 1, 40);
     private final Setting<Integer> retryTicks = num("RetryTicks", 2, 1, 20);
@@ -797,7 +798,7 @@ public class GuangxiMineModule extends Module implements MineApi {
     private boolean rotateFor(BlockPos target, boolean rotate) {
         if (!rotate) return true;
         float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), Vec3.atCenterOf(target));
-        return GuizhouWare.rotationManager.trySubmit(new RotationRequest("GuangxiMine", SwapPriority.MINING,
+        return GuizhouWare.rotationManager.tryAction(rotationOptions.request("GuangxiMine", SwapPriority.MINING,
                 angles[0], angles[1], RotationRequest.Mode.SILENT));
     }
 

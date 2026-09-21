@@ -29,16 +29,17 @@ public final class PacketActionHookTest {
     private static void pistonAttackGates() throws IOException {
         Code code = method(PISTON, "breakCrystal", null);
         int safety = code.call(PISTON, "selfSafe");
-        int rotate = code.call(ROTATION, "trySubmit");
+        int rotate = code.call(ROTATION, "tryAction");
         int ray = code.lastCall(PISTON, "canHitCrystal");
         int send = code.call(SEND, "send");
         int mark = code.call("dev/guizhou/util/combat/CrystalRetryTracker", "markSent");
         check(safety < rotate && rotate < ray && ray < send && send < mark,
                 "Piston must check safety, submitted rotation and final ray before attack bookkeeping");
-        for (int gate : new int[]{safety, rotate, ray, send}) {
+        for (int gate : new int[]{safety, ray, send}) {
             code.dominates(gate, mark, "A rejected piston action can reach sent bookkeeping");
             code.rejectedCannotReach(gate, false, mark);
         }
+        code.rejectedCannotReach(rotate, false, mark);
         code.dominates(code.call(ROTATION, "getServerYaw"), ray, "Final ray lost submitted yaw");
         code.dominates(code.call(ROTATION, "getServerPitch"), ray, "Final ray lost submitted pitch");
         Code safetyCode = method(PISTON, "selfSafe", null);
@@ -59,18 +60,17 @@ public final class PacketActionHookTest {
         submit.rejectedCannotReach(arbitration, true, accept);
         submit.rejectedCannotReach(send, false, accept);
 
+        Code submitted = method(ROTATION, "onSubmitted", null);
+        int yaw = submitted.call(null, "getYRot");
+        int pitch = submitted.call(null, "getXRot");
+        int setYaw = submitted.call(ROTATION, "setServerYaw");
+        int setPitch = submitted.call(ROTATION, "setServerPitch");
+        submitted.dominates(yaw, setYaw, "Submitted yaw must come from the final accepted packet");
+        submitted.dominates(pitch, setPitch, "Submitted pitch must come from the final accepted packet");
         Code silent = method(ROTATION, "performSilent", null);
         int dispatch = silent.call(SEND, "send");
-        int yaw = silent.call(null, "getYRot");
-        int pitch = silent.call(null, "getXRot");
-        int setYaw = silent.call(ROTATION, "setServerYaw");
-        int setPitch = silent.call(ROTATION, "setServerPitch");
-        silent.dominates(dispatch, setYaw, "Server rotation changed without packet submission");
-        silent.dominates(yaw, setYaw, "Server yaw must come from the final packet");
-        silent.dominates(pitch, setPitch, "Server pitch must come from the final packet");
-        check(dispatch < yaw && dispatch < pitch, "Packet angles must be read after event policies mutate the packet");
-        silent.rejectedCannotReach(dispatch, false, setYaw);
-        silent.rejectedCannotReach(dispatch, false, setPitch);
+        check(dispatch < silent.call(ROTATION, "isSynchronized"),
+                "Silent readiness must compare accepted replacement angles after dispatch");
     }
 
     private static void placementAcceptance() throws IOException {

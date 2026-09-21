@@ -428,8 +428,8 @@ public class SurroundModule extends Module {
         Vec3 eye = mc.player.getEyePosition(1.0f);
         Vec3 hit = closestPointToEye(eye, crystal.getBoundingBox());
         float[] angles = MathUtil.calcAngle(eye, hit);
-        GuizhouWare.rotationManager.submit(new RotationRequest(
-                "Surround", 100, angles[0], angles[1], RotationRequest.Mode.SILENT));
+        if (!GuizhouWare.rotationManager.tryAction(new RotationRequest(
+                "Surround", 100, angles[0], angles[1], RotationRequest.Mode.SILENT))) return;
         mc.gameMode.attack(mc.player, crystal);
     }
 

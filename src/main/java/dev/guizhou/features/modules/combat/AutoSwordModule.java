@@ -110,9 +110,9 @@ public class AutoSwordModule extends Module {
         Vec3 closestPoint = getClosestPointToEye(eyePos, currentTarget.getBoundingBox());
         float[] angles = MathUtil.calcAngle(eyePos, closestPoint);
 
-        GuizhouWare.rotationManager.submit(new RotationRequest(
+        if (!GuizhouWare.rotationManager.tryAction(new RotationRequest(
             "AutoSword", 6, angles[0], angles[1], RotationRequest.Mode.SILENT
-        ));
+        ))) return;
 
         float serverYaw = GuizhouWare.rotationManager.getServerYaw();
         float serverPitch = GuizhouWare.rotationManager.getServerPitch();

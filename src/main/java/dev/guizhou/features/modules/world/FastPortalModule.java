@@ -60,7 +60,7 @@ public class FastPortalModule extends Module {
         float yaw = calcYaw(eye, portalCenter);
         float pitch = calcPitch(eye, portalCenter);
 
-        GuizhouWare.rotationManager.submit(new RotationRequest("fastportal", 20, yaw, pitch, RotationRequest.Mode.SILENT));
+        if (!GuizhouWare.rotationManager.tryAction(new RotationRequest("fastportal", 20, yaw, pitch, RotationRequest.Mode.SILENT))) return;
 
         mc.gameMode.ensureHasSentCarriedItem();
         boolean sent = GuizhouWare.swapManager.withSwap(pearl, SwapMode.ALTSILENT, SwapPriority.UTILITY, () -> {

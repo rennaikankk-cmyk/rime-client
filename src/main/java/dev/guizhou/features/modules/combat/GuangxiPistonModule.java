@@ -68,6 +68,8 @@ public class GuangxiPistonModule extends Module {
     private final Setting<Integer> delay        = num("Delay",       10, 0, 20).setPage("General");
     private final Setting<Boolean> autoBase     = bool("AutoBase",   true).setPage("General");
     private final Setting<Boolean> reuseRedstone = bool("ReuseRedstone", true).setPage("General");
+    private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
+    private final dev.guizhou.manager.RotationOptions rotationOptions = new dev.guizhou.manager.RotationOptions(this, rotate);
 
     private final Setting<Double> maxSelfDamage = num("MaxSelfDamage", 8.0, 0.0, 36.0).setPage("General");
     private final Setting<Double> reserve = num("Reserve", 2.0, 0.0, 20.0).setPage("General");
@@ -320,8 +322,10 @@ public class GuangxiPistonModule extends Module {
                         }
                     }
                     int slot = pistonSlot();
-                    if (canSubmit() && slot >= 0 && GuizhouWare.rotationManager.trySubmit(new RotationRequest(
-                            ROTATION_ID, ROTATION_PRIORITY, setup.dir().toYRot(), 0f, RotationRequest.Mode.SILENT))) {
+                    if (canSubmit() && slot >= 0 && (rotate.getValue()
+                            ? GuizhouWare.rotationManager.tryAction(rotationOptions.request(
+                                ROTATION_ID, ROTATION_PRIORITY, setup.dir().toYRot(), 0f, RotationRequest.Mode.SILENT))
+                            : Direction.fromYRot(GuizhouWare.rotationManager.getServerYaw()) == setup.dir())) {
                         Item item = mc.player.getInventory().getItem(slot).getItem();
                         if (GuizhouWare.placementManager.placeDirect(setup.piston(), null, item,
                                 dev.guizhou.util.inventory.SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, placeReach.getValue())) submitted(setup.piston());
@@ -383,7 +387,7 @@ public class GuangxiPistonModule extends Module {
         Vec3 eye = mc.player.getEyePosition();
         float[] angles = MathUtil.calcAngle(eye, closestPointOnBox(eye, crystal.getBoundingBox()));
         if (!canHitCrystal(crystal, angles[0], angles[1])) return false;
-        if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+        if (rotate.getValue() && !GuizhouWare.rotationManager.tryAction(rotationOptions.request(
                 "PistonCrystal_break", ROTATION_PRIORITY, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
         if (!canHitCrystal(crystal, GuizhouWare.rotationManager.getServerYaw(), GuizhouWare.rotationManager.getServerPitch())) return false;
         if (!PacketSendUtil.send(ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown()))) return false;
