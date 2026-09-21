@@ -98,20 +98,49 @@ public final class PlacementGeometryTest {
     }
 
     private static void pistonPowerConfirmation() {
-        var breakPower = dev.guizhou.util.combat.PistonPowerSequence.Action.BREAK;
+        var breakPiston = dev.guizhou.util.combat.PistonPowerSequence.Action.BREAK;
         var wait = dev.guizhou.util.combat.PistonPowerSequence.Action.WAIT;
         var ready = dev.guizhou.util.combat.PistonPowerSequence.Action.READY;
         var abort = dev.guizhou.util.combat.PistonPowerSequence.Action.ABORT;
-        check(dev.guizhou.util.combat.PistonPowerSequence.next(true, false, true, true) == breakPower,
-                "existing redstone cannot enter a reset operation");
-        check(dev.guizhou.util.combat.PistonPowerSequence.next(false, true, false, true) == wait,
-                "air update advanced before piston retraction");
-        check(dev.guizhou.util.combat.PistonPowerSequence.next(false, true, true, false) == wait,
-                "another power source was ignored");
-        check(dev.guizhou.util.combat.PistonPowerSequence.next(false, true, false, false) == ready,
-                "confirmed reset cannot advance");
-        check(dev.guizhou.util.combat.PistonPowerSequence.next(false, false, false, false) == abort,
+        check(dev.guizhou.util.combat.PistonPowerSequence.resetPiston(true, false, false, true) == breakPiston,
+                "existing piston cannot be recycled");
+        check(dev.guizhou.util.combat.PistonPowerSequence.resetPiston(false, true, false, true) == wait,
+                "air update advanced before old head disappeared");
+        check(dev.guizhou.util.combat.PistonPowerSequence.resetPiston(true, false, false, false) == abort,
+                "vanished power ignored");
+        check(dev.guizhou.util.combat.PistonPowerSequence.resetPiston(false, true, true, true) == ready,
+                "confirmed piston removal cannot advance");
+        check(dev.guizhou.util.combat.PistonPowerSequence.resetPiston(false, false, true, true) == abort,
                 "replacement block would be mined without ownership");
+        var keep = dev.guizhou.util.combat.PistonPowerSequence.Plan.KEEP_POWER;
+        var recycle = dev.guizhou.util.combat.PistonPowerSequence.Plan.RECYCLE_PISTON;
+        var reject = dev.guizhou.util.combat.PistonPowerSequence.Plan.REJECT;
+        check(dev.guizhou.util.combat.PistonPowerSequence.plan(true, true, false, 2, false) == keep,
+                "existing power incorrectly requires mining or spare redstone");
+        check(dev.guizhou.util.combat.PistonPowerSequence.plan(true, true, true, 2, true) == recycle,
+                "existing powered piston cannot be retriggered while preserving power");
+        check(dev.guizhou.util.combat.PistonPowerSequence.plan(true, true, true, 2, false) == reject,
+                "prepowered piston reused with no way to retrigger it");
+        check(dev.guizhou.util.combat.PistonPowerSequence.plan(true, true, false, 1, false) == reject,
+                "crystal-first plan accepted overlapping piston cell");
+        check(dev.guizhou.util.combat.PistonPowerSequence.plan(true, false, false, 2, false) == reject,
+                "disabled reuse ignored");
+        check(dev.guizhou.util.combat.PistonPowerSequence.plan(false, true, false, 1, false)
+                == dev.guizhou.util.combat.PistonPowerSequence.Plan.PLACE_POWER, "normal sequence lost");
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            BlockPos crystal = new BlockPos(-10, 50, -20);
+            check(!dev.guizhou.util.combat.PistonPowerSequence.clearForPiston(crystal, crystal.relative(dir)),
+                    "adjacent piston incorrectly fits after crystal spawn");
+            check(dev.guizhou.util.combat.PistonPowerSequence.clearForPiston(crystal, crystal.relative(dir, 2)),
+                    "gap-two piston rejected despite clear crystal bounds");
+            Vec3 start = Vec3.atBottomCenterOf(crystal);
+            Vec3 end = dev.guizhou.util.combat.PistonPowerSequence.predictedPush(crystal, dir);
+            check(dev.guizhou.util.combat.PistonPowerSequence.pushed(start, end, dir), "expected push not recognized");
+            check(!dev.guizhou.util.combat.PistonPowerSequence.pushed(start, start, dir),
+                    "extended block state alone counted as a moved crystal");
+            check(!dev.guizhou.util.combat.PistonPowerSequence.pushed(start, start.scale(2).subtract(end), dir),
+                    "movement away from target counted as successful push");
+        }
     }
 
     private static void check(boolean condition, String message) {
