@@ -56,11 +56,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Automatic capability-gated diagnostics. Only explicitly allowlisted fields reach the wire. */
 public class TelemetryManager extends Feature {
-    public static final String ENDPOINT = "http://62.234.117.226/telemetryapi/v1/events";
+    public static final String ENDPOINT = "https://62.234.117.226/telemetryapi/v1/events";
     private static final Path STATE_FILE = Path.of("guizhouware", "telemetry.json");
     private static final long SECOND = 1_000_000_000L;
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
+    private static final HttpClient HTTP = dev.guizhou.util.license.AuthTransport.create();
     private static final EquipmentSlot[] EQUIPMENT = {EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND,
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 

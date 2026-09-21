@@ -148,6 +148,7 @@ def clientRegressionTests = [
         placementGeometryTest: 'dev.guizhou.manager.PlacementGeometryTest',
         licenseLeaseTest: 'dev.guizhou.util.license.LicenseLeaseTest',
         signedHeartbeatTest: 'dev.guizhou.util.license.SignedHeartbeatTest',
+        jarIntegrityTest: 'dev.guizhou.util.license.JarIntegrityTest',
         licenseActionHookTest: 'dev.guizhou.util.combat.LicenseActionHookTest',
         clientDiagnosticsTest: 'dev.guizhou.util.diagnostics.ClientDiagnosticsTest',
         diagnosticsWiringTest: 'dev.guizhou.util.diagnostics.DiagnosticsWiringTest',

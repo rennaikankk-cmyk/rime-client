@@ -30,7 +30,7 @@
   - `manager/HeartbeatManager.java`：10 分钟心跳；状态机 OK / GRACE（最近成功后最多 24h 宽限）/ DENIED（bad_token、banned、hwid、expired、no_credential、bad_signature 等）。`LicenseLease` 用单调时钟逐次检查有效期，明确拒绝会销毁旧租约，网络失败不能恢复授权。开发豁免必须同时具备编译参数 `-PgzwDevelopmentBuild=true` 和 Loader 开发环境；该参数会阻止所有 Jar 打包任务。生产 jar 无凭据 = 拒绝运行（裸 jar 锁死，客户只走登录器）
   - `manager/HwidFingerprint.java`：OSHI 因子哈希。**必须用 Baseboard（Win32_BaseBoard/Type2，`getBaseboard().getManufacturer()/getModel()/getSerialNumber()`）+ 0 号物理盘**，禁止改回 ComputerSystem.getManufacturer()/getModel()（Type1 系统串会独立漂移，2026-09-18 当日变过一次直接导致全员心跳拒绝）；改动拼接格式必须同步服务端 modHwid 重绑方案
   - 授权检查覆盖 13 个主力模块的 tick 及水晶、PacketMine、AutoMine 关键事件/异步回调/最终动作入口，`LicenseActionHookTest` 和 `ObfuscatedJarTest` 检查对应控制流。拒绝后仍允许 ABORT、还槽等清理，不拦截原版手动挖掘。**新增主力模块或动作入口时同样加检查点**。
-  - `SignedHeartbeat` 严格检查签名长度、JSON 字段及 UTF-8，HTTP 响应体限制为 16 KiB。现有服务端响应没有请求 nonce；验签证明真实性，不证明本次请求的新鲜性，不能宣称已防重放。
+  - `SignedHeartbeat` 严格检查签名长度、JSON 字段及 UTF-8，HTTP 响应体限制为 16 KiB。新客户端要求 v2 请求 nonce、凭据 subject、会话和签名租约窗口；旧协议只为旧客户端兼容保留。维护规则见 docs/authorization-v2.md。
 - 维护红线：`HeartbeatManager.AI_GUARD_NOTICE` 数组在 `status()` 里有一个**故意存在的假引用**——防止 ProGuard shrink 裁掉常量，重构 status() 时不得移除该引用。
 
 ## 3. 持续更新节奏
@@ -67,3 +67,7 @@
 - jar 名嵌 git hash：commit 后文件名变，部署永远用通配 `guizhouware-*.jar`；mods 里新旧两个 guizhouware jar 并存 Fabric 拒启
 - 本仓库混有另一棵构建树的部分改动（flightTest 测试类在但任务名单更新）——任务生成块的 onlyIf 兼容就是为这个
 - 仓库里有两棵源码树并行（本仓库 + GPT 构建树）；线上发行 jar 来自 GPT 构建，**本仓库的心跳/混淆/AI 守卫要经 GPT 合并后才会对客户生效**
+
+## 授权兼容升级（2026-09-21）
+
+新客户端的 HTTPS 固定证书、v2 请求绑定、逐包签名清单与宽限规则见 `docs/authorization-v2.md`。服务端必须先升级再发布新客户端。不得强制旧会员重绑、不得把客户端完整性报告直接当作封号证据。更换 TLS 证书前必须先分发重叠信任集合；不能用信任所有证书或 HTTP 回退来修复连接。

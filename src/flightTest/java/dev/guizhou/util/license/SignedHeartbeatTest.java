@@ -24,6 +24,14 @@ public final class SignedHeartbeatTest {
         check(!denied.allowed() && denied.reason().equals("banned"), "Signed refusal remains a refusal");
         var message = verify(envelope(Map.of("msg", "授权已过期", "ok", "false")));
         check(message.reason().equals("授权已过期"), "Unicode signed reason remains compatible");
+        String nonce = "0123456789abcdef0123456789abcdef";
+        String subject = "a".repeat(64);
+        var bound = verify(envelope(Map.of("ok", "true", "nonce", nonce, "subject", subject)));
+        check(bound.allowed() && bound.matchesRequest(nonce, subject), "Current request and licence binding accepted");
+        check(!bound.matchesRequest("f".repeat(32), subject), "Old response nonce rejected");
+        check(!bound.matchesRequest(nonce, "b".repeat(64)), "Other licence response rejected");
+        check(!verify(success).matchesRequest(nonce, subject), "Legacy response cannot authorize direct JAR");
+        check(!bound.matchesRequest(null, subject) && !bound.matchesRequest(nonce, null), "Missing binding rejected");
         reject(success.replace("\"true\"", "\"false\""), "Tampered verdict");
         reject(success.replace("\"sig\":\"", "\"sig\":\"f"), "Odd-length signature formerly truncated");
         reject(success.replace("\"sig\":\"", "\"sig\":\"zz"), "Nonhex or excessive signature");
@@ -53,8 +61,39 @@ public final class SignedHeartbeatTest {
         byte[] invalidUtf8 = {(byte)0xc3, (byte)0x28};
         try { SignedHeartbeat.verify(invalidUtf8, key.getPublic()); throw new AssertionError("Invalid UTF-8 accepted"); }
         catch (java.nio.charset.CharacterCodingException expected) { checks++; }
+        boundWindows();
         streaming();
         System.out.println("SignedHeartbeatTest passed: " + checks + " checks");
+    }
+
+    private static void boundWindows() throws Exception {
+        String nonce = "a".repeat(32), subject = "b".repeat(64), session = "c".repeat(32);
+        var fields = new TreeMap<String, String>(Map.of("ok", "true", "nonce", nonce, "subject", subject,
+                "protocol", "2", "session", session, "issuedAt", "1790000000000", "leaseSeconds", "900", "graceSeconds", "86400"));
+        var verdict = verify(envelope(fields));
+        check(verdict.matchesRequest(nonce, subject) && verdict.matchesSession(session), "Bound v2 response accepted");
+        var window = verdict.windowFor(session, 2_000_000_000L);
+        check(window.freshNanos() == 898_000_000_000L && window.totalNanos() == 86_398_000_000_000L,
+                "Transport time is subtracted without trusting the client wall clock");
+        for (var pair : List.of(Map.entry("protocol", "1"), Map.entry("session", "d".repeat(32)),
+                Map.entry("issuedAt", "0"), Map.entry("leaseSeconds", "901"), Map.entry("leaseSeconds", "-1"),
+                Map.entry("graceSeconds", "86401"), Map.entry("graceSeconds", "1"), Map.entry("leaseSeconds", "0.5"))) {
+            var bad = new TreeMap<>(fields); bad.put(pair.getKey(), pair.getValue());
+            rejectWindow(verify(envelope(bad)), session, 0, "Invalid " + pair.getKey());
+        }
+        for (String field : List.of("protocol", "session", "issuedAt", "leaseSeconds", "graceSeconds")) {
+            var bad = new TreeMap<>(fields); bad.remove(field);
+            rejectWindow(verify(envelope(bad)), session, 0, "Missing " + field);
+        }
+        rejectWindow(verdict, session, -1, "Monotonic regression");
+        rejectWindow(verdict, session, 15_000_000_001L, "Delayed response");
+        var shortFields = new TreeMap<>(fields); shortFields.put("leaseSeconds", "1"); shortFields.put("graceSeconds", "1");
+        rejectWindow(verify(envelope(shortFields)), session, 1_000_000_000L, "Grant expires in transit");
+        fields.put("ok", "false"); rejectWindow(verify(envelope(fields)), session, 0, "Denial cannot grant a window");
+    }
+    private static void rejectWindow(SignedHeartbeat.Verdict verdict, String session, long elapsed, String label) throws Exception {
+        try { verdict.windowFor(session, elapsed); throw new AssertionError(label + " accepted"); }
+        catch (java.io.IOException expected) { checks++; }
     }
 
     private static void streaming() {

@@ -426,10 +426,10 @@ public final class ObfuscatedJarTest {
             MethodInfo beat = retainedMethod(before, classes, mapping, HEARTBEAT, "beat()V", obfuscated);
             String verifyName = obfuscated ? mapping.requiredMember(signed, "verify(byte[],java.security.PublicKey)") : "verify";
             String allowedName = obfuscated ? mapping.requiredMember(verdict, "allowed()") : "allowed";
-            String successName = obfuscated ? mapping.requiredMember(lease, "verifiedSuccess()") : "verifiedSuccess";
+            String successName = obfuscated ? mapping.requiredMember(lease, "verifiedSuccess(long,long)") : "verifiedSuccess";
             int verify = uniqueCall(beat, signedOwner, verifyName, "([BLjava/security/PublicKey;)L" + verdictOwner + ";");
             int allowed = uniqueCall(beat, verdictOwner, allowedName, "()Z");
-            int success = uniqueCall(beat, leaseOwner, successName, "()V");
+            int success = uniqueCall(beat, leaseOwner, successName, "(JJ)V");
             check(verify < allowed && allowed < success, "Heartbeat lease renewal must follow verified allowed verdict");
             check(!flowReaches(beat, 0, success, verify) && !flowReaches(beat, 0, success, allowed),
                     "Heartbeat lease renewal bypasses signature verification or the allowed verdict");
@@ -445,10 +445,26 @@ public final class ObfuscatedJarTest {
             MethodInfo verifier = retainedMethod(before, classes, mapping, signed,
                     "verify([BLjava/security/PublicKey;)L" + verdict + ";", obfuscated);
             int signature = uniqueCall(verifier, "java/security/Signature", "verify", "([B)Z");
-            int createVerdict = uniqueCall(verifier, verdictOwner, "<init>", "(ZLjava/lang/String;)V");
+            int createVerdict = uniqueCall(verifier, verdictOwner, "<init>", "(ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)V");
             check(!flowReaches(verifier, 0, createVerdict, signature)
                             && !flowReaches(verifier, rejectedBooleanPath(verifier, signature), createVerdict, -1),
                     "SignedHeartbeat can construct a verdict after a failed or skipped cryptographic verification");
+
+            String matchName = obfuscated ? mapping.requiredMember(verdict, "matchesRequest(java.lang.String,java.lang.String)") : "matchesRequest";
+            int match = uniqueCall(beat, verdictOwner, matchName, "(Ljava/lang/String;Ljava/lang/String;)Z");
+            check(!flowReaches(beat, 0, success, match)
+                            && !flowReaches(beat, rejectedBooleanPath(beat, match), success, -1),
+                    "Lease renewal must require the current nonce and token subject");
+
+            String windowClass = "dev/guizhou/util/license/SignedHeartbeat$Window";
+            String windowOwner = obfuscated ? mapping.requiredClass(windowClass) : windowClass;
+            String windowName = obfuscated ? mapping.requiredMember(verdict, "windowFor(java.lang.String,long)") : "windowFor";
+            int window = uniqueCall(beat, verdictOwner, windowName, "(Ljava/lang/String;J)L" + windowOwner + ";");
+            check(!flowReaches(beat, 0, success, window), "Lease renewal bypasses session/age/lease validation");
+            for (ExceptionRegion region : beat.exceptions) {
+                if (labelIndex(beat, region.start) <= window && window < labelIndex(beat, region.end))
+                    check(!flowReaches(beat, labelIndex(beat, region.handler), success, -1), "Invalid session window renews a lease");
+            }
 
             ClassInfo subscriber = required(classes, limitedOwner);
             check(subscriber.interfaces.contains("java/net/http/HttpResponse$BodySubscriber"),

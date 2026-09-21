@@ -1,5 +1,6 @@
 package dev.guizhou.util.license;
 
+import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 
@@ -18,10 +19,39 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
 
-/** Validates the existing signed protocol. Authenticity is not request freshness. */
+/** Signature verification plus explicit nonce, subject, session and bounded lease validation. */
 public final class SignedHeartbeat {
     public static final int MAX_BYTES = 16_384;
-    public record Verdict(boolean allowed, String reason) {}
+    public record Window(long freshNanos, long totalNanos) {}
+    public record Verdict(boolean allowed, String reason, String nonce, String subject, Map<String, String> fields) {
+        public boolean matchesSession(String session) {
+            return session != null && session.matches("[0-9a-f]{32}")
+                    && "2".equals(fields.get("protocol")) && session.equals(fields.get("session"));
+        }
+        public Window windowFor(String session, long elapsedNanos) throws IOException {
+            if (!allowed || !matchesSession(session) || elapsedNanos < 0 || elapsedNanos > 15_000_000_000L)
+                throw new IOException("Invalid heartbeat session or response age");
+            try {
+                long issued = positive("issuedAt"), fresh = positive("leaseSeconds"), total = positive("graceSeconds");
+                if (issued <= 0 || fresh > 900 || total > 86400 || total < fresh)
+                    throw new IOException("Invalid signed lease limits");
+                long remaining = total * 1_000_000_000L - elapsedNanos;
+                long current = fresh * 1_000_000_000L - elapsedNanos;
+                if (current <= 0 || remaining <= 0) throw new IOException("Response lease already expired");
+                return new Window(current, remaining);
+            } catch (NumberFormatException e) { throw new IOException("Invalid signed lease", e); }
+        }
+        private long positive(String name) throws IOException {
+            String value = fields.get(name);
+            if (value == null || !value.matches("[1-9][0-9]{0,15}")) throw new IOException("Missing or invalid " + name);
+            return Long.parseLong(value);
+        }
+        public boolean matchesRequest(String expectedNonce, String expectedSubject) {
+            return expectedNonce != null && expectedNonce.matches("[0-9a-f]{32}")
+                    && expectedSubject != null && expectedSubject.matches("[0-9a-f]{64}")
+                    && expectedNonce.equals(nonce) && expectedSubject.equals(subject);
+        }
+    }
     private SignedHeartbeat() {}
 
     public static Verdict verify(byte[] response, PublicKey publicKey) throws Exception {
@@ -32,6 +62,7 @@ public final class SignedHeartbeat {
         Map<String, String> data = null;
         String signature = null;
         try (JsonReader reader = new JsonReader(new StringReader(json))) {
+            reader.setStrictness(Strictness.STRICT);
             reader.beginObject();
             while (reader.hasNext()) {
                 String key = reader.nextName();
@@ -54,7 +85,8 @@ public final class SignedHeartbeat {
         String ok = data.get("ok");
         if (!"true".equals(ok) && !"false".equals(ok)) throw new IOException("Invalid verdict");
         String reason = data.getOrDefault("reason", data.getOrDefault("msg", "denied"));
-        return new Verdict("true".equals(ok), reason.length() > 128 ? reason.substring(0, 128) : reason);
+        return new Verdict("true".equals(ok), reason.length() > 128 ? reason.substring(0, 128) : reason,
+                data.getOrDefault("nonce", ""), data.getOrDefault("subject", ""), Map.copyOf(data));
     }
 
     private static Map<String, String> readData(JsonReader reader) throws IOException {
