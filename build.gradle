@@ -169,6 +169,7 @@ def clientRegressionTests = [
         autoUseWhitelistTest: 'dev.guizhou.util.player.AutoUseWhitelistTest',
         itemUseOwnershipTest: 'dev.guizhou.util.player.ItemUseOwnershipTest',
         fontPageTest: 'dev.guizhou.util.render.font.FontPageTest',
+        fontRecoveryTest: 'dev.guizhou.util.render.font.FontRecoveryTest',
         targetMotionTrackerTest: 'dev.guizhou.util.elytra.TargetMotionTrackerTest',
         aerialCombatPolicyTest: 'dev.guizhou.util.elytra.AerialCombatPolicyTest',
         aerialInterceptTest: 'dev.guizhou.util.elytra.AerialInterceptTest',

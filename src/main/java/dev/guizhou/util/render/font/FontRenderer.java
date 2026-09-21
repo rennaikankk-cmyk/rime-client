@@ -78,6 +78,7 @@ public class FontRenderer implements Closeable {
         float[] pen = { 0f };
 
         synchronized (glyphPages) {
+          try {
             text.accept((index, style, codePoint) -> {
                 int rgb;
                 if (style.getColor() != null) {
@@ -106,6 +107,7 @@ public class FontRenderer implements Closeable {
 
             var pose = graphics.pose();
             pose.pushMatrix();
+            try {
             pose.translate(x, yTop);
             float scale = 1.0f / this.multiplier;
             pose.scale(scale, scale);
@@ -125,8 +127,8 @@ public class FontRenderer implements Closeable {
                 }
             }
 
-            pose.popMatrix();
-            glyphPages.clear();
+            } finally { pose.popMatrix(); }
+          } finally { glyphPages.clear(); }
         }
     }
 
@@ -195,11 +197,13 @@ public class FontRenderer implements Closeable {
 
             BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
             Graphics2D pg = probe.createGraphics();
-
+            try {
             float probeSize = 16f * this.multiplier;
             pg.setFont(baseFonts[0].deriveFont(probeSize));
             FontMetrics probeFm = pg.getFontMetrics();
             float ascentRatio = probeFm.getAscent() / probeSize;
+            if (!Float.isFinite(ascentRatio) || ascentRatio <= 0)
+                throw new IllegalStateException("Invalid custom font ascent");
             float fitSize = (this.targetAscent * this.multiplier) / ascentRatio;
 
             Font[] fitted = new Font[baseFonts.length];
@@ -210,10 +214,9 @@ public class FontRenderer implements Closeable {
             pg.setFont(fitted[0]);
             FontMetrics fm = pg.getFontMetrics();
             this.blockPx = fm.getAscent() + fm.getDescent();
-            pg.dispose();
-
             this.fittedFonts = fitted;
             initialized = true;
+            } finally { pg.dispose(); }
         } finally {
             lock.writeLock().unlock();
         }

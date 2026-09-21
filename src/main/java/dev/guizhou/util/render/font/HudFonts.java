@@ -34,50 +34,74 @@ public final class HudFonts {
     private HudFonts() {}
 
     public static FontRenderer of(int weight) {
-        if (regular == null) init();
-        if (regular == null) return null;
-        return switch (weight) {
+        return FontFallback.recover("menu/HUD font initialization", () -> customFont(weight), () -> null);
+    }
+    private static FontRenderer customFont(int weight) {
+            if (regular == null) init();
+            return switch (weight) {
             case 700 -> bold;
             case 600 -> semibold;
             default -> regular;
-        };
+            };
     }
 
     /** Draws text at an explicit CSS-px size, no drop shadow. x/y in GUI px. */
     public static void draw(GuiGraphics g, String text, float x, float y, float sizePx, int weight, int color) {
         // FontRenderer forces alpha < 4 to opaque; a nearly invisible draw is skipped instead
-        if (((color >>> 24) & 0xFF) < 4) return;
-        FontRenderer r = of(weight);
-        if (r == null) return;
-        float em = r.emGuiHeight();
-        float s = sizePx / em;
-        if (!Float.isFinite(s) || s <= 0f) return;
-        var pose = g.pose();
-        pose.pushMatrix();
-        pose.scale(s, s);
-        r.drawString(g, text, x / s, y / s, color, false);
-        pose.popMatrix();
+        if (text == null || text.isEmpty() || !Float.isFinite(sizePx) || sizePx <= 0 || ((color >>> 24) & 0xFF) < 4) return;
+        FontFallback.recover("menu/HUD text drawing", () -> {
+            FontRenderer r = customFont(weight);
+            float s = sizePx / r.emGuiHeight();
+            if (!Float.isFinite(s) || s <= 0f) throw new IllegalStateException("Invalid custom font scale");
+            var pose = g.pose();
+            pose.pushMatrix();
+            try {
+                pose.scale(s, s);
+                r.drawString(g, text, x / s, y / s, color, false);
+            } finally { pose.popMatrix(); }
+            return null;
+        }, () -> { FontFallback.drawScaled(g,text,x,y,sizePx,color); return null; });
     }
 
     /** Width in GUI px for text at an explicit CSS-px size. */
     public static float width(String text, float sizePx, int weight) {
-        FontRenderer r = of(weight);
-        if (r == null) return 0f;
-        return r.getTextWidth(text) * (sizePx / r.emGuiHeight());
+        if (text == null || text.isEmpty() || !Float.isFinite(sizePx) || sizePx <= 0) return 0;
+        return FontFallback.recover("menu/HUD text measurement", () -> {
+            FontRenderer r = customFont(weight);
+            float measured = r.getTextWidth(text) * (sizePx / r.emGuiHeight());
+            if (!Float.isFinite(measured) || measured < 0) throw new IllegalStateException("Invalid custom font width");
+            return measured;
+        }, () -> FontFallback.scaledWidth(text,sizePx));
     }
 
     private static synchronized void init() {
         if (regular != null) return;
+        FontRenderer nextRegular = null, nextSemibold = null, nextBold = null;
+        boolean published = false;
         try {
             Font yahei = installedSans();
             Font zh = zhFace();
-            regular = make("/assets/guizhouware/font/geist-400.ttf", yahei, zh);
+            nextRegular = make("/assets/guizhouware/font/geist-400.ttf", yahei, zh);
             Font strongCjk = yahei == null ? null : yahei.deriveFont(Font.BOLD);
-            semibold = make("/assets/guizhouware/font/geist-600.ttf", strongCjk, zh);
-            bold = make("/assets/guizhouware/font/geist-700.ttf", strongCjk, zh);
-        } catch (Throwable ignored) {
-            // any failure leaves of() returning null; callers skip text rather than crash
+            nextSemibold = make("/assets/guizhouware/font/geist-600.ttf", strongCjk, zh);
+            nextBold = make("/assets/guizhouware/font/geist-700.ttf", strongCjk, zh);
+            semibold = nextSemibold;
+            bold = nextBold;
+            regular = nextRegular; // Publish only after all weights succeed.
+            published = true;
+        } finally {
+            if (!published) {
+                closeIncomplete(nextRegular);
+                closeIncomplete(nextSemibold);
+                closeIncomplete(nextBold);
+            }
         }
+    }
+
+    private static void closeIncomplete(FontRenderer renderer) {
+        if (renderer == null) return;
+        try { renderer.close(); }
+        catch (Throwable failure) { FontFallback.fail("partial font cleanup", failure); }
     }
 
     private static FontRenderer make(String geistPath, Font yahei, Font zh) {

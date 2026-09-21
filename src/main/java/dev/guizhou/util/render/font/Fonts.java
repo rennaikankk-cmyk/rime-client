@@ -49,72 +49,77 @@ public final class Fonts {
     public static void endHudPass()   { hudPass = false; }
 
     public static void drawString(GuiGraphics graphics, String text, float x, float y, int color) {
-        FontRenderer fr = clickGuiOn() ? renderer() : null;
-        if (fr == null) {
-            graphics.drawString(mc.font, text, (int) x, (int) y, color);
-            return;
-        }
-        fr.drawString(graphics, text, x + SHADOW_OFFSET, y + SHADOW_OFFSET, color, true);
-        fr.drawString(graphics, text, x, y, color, false);
+        draw(safeRenderer(clickGuiOn()), graphics, text, x, y, color, true);
     }
 
     public static int width(String text) {
-        FontRenderer fr = clickGuiOn() ? renderer() : null;
-        return fr == null ? mc.font.width(text) : Math.round(fr.getTextWidth(text));
+        return measure(safeRenderer(clickGuiOn()), text);
     }
 
     public static int lineHeight() {
-        FontRenderer fr = clickGuiOn() ? renderer() : null;
-        return fr == null ? mc.font.lineHeight : Math.max(1, Math.round(fr.getHeight()));
+        return Math.max(1, mc.font.lineHeight);
     }
 
     public static boolean drawOverrideActive() {
-        return hudPass && hudOn() && renderer() != null;
+        return !FontFallback.nativePass() && FontFallback.customEnabled()
+                && hudPass && hudOn() && safeRenderer(true) != null;
     }
 
     public static void renderOverrideString(GuiGraphics graphics, String text, float x, float y, int color, boolean shadow) {
-        FontRenderer fr = renderer();
-        if (fr == null) return;
-        if (shadow) fr.drawString(graphics, text, x + SHADOW_OFFSET, y + SHADOW_OFFSET, color, true);
-        fr.drawString(graphics, text, x, y, color, false);
+        draw(safeRenderer(true), graphics, text, x, y, color, shadow);
     }
 
     public static void renderOverrideText(GuiGraphics graphics, FormattedCharSequence text, float x, float y, int color, boolean shadow) {
-        FontRenderer fr = renderer();
-        if (fr == null) return;
-        if (shadow) fr.drawText(graphics, text, x + SHADOW_OFFSET, y + SHADOW_OFFSET, color, true);
-        fr.drawText(graphics, text, x, y, color, false);
+        FontRenderer fr = safeRenderer(true);
+        if (fr == null) { FontFallback.draw(graphics,text,x,y,color,shadow); return; }
+        FontFallback.recover("formatted text drawing", () -> {
+            if (shadow) fr.drawText(graphics,text,x+SHADOW_OFFSET,y+SHADOW_OFFSET,color,true);
+            fr.drawText(graphics,text,x,y,color,false);
+            return null;
+        }, () -> { FontFallback.draw(graphics,text,x,y,color,shadow); return null; });
     }
 
     public static int overrideWidth(String text) {
-        FontRenderer fr = renderer();
-        return fr == null ? mc.font.width(text) : Math.round(fr.getTextWidth(text));
+        return measure(safeRenderer(true), text);
     }
 
     public static int overrideWidth(FormattedCharSequence text) {
-        FontRenderer fr = renderer();
-        return fr == null ? mc.font.width(text) : Math.round(fr.getTextWidth(text));
+        FontRenderer fr = safeRenderer(true);
+        return fr == null ? FontFallback.width(text) : FontFallback.recover("formatted text measurement",
+                () -> roundedWidth(fr.getTextWidth(text)), () -> FontFallback.width(text));
     }
 
     /** Nametag text through the custom renderer (CJK-capable), vanilla font as fallback. */
     public static void drawNametagString(GuiGraphics graphics, String text, float x, float y, int color) {
-        FontRenderer fr = (nametagOn() || clickGuiOn()) ? renderer() : null;
-        if (fr == null) {
-            graphics.drawString(mc.font, text, (int) x, (int) y, color);
-            return;
-        }
-        fr.drawString(graphics, text, x + SHADOW_OFFSET, y + SHADOW_OFFSET, color, true);
-        fr.drawString(graphics, text, x, y, color, false);
+        draw(safeRenderer(nametagOn() || clickGuiOn()),graphics,text,x,y,color,true);
     }
 
     public static int nametagWidth(String text) {
-        FontRenderer fr = (nametagOn() || clickGuiOn()) ? renderer() : null;
-        return fr == null ? mc.font.width(text) : Math.round(fr.getTextWidth(text));
+        return measure(safeRenderer(nametagOn() || clickGuiOn()),text);
     }
 
     public static int nametagLineHeight() {
-        FontRenderer fr = (nametagOn() || clickGuiOn()) ? renderer() : null;
-        return fr == null ? mc.font.lineHeight : Math.max(1, Math.round(fr.getHeight()));
+        return lineHeight();
+    }
+
+    private static FontRenderer safeRenderer(boolean requested) {
+        return requested ? FontFallback.recover("custom font initialization", Fonts::renderer, () -> null) : null;
+    }
+    private static int roundedWidth(float width) {
+        if (!Float.isFinite(width) || width < 0) throw new IllegalStateException("Invalid custom font width");
+        return Math.round(width);
+    }
+    private static int measure(FontRenderer fr, String text) {
+        return fr == null ? FontFallback.width(text) : FontFallback.recover("custom text measurement",
+                () -> roundedWidth(fr.getTextWidth(text)), () -> FontFallback.width(text));
+    }
+    private static void draw(FontRenderer fr, GuiGraphics graphics, String text, float x, float y, int color, boolean shadow) {
+        if (fr == null) { FontFallback.draw(graphics,text,x,y,color,shadow); return; }
+        FontFallback.recover("custom text drawing", () -> {
+            if (shadow) fr.drawString(graphics,text,x+SHADOW_OFFSET,y+SHADOW_OFFSET,color,true);
+            fr.drawString(graphics,text,x,y,color,false);
+            return null;
+        }, () -> { FontFallback.draw(graphics,text,x,y,color,shadow); return null; });
     }
 
     private static FontRenderer renderer() {
