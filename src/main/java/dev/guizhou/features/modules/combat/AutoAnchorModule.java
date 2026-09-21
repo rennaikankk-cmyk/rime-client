@@ -251,12 +251,12 @@ public class AutoAnchorModule extends Module {
                     && action != awaited) timing.observed(awaited, tick - sentTick);
             if (action == AnchorSequence.Action.WAIT) {
                 visuals.touch("main");
-                visuals.stage("main", "充能 " + (anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)
-                        + " · " + anchorStage(awaited));
+                visuals.stage("main", "Q" + (anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)
+                        + " " + anchorStage(awaited));
                 return;
             }
             if (action == AnchorSequence.Action.COMPLETE || action == AnchorSequence.Action.ABORT) {
-                visuals.stage("main", action == AnchorSequence.Action.COMPLETE ? "已观察到锚移除" : "操作中止");
+                visuals.stage("main", action == AnchorSequence.Action.COMPLETE ? "DONE" : "STOP");
                 if (action == AnchorSequence.Action.COMPLETE && spamPlace.getValue()
                         && state.canBeReplaced() && !miningBlocked(activePos)) {
                     repeatPos = activePos.immutable();
@@ -294,7 +294,7 @@ public class AutoAnchorModule extends Module {
                 actionsThisTick++;
                 lastDamage = damage;
                 if (render.getValue()) visuals.main(activePos, new AABB(activePos), Vec3.atCenterOf(activePos),
-                        damage, local, "充能 " + (anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0) + " · " + anchorStage(action));
+                        damage, local, "Q" + (anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0) + " " + anchorStage(action));
             } else stageDiagnostics.blocked("actionDeferred");
             return;
         }
@@ -731,12 +731,12 @@ public class AutoAnchorModule extends Module {
     }
 
     private static String anchorStage(AnchorSequence.Action action) {
-        if (action == null) return "等待确认";
+        if (action == null) return "WAIT";
         return switch(action) {
-            case PLACE -> "等待放置确认";
-            case CHARGE -> "等待充能确认";
-            case DETONATE -> "等待引爆确认";
-            default -> "等待确认";
+            case PLACE -> "PL";
+            case CHARGE -> "CHG";
+            case DETONATE -> "DET";
+            default -> "WAIT";
         };
     }
 

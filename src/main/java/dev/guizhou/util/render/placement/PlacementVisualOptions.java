@@ -27,13 +27,13 @@ public final class PlacementVisualOptions {
                 .setVisibility(v -> smooth.getValue());
         info = owner.bool("Info", true).setPage("Render");
         damage = owner.bool("DamageText", damageInfo).setPage("Render").setVisibility(v -> damageInfo && info.getValue());
-        selfDamage = owner.bool("SelfDamageText", damageInfo).setPage("Render").setVisibility(v -> damageInfo && info.getValue());
-        stage = owner.bool("StageText", true).setPage("Render").setVisibility(v -> info.getValue());
+        selfDamage = owner.bool("SelfDamageText", false).setPage("Render").setVisibility(v -> damageInfo && info.getValue());
+        stage = owner.bool("StageText", false).setPage("Render").setVisibility(v -> info.getValue());
         distance = owner.bool("DistanceText", false).setPage("Render").setVisibility(v -> info.getValue());
         parts = owner.bool("PartLabels", true).setPage("Render").setVisibility(v -> partInfo && info.getValue());
         textScale = owner.num("TextScale", .8f, .5f, 1.5f).setPage("Render").setVisibility(v -> info.getValue());
         maxDistance = owner.num("TextDistance", 32f, 4f, 128f).setPage("Render").setVisibility(v -> info.getValue());
-        background = owner.bool("TextBackground", true).setPage("Render").setVisibility(v -> info.getValue());
+        background = owner.bool("TextBackground", false).setPage("Render").setVisibility(v -> info.getValue());
         textColor = owner.color("TextColor", 240, 244, 255, 255).setPage("Render").setVisibility(v -> info.getValue());
     }
 }

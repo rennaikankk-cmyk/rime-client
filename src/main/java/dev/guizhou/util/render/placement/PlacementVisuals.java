@@ -11,7 +11,7 @@ import java.util.*;
 
 public final class PlacementVisuals implements Util {
     private static final class Entry {
-        AABB box, smooth;
+        AABB box, smooth, labelBounds;
         BlockPos labelBlock;
         Vec3 label;
         String stage, info = "";
@@ -40,6 +40,7 @@ public final class PlacementVisuals implements Util {
     public void stageAt(BlockPos pos,String stage) { for(Entry e:entries.values()) if(e.labelBlock.equals(pos)) e.stage=stage; }
     public void info(String id,String info) { Entry e=entries.get(id); if(e!=null) e.info=info; }
     public void colors(String id,Color fill,Color line) { Entry e=entries.get(id); if(e!=null) { e.fillOverride=fill; e.lineOverride=line; } }
+    public void labelBounds(String id,AABB bounds) { Entry e=entries.get(id); if(e!=null) e.labelBounds=bounds; }
     public void stage(String id,String stage) { Entry e=entries.get(id); if(e!=null) e.stage=stage; }
     public void render(Render3DEvent event,PlacementVisualOptions options,Color fill,Color line,float width,
                        double fade,PlacementVisualOptions.Style style,double smoothing,double gradientHeight,
@@ -76,7 +77,7 @@ public final class PlacementVisuals implements Util {
             }
             Vec3 shift=e.smooth.getCenter().subtract(e.box.getCenter());
             PlacementLabels.submit(module,e.labelBlock.getX()+":"+e.labelBlock.getY()+":"+e.labelBlock.getZ(),
-                    e.box,e.label.add(shift),e.damage,e.self,e.stage,e.info,e.main,alpha,options);
+                    e.labelBounds==null?e.smooth:e.labelBounds.move(shift),e.label.add(shift),e.damage,e.self,e.stage,e.info,e.main,alpha,options);
         }
     }
     public void render(Render3DEvent event,PlacementVisualOptions options,Color fill,Color line,float width,double fade) {

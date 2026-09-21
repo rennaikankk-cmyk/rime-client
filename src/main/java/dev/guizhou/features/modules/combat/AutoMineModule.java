@@ -462,7 +462,7 @@ public class AutoMineModule extends Module {
             glassRenderPos = pos.immutable();
             glassRenderStart = System.currentTimeMillis();
             if (glassRender.getValue()) glassVisuals.main(glassRenderPos, new AABB(glassRenderPos), Vec3.atCenterOf(glassRenderPos),
-                    Float.NaN, Float.NaN, "玻璃已提交 · 等待放置确认");
+                    Float.NaN, Float.NaN, "PL");
         }
     }
 
@@ -811,7 +811,7 @@ public class AutoMineModule extends Module {
             mineVisuals.render(event,visualOptions,new Color(c.getRed(),c.getGreen(),c.getBlue(),35),c,lineWidth.getValue(),.25);
         } else mineVisuals.clear();
         if (glassRender.getValue()) {
-            if (glassStage == GlassStage.AwaitBreak) glassVisuals.stage("main","玻璃已就位 · 等待挖除");
+            if (glassStage == GlassStage.AwaitBreak) glassVisuals.stage("main","MINE");
             glassVisuals.render(event,visualOptions,glassFillColor.getValue(),glassOutlineColor.getValue(),lineWidth.getValue(),glassFadeTime.getValue());
         } else glassVisuals.clear();
     }
@@ -820,15 +820,15 @@ public class AutoMineModule extends Module {
         if(selected==null) return;
         BlockPos p=selected.blockPos;
         var mine=speedMine();
-        if (mc.level.getBlockState(p).isAir()) { mineVisuals.stage(role,"已观察到方块消失"); return; }
+        if (mc.level.getBlockState(p).isAir()) { mineVisuals.stage(role,"DONE"); return; }
         String type=switch(selected.type) {
-            case Feet -> "脚部"; case Surround -> "包围"; case Extend -> "延伸";
-            case FacePlace -> "贴身"; case Head -> "头部"; case Below -> "脚下"; case TerrainBase -> "地形底座";
+            case Feet -> "FT"; case Surround -> "SR"; case Extend -> "EX";
+            case FacePlace -> "FP"; case Head -> "HD"; case Below -> "BL"; case TerrainBase -> "BS";
         };
-        String state=mine!=null && mine.isMining(p)?"已交给发包挖":"等待挖掘";
+        String state=mine!=null && mine.isMining(p)?"MINE":"WAIT";
         mineVisuals.mark(role,new AABB(p),p,Vec3.atCenterOf(p),Float.NaN,Float.NaN,
-                role+" · "+type+" · "+state,true,null);
-        mineVisuals.info(role,scoreText.getValue()?String.format(java.util.Locale.ROOT,"策略分 %.2f",selected.score):"");
+                state,true,null);
+        mineVisuals.info(role,scoreText.getValue()?String.format(java.util.Locale.ROOT,type+" SC%.1f",selected.score):type);
     }
 
     @Subscribe

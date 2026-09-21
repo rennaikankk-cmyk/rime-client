@@ -31,23 +31,20 @@ public final class PlacementVisualTest {
             check(bed.contains(p.getX()+.5,64.2,p.getZ()+.5),"foot absent");
             check(bed.contains(p.relative(d).getX()+.5,64.2,p.relative(d).getZ()+.5),"head absent");
         }
-        for(int[] viewport:new int[][]{{320,180},{640,360},{1280,720}}) {
-            List<LabelLayout.Rect> occupied=new ArrayList<>();
-            for(int i=0;i<100;i++) {
-                var box=LabelLayout.place(viewport[0]/2.0+(i%3),viewport[1]/2.0,140,26,viewport[0],viewport[1],occupied);
-                if(box==null) continue;
-                check(box.x()>=4 && box.y()>=4 && box.x()+box.width()<=viewport[0]-4
-                        && box.y()+box.height()<=viewport[1]-4,"label escaped screen");
-                for(var prior:occupied) check(!box.intersects(prior),"labels overlap");
-                occupied.add(box);
+        for(double width:new double[]{.15,.5,.75,1.5}) for(double height:new double[]{.1,.3,.55}) {
+            var bounds=new LabelLayout.Rect(0,0,width,height);
+            for(int textWidth:new int[]{12,35,80,140}) for(int lines=1;lines<=3;lines++) {
+                double scale=LabelLayout.fitScale(textWidth,lines*9,bounds,.025);
+                check(scale>0 && scale<=.025,"invalid world text scale");
+                check(textWidth*scale<=width+1e-12 && lines*9*scale<=height+1e-12,"text escaped block interior");
             }
-            check(occupied.size()>=3,"cannot fit three colocated modules");
         }
-        check(LabelLayout.place(0,0,500,20,320,180,List.of())==null,"oversize label allowed");
-        check(LabelLayout.place(Double.NaN,0,20,20,320,180,List.of())==null,"NaN position allowed");
-        var edge=LabelLayout.place(-100,1000,100,20,320,180,List.of());
-        check(edge!=null && edge.x()==4 && edge.y()==156,"edge clamp failed");
-        System.out.println("PlacementVisualTest passed: "+checks+" checks (FPS, fade, four bed directions, crowded label layout)");
+        var bounds=new LabelLayout.Rect(0,0,.75,.55);
+        check(LabelLayout.fitScale(Double.NaN,9,bounds,.025)==0,"NaN text width accepted");
+        check(LabelLayout.fitScale(20,0,bounds,.025)==0,"zero-height text accepted");
+        check(new LabelLayout.Rect(0,0,10,10).intersects(new LabelLayout.Rect(5,5,10,10)),"overlap missed");
+        check(!new LabelLayout.Rect(0,0,10,10).intersects(new LabelLayout.Rect(14,0,10,10)),"disjoint labels overlap");
+        System.out.println("PlacementVisualTest passed: "+checks+" checks (FPS, fade, four bed directions, world text bounds and overlap)");
     }
     private static double response(int fps,int seconds,double smoothness) {
         double x=0;

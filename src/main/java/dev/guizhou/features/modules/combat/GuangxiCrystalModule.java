@@ -510,7 +510,7 @@ public class GuangxiCrystalModule extends Module {
 
         if (packet instanceof ClientboundAddEntityPacket pkt) {
             if (pkt.getType() == EntityType.END_CRYSTAL)
-                visuals.stageAt(BlockPos.containing(pkt.getX(),pkt.getY(),pkt.getZ()).below(), "已收到水晶生成包");
+                visuals.stageAt(BlockPos.containing(pkt.getX(),pkt.getY(),pkt.getZ()).below(), "SPAWN");
             entitySnapshotTick = -1;
             entitySnapshot = List.of();
             attackRetries.removed(pkt.getId());
@@ -1658,7 +1658,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 Vec3 source = Vec3.atBottomCenterOf(air);
                 visuals.main(base, new AABB(base), Vec3.atCenterOf(base),
                         target.damage > 0 ? target.damage : Float.NaN,
-                        calcDamageSelf(source, trustBase ? base : null), "已提交 · 等待水晶生成");
+                        calcDamageSelf(source, trustBase ? base : null), "WAIT");
             }
             // The spawn for this placement takes the next sequential entity id.
             sendGhostAttacksAfter(lastMaxEntityId);

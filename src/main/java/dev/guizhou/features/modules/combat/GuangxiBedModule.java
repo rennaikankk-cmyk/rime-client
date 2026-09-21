@@ -105,7 +105,7 @@ public class GuangxiBedModule extends Module {
     private final Setting<Float> lineWidth = num("LineWidth", 1.5f, .5f, 5f).setPage("Render");
     private final Setting<Color> outlineColor = color("OutlineColor", 255, 80, 80, 220).setPage("Render");
     private float visualDamage = Float.NaN, visualSelf = Float.NaN;
-    private String visualStage = "等待放置确认";
+    private String visualStage = "PL";
 
 
 
@@ -181,7 +181,7 @@ public class GuangxiBedModule extends Module {
         stageDiagnostics.decision(action.name(), mc.player.tickCount, confirmTicks.getValue());
         if (action == BedSequence.Action.WAIT) { visuals.touch("main"); return; }
         if (action == BedSequence.Action.COMPLETE || action == BedSequence.Action.ABORT) {
-            visuals.stage("main", action == BedSequence.Action.COMPLETE ? "已观察到床移除" : "操作中止");
+            visuals.stage("main", action == BedSequence.Action.COMPLETE ? "DONE" : "STOP");
             clearPending();
             timer.reset();
             return;
@@ -196,7 +196,7 @@ public class GuangxiBedModule extends Module {
             clearPending();
             return;
         }
-        visualStage = action == BedSequence.Action.DETONATE ? "等待引爆确认" : "等待放置确认";
+        visualStage = action == BedSequence.Action.DETONATE ? "DET" : "PL";
         if (action == BedSequence.Action.DETONATE) {
             if (detonate()) {
                 sequence.sent(action, mc.player.tickCount);
@@ -561,8 +561,8 @@ public class GuangxiBedModule extends Module {
     private void noteRender() {
         if (!render.getValue() || pendingFoot == null || pendingHead == null) return;
         AABB box = PlacementVisuals.bed(pendingFoot, pendingHead);
-        visuals.main(pendingFoot, box, new Vec3(box.getCenter().x, box.maxY + .2, box.getCenter().z),
-                visualDamage, visualSelf, (tpMode.getValue() ? "TP床 · " : "") + visualStage);
+        visuals.main(pendingFoot, box, box.getCenter(),
+                visualDamage, visualSelf, (tpMode.getValue() ? "TP " : "") + visualStage);
     }
 
     private boolean sendFakeMove(Vec3 pos, float yaw) {

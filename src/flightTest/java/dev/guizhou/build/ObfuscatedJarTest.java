@@ -369,7 +369,8 @@ public final class ObfuscatedJarTest {
                 boolean notification = member(step, Opcodes.INVOKESTATIC, HEARTBEAT, "notifyDeniedOnce", "()V");
                 boolean ownCleanup = owner.name.equals(step.owner) && cleanup.contains(step.name) && step.descriptor.equals("()V");
                 boolean clear = step.name.equals("clear") && step.descriptor.equals("()V")
-                        && (step.owner.startsWith("java/util/") || step.owner.equals("dev/guizhou/features/modules/combat/MiningBreakTracker"));
+                        && (step.owner.startsWith("java/util/") || step.owner.equals("dev/guizhou/features/modules/combat/MiningBreakTracker")
+                        || step.owner.equals("dev/guizhou/util/render/placement/PlacementVisuals"));
                 check(notification || ownCleanup || clear, "Denied tick calls normal business: " + label + " -> " + step.name);
             }
         }

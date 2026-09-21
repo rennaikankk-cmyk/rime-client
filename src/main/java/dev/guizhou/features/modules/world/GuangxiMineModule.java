@@ -75,7 +75,7 @@ public class GuangxiMineModule extends Module implements MineApi {
     private final PlacementVisuals visuals = new PlacementVisuals("发包挖");
     private final Setting<Float> fadeTime = num("FadeTime", .3f, .05f, 2f).setPage("Render");
     private final Setting<Boolean> progressText = bool("ProgressText", true).setPage("Render");
-    private final Setting<Boolean> remainingText = bool("RemainingText", true).setPage("Render");
+    private final Setting<Boolean> remainingText = bool("RemainingText", false).setPage("Render");
     private final Setting<Boolean> progressBox = bool("ProgressBox", true).setPage("Render");
     private BlockPos pos;
     private Direction direction;
@@ -657,22 +657,23 @@ public class GuangxiMineModule extends Module implements MineApi {
     private void drawBlock(Render3DEvent event, BlockPos target, Color side, double eased, boolean primary) {
         String id=(primary?"primary:":"secondary:")+target.asLong();
         if (mc.level.getBlockState(target).isAir()) {
-            visuals.stage(id, primary && rebreak.getValue() ? "已观察到空气 · 等待重挖" : "已观察到方块消失");
+            visuals.stage(id, primary && rebreak.getValue() ? "WAIT" : "DONE");
             return;
         }
         double t = progressBox.getValue() ? Mth.clamp(eased, .02, 1) : 1;
         Vec3 center=Vec3.atCenterOf(target);
         AABB box=new AABB(center.x-t/2,center.y-t/2,center.z-t/2,center.x+t/2,center.y+t/2,center.z+t/2);
-        String state=primary ? (finished ? "等待方块消失" : "挖掘中") : (secondaryHolding ? "副挖 · 工具保持" : "副挖 · 等待完成");
-        if (primary && paused()) state="暂停 · 等待操作条件";
-        String role=primary ? "主挖" : "副挖";
-        visuals.mark(id,box,target,center,Float.NaN,Float.NaN,role+" · "+state,true,side);
+        String state=primary ? (finished ? "WAIT" : "MINE") : (secondaryHolding ? "HOLD" : "WAIT");
+        if (primary && paused()) state="PAUSE";
+        String role=primary ? "1" : "2";
+        visuals.mark(id,box,target,center,Float.NaN,Float.NaN,role+" "+state,true,side);
         visuals.colors(id,side,lineColor.getValue());
+        visuals.labelBounds(id,new AABB(target));
         double raw=primary ? (finished?1:Math.min(progress/threshold.getValue(),1)) : Math.min(secondaryProgress,1);
-        String info=progressText.getValue()?String.format(java.util.Locale.ROOT,"%s %.0f%%",role,raw*100):"";
+        String info=progressText.getValue()?String.format(java.util.Locale.ROOT,"%.0f%%",raw*100):"";
         double effectiveTicks=primary ? Math.max(0,ticks-fudgeTicks.getValue()) : secondaryTicks;
         if(remainingText.getValue() && raw>0 && raw<1 && effectiveTicks>0 && !(primary && paused()))
-            info+=(info.isEmpty()?"":" · ")+String.format(java.util.Locale.ROOT,"预计 %.2fs",Math.min(99,(1-raw)/raw*effectiveTicks*.05));
+            info+=(info.isEmpty()?"":" · ")+String.format(java.util.Locale.ROOT,"%.2fs",Math.min(99,(1-raw)/raw*effectiveTicks*.05));
         visuals.info(id,info);
     }
 

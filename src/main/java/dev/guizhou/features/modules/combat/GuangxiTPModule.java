@@ -408,7 +408,7 @@ public class GuangxiTPModule extends Module {
 
     private void noteRender(BlockPos base, float damage, float self) {
         if (render.getValue()) visuals.main(base, new AABB(base), Vec3.atCenterOf(base), damage, self,
-                "TP交互已提交 · 等待生成");
+                "TP WAIT");
     }
 
     @Override

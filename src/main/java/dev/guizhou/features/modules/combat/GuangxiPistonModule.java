@@ -191,7 +191,7 @@ public class GuangxiPistonModule extends Module {
         if (active != null) {
             boolean removed = stage == Stage.CONFIRM && trackedCrystal >= 0 && mc.level != null
                     && (mc.level.getEntity(trackedCrystal) == null || mc.level.getEntity(trackedCrystal).isRemoved());
-            visuals.stage("main", removed ? "已观察到水晶移除" : "操作结束 · 等待重新选点");
+            visuals.stage("main", removed ? "DONE" : "STOP");
             visuals.info("main", "");
         }
         releasePowerMine();
@@ -770,25 +770,23 @@ public class GuangxiPistonModule extends Module {
         visualSetup = active;
         Setup s = active;
         String text = switch(stage) {
-            case RESET_PISTON -> "重置活塞 · 保留红石";
-            case BASE -> "等待底座";
-            case PISTON -> "等待活塞";
-            case CRYSTAL -> "等待水晶生成";
-            case POWER -> s.keepPower() ? "现有红石 · 复用" : "等待红石放置";
-            case EXTEND -> "等待实际推动";
-            case ATTACK -> "准备攻击";
-            case CONFIRM -> "等待水晶移除";
+            case RESET_PISTON -> "RESET";
+            case BASE -> "BASE";
+            case PISTON -> "PISTON";
+            case CRYSTAL -> "CRYSTAL";
+            case POWER -> s.keepPower() ? "R=" : "POWER";
+            case EXTEND -> "PUSH";
+            case ATTACK -> "HIT";
+            case CONFIRM -> "WAIT";
         };
         visuals.main(s.base(), new AABB(s.base()), Vec3.atCenterOf(s.base()), s.damage(), visualSelf,
-                "推动后估算 · " + text);
-        visuals.info("main", (needsBase(s.base()) ? "底座待放置" : "底座已就位") + " · "
-                + (trackedCrystal >= 0 && mc.level.getEntity(trackedCrystal) != null ? "水晶已生成" : "等待水晶"));
-        String piston = mc.level.getBlockState(s.piston()).isAir() ? "活塞 · 待放置" : "活塞 · 已就位";
-        String power = s.keepPower() ? "现有红石 · 复用"
-                : mc.level.getBlockState(s.redstone()).is(Blocks.REDSTONE_BLOCK) ? "红石 · 已就位" : "红石 · 待放置";
-        visuals.mark("piston", new AABB(s.piston()), s.piston(), Vec3.atCenterOf(s.piston()).add(0,.65,0),
+                text);
+        String piston = mc.level.getBlockState(s.piston()).isAir() ? "P?" : "P+";
+        String power = s.keepPower() ? "R="
+                : mc.level.getBlockState(s.redstone()).is(Blocks.REDSTONE_BLOCK) ? "R+" : "R?";
+        visuals.mark("piston", new AABB(s.piston()), s.piston(), Vec3.atCenterOf(s.piston()),
                 Float.NaN, Float.NaN, piston, false, pistonColor.getValue());
-        visuals.mark("power", new AABB(s.redstone()), s.redstone(), Vec3.atCenterOf(s.redstone()).add(0,.65,0),
+        visuals.mark("power", new AABB(s.redstone()), s.redstone(), Vec3.atCenterOf(s.redstone()),
                 Float.NaN, Float.NaN, power, false, powerColor.getValue());
     }
 
