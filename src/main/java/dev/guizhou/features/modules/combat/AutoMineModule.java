@@ -166,6 +166,13 @@ public class AutoMineModule extends Module {
         });
     }
 
+    /** Main-thread placement coordination, including selected operations not yet handed to PacketMine. */
+    public boolean reservesPlacement(BlockPos pos) {
+        return isEnabled() && pos != null && sessionLevel == mc.level && sessionPlayer == mc.player
+                && (target1 != null && pos.equals(target1.blockPos)
+                || target2 != null && pos.equals(target2.blockPos) || pos.equals(glassTargetPos));
+    }
+
     private boolean isBlockBeingBroken(BlockPos pos) {
         return enemyBreaking.isBreaking(pos.asLong(), false, System.currentTimeMillis());
     }

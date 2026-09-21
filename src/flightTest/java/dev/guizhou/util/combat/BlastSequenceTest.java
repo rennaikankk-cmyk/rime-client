@@ -5,6 +5,7 @@ public final class BlastSequenceTest {
     public static void main(String[] args) {
         anchors();
         beds();
+        timing();
         System.out.println("BlastSequenceTest passed: " + checks + " checks");
     }
     private static void anchors() {
@@ -55,6 +56,24 @@ public final class BlastSequenceTest {
         s.reset();
         check(s.next(false, false, true, 0, 8, 2) == BedSequence.Action.PLACE, "New session drops old bed state");
     }
+    private static void timing() {
+        AnchorTiming timing = new AnchorTiming();
+        check(timing.horizon(true, 1, 20, 0, 0, 0) == 1, "Charged anchor uses one remaining stage");
+        check(timing.horizon(true, 0, 20, 0, 0, 0) == 2, "Empty anchor includes charge confirmation");
+        check(timing.horizon(false, 0, 20, 0, 0, 0) == 3, "New anchor includes all remaining stages");
+        timing.observed(AnchorSequence.Action.PLACE, 9);
+        check(timing.horizon(false, 0, 20, 0, 0, 0) == 5, "Observed slow placement extends bounded prediction");
+        check(timing.horizon(true, 1, 20, 0, 0, 0) == 1, "Placement latency does not inflate charged-anchor prediction");
+        check(timing.horizon(false, 0, 4, 20, 20, 20) == 4, "Configured cap bounds long stage delays");
+        check(timing.horizon(false, 0, 0, 0, 0, 0) == 0, "Zero cap disables prediction");
+        timing.observed(AnchorSequence.Action.WAIT, 99);
+        timing.reset();
+        check(timing.horizon(false, 0, 20, 0, 0, 0) == 3, "New world discards previous timing samples");
+        check(AnchorTiming.ready(3, Integer.MIN_VALUE, 20), "First action should not wait for fictitious previous send");
+        check(!AnchorTiming.ready(6, 5, 2) && AnchorTiming.ready(7, 5, 2), "Stage delay boundary");
+        check(!AnchorTiming.ready(4, 5, 0), "Tick rollback must not skip delay");
+    }
+
     private static void check(boolean condition, String message) {
         checks++;
         if (!condition) throw new AssertionError(message);

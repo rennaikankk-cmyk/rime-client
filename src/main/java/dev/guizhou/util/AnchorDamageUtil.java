@@ -23,6 +23,9 @@ public final class AnchorDamageUtil implements Util {
 
     public record Target(LivingEntity entity, Vec3 pos, AABB box, float armor, float toughness,
                          float resistMult, int protPoints) {
+        public Target at(Vec3 position) {
+            return new Target(entity, position, box.move(position.subtract(pos)), armor, toughness, resistMult, protPoints);
+        }
         public static Target of(LivingEntity living) { return of(living, false); }
 
         public static Target of(LivingEntity living, boolean assumeBestArmor) {

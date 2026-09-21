@@ -14,7 +14,7 @@ import java.util.concurrent.locks.LockSupport;
 public final class CombatPlannerTest {
     private static int checks;
     public static void main(String[] args) throws Exception {
-        rays(); planner(); movingSnapshots(); boundedWork(); realBackgroundWork();
+        rays(); planner(); predictions(); movingSnapshots(); boundedWork(); realBackgroundWork();
         System.out.println("CombatPlannerTest passed: " + checks + " checks");
     }
     private static void rays() {
@@ -67,6 +67,29 @@ public final class CombatPlannerTest {
         var blocked = new AnchorPlanner.Input(4, 10, 2, false, 1, 100, self, List.of(target), List.of(nearSelf), shield);
         check(AnchorPlanner.plan(blocked).candidate() == null, "Wall shielding removes target damage instead of only sorting distances");
     }
+    private static void predictions() {
+        var terrain = new CombatCollisionSnapshot(-10, -3, -4, 32, 8, 9, Map.of());
+        var self = person(1, -5, 20);
+        var target = person(2, 5, 20);
+        var candidate = new AnchorPlanner.Candidate(4, 0, 0, 3);
+        var moved = target.at(10, 0, 0);
+        check(moved.identity() == target.identity() && moved.minX() == target.minX() + 5
+                && moved.maxX() == target.maxX() + 5, "Prediction moves bounds without changing entity identity");
+        var original = new AnchorPlanner.Input(1, 1, 2, false, 1, 10, self, List.of(target), List.of(candidate), terrain);
+        var mutable = new ArrayList<>(List.of(moved));
+        var projected = new AnchorPlanner.Input(1, 1, 2, false, 1, 10, self, List.of(target), List.of(candidate), terrain,
+                Map.of(3, mutable), Map.of());
+        mutable.clear();
+        check(AnchorPlanner.plan(projected).damage() < AnchorPlanner.plan(original).damage(),
+                "Candidate scores copied predicted positions for its remaining stage horizon");
+        var futureUnsafe = new AnchorPlanner.Input(1, 1, 2, false, 1, 10, self, List.of(target), List.of(candidate), terrain,
+                Map.of(), Map.of(3, self.at(4, 0, 0)));
+        check(AnchorPlanner.plan(futureUnsafe).candidate() == null, "Unsafe predicted self position blocks action");
+        var currentUnsafe = new AnchorPlanner.Input(1, 1, 2, false, 1, 10, self.at(4, 0, 0), List.of(target), List.of(candidate), terrain,
+                Map.of(), Map.of(3, self));
+        check(AnchorPlanner.plan(currentUnsafe).candidate() == null, "Safe future position cannot hide unsafe current self damage");
+    }
+
     private static void movingSnapshots() {
         var before = person(2, 5, 20);
         var moving = person(2, 5.5, 15);

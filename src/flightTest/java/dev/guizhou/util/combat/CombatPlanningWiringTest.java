@@ -33,7 +33,7 @@ public final class CombatPlanningWiringTest {
         // is stored in a local, so a control-flow-only graph cannot prove those short-circuit paths.
         for (String check : List.of("compatible", "compatibleTargets", "stillValid"))
             check(apply.find(check, null) < publish, "Snapshot " + check + " is evaluated before publishing a worker winner");
-        for (String check : List.of("usableCandidate", "score", "damage")) {
+        for (String check : List.of("usableCandidate", "score", "selfDamage")) {
             int guard = apply.find(check, null);
             check(!apply.reachable(publish, guard), "Live " + check + " must dominate publication of a worker winner");
         }
@@ -56,6 +56,11 @@ public final class CombatPlanningWiringTest {
                 "Reactive block updates queue one drain instead of scanning in each callback");
         check(method(MODULE + "GuangxiCrystalModule", "onCrystalSpawn").find("sendCrystalAttack", null) >= 0,
                 "Crystal spawn retains the immediate attack path");
+        Trace anchorUpdates = method(MODULE + "AutoAnchorModule", "onBlockUpdate");
+        check(anchorUpdates.find("schedule", null) >= 0 && !anchorUpdates.has("runCycle", null),
+                "Anchor updates coalesce through a scheduled main-thread drain");
+        check(method(MODULE + "AutoAnchorModule", "perform").find("miningBlocked", null) >= 0,
+                "Anchor final action rechecks mining reservations");
         System.out.println("CombatPlanningWiringTest passed: " + checks + " checks");
     }
 

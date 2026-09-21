@@ -15,6 +15,9 @@ import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.PacketSendUtil;
 import dev.guizhou.util.combat.AnchorSequence;
+import dev.guizhou.util.combat.AnchorTiming;
+import dev.guizhou.util.PredictUtil;
+import dev.guizhou.features.modules.world.GuangxiMineModule;
 import dev.guizhou.util.combat.BlastStageDiagnostics;
 import dev.guizhou.util.combat.AnchorPlanner;
 import dev.guizhou.util.combat.CombatantSnapshot;
@@ -66,6 +69,18 @@ public class AutoAnchorModule extends Module {
     private final Setting<Boolean> assumeBestArmor = bool("AssumeBestArmor", false).setPage("General");
     private enum AnchorSwap { SILENT, INVENTORY }
     private final Setting<AnchorSwap> autoSwap = mode("AutoSwap", AnchorSwap.SILENT).setPage("General");
+    private enum StageSwap { INHERIT, SILENT, INVENTORY }
+    private final Setting<StageSwap> placeSwitch = mode("PlaceSwitch", StageSwap.INHERIT).setPage("General");
+    private final Setting<StageSwap> chargeSwitch = mode("ChargeSwitch", StageSwap.INHERIT).setPage("General");
+    private final Setting<StageSwap> explodeSwitch = mode("ExplodeSwitch", StageSwap.INHERIT).setPage("General");
+    private final Setting<Boolean> spamPlace = bool("SpamPlace", true).setPage("General");
+    private final Setting<Boolean> detectMining = bool("DetectMining", true).setPage("General");
+    private final Setting<Integer> placeDelay = num("PlaceDelay", 0, 0, 20).setPage("General");
+    private final Setting<Integer> chargeDelay = num("ChargeDelay", 0, 0, 20).setPage("General");
+    private final Setting<Integer> detonateDelay = num("DetonateDelay", 0, 0, 20).setPage("General");
+    private final Setting<Boolean> extrapolate = bool("Extrapolate", true).setPage("General");
+    private final Setting<Boolean> selfExtrapolate = bool("SelfExtrapolate", true).setPage("General");
+    private final Setting<Integer> extrapolationTicks = num("ExtrapolationTicks", 6, 0, 20).setPage("General");
     private final Setting<Integer> confirmTicks = num("ConfirmTicks", 8, 2, 40).setPage("General");
     private final Setting<Integer> retries = num("Retries", 2, 1, 5).setPage("General");
     private final Setting<Integer> delay         = num("Delay", 2, 0, 20).setPage("General");
@@ -93,6 +108,18 @@ public class AutoAnchorModule extends Module {
     private final AnchorSequence sequence = new AnchorSequence();
     private final BlastStageDiagnostics stageDiagnostics = new BlastStageDiagnostics("AutoAnchor");
     private BlockPos activePos;
+    private BlockPos repeatPos;
+    private int repeatUntil;
+    private final AnchorTiming timing = new AnchorTiming();
+    private final java.util.Map<Integer, List<AnchorDamageUtil.Target>> targetPredictions = new java.util.HashMap<>();
+    private final java.util.Map<Integer, AnchorDamageUtil.Target> selfPredictions = new java.util.HashMap<>();
+    private long lifecycleGeneration;
+    private boolean reactiveScheduled;
+    private int budgetTick = Integer.MIN_VALUE;
+    private int actionsThisTick;
+    private int reactiveRunsThisTick;
+    private int lastActionTick = Integer.MIN_VALUE;
+    private final dev.guizhou.manager.PlacementManager.PlacementListener placementListener = this::onBlockUpdate;
     private ClientLevel sessionLevel;
     private LocalPlayer sessionPlayer;
     private float lastDamage = 0f;
@@ -106,14 +133,25 @@ public class AutoAnchorModule extends Module {
     @Override
     public void onEnable() {
         resetSession();
+        GuizhouWare.placementManager.addListener(placementListener);
     }
 
     @Override
     public void onDisable() {
+        GuizhouWare.placementManager.removeListener(placementListener);
         resetSession();
     }
 
     private void resetSession() {
+        lifecycleGeneration++;
+        reactiveScheduled = false;
+        repeatPos = null;
+        repeatUntil = 0;
+        timing.reset();
+        targetPredictions.clear();
+        selfPredictions.clear();
+        budgetTick = Integer.MIN_VALUE;
+        lastActionTick = Integer.MIN_VALUE;
         stageDiagnostics.reset();
         lastBurstTick = -1;
         planningGeneration++;
@@ -135,75 +173,166 @@ public class AutoAnchorModule extends Module {
             dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
             return;
         }
+        runCycle();
+    }
+
+    private void onBlockUpdate(BlockPos pos, boolean nowAir) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized() || !isEnabled() || nullCheck()
+                || sessionLevel != mc.level || sessionPlayer != mc.player || !pos.equals(activePos)) return;
+        if (reactiveScheduled) { ClientDiagnostics.count("combat.AutoAnchor.reactive.coalesced", 1); return; }
+        reactiveScheduled = true;
+        long generation = lifecycleGeneration;
+        var level = mc.level;
+        var player = mc.player;
+        mc.schedule(() -> {
+            if (generation != lifecycleGeneration || !isEnabled() || mc.level != level || mc.player != player) return;
+            reactiveScheduled = false;
+            if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
+            resetBudget(player.tickCount);
+            if (reactiveRunsThisTick++ >= 2) return;
+            ClientDiagnostics.count("combat.AutoAnchor.reactive.drain", 1);
+            runCycle();
+        });
+    }
+
+    private void resetBudget(int tick) {
+        if (budgetTick == tick) return;
+        budgetTick = tick;
+        actionsThisTick = reactiveRunsThisTick = 0;
+    }
+
+    private void runCycle() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized() || !mc.isSameThread()) return;
         if (sessionLevel != mc.level || sessionPlayer != mc.player) resetSession();
         if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (mc.player.containerMenu != mc.player.inventoryMenu || !mc.player.inventoryMenu.getCarried().isEmpty()
                 || mc.player.isShiftKeyDown() || EatUtil.shouldDefer()) return;
         int tick = mc.player.tickCount;
-        if (activePos == null && lastBurstTick >= 0 && tick - lastBurstTick < delay.getValue()) return;
-
-        Candidate freshCandidate = null;
-        List<AnchorDamageUtil.Target> targets = null;
-        AnchorDamageUtil.Target self = null;
-        if (activePos == null) {
-            targets = collectTargets();
-            self = AnchorDamageUtil.Target.of(mc.player);
-            long scanTimer = ClientDiagnostics.startTimer();
-            Candidate best;
-            try { best = selectCandidate(targets, self); }
-            finally { ClientDiagnostics.endTimer("combat.AutoAnchor.scan", scanTimer); }
-            if (best == null) { lastDamage = 0f; return; }
-            freshCandidate = best;
-            activePos = best.pos;
-            sequence.reset();
-        }
-        BlockState state = mc.level.getBlockState(activePos);
-        boolean anchor = state.is(Blocks.RESPAWN_ANCHOR);
-        AnchorSequence.Action action = sequence.next(anchor, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0,
-                state.canBeReplaced(), tick, confirmTicks.getValue(), retries.getValue());
-        stageDiagnostics.decision(action.name(), tick, confirmTicks.getValue());
-        if (action == AnchorSequence.Action.WAIT) return;
-        if (action == AnchorSequence.Action.COMPLETE || action == AnchorSequence.Action.ABORT) {
-            activePos = null;
-            sequence.reset();
-            lastBurstTick = tick;
+        resetBudget(tick);
+        if (actionsThisTick >= 3) return;
+        targetPredictions.clear();
+        selfPredictions.clear();
+        // One observed completion may immediately select its old position, never an unbounded burst.
+        for (int advance = 0; advance < 2; advance++) {
+            Candidate freshCandidate = null;
+            List<AnchorDamageUtil.Target> targets = null;
+            AnchorDamageUtil.Target self = null;
+            if (activePos == null) {
+                if (repeatPos != null && (!spamPlace.getValue() || tick > repeatUntil)) repeatPos = null;
+                boolean delayed = lastBurstTick >= 0 && tick - lastBurstTick < delay.getValue();
+                if (repeatPos == null && delayed) return;
+                targets = collectTargets();
+                self = AnchorDamageUtil.Target.of(mc.player);
+                long scanTimer = ClientDiagnostics.startTimer();
+                Candidate best = null;
+                try {
+                    if (repeatPos != null) {
+                        best = repeatCandidate(repeatPos, targets, self);
+                        ClientDiagnostics.count("combat.AutoAnchor.repeat." + (best != null ? "applied" : "rejected"), 1);
+                        repeatPos = null;
+                    }
+                    if (best == null && !delayed) best = selectCandidate(targets, self);
+                } finally { ClientDiagnostics.endTimer("combat.AutoAnchor.scan", scanTimer); }
+                if (best == null) { lastDamage = 0f; return; }
+                freshCandidate = best;
+                activePos = best.pos;
+                sequence.reset();
+            }
+            BlockState state = mc.level.getBlockState(activePos);
+            boolean anchor = state.is(Blocks.RESPAWN_ANCHOR);
+            AnchorSequence.Action awaited = sequence.awaiting();
+            int sentTick = sequence.sentTick();
+            AnchorSequence.Action action = sequence.next(anchor, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0,
+                    state.canBeReplaced(), tick, confirmTicks.getValue(), retries.getValue());
+            stageDiagnostics.decision(action.name(), tick, confirmTicks.getValue());
+            if (awaited != null && action != AnchorSequence.Action.WAIT && action != AnchorSequence.Action.ABORT
+                    && action != awaited) timing.observed(awaited, tick - sentTick);
+            if (action == AnchorSequence.Action.WAIT) return;
+            if (action == AnchorSequence.Action.COMPLETE || action == AnchorSequence.Action.ABORT) {
+                if (action == AnchorSequence.Action.COMPLETE && spamPlace.getValue()
+                        && state.canBeReplaced() && !miningBlocked(activePos)) {
+                    repeatPos = activePos.immutable();
+                    repeatUntil = tick + Math.max(confirmTicks.getValue(), delay.getValue() + 1);
+                }
+                activePos = null;
+                sequence.reset();
+                lastBurstTick = tick;
+                if (repeatPos != null) continue;
+                return;
+            }
+            if (!AnchorTiming.ready(tick, lastActionTick, actionDelay(action))) {
+                stageDiagnostics.blocked("stageDelay"); return;
+            }
+            if (miningBlocked(activePos)) {
+                stageDiagnostics.blocked("mining"); abandonActive(); return;
+            }
+            if (targets == null) targets = collectTargets();
+            if (self == null) self = AnchorDamageUtil.Target.of(mc.player);
+            Vec3 center = Vec3.atCenterOf(activePos);
+            float damage = freshCandidate == null ? score(targets, center, activePos) : freshCandidate.damage;
+            float local = selfDamage(self, center, activePos);
+            if (targets.isEmpty() || !safeDamage(damage, local)
+                    || mc.player.getEyePosition().distanceToSqr(center) > placeRange.getValue() * placeRange.getValue()) {
+                stageDiagnostics.blocked("safety"); abandonActive(); return;
+            }
+            if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, activePos)
+                    || !canSupply(action, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)) {
+                stageDiagnostics.blocked("materialOrDimension"); abandonActive(); return;
+            }
+            if (perform(action, activePos)) {
+                sequence.sent(action, tick);
+                stageDiagnostics.submitted(action.name(), tick);
+                lastActionTick = tick;
+                actionsThisTick++;
+                lastDamage = damage;
+                if (render.getValue()) { renderPos = activePos; renderStart = System.currentTimeMillis(); }
+            } else stageDiagnostics.blocked("actionDeferred");
             return;
         }
-        // Waiting for confirmation does not require scanning targets or reading equipment again.
-        if (targets == null) targets = collectTargets();
-        if (self == null) self = AnchorDamageUtil.Target.of(mc.player);
-        // Revalidate target damage, health and range at every action, including delayed detonations.
-        Vec3 center = Vec3.atCenterOf(activePos);
-        float damage = freshCandidate == null ? score(targets, center, activePos) : freshCandidate.damage;
-        float selfDamage = freshCandidate == null ? AnchorDamageUtil.damage(self, center, activePos) : freshCandidate.selfDamage;
-        if (targets.isEmpty() || damage <= 0f || damage < minDamage.getValue() || selfDamage > maxSelfDamage.getValue()
-                || selfDamage > 0f && selfDamage + 1.5f >= mc.player.getHealth() + mc.player.getAbsorptionAmount()
-                || mc.player.getEyePosition().distanceToSqr(center) > placeRange.getValue() * placeRange.getValue()) {
-            stageDiagnostics.blocked("safety");
-            stageDiagnostics.reset();
-            activePos = null;
-            sequence.reset();
-            lastDamage = 0f;
-            return;
-        }
-        if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, activePos)
-                || !canSupply(action, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)) {
-            stageDiagnostics.blocked("materialOrDimension");
-            stageDiagnostics.reset();
-            activePos = null;
-            sequence.reset();
-            return;
-        }
-        if (perform(action, activePos)) {
-            sequence.sent(action, tick);
-            stageDiagnostics.submitted(action.name(), tick);
-            lastDamage = damage;
-            if (render.getValue()) { renderPos = activePos; renderStart = System.currentTimeMillis(); }
-        } else stageDiagnostics.blocked("actionDeferred");
     }
 
-    private SwapMode swapMode() {
-        return autoSwap.getValue() == AnchorSwap.INVENTORY ? SwapMode.ALTSILENT : SwapMode.SILENT;
+    private void abandonActive() {
+        stageDiagnostics.reset();
+        activePos = null;
+        repeatPos = null;
+        sequence.reset();
+        lastDamage = 0f;
+    }
+
+    private int actionDelay(AnchorSequence.Action action) {
+        return switch (action) {
+            case PLACE -> placeDelay.getValue(); case CHARGE -> chargeDelay.getValue();
+            case DETONATE -> detonateDelay.getValue(); default -> 0;
+        };
+    }
+
+    private boolean miningBlocked(BlockPos pos) {
+        if (!detectMining.getValue()) return false;
+        GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
+        AutoMineModule auto = GuizhouWare.moduleManager.getModuleByClass(AutoMineModule.class);
+        return mine != null && mine.isEnabled() && mine.isMining(pos) || auto != null && auto.reservesPlacement(pos);
+    }
+
+    private boolean safeDamage(float damage, float self) {
+        return Float.isFinite(damage) && Float.isFinite(self) && damage > 0 && damage >= minDamage.getValue()
+                && self <= maxSelfDamage.getValue()
+                && (self <= 0 || self + 1.5f < mc.player.getHealth() + mc.player.getAbsorptionAmount());
+    }
+
+    private Candidate repeatCandidate(BlockPos pos, List<AnchorDamageUtil.Target> targets, AnchorDamageUtil.Target self) {
+        if (!usableCandidate(pos)) return null;
+        Vec3 center = Vec3.atCenterOf(pos);
+        float damage = score(targets, center, pos), local = selfDamage(self, center, pos);
+        return safeDamage(damage, local) ? new Candidate(pos, damage, local) : null;
+    }
+
+    private SwapMode swapMode(AnchorSequence.Action action) {
+        StageSwap stage = switch (action) {
+            case PLACE -> placeSwitch.getValue(); case CHARGE -> chargeSwitch.getValue();
+            default -> explodeSwitch.getValue();
+        };
+        return (stage == StageSwap.INVENTORY || stage == StageSwap.INHERIT && autoSwap.getValue() == AnchorSwap.INVENTORY)
+                ? SwapMode.ALTSILENT : SwapMode.SILENT;
     }
 
     private Result itemFor(AnchorSequence.Action action) {
@@ -212,11 +341,11 @@ public class AutoAnchorModule extends Module {
             case CHARGE -> stack.is(Items.GLOWSTONE);
 
             default -> false;
-        }, swapMode().scope());
+        }, swapMode(action).scope());
     }
 
     private Result detonationSlot(int excluded) {
-        int size = swapMode() == SwapMode.ALTSILENT ? 36 : 9;
+        int size = swapMode(AnchorSequence.Action.DETONATE) == SwapMode.ALTSILENT ? 36 : 9;
         for (int slot = 0; slot < size; slot++) {
             if (slot == excluded) continue;
             ItemStack stack = mc.player.getInventory().getItem(slot);
@@ -227,7 +356,7 @@ public class AutoAnchorModule extends Module {
     }
 
     private int offhandClearSlot() {
-        int size = swapMode() == SwapMode.ALTSILENT ? 36 : 9;
+        int size = swapMode(AnchorSequence.Action.DETONATE) == SwapMode.ALTSILENT ? 36 : 9;
         for (int slot = 0; slot < size; slot++) {
             if (!mc.player.getInventory().getItem(slot).is(Items.GLOWSTONE) && detonationSlot(slot) != null) return slot;
         }
@@ -255,7 +384,7 @@ public class AutoAnchorModule extends Module {
             Runnable action = () -> sent[0] = sendUseItemOn(hit, InteractionHand.MAIN_HAND);
             boolean swapped = item.stack().isEmpty()
                     ? GuizhouWare.swapManager.withEmptySlot(item.slot(), SwapPriority.CRYSTAL, action)
-                    : GuizhouWare.swapManager.withSwap(item, swapMode(), SwapPriority.CRYSTAL, action);
+                    : GuizhouWare.swapManager.withSwap(item, swapMode(AnchorSequence.Action.DETONATE), SwapPriority.CRYSTAL, action);
             return swapped && sent[0];
         } finally {
             if (cleared >= 0) InventoryUtil.swapToOffhand(cleared);
@@ -264,12 +393,13 @@ public class AutoAnchorModule extends Module {
 
     private boolean perform(AnchorSequence.Action action, BlockPos pos) {
         ClientPacketListener conn = mc.getConnection();
-        if (conn == null) return false;
+        if (conn == null || miningBlocked(pos)) return false;
         BlockHitResult hit = action == AnchorSequence.Action.PLACE
                 ? GuizhouWare.placementManager.preparePlaceHit(pos, null, airPlace.getValue(), placeRange.getValue(), wallRange.getValue())
                 : GuizhouWare.placementManager.prepareInteractionHit(pos, null, mc.player.getEyePosition(),
                         placeRange.getValue(), wallRange.getValue(), false);
-        if (hit == null || action == AnchorSequence.Action.PLACE && !PlaceUtil.canPlace(pos)) return false;
+        if (hit == null || action == AnchorSequence.Action.PLACE
+                && (!PlaceUtil.canPlace(pos, placeRange.getValue()) || miningBlocked(hit.getBlockPos()))) return false;
         if (mc.player.getEyePosition().distanceToSqr(hit.getLocation()) > placeRange.getValue() * placeRange.getValue()) return false;
         if (rotate.getValue()) {
             float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
@@ -281,7 +411,7 @@ public class AutoAnchorModule extends Module {
         Result item = itemFor(action);
         if (!item.found()) return false;
         boolean[] sent = {false};
-        boolean swapped = GuizhouWare.swapManager.withSwap(item, swapMode(), SwapPriority.CRYSTAL,
+        boolean swapped = GuizhouWare.swapManager.withSwap(item, swapMode(action), SwapPriority.CRYSTAL,
                 () -> sent[0] = sendUseItemOn(hit, item.hand()));
         if (swapped && sent[0] && action == AnchorSequence.Action.PLACE)
             GuizhouWare.placementManager.notePlacement(pos);
@@ -328,7 +458,7 @@ public class AutoAnchorModule extends Module {
                     if (usableCandidate(pos)) {
                         Vec3 center = Vec3.atCenterOf(pos);
                         float damage = score(targets, center, pos);
-                        float local = AnchorDamageUtil.damage(self, center, pos);
+                        float local = selfDamage(self, center, pos);
                         if (damage > 0 && damage >= minDamage.getValue() && local <= maxSelfDamage.getValue()
                                 && (local <= 0 || local + 1.5f < mc.player.getHealth() + mc.player.getAbsorptionAmount())) {
                             ClientDiagnostics.count("combat.AutoAnchor.async.applied", 1);
@@ -358,12 +488,30 @@ public class AutoAnchorModule extends Module {
             List<CombatantSnapshot> snapshots = plannerTargets(targets);
             if (snapshots.isEmpty()) return null;
             CombatantSnapshot player = CombatSnapshotService.get(mc.player);
+            java.util.Map<Integer, List<CombatantSnapshot>> predictions = new java.util.HashMap<>();
+            java.util.Map<Integer, CombatantSnapshot> selfSnapshots = new java.util.HashMap<>();
+            List<CombatantSnapshot> captureBounds = new ArrayList<>(snapshots);
+            if (candidates != null) for (var candidate : candidates) {
+                int ticks = candidate.predictionTicks();
+                if (ticks <= 0 || predictions.containsKey(ticks)) continue;
+                var predicted = plannerTargets(predictedTargets(targets, ticks));
+                predictions.put(ticks, predicted);
+                captureBounds.addAll(predicted);
+                if (selfExtrapolate.getValue()) {
+                    var projected = selfPredictions.computeIfAbsent(ticks, ignored -> predict(self, ticks));
+                    Vec3 position = projected.pos();
+                    var snapshot = player.at(position.x, position.y, position.z);
+                    selfSnapshots.put(ticks, snapshot);
+                    captureBounds.add(snapshot);
+                }
+            }
             long remaining = snapshotBudgetNanos() - (System.nanoTime() - captureStart);
             var captured = candidates == null || snapshots.size() > 32 || remaining <= 0 ? null
-                    : CombatTerrainCapture.capture(candidates, snapshots, player, remaining);
+                    : CombatTerrainCapture.capture(candidates, captureBounds, player, remaining);
             if (captured != null) {
                 AnchorPlanner.Input input = new AnchorPlanner.Input(planningGeneration, tick, mc.level.getDifficulty().getId(),
-                        assumeBestArmor.getValue(), minDamage.getValue(), maxSelfDamage.getValue(), player, snapshots, candidates, captured.terrain());
+                        assumeBestArmor.getValue(), minDamage.getValue(), maxSelfDamage.getValue(), player, snapshots, candidates,
+                        captured.terrain(), predictions, selfSnapshots);
                 planning = new PlanningTicket(input, captured, planningSettings());
                 planner.submit(input);
                 ClientDiagnostics.count("combat.AutoAnchor.async.submitted", 1);
@@ -387,14 +535,18 @@ public class AutoAnchorModule extends Module {
     private long snapshotBudgetNanos() { return (long)(snapshotBudget.getValue() * 1_000_000); }
     private int planningSettings() {
         return java.util.Objects.hash(placeRange.getValue(), wallRange.getValue(), airPlace.getValue(), minDamage.getValue(), maxSelfDamage.getValue(),
-                assumeBestArmor.getValue(), damageSync.getValue(), autoSwap.getValue());
+                assumeBestArmor.getValue(), damageSync.getValue(), autoSwap.getValue(), detectMining.getValue(),
+                placeSwitch.getValue(), chargeSwitch.getValue(), explodeSwitch.getValue(),
+                extrapolate.getValue(), selfExtrapolate.getValue(), extrapolationTicks.getValue(),
+                placeDelay.getValue(), chargeDelay.getValue(), detonateDelay.getValue());
     }
 
     private List<CombatantSnapshot> plannerTargets(List<AnchorDamageUtil.Target> targets) {
         List<CombatantSnapshot> out = new ArrayList<>();
         for (var target : targets) {
             if (damageSync.getValue() && DamageSyncTracker.shouldHold(target.entity())) continue;
-            out.add(CombatSnapshotService.get(target.entity()));
+            Vec3 position = target.pos();
+            out.add(CombatSnapshotService.get(target.entity()).at(position.x, position.y, position.z));
         }
         return List.copyOf(out);
     }
@@ -416,19 +568,21 @@ public class AutoAnchorModule extends Module {
             if (x * x + y * y + z * z > range * range) continue;
             cursor.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
             if (eye.distanceToSqr(Vec3.atCenterOf(cursor)) > rangeSquared) continue;
+            if (miningBlocked(cursor)) continue;
             BlockState state = mc.level.getBlockState(cursor);
             if (state.is(Blocks.RESPAWN_ANCHOR)) {
                 int charges = state.getValue(RespawnAnchorBlock.CHARGE);
                 if (charges == 0 && !charge || charges > 0 && charges < 4 && !detonate) continue;
-            } else if (!place || !state.canBeReplaced() || !PlaceUtil.canPlace(cursor)) continue;
+            } else if (!place || !charge || !detonate || !state.canBeReplaced() || !PlaceUtil.canPlace(cursor, placeRange.getValue())) continue;
             if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, cursor)) continue;
-            out.add(new AnchorPlanner.Candidate(cursor.getX(), cursor.getY(), cursor.getZ()));
+            out.add(new AnchorPlanner.Candidate(cursor.getX(), cursor.getY(), cursor.getZ(), horizon(cursor)));
         }
         ClientDiagnostics.count("combat.AutoAnchor.async.candidates", out.size());
         return out;
     }
 
     private boolean usableCandidate(BlockPos pos) {
+        if (miningBlocked(pos)) return false;
         if (mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) > placeRange.getValue() * placeRange.getValue()
                 || mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, pos)) return false;
         BlockState state = mc.level.getBlockState(pos);
@@ -437,14 +591,16 @@ public class AutoAnchorModule extends Module {
             int charges = state.getValue(RespawnAnchorBlock.CHARGE);
             return canSupply(charges > 0 ? AnchorSequence.Action.DETONATE : AnchorSequence.Action.CHARGE, charges);
         }
-        return state.canBeReplaced() && canSupply(AnchorSequence.Action.PLACE, 0) && PlaceUtil.canPlace(pos);
+        return state.canBeReplaced() && canSupply(AnchorSequence.Action.PLACE, 0)
+                && canSupply(AnchorSequence.Action.CHARGE, 0) && canSupply(AnchorSequence.Action.DETONATE, 1)
+                && PlaceUtil.canPlace(pos, placeRange.getValue());
     }
 
     private boolean hasInteraction(BlockPos pos, boolean existing) {
-        return existing ? GuizhouWare.placementManager.prepareInteractionHit(pos, null, mc.player.getEyePosition(),
-                placeRange.getValue(), wallRange.getValue(), false) != null
-                : GuizhouWare.placementManager.preparePlaceHit(pos, null, airPlace.getValue(),
-                placeRange.getValue(), wallRange.getValue()) != null;
+        BlockHitResult hit = existing ? GuizhouWare.placementManager.prepareInteractionHit(pos, null, mc.player.getEyePosition(),
+                placeRange.getValue(), wallRange.getValue(), false)
+                : GuizhouWare.placementManager.preparePlaceHit(pos, null, airPlace.getValue(), placeRange.getValue(), wallRange.getValue());
+        return hit != null && (existing || !miningBlocked(hit.getBlockPos()));
     }
 
     private Candidate findBest(List<AnchorDamageUtil.Target> targets, AnchorDamageUtil.Target selfTarget) {
@@ -473,9 +629,10 @@ public class AutoAnchorModule extends Module {
                     Vec3 center = Vec3.atCenterOf(cursor);
                     if (eye.distanceToSqr(center) > rangeSq) continue;
 
+                    if (miningBlocked(cursor)) continue;
                     BlockState state = mc.level.getBlockState(cursor);
                     boolean existing = state.is(Blocks.RESPAWN_ANCHOR);
-                    if (!existing && (!state.canBeReplaced() || !canPlaceAnchor)) continue;
+                    if (!existing && (!state.canBeReplaced() || !canPlaceAnchor || !canChargeAnchor || !canDetonateAnchor)) continue;
                     if (existing) {
                         int charges = state.getValue(RespawnAnchorBlock.CHARGE);
                         if (charges == 0 && !canChargeAnchor || charges > 0 && charges < 4 && !canDetonateAnchor) continue;
@@ -484,7 +641,7 @@ public class AutoAnchorModule extends Module {
                     BlockPos pos = null;
                     // Sum upper bounds using the same group-damage scoring as the exact pass.
                     float upper = 0f;
-                    for (AnchorDamageUtil.Target target : targets) {
+                    for (AnchorDamageUtil.Target target : predictedTargets(targets, horizon(cursor))) {
                         if (damageSync.getValue() && DamageSyncTracker.shouldHold(target.entity())) continue;
                         upper += AnchorDamageUtil.maxDamage(target, center);
                     }
@@ -494,13 +651,13 @@ public class AutoAnchorModule extends Module {
                         pos = cursor.immutable();
                     } else {
                         if (!state.canBeReplaced()) continue;
-                        if (!PlaceUtil.canPlace(cursor)) continue;
+                        if (!PlaceUtil.canPlace(cursor, placeRange.getValue())) continue;
                         pos = cursor.immutable();
                     }
 
                     float total = score(targets, center, pos);
                     if (total <= 0f || total < min || best != null && total <= best.damage) continue;
-                    float self = AnchorDamageUtil.damage(selfTarget, center, pos);
+                    float self = selfDamage(selfTarget, center, pos);
                     if (self > maxSelf) continue;
 
                     if (self > 0f && self + 1.5f >= playerHealth) continue;
@@ -527,11 +684,41 @@ public class AutoAnchorModule extends Module {
 
     private float score(List<AnchorDamageUtil.Target> targets, Vec3 center, BlockPos pos) {
         float total = 0f;
-        for (AnchorDamageUtil.Target target : targets) {
+        for (AnchorDamageUtil.Target target : predictedTargets(targets, horizon(pos))) {
             if (damageSync.getValue() && DamageSyncTracker.shouldHold(target.entity())) continue;
             total += AnchorDamageUtil.damage(target, center, pos);
         }
         return total;
+    }
+
+    private int horizon(BlockPos pos) {
+        if (!extrapolate.getValue() && !selfExtrapolate.getValue()) return 0;
+        BlockState state = mc.level.getBlockState(pos);
+        boolean anchor = state.is(Blocks.RESPAWN_ANCHOR);
+        return timing.horizon(anchor, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0,
+                extrapolationTicks.getValue(), placeDelay.getValue(), chargeDelay.getValue(), detonateDelay.getValue());
+    }
+
+    private AnchorDamageUtil.Target predict(AnchorDamageUtil.Target target, int ticks) {
+        if (ticks <= 0) return target;
+        Vec3 predicted = PredictUtil.predict(target.entity(), ticks, 1.0);
+        if (!Double.isFinite(predicted.x) || !Double.isFinite(predicted.y) || !Double.isFinite(predicted.z)
+                || predicted.distanceToSqr(target.pos()) > 144) return target;
+        return target.at(predicted);
+    }
+
+    private List<AnchorDamageUtil.Target> predictedTargets(List<AnchorDamageUtil.Target> targets, int ticks) {
+        if (!extrapolate.getValue() || ticks <= 0) return targets;
+        return targetPredictions.computeIfAbsent(ticks,
+                ignored -> targets.stream().map(target -> predict(target, ticks)).toList());
+    }
+
+    private float selfDamage(AnchorDamageUtil.Target self, Vec3 center, BlockPos pos) {
+        float current = AnchorDamageUtil.damage(self, center, pos);
+        int ticks = horizon(pos);
+        if (!selfExtrapolate.getValue() || ticks <= 0) return current;
+        var predicted = selfPredictions.computeIfAbsent(ticks, ignored -> predict(self, ticks));
+        return Math.max(current, AnchorDamageUtil.damage(predicted, center, pos));
     }
 
     @Override

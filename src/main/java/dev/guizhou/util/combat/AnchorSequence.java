@@ -32,5 +32,7 @@ public final class AnchorSequence {
         sentTick = tick;
     }
 
+    public Action awaiting() { return awaiting; }
+    public int sentTick() { return sentTick; }
     public void reset() { awaiting = null; attempts = 0; sentTick = 0; }
 }

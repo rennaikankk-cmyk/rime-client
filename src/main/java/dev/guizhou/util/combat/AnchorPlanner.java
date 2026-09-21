@@ -1,16 +1,35 @@
 package dev.guizhou.util.combat;
 
 import java.util.List;
+import java.util.Map;
 
 /** Real off-thread power-five candidate scoring, including collision rays and self damage. */
 public final class AnchorPlanner {
-    public record Candidate(int x, int y, int z) {}
+    public record Candidate(int x, int y, int z, int predictionTicks) {
+        public Candidate(int x, int y, int z) { this(x, y, z, 0); }
+        public Candidate { if (predictionTicks < 0 || predictionTicks > 20) throw new IllegalArgumentException("Prediction bound"); }
+    }
     public record Input(long generation, int tick, int difficulty, boolean assumeArmor, double minDamage,
                         double maxSelfDamage, CombatantSnapshot self, List<CombatantSnapshot> targets,
-                        List<Candidate> candidates, CombatCollisionSnapshot terrain) {
+                        List<Candidate> candidates, CombatCollisionSnapshot terrain,
+                        Map<Integer, List<CombatantSnapshot>> predictions, Map<Integer, CombatantSnapshot> selfPredictions) {
+        public Input(long generation, int tick, int difficulty, boolean assumeArmor, double minDamage,
+                     double maxSelfDamage, CombatantSnapshot self, List<CombatantSnapshot> targets,
+                     List<Candidate> candidates, CombatCollisionSnapshot terrain) {
+            this(generation, tick, difficulty, assumeArmor, minDamage, maxSelfDamage, self, targets, candidates, terrain,
+                    Map.of(), Map.of());
+        }
         public Input {
             targets = List.copyOf(targets); candidates = List.copyOf(candidates);
             if (targets.size() > 32 || candidates.size() > 4096) throw new IllegalArgumentException("Unbounded anchor input");
+            var copy = new java.util.HashMap<Integer, List<CombatantSnapshot>>();
+            predictions.forEach((ticks, values) -> {
+                if (ticks < 0 || ticks > 20 || values.size() > 32) throw new IllegalArgumentException("Unbounded prediction");
+                copy.put(ticks, List.copyOf(values));
+            });
+            predictions = Map.copyOf(copy);
+            selfPredictions = Map.copyOf(selfPredictions);
+            if (predictions.size() > 3 || selfPredictions.size() > 3) throw new IllegalArgumentException("Too many prediction stages");
         }
     }
     public record Result(Candidate candidate, float damage, float selfDamage, long rays, int evaluated) {}
@@ -27,17 +46,21 @@ public final class AnchorPlanner {
             if (Thread.currentThread().isInterrupted() || (++visited & 7) == 0 && System.nanoTime() > deadline)
                 throw new IllegalStateException("Anchor planning budget expired");
             float upper = 0;
-            for (CombatantSnapshot target : input.targets)
+            List<CombatantSnapshot> targets = input.predictions.getOrDefault(candidate.predictionTicks, input.targets);
+            for (CombatantSnapshot target : targets)
                 upper += damage(target, candidate, 1, input.difficulty, input.assumeArmor);
             if (upper < input.minDamage || upper <= bestDamage) continue;
             float total = 0;
-            for (CombatantSnapshot target : input.targets) {
+            for (CombatantSnapshot target : targets) {
                 if (distance(target, candidate) >= 10) continue;
                 total += damage(target, candidate, exposure(input.terrain, target, candidate, rays), input.difficulty, input.assumeArmor);
             }
             evaluated++;
             if (total <= bestDamage || total < input.minDamage) continue;
             float self = damage(input.self, candidate, exposure(input.terrain, input.self, candidate, rays), input.difficulty, false);
+            CombatantSnapshot predictedSelf = input.selfPredictions.get(candidate.predictionTicks);
+            if (predictedSelf != null) self = Math.max(self, damage(predictedSelf, candidate,
+                    exposure(input.terrain, predictedSelf, candidate, rays), input.difficulty, false));
             if (self > input.maxSelfDamage || self > 0 && self + 1.5f >= input.self.effectiveHealth()) continue;
             best = candidate; bestDamage = total; bestSelf = self;
         }

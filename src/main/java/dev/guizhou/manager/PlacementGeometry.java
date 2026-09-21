@@ -40,6 +40,22 @@ public final class PlacementGeometry {
         };
     }
 
+    /** A bounded fallback set for partially exposed faces; every point stays inside the real outline. */
+    public static java.util.List<Vec3> faceSamples(AABB bounds, Direction face) {
+        Vec3 center = bounds.getCenter();
+        var points = new java.util.LinkedHashSet<Vec3>();
+        points.add(facePoint(bounds, face, center));
+        for (int a : new int[]{0, 1}) for (int b : new int[]{0, 1}) {
+            Vec3 corner = switch (face.getAxis()) {
+                case X -> new Vec3(center.x, a == 0 ? bounds.minY : bounds.maxY, b == 0 ? bounds.minZ : bounds.maxZ);
+                case Y -> new Vec3(a == 0 ? bounds.minX : bounds.maxX, center.y, b == 0 ? bounds.minZ : bounds.maxZ);
+                case Z -> new Vec3(a == 0 ? bounds.minX : bounds.maxX, b == 0 ? bounds.minY : bounds.maxY, center.z);
+            };
+            points.add(facePoint(bounds, face, corner));
+        }
+        return java.util.List.copyOf(points);
+    }
+
     public static boolean validCursor(BlockHitResult hit) {
         if (hit == null) return false;
         Vec3 p = hit.getLocation().subtract(Vec3.atLowerCornerOf(hit.getBlockPos()));

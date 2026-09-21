@@ -24,7 +24,18 @@ public final class LicenseActionHookTest {
         crystalActions();
         miningActionsAndCleanup();
         autoMineCallbacks();
+        anchorCallbacks();
         System.out.println("LicenseActionHookTest passed: " + checks + " authorization/action/cleanup checks");
+    }
+
+    private static void anchorCallbacks() throws IOException {
+        String anchor = BASE + "combat/AutoAnchorModule";
+        guarded(anchor, "onPreTick", null, "runCycle");
+        guarded(anchor, "onBlockUpdate", null, "schedule");
+        guarded(anchor, "lambda$onBlockUpdate$", null, "runCycle");
+        guarded(anchor, "runCycle", null, "perform", "selectCandidate", "repeatCandidate");
+        guarded(anchor, "sendUseItemOn", null, "sendUseItemOnDirect");
+        check(!method(anchor, "onDisable", null).hasAuthorization(), "Anchor listener cleanup survives revocation");
     }
 
     private static void crystalActions() throws IOException {

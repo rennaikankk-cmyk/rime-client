@@ -456,7 +456,22 @@ public class PlacementManager extends Feature {
                 bestVisible = visible;
             }
         }
-        return best;
+        if (best != null || shape.isEmpty()) return best;
+        // Only when the cheap face projections fail: bounded center/edge probes can find a visible sliver.
+        int probes = 0;
+        for (AABB box : boxes) for (Direction face : Direction.values()) {
+            if (preferredFace != null && face != preferredFace) continue;
+            Vec3 point = PlacementGeometry.facePoint(box, face, eye);
+            double outward = (eye.x - point.x) * face.getStepX() + (eye.y - point.y) * face.getStepY()
+                    + (eye.z - point.z) * face.getStepZ();
+            if (outward <= 0) continue;
+            for (Vec3 sample : PlacementGeometry.faceSamples(box, face)) {
+                if (++probes > 24) return null;
+                BlockHitResult hit = new BlockHitResult(sample, face, clicked.immutable(), false);
+                if (validInteractionGeometry(hit, eye, range) && visible(hit, eye)) return hit;
+            }
+        }
+        return null;
     }
 
     public boolean canInteract(BlockHitResult hit, Vec3 eye, double range, double wallRange) {

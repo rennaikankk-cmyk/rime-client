@@ -57,6 +57,11 @@ public final class PlacementGeometryTest {
             Vec3 point = PlacementGeometry.facePoint(bed, face, eye);
             check(bed.contains(point), "bed interaction aimed outside its actual outline");
             check(PlacementGeometry.validCursor(new BlockHitResult(point, face, pos, false)), "invalid projected cursor");
+            var samples = PlacementGeometry.faceSamples(bed, face);
+            check(samples.size() <= 5 && samples.size() > 0, "unbounded fallback face samples");
+            for (Vec3 sample : samples) check(bed.contains(sample)
+                    && PlacementGeometry.validCursor(new BlockHitResult(sample, face, pos, false)),
+                    "partial-face fallback escaped the actual bed outline");
         }
         Vec3 top = PlacementGeometry.facePoint(bed, Direction.UP, eye);
         check(top.y < 42 + 9.0 / 16.0 && top.y > 42.5, "bed hit used the full-cube top");
