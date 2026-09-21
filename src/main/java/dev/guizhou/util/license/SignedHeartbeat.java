@@ -1,6 +1,5 @@
 package dev.guizhou.util.license;
 
-import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 
@@ -62,7 +61,7 @@ public final class SignedHeartbeat {
         Map<String, String> data = null;
         String signature = null;
         try (JsonReader reader = new JsonReader(new StringReader(json))) {
-            reader.setStrictness(Strictness.STRICT);
+            reader.setLenient(false); // Minecraft 1.21.1 bundles Gson 2.10.1.
             reader.beginObject();
             while (reader.hasNext()) {
                 String key = reader.nextName();
