@@ -28,7 +28,30 @@ The downloader signs an inventory after adding per-account credentials and water
 New clients verify all their own JAR entries and the credential subject before renewal. Other
 Fabric mods and transformed game classes are not hashed. Definitive modification stops the local
 run. A temporary read error permits only an already-issued, unexpired grace period and is retried.
-Client reports never automatically ban an account; revocation remains a server/admin decision.
+Owner-requested automatic enforcement (2026-09-21, backend-only update): an explicit
+integrity=mismatch report on v2 or the legacy dedicated nonce protocol automatically bans
+the reporting account only after validating its unexpired capability, same-account HMAC
+watermark and existing device binding. Dedicated unbound accounts must use the dedicated
+device marker. Reports may not create or migrate HWID bindings. Invalid/missing/cross-account
+watermarks, network failures, read errors and old ordinary heartbeats do not auto-ban.
+
+The backend persists integrityBan (reason, time, capability SHA-256, watermark issue time,
+protocol) and banned=true, revokes outstanding login/download tickets and denies subsequent
+login, heartbeat and downloads. An existing administrator can unban the account; the audit
+record remains. Replace/restore the unmodified official copy before unbanning, or the same
+modified copy can report again. A temporary database write failure does not create an
+in-memory-only ban. Account credentials, membership expiry and bindings remain unchanged.
+
+This is an explicit policy on an authenticated client report, not trusted remote attestation:
+an attacker controlling a copy can suppress or forge its own report, and file corruption can
+also cause an integrity mismatch. Possession of an account's token and watermark can be used
+to target that same account. Offline decompilation is undetectable. Do not claim that every
+crack is detected or that false positives are impossible. Existing offline grace still applies.
+
+Current combat.3 / mc1211.3 / direct.8 clients already send the necessary report and watermark;
+this backend change needs no JAR rebuild or member reinstall. Production tests must never
+send a tamper report using an actual member credential; use ephemeral keys and isolated
+in-memory accounts, including successful bans, invalid reports, ticket revocation and unban.
 
 These checks raise tampering and credential-replay costs. They cannot prevent offline decompilation
 or guarantee that code running on a fully controlled client cannot be patched.
