@@ -6,6 +6,7 @@ import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.client.TargetsModule;
+import dev.guizhou.features.modules.world.GuangxiMineModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.DamageSyncTracker;
@@ -64,6 +65,7 @@ public class GuangxiPistonModule extends Module {
     private final Setting<Double>  minDamage    = num("MinDamage",    6.0, 0.0, 36.0).setPage("General");
     private final Setting<Integer> delay        = num("Delay",       10, 0, 20).setPage("General");
     private final Setting<Boolean> autoBase     = bool("AutoBase",   true).setPage("General");
+    private final Setting<Boolean> reuseRedstone = bool("ReuseRedstone", true).setPage("General");
 
     private final Setting<Double> maxSelfDamage = num("MaxSelfDamage", 8.0, 0.0, 36.0).setPage("General");
     private final Setting<Double> reserve = num("Reserve", 2.0, 0.0, 20.0).setPage("General");
@@ -95,7 +97,8 @@ public class GuangxiPistonModule extends Module {
     private ClientLevel sessionLevel;
     private LocalPlayer sessionPlayer;
     private final CrystalRetryTracker attacks = new CrystalRetryTracker();
-    private enum Stage { BASE, PISTON, CRYSTAL, POWER, EXTEND, ATTACK, CONFIRM }
+    private enum Stage { RESET_POWER, BASE, PISTON, CRYSTAL, POWER, EXTEND, ATTACK, CONFIRM }
+    private final Object powerMineOwner = new Object();
     private float   lastDamage;
 
     private ArmorProfile                     targetProfile;
@@ -120,6 +123,7 @@ public class GuangxiPistonModule extends Module {
     }
 
     private void resetState() {
+        releasePowerMine();
         pending    = null;
         active     = null;
         delayTicks = 0;
@@ -162,7 +166,7 @@ public class GuangxiPistonModule extends Module {
         pending = null;
         waitTicks = 0;
         trackedCrystal = -1;
-        enterStage(Stage.BASE);
+        enterStage(setup.resetPower() ? Stage.RESET_POWER : Stage.BASE);
         tickActive();
     }
 
@@ -174,11 +178,18 @@ public class GuangxiPistonModule extends Module {
     }
 
     private void clearActive() {
+        releasePowerMine();
         active = null;
         trackedCrystal = -1;
         waitTicks = 0;
         delayTicks = 0;
         clearPending();
+    }
+
+    private void releasePowerMine() {
+        if (GuizhouWare.moduleManager == null) return;
+        var mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
+        if (mine != null) mine.cancelBreakOnce(powerMineOwner);
     }
 
     private boolean validTarget(Setup setup) {
@@ -210,7 +221,7 @@ public class GuangxiPistonModule extends Module {
     private void tickActive() {
         if (active == null || !validTarget(active)) { clearActive(); return; }
         Setup setup = active;
-        if (stage != Stage.BASE && needsBase(setup.base())) { clearActive(); return; }
+        if (stage != Stage.BASE && stage != Stage.RESET_POWER && needsBase(setup.base())) { clearActive(); return; }
         if (stage.ordinal() >= Stage.CRYSTAL.ordinal() && stage.ordinal() <= Stage.EXTEND.ordinal()) {
             BlockState piston = mc.level.getBlockState(setup.piston());
             if (!(piston.is(Blocks.PISTON) || piston.is(Blocks.STICKY_PISTON))
@@ -221,6 +232,7 @@ public class GuangxiPistonModule extends Module {
         // Several already-observed stages may advance in one tick; a submitted packet never counts as observation.
         for (int steps = 0; steps < Stage.values().length && active != null; steps++) {
             BlockPos interaction = switch (stage) {
+                case RESET_POWER -> setup.redstone();
                 case BASE -> setup.base();
                 case PISTON -> setup.piston();
                 case CRYSTAL -> setup.base();
@@ -230,9 +242,28 @@ public class GuangxiPistonModule extends Module {
             if (interaction != null && mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(interaction))
                     > placeReach.getValue() * placeReach.getValue()) { clearActive(); return; }
             switch (stage) {
+                case RESET_POWER -> {
+                    BlockState power = mc.level.getBlockState(setup.redstone());
+                    BlockState piston = mc.level.getBlockState(setup.piston());
+                    var reset = dev.guizhou.util.combat.PistonPowerSequence.next(power.is(Blocks.REDSTONE_BLOCK), power.isAir(),
+                            mc.level.hasNeighborSignal(setup.piston()), piston.hasProperty(BlockStateProperties.EXTENDED)
+                                    && piston.getValue(BlockStateProperties.EXTENDED));
+                    if (reset == dev.guizhou.util.combat.PistonPowerSequence.Action.WAIT) return;
+                    if (reset == dev.guizhou.util.combat.PistonPowerSequence.Action.ABORT) { clearActive(); return; }
+                    if (reset == dev.guizhou.util.combat.PistonPowerSequence.Action.READY) {
+                        releasePowerMine();
+                        enterStage(Stage.BASE);
+                        continue;
+                    }
+                    var mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
+                    if (mine == null || !mine.isAvailable() || !mine.inMineRange(setup.redstone())) { clearActive(); return; }
+                    if (canSubmit() && mine.requestBreakOnce(setup.redstone(), powerMineOwner)) submitted(setup.redstone());
+                    return;
+                }
                 case BASE -> {
                     if (!needsBase(setup.base())) { enterStage(Stage.PISTON); continue; }
-                    if (canSubmit() && GuizhouWare.placementManager.placeDirect(setup.base(), null, Items.OBSIDIAN)) submitted(setup.base());
+                    if (canSubmit() && GuizhouWare.placementManager.placeDirect(setup.base(), null, Items.OBSIDIAN,
+                            dev.guizhou.util.inventory.SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, placeReach.getValue())) submitted(setup.base());
                     return;
                 }
                 case CRYSTAL -> {
@@ -240,7 +271,9 @@ public class GuangxiPistonModule extends Module {
                             || mc.level.getBlockState(setup.piston()).getValue(BlockStateProperties.EXTENDED)) { clearActive(); return; }
                     EndCrystal crystal = crystalAt(setup.crystal());
                     if (crystal != null) { trackedCrystal = crystal.getId(); enterStage(Stage.POWER); continue; }
-                    if (canSubmit() && GuizhouWare.placementManager.placeCrystal(setup.base(), false)) submitted(setup.crystal());
+                    if (canSubmit() && GuizhouWare.placementManager.placeCrystal(setup.base(), false,
+                            dev.guizhou.util.inventory.SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, null,
+                            new dev.guizhou.manager.PlacementManager.CrystalOptions(placeReach.getValue(), placeReach.getValue(), false))) submitted(setup.crystal());
                     return;
                 }
                 case PISTON -> {
@@ -254,13 +287,15 @@ public class GuangxiPistonModule extends Module {
                     if (canSubmit() && slot >= 0 && GuizhouWare.rotationManager.trySubmit(new RotationRequest(
                             ROTATION_ID, ROTATION_PRIORITY, setup.dir().toYRot(), 0f, RotationRequest.Mode.SILENT))) {
                         Item item = mc.player.getInventory().getItem(slot).getItem();
-                        if (GuizhouWare.placementManager.placeDirect(setup.piston(), null, item)) submitted(setup.piston());
+                        if (GuizhouWare.placementManager.placeDirect(setup.piston(), null, item,
+                                dev.guizhou.util.inventory.SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, placeReach.getValue())) submitted(setup.piston());
                     }
                     return;
                 }
                 case POWER -> {
                     if (mc.level.getBlockState(setup.redstone()).is(Blocks.REDSTONE_BLOCK)) { enterStage(Stage.EXTEND); continue; }
-                    if (canSubmit() && GuizhouWare.placementManager.placeDirect(setup.redstone(), null, Items.REDSTONE_BLOCK)) submitted(setup.redstone());
+                    if (canSubmit() && GuizhouWare.placementManager.placeDirect(setup.redstone(), null, Items.REDSTONE_BLOCK,
+                            dev.guizhou.util.inventory.SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, placeReach.getValue())) submitted(setup.redstone());
                     return;
                 }
                 case EXTEND -> {
@@ -402,7 +437,7 @@ public class GuangxiPistonModule extends Module {
 
         boolean placeBase = needsBase(base);
         if (placeBase && !canAutoBase(base)) return null;
-        if (!mc.level.getBlockState(crystalPos).isAir()) return null;
+        if (!crystalCellOpen(crystalPos, pistonPos, dir)) return null;
         if (!mc.level.getBlockState(head).isAir()) return null;
 
         Vec3 explosionPos = new Vec3(head.getX() + 0.5, head.getY(), head.getZ() + 0.5);
@@ -418,7 +453,7 @@ public class GuangxiPistonModule extends Module {
 
         boolean placeBase = needsBase(base);
         if (placeBase && !canAutoBase(base)) return null;
-        if (!mc.level.getBlockState(crystalPos).isAir()) return null;
+        if (!crystalCellOpen(crystalPos, pistonPos, dir)) return null;
 
         BlockPos dest = head.above();
         Vec3 explosionPos = mc.level.getBlockState(dest).isAir()
@@ -435,10 +470,20 @@ public class GuangxiPistonModule extends Module {
         return !s.is(Blocks.OBSIDIAN) && !s.is(Blocks.BEDROCK);
     }
 
+    private boolean crystalCellOpen(BlockPos cell, BlockPos piston, Direction dir) {
+        BlockState state = mc.level.getBlockState(cell);
+        if (state.isAir()) return true;
+        BlockState body = mc.level.getBlockState(piston);
+        return reuseRedstone.getValue() && state.is(Blocks.PISTON_HEAD)
+                && state.getValue(BlockStateProperties.FACING) == dir.getOpposite()
+                && (body.is(Blocks.PISTON) || body.is(Blocks.STICKY_PISTON))
+                && body.getValue(BlockStateProperties.FACING) == dir.getOpposite();
+    }
+
     private boolean canAutoBase(BlockPos base) {
         return autoBase.getValue()
                 && hotbarSlotOf(Items.OBSIDIAN) >= 0
-                && PlaceUtil.canPlace(base);
+                && PlaceUtil.canPlace(base, placeReach.getValue());
     }
 
     private Setup buildSetup(LivingEntity target, BlockPos head, Direction dir,
@@ -448,10 +493,8 @@ public class GuangxiPistonModule extends Module {
         BlockState pistonState = mc.level.getBlockState(pistonPos);
         boolean existingPiston = (pistonState.is(Blocks.PISTON) || pistonState.is(Blocks.STICKY_PISTON))
                 && pistonState.hasProperty(BlockStateProperties.FACING)
-                && pistonState.getValue(BlockStateProperties.FACING) == dir.getOpposite()
-                && !pistonState.getValue(BlockStateProperties.EXTENDED);
-        if (!existingPiston && (!PlaceUtil.canPlace(pistonPos) || pistonSlot() < 0)) return null;
-        if (mc.level.hasNeighborSignal(pistonPos)) return null;
+                && pistonState.getValue(BlockStateProperties.FACING) == dir.getOpposite();
+        if (!existingPiston && (!PlaceUtil.canPlace(pistonPos, placeReach.getValue()) || pistonSlot() < 0)) return null;
         if (crystalAt(crystalPos) == null && hotbarSlotOf(Items.END_CRYSTAL) < 0) return null;
 
         double rangeSq = range * range;
@@ -468,13 +511,18 @@ public class GuangxiPistonModule extends Module {
         if (damage < minDamage.getValue() || !selfSafe(explosionPos, placeBase ? base : null)) return null;
 
         RedstoneSpot redstone = findRedstoneSpot(pistonPos, dir, explosionPos, eye, rangeSq);
-        if (redstone == null || (redstone.place() && hotbarSlotOf(Items.REDSTONE_BLOCK) < 0)) return null;
-        // A pre-powered new piston extends into the crystal cell before crystal placement.
-        // Placing the crystal first is also invalid: its full entity box obstructs placing the piston.
-        if (!redstone.place()) return null;
+        // Resetting power needs a replacement in inventory; do not assume the mined drop is collected.
+        if (redstone == null || hotbarSlotOf(Items.REDSTONE_BLOCK) < 0) return null;
+        boolean resetPower = !redstone.place();
+        if (resetPower) {
+            var mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
+            if (!reuseRedstone.getValue() || mine == null || !mine.isAvailable()
+                    || !mine.hasFreePrimary() || mine.isMining(redstone.pos()) || !mine.inMineRange(redstone.pos())) return null;
+        } else if (mc.level.hasNeighborSignal(pistonPos)
+                || existingPiston && pistonState.getValue(BlockStateProperties.EXTENDED)) return null;
 
         return new Setup(dir, pistonPos, redstone.pos(), crystalPos, base, head,
-                         redstone.place(), placeBase, damage, target.getId(), target.position(), explosionPos);
+                         resetPower, placeBase, damage, target.getId(), target.position(), explosionPos);
     }
 
     private RedstoneSpot findRedstoneSpot(BlockPos pistonPos, Direction dir,
@@ -493,7 +541,7 @@ public class GuangxiPistonModule extends Module {
 
         BlockPos fallback = null;
         for (BlockPos pos : new BlockPos[]{above, inDir, cw, ccw, below}) {
-            if (!PlaceUtil.canPlace(pos)) continue;
+            if (!PlaceUtil.canPlace(pos, placeReach.getValue())) continue;
             if (eye.distanceToSqr(Vec3.atCenterOf(pos)) > rangeSq) continue;
             if (redstoneSafe(pos, explosionPos)) return new RedstoneSpot(pos, true);
             if (fallback == null) fallback = pos;
@@ -683,7 +731,7 @@ public class GuangxiPistonModule extends Module {
 
     private record Setup(Direction dir, BlockPos piston, BlockPos redstone,
                          BlockPos crystal, BlockPos base, BlockPos head,
-                         boolean placeRedstone, boolean placeBase, float damage, int targetId, Vec3 targetOrigin, Vec3 explosion) {}
+                         boolean resetPower, boolean placeBase, float damage, int targetId, Vec3 targetOrigin, Vec3 explosion) {}
 
     private record RedstoneSpot(BlockPos pos, boolean place) {}
 

@@ -26,6 +26,9 @@ public class BomberModule extends Module {
 
     private int      ticksWaited = 0;
     private BlockPos lastPos     = null;
+    private BlockPos pendingPos;
+    private int pendingTick;
+    private net.minecraft.client.multiplayer.ClientLevel sessionLevel;
 
     public BomberModule() {
         super("Bomber", "Automatically places and lights TNT around you.", Category.WORLD);
@@ -35,11 +38,24 @@ public class BomberModule extends Module {
     public void onEnable() {
         ticksWaited = 0;
         lastPos     = null;
+        pendingPos = null;
+        sessionLevel = mc.level;
     }
 
     @Subscribe
     private void onPreTick(PreTickEvent event) {
         if (nullCheck()) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
+        if (sessionLevel != mc.level) { onEnable(); }
+        if (pendingPos != null) {
+            if (mc.level.getBlockState(pendingPos).is(net.minecraft.world.level.block.Blocks.TNT)) {
+                Result lighter = findHotbar(Items.FLINT_AND_STEEL);
+                if (lighter != null && igniteAt(pendingPos, lighter)) { pendingPos = null; return; }
+            }
+            if (mc.player.tickCount - pendingTick < 20) return;
+            pendingPos = null;
+            lastPos = null;
+        }
 
         if (ticksWaited < delay.getValue()) {
             ticksWaited++;
@@ -69,23 +85,26 @@ public class BomberModule extends Module {
                 if (pos.equals(lastPos)) continue;
                 if (!mc.level.getBlockState(pos).isAir()) continue;
 
+                if (!GuizhouWare.placementManager.placeDirect(pos, null, tnt.stack().getItem(),
+                        SwapMode.ALTSILENT, InventoryUtil.PLACE_SCOPE)) continue;
                 lastPos = pos;
-
-                if (!GuizhouWare.placementManager.enqueue(pos, tnt.stack().getItem())) continue;
-                GuizhouWare.placementManager.flushQueue();
-
-                igniteAt(pos, fas);
+                pendingPos = pos.immutable();
+                pendingTick = mc.player.tickCount;
                 return;
             }
         }
     }
 
-    private void igniteAt(BlockPos pos, Result fas) {
-        BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false);
-        GuizhouWare.swapManager.withSwap(fas, SwapMode.ALTSILENT, SwapPriority.USER_ACTION, () -> {
-            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
-            mc.player.swing(InteractionHand.MAIN_HAND);
+    private boolean igniteAt(BlockPos pos, Result fas) {
+        BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(pos, null,
+                mc.player.getEyePosition(), 5.154, 5.154, false);
+        if (hit == null) return false;
+        boolean[] sent = {false};
+        boolean swapped = GuizhouWare.swapManager.withSwap(fas, SwapMode.ALTSILENT, SwapPriority.USER_ACTION, () -> {
+            sent[0] = GuizhouWare.placementManager.sendUseItemOnDirect(hit, InteractionHand.MAIN_HAND);
+            if (sent[0]) mc.player.swing(InteractionHand.MAIN_HAND);
         });
+        return swapped && sent[0];
     }
 
     private Result findHotbar(Item item) {

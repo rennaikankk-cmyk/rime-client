@@ -101,6 +101,8 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     private BlockPos rebreakHoldPos;
     private int rebreakHoldTicks;
+    private Object oneShotOwner;
+    private BlockPos oneShotPos;
 
     public interface MineFinishListener { void onMineFinish(BlockPos pos); }
 
@@ -244,6 +246,12 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     private boolean startMine(BlockPos target, Direction dir) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        // A manual retarget supersedes an owned one-shot. Never let its later cleanup
+        // cancel the user's replacement target or leave the power block in rebreak.
+        if (oneShotOwner != null) {
+            if (started && !finished) abortBreak();
+            clearMine();
+        }
         if (pos != null && started && !finished) {
             if (doubleBreak.getValue() && secondaryPos == null) {
                 // Keep the active break when its STOP/tool swap is refused.
@@ -297,6 +305,7 @@ public class GuangxiMineModule extends Module implements MineApi {
         if (!mc.isSameThread() || !isAvailable() || target == null) return false;
         ensureSession();
         if (isMining(target)) return true;
+        if (oneShotOwner != null) return false;
         if (!inMineRange(target)) return false;
         BlockState state = mc.level.getBlockState(target);
         if (state.isAir() || !InteractionUtil.canBreak(target, state)) return false;
@@ -305,6 +314,26 @@ public class GuangxiMineModule extends Module implements MineApi {
             if (!doubleBreak.getValue() || secondaryPos != null) return false;
         }
         return startMine(target, validFace(target));
+    }
+
+    /** An owned single break ends on observed air, without leaving a rebreak on a power block. */
+    public boolean requestBreakOnce(BlockPos target, Object owner) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized() || owner == null || !mc.isSameThread()) return false;
+        if (!isAvailable()) return false;
+        ensureSession();
+        if (oneShotOwner != null) return oneShotOwner == owner && target != null && target.equals(oneShotPos);
+        if (isMining(target) || !hasFreePrimary()) return false;
+        if (!requestBreak(target)) return false;
+        oneShotOwner = owner;
+        oneShotPos = target.immutable();
+        return true;
+    }
+
+    /** Releases only the caller's operation. Revocation and disabling must still reach cleanup. */
+    public void cancelBreakOnce(Object owner) {
+        if (!mc.isSameThread() || owner == null || oneShotOwner != owner) return;
+        if (!nullCheck() && mc.level == sessionLevel && mc.player == sessionPlayer && started && !finished) abortBreak();
+        clearMine();
     }
 
     @Override
@@ -319,12 +348,12 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     @Override
     public boolean hasFreePrimary() {
-        return pos == null || finished;
+        return oneShotOwner == null && (pos == null || finished);
     }
 
     @Override
     public boolean hasFreeSecondary() {
-        return doubleBreak.getValue() && secondaryPos == null;
+        return oneShotOwner == null && doubleBreak.getValue() && secondaryPos == null;
     }
 
     @Override
@@ -759,6 +788,7 @@ public class GuangxiMineModule extends Module implements MineApi {
             retry.reset();
             GuizhouWare.swapManager.release(primaryToolOwner);
             primaryHeldTicks = 0;
+            if (target.equals(oneShotPos)) clearMine();
             fireFinish(target);
         }
         if (target.equals(secondaryPos) && nowAir) {
@@ -781,6 +811,8 @@ public class GuangxiMineModule extends Module implements MineApi {
     }
 
     private void clearMine() {
+        oneShotOwner = null;
+        oneShotPos = null;
         primaryStopNanos = 0;
         GuizhouWare.swapManager.release(primaryToolOwner);
         primaryHeldTicks = 0;

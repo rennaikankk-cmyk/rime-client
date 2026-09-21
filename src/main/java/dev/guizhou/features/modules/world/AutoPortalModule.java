@@ -37,6 +37,8 @@ public class AutoPortalModule extends Module {
 
     private final List<BlockPos> portalBlocks = new ArrayList<>();
     private final Map<BlockPos, Long> renderMap = new HashMap<>();
+    private int igniteTick = -100;
+    private net.minecraft.client.multiplayer.ClientLevel sessionLevel;
 
     public AutoPortalModule() {
         super("AutoPortal", "For the base hunter who has places to be.", Category.WORLD);
@@ -45,6 +47,9 @@ public class AutoPortalModule extends Module {
     @Override
     public void onEnable() {
         portalBlocks.clear();
+        igniteTick = -100;
+        sessionLevel = mc.level;
+        if (nullCheck()) { disable(); return; }
 
         int obsidianCount = 0;
         for (int i = 0; i < 36; i++) {
@@ -113,6 +118,8 @@ public class AutoPortalModule extends Module {
     @Subscribe
     private void onPreTick(PreTickEvent event) {
         if (nullCheck() || portalBlocks.isEmpty()) return;
+        if (sessionLevel != mc.level) { disable(); return; }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
 
         boolean allDone = true;
         for (BlockPos pos : portalBlocks) {
@@ -122,9 +129,12 @@ public class AutoPortalModule extends Module {
             }
         }
         if (allDone) {
-            ignite();
-            ChatUtil.sendMessage(Component.literal("[AutoPortal] Portal complete!"));
-            disable();
+            if (mc.level.getBlockState(portalBlocks.getFirst().above()).is(net.minecraft.world.level.block.Blocks.NETHER_PORTAL)) {
+                ChatUtil.sendMessage(Component.literal("[AutoPortal] Portal complete!"));
+                disable();
+            } else if (mc.player.tickCount - igniteTick >= 5 && ignite()) {
+                igniteTick = mc.player.tickCount;
+            }
             return;
         }
 
@@ -155,16 +165,20 @@ public class AutoPortalModule extends Module {
         renderMap.entrySet().removeIf(e -> now - e.getValue() > fadeMs);
     }
 
-    private void ignite() {
+    private boolean ignite() {
         Result fas = findHotbar(Items.FLINT_AND_STEEL);
-        if (fas == null) return;
+        if (fas == null) return false;
 
-        BlockPos firePos = portalBlocks.get(0).above();
-        BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(firePos), Direction.UP, firePos, false);
-        GuizhouWare.swapManager.withSwap(fas, SwapMode.ALTSILENT, SwapPriority.USER_ACTION, () -> {
-            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
-            mc.player.swing(InteractionHand.MAIN_HAND);
+        BlockPos support = portalBlocks.getFirst();
+        BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(support, Direction.UP,
+                mc.player.getEyePosition(), 5.154, 5.154, false);
+        if (hit == null) return false;
+        boolean[] sent = {false};
+        boolean swapped = GuizhouWare.swapManager.withSwap(fas, SwapMode.ALTSILENT, SwapPriority.USER_ACTION, () -> {
+            sent[0] = GuizhouWare.placementManager.sendUseItemOnDirect(hit, InteractionHand.MAIN_HAND);
+            if (sent[0]) mc.player.swing(InteractionHand.MAIN_HAND);
         });
+        return swapped && sent[0];
     }
 
     private Result findHotbar(net.minecraft.world.item.Item item) {

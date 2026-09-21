@@ -288,7 +288,8 @@ public class GuangxiBedModule extends Module {
         }
 
         // Opens the table (screen flashes ~2 frames); the clicks land next tick.
-        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, tableHit);
+        if (!GuizhouWare.placementManager.sendUseItemOnDirect(tableHit, InteractionHand.MAIN_HAND,
+                mc.player.getEyePosition(), 4.0, 4.0)) return false;
         craftPhase = 1;
         craftTimeoutTick = mc.player.tickCount + 40;
         return true;
@@ -391,7 +392,9 @@ public class GuangxiBedModule extends Module {
                     cursor.set(p.getX() + dx, p.getY() + dy, p.getZ() + dz);
                     if (mc.level.getBlockState(cursor).is(Blocks.CRAFTING_TABLE)
                             && mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(cursor)) <= 16.0) {
-                        return new BlockHitResult(Vec3.atCenterOf(cursor), Direction.UP, cursor.immutable(), false);
+                        BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(cursor, null,
+                                mc.player.getEyePosition(), 4.0, 4.0, false);
+                        if (hit != null) return hit;
                     }
                 }
             }
@@ -465,15 +468,16 @@ public class GuangxiBedModule extends Module {
     }
 
     private boolean cellStillValid(BlockPos cell) {
+        if (mc.level.isOutsideBuildHeight(cell) || !mc.level.getWorldBorder().isWithinBounds(cell)) return false;
         if (!mc.level.getBlockState(cell).isAir()) return false;
         BlockPos below = cell.below();
         BlockState belowState = mc.level.getBlockState(below);
         if (belowState.isAir() || belowState.getCollisionShape(mc.level, below).isEmpty()) return false;
-        // A live crystal occupying the cell makes the server reject the bed placement —
-        // skip it (players standing in the cell are fine; beds place through them).
-        AABB bedBox = new AABB(cell);
+        // Bed collision height is 9/16; a player standing above the bed need not block it.
+        AABB bedBox = new AABB(cell.getX(), cell.getY(), cell.getZ(), cell.getX() + 1,
+                cell.getY() + 9.0 / 16.0, cell.getZ() + 1);
         for (Entity e : mc.level.getEntities(null, bedBox)) {
-            if (e instanceof EndCrystal) return false;
+            if (e.blocksBuilding && !e.isRemoved() && !e.isSpectator()) return false;
         }
         return true;
     }
@@ -484,8 +488,9 @@ public class GuangxiBedModule extends Module {
 
     private boolean placeBed() {
         BlockPos floor = pendingFoot.below();
-        Vec3 floorTop = new Vec3(floor.getX() + 0.5, floor.getY() + 0.95, floor.getZ() + 0.5);
-        BlockHitResult placeHit = new BlockHitResult(floorTop, Direction.UP, floor, false);
+        BlockHitResult placeHit = GuizhouWare.placementManager.prepareInteractionHit(floor, Direction.UP,
+                interactionEye(), interactionRange(), interactionRange(), false);
+        if (placeHit == null) return false;
         if (!prepareAction(placeHit, true)) return false;
         boolean mainBed = mc.player.getMainHandItem().is(ItemTags.BEDS);
         boolean offBed = mc.player.getOffhandItem().is(ItemTags.BEDS);
@@ -505,7 +510,9 @@ public class GuangxiBedModule extends Module {
     }
 
     private boolean detonate() {
-        BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pendingHead), Direction.UP, pendingHead, false);
+        BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(pendingHead, null,
+                interactionEye(), interactionRange(), interactionRange(), false);
+        if (hit == null) return false;
         if (!prepareAction(hit, false)) return false;
         boolean sent = sendAtSpot(hit, InteractionHand.MAIN_HAND);
         if (sent) noteRender();
@@ -521,20 +528,23 @@ public class GuangxiBedModule extends Module {
                 placing ? desiredYaw : angles[0], angles[1], RotationRequest.Mode.SILENT));
     }
 
+    private Vec3 interactionFeet() {
+        return new Vec3(pendingFoot.getX() + 0.5, pendingFoot.getY() + 2.0, pendingFoot.getZ() + 0.5);
+    }
+
+    private Vec3 interactionEye() {
+        return tpMode.getValue() ? interactionFeet().add(0, mc.player.getEyeHeight(), 0) : mc.player.getEyePosition();
+    }
+
+    private double interactionRange() { return tpMode.getValue() ? 6.0 : bedRange.getValue(); }
+
     private boolean sendAtSpot(BlockHitResult hit, InteractionHand hand) {
-        boolean fakeSent = false;
-        try {
-            if (tpMode.getValue()) {
-                Vec3 fake = new Vec3(pendingFoot.getX() + 0.5, pendingFoot.getY() + 3.0, pendingFoot.getZ() + 0.5);
-                fakeSent = sendFakeMove(fake, desiredYaw);
-                if (!fakeSent) return false;
-            }
-            try (var prediction = ((ClientLevelAccessor) mc.level).guizhouware$getBlockStatePredictionHandler().startPredicting()) {
-                return PacketSendUtil.send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
-            }
-        } finally {
-            if (fakeSent) sendRealMove();
-        }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        java.util.function.BooleanSupplier action = () -> GuizhouWare.placementManager.sendUseItemOnDirect(
+                hit, hand, interactionEye(), interactionRange(), interactionRange());
+        return tpMode.getValue() ? dev.guizhou.util.InteractionTransaction.run(
+                () -> sendFakeMove(interactionFeet(), desiredYaw), action, this::sendRealMove)
+                : action.getAsBoolean();
     }
 
     private void noteRender() {

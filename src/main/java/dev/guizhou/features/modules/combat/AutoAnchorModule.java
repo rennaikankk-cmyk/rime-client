@@ -60,6 +60,8 @@ public class AutoAnchorModule extends Module {
     private final Setting<Double>  minDamage     = num("MinDamage", 6.0, 0.0, 36.0).setPage("General");
     private final Setting<Double>  maxSelfDamage = num("MaxSelfDamage", 4.0, 0.0, 36.0).setPage("General");
     private final Setting<Double> placeRange = num("PlaceRange", 5.0, 1.0, 6.0).setPage("General");
+    private final Setting<Double> wallRange = num("WallRange", 5.0, 0.0, 6.0).setPage("General");
+    private final Setting<Boolean> airPlace = bool("AirPlace", true).setPage("General");
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
     private final Setting<Boolean> assumeBestArmor = bool("AssumeBestArmor", false).setPage("General");
     private enum AnchorSwap { SILENT, INVENTORY }
@@ -264,8 +266,9 @@ public class AutoAnchorModule extends Module {
         ClientPacketListener conn = mc.getConnection();
         if (conn == null) return false;
         BlockHitResult hit = action == AnchorSequence.Action.PLACE
-                ? GuizhouWare.placementManager.prepareAirPlaceHit(pos)
-                : anchorHit(pos, mc.player.getEyePosition());
+                ? GuizhouWare.placementManager.preparePlaceHit(pos, null, airPlace.getValue(), placeRange.getValue(), wallRange.getValue())
+                : GuizhouWare.placementManager.prepareInteractionHit(pos, null, mc.player.getEyePosition(),
+                        placeRange.getValue(), wallRange.getValue(), false);
         if (hit == null || action == AnchorSequence.Action.PLACE && !PlaceUtil.canPlace(pos)) return false;
         if (mc.player.getEyePosition().distanceToSqr(hit.getLocation()) > placeRange.getValue() * placeRange.getValue()) return false;
         if (rotate.getValue()) {
@@ -286,23 +289,11 @@ public class AutoAnchorModule extends Module {
     }
 
     private boolean sendUseItemOn(BlockHitResult hit, InteractionHand hand) {
-        try (var handler = ((ClientLevelAccessor) mc.level).guizhouware$getBlockStatePredictionHandler().startPredicting()) {
-            boolean sent = PacketSendUtil.send(new ServerboundUseItemOnPacket(hand, hit, handler.currentSequence()));
-            if (sent) mc.getConnection().send(new ServerboundSwingPacket(hand));
-            return sent;
-        }
-    }
-
-    private BlockHitResult anchorHit(BlockPos pos, Vec3 eye) {
-        Vec3 center = Vec3.atCenterOf(pos);
-        double dx = eye.x - center.x, dy = eye.y - center.y, dz = eye.z - center.z;
-        double ax = Math.abs(dx), ay = Math.abs(dy), az = Math.abs(dz);
-        Direction face;
-        if (ay >= ax && ay >= az)  face = dy > 0 ? Direction.UP    : Direction.DOWN;
-        else if (ax >= az)         face = dx > 0 ? Direction.EAST  : Direction.WEST;
-        else                       face = dz > 0 ? Direction.SOUTH : Direction.NORTH;
-        Vec3 hitVec = center.add(face.getStepX() * 0.45, face.getStepY() * 0.45, face.getStepZ() * 0.45);
-        return new BlockHitResult(hitVec, face, pos, false);
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        boolean sent = GuizhouWare.placementManager.sendUseItemOnDirect(hit, hand,
+                mc.player.getEyePosition(), placeRange.getValue(), wallRange.getValue());
+        if (sent) mc.getConnection().send(new ServerboundSwingPacket(hand));
+        return sent;
     }
 
     private Candidate selectCandidate(List<AnchorDamageUtil.Target> targets, AnchorDamageUtil.Target self) {
@@ -395,7 +386,7 @@ public class AutoAnchorModule extends Module {
 
     private long snapshotBudgetNanos() { return (long)(snapshotBudget.getValue() * 1_000_000); }
     private int planningSettings() {
-        return java.util.Objects.hash(placeRange.getValue(), minDamage.getValue(), maxSelfDamage.getValue(),
+        return java.util.Objects.hash(placeRange.getValue(), wallRange.getValue(), airPlace.getValue(), minDamage.getValue(), maxSelfDamage.getValue(),
                 assumeBestArmor.getValue(), damageSync.getValue(), autoSwap.getValue());
     }
 
@@ -441,11 +432,19 @@ public class AutoAnchorModule extends Module {
         if (mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) > placeRange.getValue() * placeRange.getValue()
                 || mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, pos)) return false;
         BlockState state = mc.level.getBlockState(pos);
+        if (!hasInteraction(pos, state.is(Blocks.RESPAWN_ANCHOR))) return false;
         if (state.is(Blocks.RESPAWN_ANCHOR)) {
             int charges = state.getValue(RespawnAnchorBlock.CHARGE);
             return canSupply(charges > 0 ? AnchorSequence.Action.DETONATE : AnchorSequence.Action.CHARGE, charges);
         }
         return state.canBeReplaced() && canSupply(AnchorSequence.Action.PLACE, 0) && PlaceUtil.canPlace(pos);
+    }
+
+    private boolean hasInteraction(BlockPos pos, boolean existing) {
+        return existing ? GuizhouWare.placementManager.prepareInteractionHit(pos, null, mc.player.getEyePosition(),
+                placeRange.getValue(), wallRange.getValue(), false) != null
+                : GuizhouWare.placementManager.preparePlaceHit(pos, null, airPlace.getValue(),
+                placeRange.getValue(), wallRange.getValue()) != null;
     }
 
     private Candidate findBest(List<AnchorDamageUtil.Target> targets, AnchorDamageUtil.Target selfTarget) {
@@ -506,7 +505,7 @@ public class AutoAnchorModule extends Module {
 
                     if (self > 0f && self + 1.5f >= playerHealth) continue;
 
-                    best = new Candidate(pos, total, self);
+                    if (hasInteraction(pos, existing)) best = new Candidate(pos, total, self);
                 }
             }
         }

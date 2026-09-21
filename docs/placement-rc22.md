@@ -1,0 +1,15 @@
+# RC22 placement update
+
+All block placement users of PlacementManager now select a point on the clicked block's outline and check that same point before submitting. A wall-range exception applies to the actual world ray and cannot exceed normal reach. Floating placement remains explicitly allowed by existing generic callers; AutoAnchor exposes AirPlace and WallRange. These are client-side checks, not a guarantee that a server accepts air placement or teleport movement.
+
+Affected direct paths: AutoCrystal, AutoAnchor, AutoBed (including TpMode), PistonCrystal, GuangxiTP, AutoPortal and Bomber. Surround, AutoTrap, PearlBlocker, Scaffold and AutoMine glass inherit the shared geometry and final submission checks. Existing font fallback and licensing remain part of both build trees.
+
+Crystal placement uses per-call range/sneak options and checks a two-block-high entity column, matching the local Minecraft 1.21.11 EndCrystalItem bytecode. FacePlace still lowers the damage threshold for eligible targets; EntityOverlap is a separate, disabled-by-default compatibility option for servers that permit a living target inside that column. Ordinary dropped items and existing crystals are blockers. Rotation rejection prevents a placement from being recorded as submitted.
+
+TP crystal and bed validate from the eye position corresponding to the synthetic movement. A cancelled movement skips the dependent interaction. Cancellation or an exception during interaction still restores movement. Local packet submission is never treated as a server acknowledgement. TNT ignition waits for observed TNT; AutoPortal clicks the frame support and waits for an observed portal before reporting completion.
+
+PistonCrystal ReuseRedstone uses an existing redstone block position through a controlled power reset. It requires enabled/available PacketMine, a free primary operation, mining reach, and a replacement redstone block in the hotbar. The sequence is: owned one-shot break, observed air, no remaining power, observed piston retraction, normal base/piston/crystal stages, replacement power. It does not assume the mined drop will be picked up. Unknown replacement blocks abort; other power sources or delayed retraction wait within the existing timeout. The owned mining request ends on observed air so PacketMine rebreak cannot destroy restored power. Manual retargeting relinquishes that ownership, and cleanup cannot cancel another target.
+
+Validation includes existing combat/licensing regressions plus negative coordinates, world-edge coordinates, slab/bed-sized outlines, exact/outside/nonfinite reach, mutable block positions, cancelled movement, rejected interactions, exception cleanup, delayed retraction and competing power. Offline startup checks validate client initialization; multiplayer timing, anti-cheat acceptance, and combat effectiveness require live server testing.
+
+Hachimi is used as analysis evidence only. Its Java wrappers show aggressive sequential anchor attempts; the native Fg implementation and runtime JNI registration are still unrecovered. No hypothetical native body is presented as recovered code or copied into the client.

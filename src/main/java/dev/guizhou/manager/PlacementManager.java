@@ -24,6 +24,8 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.level.block.AnvilBlock;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.BedBlock;
@@ -88,8 +90,6 @@ public class PlacementManager extends Feature {
         queue.clear();
         window.clear();
         cooldowns.clear();
-        sneakSandwich = false;
-        crystalWallRangeSq = -1.0;
     }
 
     public interface PlacementListener {
@@ -98,28 +98,9 @@ public class PlacementManager extends Feature {
 
     private final CopyOnWriteArrayList<PlacementListener> listeners = new CopyOnWriteArrayList<>();
 
-    /**
-     * When set, the next placement UseItemOn is wrapped in a sneak-state sandwich
-     * (PRESS_SHIFT → place → RELEASE_SHIFT, or the reverse if we already sneak) so the
-     * server sees a sneak interaction. Modules set this around a single placement call.
-     */
-    private boolean sneakSandwich = false;
-
-    public void setSneakSandwich(boolean enabled) {
-        ensureSession();
-        this.sneakSandwich = enabled;
-    }
-
-    /**
-     * WallPlace (Mio): squared reduced range within which a crystal placement is attempted even
-     * when the base has no line of sight. Servers without placement-LOS validation accept it;
-     * LOS-checking servers just drop the packet. &lt;= 0 keeps the strict LOS gate.
-     */
-    private double crystalWallRangeSq = -1.0;
-
-    public void setCrystalWallRangeSq(double sqRange) {
-        ensureSession();
-        this.crystalWallRangeSq = sqRange;
+    /** Per-call policy: reactive placements cannot inherit another module's transient settings. */
+    public record CrystalOptions(double range, double wallRange, boolean sneak) {
+        public static final CrystalOptions DEFAULT = new CrystalOptions(6.0, 0.0, false);
     }
 
     public void addListener(PlacementListener listener)    { listeners.addIfAbsent(listener); }
@@ -269,15 +250,20 @@ public class PlacementManager extends Feature {
     /** Single placement with an explicit swap mode/scope (e.g. BasePlace following AutoSwap). */
     public boolean placeDirect(BlockPos pos, @Nullable Direction face, Item item,
                                SwapMode mode, EnumSet<ResultType> scope) {
+        return placeDirect(pos, face, item, mode, scope, 5.154);
+    }
+
+    public boolean placeDirect(BlockPos pos, @Nullable Direction face, Item item,
+                               SwapMode mode, EnumSet<ResultType> scope, double range) {
         if (!mc.isSameThread()) return false;
         ensureSession();
         if (nullCheck() || EatUtil.shouldDefer()) return false;
         if (budget() <= 0 || onCooldown(pos)) return false;
-        if (!PlaceUtil.canPlace(pos)) return false;
+        if (!PlaceUtil.canPlace(pos, range)) return false;
 
         boolean[] sent = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(item, scope, mode,
-                SwapPriority.PLACEMENT, () -> sent[0] = sendPlace(pos, face));
+                SwapPriority.PLACEMENT, () -> sent[0] = sendPlace(pos, face, range));
         if (!swapped || !sent[0]) return false;
 
         notePlacement(pos);
@@ -286,38 +272,20 @@ public class PlacementManager extends Feature {
 
     /** Sends one {@code UseItemOn} for {@code pos}. Must run inside a swap holding the block item. */
     private boolean sendPlace(BlockPos pos, @Nullable Direction face) {
-        Direction side = face != null ? face : placeSide(pos);
+        return sendPlace(pos, face, 5.154);
+    }
 
-        BlockPos clicked;
-        Vec3 hitPos;
-        Direction hitSide;
-        if (side == null) {
-            // Nothing solid to click against: aim at the face of the target cell itself.
-            hitSide = airPlaceDirection(pos);
-            clicked = pos;
-            hitPos = faceCenter(pos, hitSide);
-        } else {
-            BlockHitResult hit = PlacementGeometry.neighbourHit(pos, side);
-            clicked = hit.getBlockPos();
-            hitSide = hit.getDirection();
-            hitPos = hit.getLocation();
+    private boolean sendPlace(BlockPos pos, @Nullable Direction face, double range) {
+        if (!PlaceUtil.canPlace(pos, range)) return false;
+        // Axis blocks need a neighbour on the intended axis; changing just the packet face
+        // would redirect placement into a different cell.
+        Direction side = face;
+        if (side == null && mc.player.getMainHandItem().getItem() instanceof BlockItem item
+                && item.getBlock().defaultBlockState().hasProperty(BlockStateProperties.AXIS)) {
+            side = Direction.DOWN;
         }
-
-        // Logs and pillars take their axis from the face that was clicked, so a batch placed off the
-        // nearest neighbour would come out rotated at random.
-        if (mc.player.getMainHandItem().getItem() instanceof BlockItem blockItem) {
-            BlockState desired = blockItem.getBlock().defaultBlockState();
-            if (desired.hasProperty(BlockStateProperties.AXIS)) {
-                hitSide = switch (desired.getValue(BlockStateProperties.AXIS)) {
-                    case X -> Direction.EAST;
-                    case Z -> Direction.SOUTH;
-                    case Y -> Direction.UP;
-                };
-                hitPos = faceCenter(clicked, hitSide);
-            }
-        }
-
-        return send(new BlockHitResult(hitPos, hitSide, clicked, false), InteractionHand.MAIN_HAND);
+        BlockHitResult hit = preparePlaceHit(pos, side, true, range, range);
+        return hit != null && send(hit, InteractionHand.MAIN_HAND, mc.player.getEyePosition(), range, range, false);
     }
 
     // ---------------------------------------------------------------- crystals
@@ -337,16 +305,22 @@ public class PlacementManager extends Feature {
     /** {@code allowOccupant} lets the cell contain that entity (FacePlace target). */
     public boolean placeCrystal(BlockPos base, boolean trustBase, SwapMode mode, EnumSet<ResultType> scope,
                                  net.minecraft.world.entity.LivingEntity allowOccupant) {
+        return placeCrystal(base, trustBase, mode, scope, allowOccupant, CrystalOptions.DEFAULT);
+    }
+
+    public boolean placeCrystal(BlockPos base, boolean trustBase, SwapMode mode, EnumSet<ResultType> scope,
+                                net.minecraft.world.entity.LivingEntity allowOccupant, CrystalOptions options) {
         if (!mc.isSameThread()) return false;
         ensureSession();
         if (nullCheck() || EatUtil.shouldDefer()) return false;
 
-        BlockHitResult hit = crystalHit(base, trustBase, allowOccupant);
+        BlockHitResult hit = crystalHit(base, trustBase, allowOccupant, options);
         if (hit == null) return false;
 
         boolean[] sent = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, scope, mode,
-                SwapPriority.CRYSTAL, () -> sent[0] = send(hit, InteractionHand.MAIN_HAND));
+                SwapPriority.CRYSTAL, () -> sent[0] = send(hit, InteractionHand.MAIN_HAND,
+                        mc.player.getEyePosition(), options.range(), options.wallRange(), options.sneak()));
         return swapped && sent[0];
     }
 
@@ -357,24 +331,24 @@ public class PlacementManager extends Feature {
 
     public boolean placeCrystalDirect(BlockPos base, boolean trustBase, InteractionHand hand,
                                        net.minecraft.world.entity.LivingEntity allowOccupant) {
+        return placeCrystalDirect(base, trustBase, hand, allowOccupant, CrystalOptions.DEFAULT);
+    }
+
+    public boolean placeCrystalDirect(BlockPos base, boolean trustBase, InteractionHand hand,
+                                      net.minecraft.world.entity.LivingEntity allowOccupant, CrystalOptions options) {
         if (!mc.isSameThread()) return false;
         ensureSession();
         if (nullCheck() || EatUtil.shouldDefer()) return false;
 
-        BlockHitResult hit = crystalHit(base, trustBase, allowOccupant);
+        BlockHitResult hit = crystalHit(base, trustBase, allowOccupant, options);
         if (hit == null) return false;
 
-        return send(hit, hand);
-    }
-
-    @Nullable
-    private BlockHitResult crystalHit(BlockPos base, boolean trustBase) {
-        return crystalHit(base, trustBase, null);
+        return send(hit, hand, mc.player.getEyePosition(), options.range(), options.wallRange(), options.sneak());
     }
 
     @Nullable
     private BlockHitResult crystalHit(BlockPos base, boolean trustBase,
-                                      net.minecraft.world.entity.LivingEntity allowOccupant) {
+                                      net.minecraft.world.entity.LivingEntity allowOccupant, CrystalOptions options) {
         if (!trustBase) {
             BlockState baseState = mc.level.getBlockState(base);
             if (!baseState.is(Blocks.OBSIDIAN) && !baseState.is(Blocks.BEDROCK)) return null;
@@ -382,57 +356,24 @@ public class PlacementManager extends Feature {
 
         BlockPos airPos = base.above();
         BlockState airState = mc.level.getBlockState(airPos);
-        if (!airState.isAir() && !(airState.is(Blocks.FIRE) && mc.level.dimension().equals(Level.END))) return null;
+        if (!airState.isAir()) return null;
 
-        for (Entity e : mc.level.getEntities(null, new AABB(airPos))) {
+        // EndCrystalItem.useOn checks a 1 x 2 x 1 entity column, including dropped items.
+        for (Entity e : mc.level.getEntities(null, new AABB(airPos).expandTowards(0, 1, 0))) {
             if (e == allowOccupant) continue;
-            if (e instanceof ItemEntity) continue;
-            if (e instanceof EndCrystal crystal
-                    && (crystal.tickCount < 5 || crystal.blockPosition().equals(airPos))) continue;
             return null;
         }
 
-        Vec3 eye = mc.player.getEyePosition(1.0f);
-        Vec3 baseCenter = Vec3.atCenterOf(base);
-        double dx = eye.x - baseCenter.x, dy = eye.y - baseCenter.y, dz = eye.z - baseCenter.z;
-        double absX = Math.abs(dx), absY = Math.abs(dy), absZ = Math.abs(dz);
-        Direction clickFace;
-        if (absY >= absX && absY >= absZ)      clickFace = dy > 0 ? Direction.UP    : Direction.DOWN;
-        else if (absX >= absZ)                 clickFace = dx > 0 ? Direction.EAST  : Direction.WEST;
-        else                                   clickFace = dz > 0 ? Direction.SOUTH : Direction.NORTH;
-
-        // Preserve the existing fractional-position bias; this is not a nearest-point projection.
-        Vec3 playerPos = mc.player.position();
-        double offX = Math.clamp(playerPos.x - Math.floor(playerPos.x), 0.2, 0.8) - 0.5;
-        double offY = Math.clamp(playerPos.y - Math.floor(playerPos.y), 0.2, 0.8) - 0.5;
-        double offZ = Math.clamp(playerPos.z - Math.floor(playerPos.z), 0.2, 0.8) - 0.5;
-        // Retain the inset used for the server tested on 2026-09-16. Boundary rejection is
-        // server-specific, not a vanilla protocol requirement.
-        Vec3 hitVec = switch (clickFace) {
-            case UP, DOWN -> baseCenter.add(offX, clickFace == Direction.UP ? 0.45 : -0.45, offZ);
-            case NORTH, SOUTH -> baseCenter.add(offX, offY, clickFace == Direction.SOUTH ? 0.45 : -0.45);
-            case EAST, WEST -> baseCenter.add(clickFace == Direction.EAST ? 0.45 : -0.45, offY, offZ);
-        };
-
-        AABB baseBox = new AABB(base);
-        if (!baseBox.contains(eye)) {
-            float[] angles = MathUtil.calcAngle(eye, hitVec);
-            Vec3 reachEnd = eye.add(lookVector(angles[0], angles[1]).scale(6.0));
-            if (baseBox.clip(eye, reachEnd).isEmpty()
-                    && (crystalWallRangeSq <= 0.0
-                        || eye.distanceToSqr(hitVec) > crystalWallRangeSq)) {
-                return null;
-            }
-        }
-
-        return new BlockHitResult(hitVec, clickFace, base, false);
+        return prepareInteractionHit(base, null, mc.player.getEyePosition(),
+                options.range(), options.wallRange(), trustBase);
     }
 
     // ---------------------------------------------------------------- fireworks
 
     /** Uses a firework against the given positions from {@code face}, inside one silent swap. */
     public boolean useFireworks(List<BlockPos> positions, Direction face) {
-        if (nullCheck() || positions.isEmpty()) return false;
+        if (!mc.isSameThread() || nullCheck() || positions.isEmpty()) return false;
+        ensureSession();
 
         boolean[] submitted = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(Items.FIREWORK_ROCKET, SCOPE, SwapMode.SILENT,
@@ -457,84 +398,85 @@ public class PlacementManager extends Feature {
 
     // ---------------------------------------------------------------- geometry
 
-    /**
-     * The neighbour face to click to place at {@code pos}: the closest solid, non-interactable,
-     * non-fluid side. Null when the position is floating and needs an air place.
-     */
-    @Nullable
-    private Direction placeSide(BlockPos pos) {
-        Vec3 eye = mc.player.getEyePosition();
-        Direction best = null;
-        double bestDistSq = Double.MAX_VALUE;
-
-        for (Direction side : Direction.values()) {
-            BlockPos neighbour = pos.relative(side);
-            BlockState state = mc.level.getBlockState(neighbour);
-            if (state.isAir()) continue;
-            if (!state.getFluidState().isEmpty()) continue;
-            if (isInteractable(state.getBlock())) continue;
-
-            double distSq = eye.distanceToSqr(Vec3.atCenterOf(neighbour));
-            if (distSq < bestDistSq) {
-                bestDistSq = distSq;
-                best = side;
-            }
-        }
-        return best;
-    }
-
-    /**
-     * The hit result for a placement at {@code pos}, for callers that emit the use packet
-     * themselves. Prefers a real neighbour whose face we can actually see, and falls back to an
-     * air place against the cell itself.
-     */
+    /** Compatibility entry: callers explicitly choose whether unsupported air placement is allowed. */
     @Nullable
     public BlockHitResult prepareAirPlaceHit(BlockPos pos) {
-        if (nullCheck() || pos == null || onCooldown(pos) || !PlaceUtil.canPlace(pos)) return null;
-
-        Vec3 eye = mc.player.getEyePosition();
-        BlockHitResult bestHit = null;
-        double bestDistSq = Double.MAX_VALUE;
-        for (Direction side : Direction.values()) {
-            BlockPos neighbour = pos.relative(side);
-            BlockState state = mc.level.getBlockState(neighbour);
-            if (state.isAir()) continue;
-            if (!state.getFluidState().isEmpty()) continue;
-            if (isInteractable(state.getBlock())) continue;
-
-            BlockHitResult candidate = PlacementGeometry.neighbourHit(pos, side);
-            Vec3 hit = candidate.getLocation();
-            // Apply the facing and distance checks to the same point we will send.
-            Direction face = candidate.getDirection();
-            Vec3 normal = new Vec3(face.getStepX(), face.getStepY(), face.getStepZ());
-            if (eye.subtract(hit).dot(normal) <= 0.01) continue;
-
-            double distSq = eye.distanceToSqr(hit);
-            if (distSq < bestDistSq) {
-                bestDistSq = distSq;
-                bestHit = candidate;
-            }
-        }
-
-        if (bestHit != null) return bestHit;
-        Direction dir = airPlaceDirection(pos);
-        return new BlockHitResult(faceCenter(pos, dir), dir, pos, false);
+        return preparePlaceHit(pos, null, true, 5.154, 5.154);
     }
 
-    private Direction airPlaceDirection(BlockPos pos) {
-        if (mc.player == null) return Direction.UP;
-
+    @Nullable
+    public BlockHitResult preparePlaceHit(BlockPos pos, @Nullable Direction side, boolean allowAir,
+                                          double range, double wallRange) {
+        if (!mc.isSameThread() || nullCheck() || pos == null) return null;
+        ensureSession();
+        if (budget() <= 0 || onCooldown(pos) || !PlaceUtil.canPlace(pos, range)) return null;
         Vec3 eye = mc.player.getEyePosition();
-        Direction best = Direction.UP;
-        double bestDist = Double.MAX_VALUE;
-        for (Direction d : Direction.values()) {
-            double dist = eye.distanceToSqr(faceCenter(pos, d));
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = d;
+        BlockHitResult best = null;
+        boolean bestVisible = false;
+        for (Direction candidateSide : Direction.values()) {
+            if (side != null && side != candidateSide) continue;
+            BlockPos neighbour = pos.relative(candidateSide);
+            BlockState state = mc.level.getBlockState(neighbour);
+            if (state.canBeReplaced() || !state.getFluidState().isEmpty() || isInteractable(state.getBlock())) continue;
+            BlockHitResult hit = prepareInteractionHit(neighbour, candidateSide.getOpposite(), eye, range, wallRange, false);
+            if (hit == null) continue;
+            boolean visible = visible(hit, eye);
+            if (best == null || visible && !bestVisible || visible == bestVisible
+                    && eye.distanceToSqr(hit.getLocation()) < eye.distanceToSqr(best.getLocation())) {
+                best = hit;
+                bestVisible = visible;
+            }
+        }
+        if (best != null || !allowAir) return best;
+        // Air placement has a distinct target and policy; never reuse an invalid neighbour hit.
+        return prepareInteractionHit(pos, side == null ? null : side.getOpposite(), eye, range, wallRange, true);
+    }
+
+    /** Select against the real outline; preferredFace preserves bed/piston direction semantics. */
+    @Nullable
+    public BlockHitResult prepareInteractionHit(BlockPos clicked, @Nullable Direction preferredFace,
+                                                Vec3 eye, double range, double wallRange, boolean allowAir) {
+        if (!mc.isSameThread() || nullCheck() || clicked == null || eye == null
+                || mc.level.isOutsideBuildHeight(clicked) || !mc.level.getWorldBorder().isWithinBounds(clicked)) return null;
+        var shape = mc.level.getBlockState(clicked).getShape(mc.level, clicked);
+        if (shape.isEmpty() && !allowAir) return null;
+        var boxes = shape.isEmpty() ? List.of(new AABB(clicked))
+                : shape.toAabbs().stream().map(box -> box.move(clicked)).toList();
+        BlockHitResult best = null;
+        boolean bestVisible = false;
+        for (AABB box : boxes) for (Direction face : Direction.values()) {
+            if (preferredFace != null && face != preferredFace) continue;
+            BlockHitResult hit = new BlockHitResult(PlacementGeometry.facePoint(box, face, eye), face, clicked.immutable(), false);
+            if (!validInteractionGeometry(hit, eye, range)) continue;
+            boolean visible = visible(hit, eye);
+            if (!visible && !(wallRange > 0 && PlacementGeometry.withinRange(eye, hit.getLocation(), Math.min(range, wallRange)))) continue;
+            if (best == null || visible && !bestVisible || visible == bestVisible
+                    && eye.distanceToSqr(hit.getLocation()) < eye.distanceToSqr(best.getLocation())) {
+                best = hit;
+                bestVisible = visible;
             }
         }
         return best;
+    }
+
+    public boolean canInteract(BlockHitResult hit, Vec3 eye, double range, double wallRange) {
+        return validInteractionGeometry(hit, eye, range) && (visible(hit, eye) || wallRange > 0
+                && PlacementGeometry.withinRange(eye, hit.getLocation(), Math.min(range, wallRange)));
+    }
+
+    private boolean validInteractionGeometry(BlockHitResult hit, Vec3 eye, double range) {
+        if (!mc.isSameThread() || nullCheck() || !PlacementGeometry.validCursor(hit)
+                || !PlacementGeometry.withinRange(eye, hit.getLocation(), range)
+                || mc.level.isOutsideBuildHeight(hit.getBlockPos())
+                || !mc.level.getWorldBorder().isWithinBounds(hit.getBlockPos())) return false;
+        return true;
+    }
+
+    private boolean visible(BlockHitResult hit, Vec3 eye) {
+        BlockHitResult trace = mc.level.clip(new ClipContext(eye, hit.getLocation(),
+                ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
+        return trace.getType() == HitResult.Type.MISS
+                || trace.getBlockPos().equals(hit.getBlockPos()) && trace.getDirection() == hit.getDirection();
     }
 
     private static boolean isInteractable(Block block) {
@@ -549,24 +491,21 @@ public class PlacementManager extends Feature {
             || block instanceof AnvilBlock;
     }
 
-    private static Vec3 lookVector(float yaw, float pitch) {
-        float f = (float) Math.cos(-yaw * 0.017453292F - Math.PI);
-        float g = (float) Math.sin(-yaw * 0.017453292F - Math.PI);
-        float h = -(float) Math.cos(-pitch * 0.017453292F);
-        float i = (float) Math.sin(-pitch * 0.017453292F);
-        return new Vec3(g * h, i, f * h);
+    private boolean send(BlockHitResult hit, InteractionHand hand) {
+        return send(hit, hand, mc.player == null ? null : mc.player.getEyePosition(), 5.154, 5.154, false);
     }
 
-    private boolean send(BlockHitResult hit, InteractionHand hand) {
-        if (nullCheck() || !mc.isSameThread()) return false;
+    private boolean send(BlockHitResult hit, InteractionHand hand, Vec3 eye,
+                         double range, double wallRange, boolean sneak) {
+        if (!HeartbeatManager.authorized() || !canInteract(hit, eye, range, wallRange)) return false;
         try (var prediction = ((ClientLevelAccessor) mc.level)
                 .guizhouware$getBlockStatePredictionHandler().startPredicting()) {
-            if (sneakSandwich && mc.player != null) {
-                // 1.21.11: sneak state rides in the input packet — flip shift, place, restore.
+            if (sneak && !mc.player.getLastSentInput().shift()) {
+                // Already-sneaking players stay sneaking; otherwise press, place, restore.
                 net.minecraft.world.entity.player.Input cur = mc.player.getLastSentInput();
                 net.minecraft.world.entity.player.Input flipped = new net.minecraft.world.entity.player.Input(
                         cur.forward(), cur.backward(), cur.left(), cur.right(), cur.jump(),
-                        !cur.shift(), cur.sprint());
+                        true, cur.sprint());
                 if (!dev.guizhou.util.PacketSendUtil.send(new ServerboundPlayerInputPacket(flipped))) return false;
                 try {
                     return dev.guizhou.util.PacketSendUtil.send(new ServerboundUseItemOnPacket(hand, hit, prediction.currentSequence()));
@@ -580,8 +519,14 @@ public class PlacementManager extends Feature {
     }
 
     /** Raw UseItemOn send with a fresh prediction sequence, for desync-based placement (GuangxiTP). */
-    public void sendUseItemOnDirect(BlockHitResult hit, InteractionHand hand) {
-        send(hit, hand);
+    public boolean sendUseItemOnDirect(BlockHitResult hit, InteractionHand hand) {
+        return send(hit, hand);
+    }
+
+    /** TP callers supply the eye position corresponding to their accepted synthetic move. */
+    public boolean sendUseItemOnDirect(BlockHitResult hit, InteractionHand hand, Vec3 eye,
+                                       double range, double wallRange) {
+        return send(hit, hand, eye, range, wallRange, false);
     }
 
     // ---------------------------------------------------------------- block updates

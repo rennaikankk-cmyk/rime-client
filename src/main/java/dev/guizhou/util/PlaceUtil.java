@@ -25,9 +25,19 @@ public final class PlaceUtil implements Util {
     }
 
     public static boolean canPlace(BlockPos pos) {
+        return canPlace(pos, 5.154);
+    }
+
+    public static boolean canPlace(BlockPos pos, double range) {
+        if (pos == null || mc.player == null || mc.level == null) return false;
         if (mc.level.isOutsideBuildHeight(pos)) return false;
+        if (!mc.level.getWorldBorder().isWithinBounds(pos)) return false;
         if (!mc.level.getBlockState(pos).canBeReplaced()) return false;
-        if (net.minecraft.world.phys.Vec3.atCenterOf(pos).distanceTo(mc.player.getEyePosition()) > 5.154) return false;
+        // Broad-phase only. The manager checks the actual clicked face before submission.
+        var eye = mc.player.getEyePosition();
+        var closest = new net.minecraft.world.phys.Vec3(Math.clamp(eye.x, pos.getX(), pos.getX() + 1.0),
+                Math.clamp(eye.y, pos.getY(), pos.getY() + 1.0), Math.clamp(eye.z, pos.getZ(), pos.getZ() + 1.0));
+        if (!Double.isFinite(range) || range < 0 || closest.distanceToSqr(eye) > range * range) return false;
         if (mc.player.getBoundingBox().intersects(new AABB(pos))) return false;
         return noEntityCollision(pos);
     }
@@ -40,7 +50,6 @@ public final class PlaceUtil implements Util {
                     || e instanceof ExperienceOrb
                     || e instanceof ThrownExperienceBottle
                     || e instanceof FireworkRocketEntity
-                    || e instanceof EndCrystal
                     || e == mc.player))) {
             return false;
         }

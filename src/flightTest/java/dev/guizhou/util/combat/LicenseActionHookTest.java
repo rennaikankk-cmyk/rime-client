@@ -37,7 +37,7 @@ public final class LicenseActionHookTest {
         guarded(CRYSTAL, "sendCrystalAttack", null, "send", "attack", "markSent");
         guarded(CRYSTAL, "sendGhostAttack", null, "send");
         guarded(CRYSTAL, "doPlace", ";Z)Z", "send", "placeCrystalShared", "recordPlace");
-        guarded(CRYSTAL, "placeCrystalShared", "LivingEntity;", "placeCrystalDirect", "placeCrystal");
+        guarded(CRYSTAL, "placeCrystalShared", "$CrystalOptions;", "placeCrystalDirect", "placeCrystal");
         Code delegate = method(CRYSTAL, "placeCrystalShared", ";Z)Z");
         check(delegate.calls("placeCrystalShared").size() == 1,
                 "Two-argument shared placement must delegate to the guarded placement implementation");
@@ -47,6 +47,10 @@ public final class LicenseActionHookTest {
         // This cancellation is a user input boundary: denying the module must leave normal mining untouched.
         guarded(MINE, "onAttackBlock", null, "cancel", "startMine");
         guarded(MINE, "requestBreak", null, "startMine");
+        guarded(MINE, "requestBreakOnce", null, "requestBreak");
+        Code singleCleanup = method(MINE, "cancelBreakOnce", null);
+        check(!singleCleanup.hasAuthorization() && !singleCleanup.calls("clearMine").isEmpty()
+                && !singleCleanup.calls("abortBreak").isEmpty(), "Owned power mining cleanup must survive revocation");
         guarded(MINE, "startMine", null, "demote", "begin");
         guarded(MINE, "begin", null, "rotateFor", "sendAction");
         guarded(MINE, "stopBreak", "(IZ)Z", "rotateFor", "withSwap", "latch");

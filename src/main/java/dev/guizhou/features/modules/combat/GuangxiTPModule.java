@@ -9,6 +9,8 @@ import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.DamageUtil;
+import dev.guizhou.util.PacketSendUtil;
+import java.util.function.BooleanSupplier;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.SwapMode;
 import dev.guizhou.util.inventory.SwapPriority;
@@ -209,10 +211,7 @@ public class GuangxiTPModule extends Module {
 
                     BlockPos airPos = cursor.above();
                     if (!mc.level.getBlockState(airPos).isAir()) continue;
-                    // Only a live crystal blocks the cell — players standing in it are fine:
-                    // 1.16 and older allow placing crystals straight into players (core crystal
-                    // pvp meta), and the point-blank cell is usually the highest damage spot.
-                    if (hasCrystalAt(airPos)) { dEntRej++; continue; }
+                    if (crystalCellBlocked(airPos)) { dEntRej++; continue; }
 
                     Vec3 center = new Vec3(airPos.getX() + 0.5, airPos.getY(), airPos.getZ() + 0.5);
                     float dmg = estimateDamage(target, center);
@@ -229,11 +228,8 @@ public class GuangxiTPModule extends Module {
         return best;
     }
 
-    private boolean hasCrystalAt(BlockPos pos) {
-        for (Entity e : mc.level.getEntities(null, new AABB(pos))) {
-            if (e instanceof EndCrystal) return true;
-        }
-        return false;
+    private boolean crystalCellBlocked(BlockPos pos) {
+        return !mc.level.getEntities(null, new AABB(pos).expandTowards(0, 1, 0)).isEmpty();
     }
 
     private EndCrystal findCrystalNear(Player target) {
@@ -268,14 +264,15 @@ public class GuangxiTPModule extends Module {
                     cursor.set(feet.getX() + dx, feet.getY() + dy, feet.getZ() + dz);
                     BlockState baseState = mc.level.getBlockState(cursor);
                     if (!baseState.isAir() && !baseState.canBeReplaced()) continue;
-                    if (!mc.level.getBlockState(cursor.above()).isAir()) continue;
+                    if (!mc.level.getBlockState(cursor.above()).isAir() || crystalCellBlocked(cursor.above())) continue;
 
                     // clickable neighbor: click its face that points back into our base cell
                     BlockPos neighbor = null;
                     Direction face = null;
                     for (Direction dir : BASE_CLICK_DIRS) {
                         BlockPos n = cursor.relative(dir);
-                        if (mc.level.getBlockState(n).isAir()) continue;
+                        if (mc.level.getBlockState(n).canBeReplaced()
+                                || !mc.level.getBlockState(n).getFluidState().isEmpty()) continue;
                         neighbor = n;
                         face = dir.getOpposite(); // face of the neighbor pointing at the base cell
                         break;
@@ -303,40 +300,48 @@ public class GuangxiTPModule extends Module {
 
         BlockPos base = opp.base();
         BlockPos n = opp.clickNeighbor();
-        Vec3 faceCenter = Vec3.atCenterOf(n).add(
-                opp.clickFace().getStepX() * 0.5,
-                opp.clickFace().getStepY() * 0.5,
-                opp.clickFace().getStepZ() * 0.5);
-        BlockHitResult hit = new BlockHitResult(faceCenter, opp.clickFace(), n, false);
-        Vec3 fake = new Vec3(base.getX() + 0.5, base.getY() + 4.0, base.getZ() + 0.5);
-
-        boolean obsidianPlaced = GuizhouWare.swapManager.withSwap(Items.OBSIDIAN, InventoryUtil.HOTBAR_SCOPE,
-                SwapMode.SILENT, SwapPriority.PLACEMENT, () ->
-                        sandwich(fake, () -> {
-                            dSent++; // counts every UseItemOn we emit (obsidian leg here)
-                            GuizhouWare.placementManager.sendUseItemOnDirect(hit, InteractionHand.MAIN_HAND);
-                        }));
-        if (!obsidianPlaced) { dSwapFail++; return false; }
-
-        return tpPlace(base);
+        Vec3 fake = fakeFeet(base);
+        Vec3 eye = fake.add(0, mc.player.getEyeHeight(), 0);
+        BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(n, opp.clickFace(), eye, 6.0, 6.0, false);
+        if (hit == null || !mc.level.getBlockState(base).canBeReplaced()
+                || !dev.guizhou.util.PlaceUtil.noEntityCollision(base)) return false;
+        boolean[] sent = {false};
+        boolean swapped = GuizhouWare.swapManager.withSwap(Items.OBSIDIAN, InventoryUtil.HOTBAR_SCOPE,
+                SwapMode.SILENT, SwapPriority.PLACEMENT, () -> sent[0] =
+                        sandwich(fake, () -> GuizhouWare.placementManager.sendUseItemOnDirect(
+                                hit, InteractionHand.MAIN_HAND, eye, 6.0, 6.0)));
+        if (!swapped) dSwapFail++;
+        if (!swapped || !sent[0]) return false;
+        dSent++;
+        // Optimistic packet ordering is retained, but a cancelled base packet cannot advance it.
+        return tpPlace(base, true);
     }
 
-    private boolean tpPlace(BlockPos base) {
+    private Vec3 fakeFeet(BlockPos base) {
+        return new Vec3(base.getX() + 0.5, base.getY() + 2.0, base.getZ() + 0.5);
+    }
+
+    private boolean tpPlace(BlockPos base) { return tpPlace(base, false); }
+
+    private boolean tpPlace(BlockPos base, boolean pendingBase) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (!InventoryUtil.find(Items.END_CRYSTAL, InventoryUtil.HOTBAR_SCOPE).found()) return false;
-
-        Vec3 hitVec = new Vec3(base.getX() + 0.5, base.getY() + 0.95, base.getZ() + 0.5); // 0.95: cursor 严格在面内（网易拒 1.0 边界）
-        BlockHitResult hit = new BlockHitResult(hitVec, Direction.UP, base, false);
-        // Fake stand ~3 blocks above the base top: comfortably inside the 6-block place reach.
-        Vec3 fake = new Vec3(base.getX() + 0.5, base.getY() + 4.0, base.getZ() + 0.5);
-
-        boolean sent = GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, InventoryUtil.HOTBAR_SCOPE, SwapMode.SILENT,
-                SwapPriority.CRYSTAL, () ->
-                        sandwich(fake, () -> {
-                            dSent++;
-                            GuizhouWare.placementManager.sendUseItemOnDirect(hit, InteractionHand.MAIN_HAND);
-                        }));
-        if (!sent) dSwapFail++;
-        return sent;
+        BlockState state = mc.level.getBlockState(base);
+        if (!pendingBase && !state.is(Blocks.OBSIDIAN) && !state.is(Blocks.BEDROCK)) return false;
+        if (!mc.level.getBlockState(base.above()).isAir() || crystalCellBlocked(base.above())) return false;
+        Vec3 fake = fakeFeet(base);
+        Vec3 eye = fake.add(0, mc.player.getEyeHeight(), 0);
+        BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(base, Direction.UP,
+                eye, 6.0, 6.0, pendingBase);
+        if (hit == null) return false;
+        boolean[] submitted = {false};
+        boolean swapped = GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, InventoryUtil.HOTBAR_SCOPE, SwapMode.SILENT,
+                SwapPriority.CRYSTAL, () -> submitted[0] =
+                        sandwich(fake, () -> GuizhouWare.placementManager.sendUseItemOnDirect(
+                                hit, InteractionHand.MAIN_HAND, eye, 6.0, 6.0)));
+        if (!swapped) dSwapFail++;
+        if (swapped && submitted[0]) dSent++;
+        return swapped && submitted[0];
     }
 
     private boolean tpBreak(EndCrystal crystal) {
@@ -352,28 +357,21 @@ public class GuangxiTPModule extends Module {
                     RotationRequest.Mode.SILENT));
         }
 
-        sandwich(fake, () -> {
-            dBreakSent++;
-            mc.player.connection.send(
-                    ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown()));
-        });
-        return true;
+        boolean sent = sandwich(fake, () -> PacketSendUtil.send(
+                ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown())));
+        if (sent) dBreakSent++;
+        return sent;
     }
 
-    /** Runs {@code action} inside the desync sandwich; in 1.12 mode the action is sent bare —
-     *  legacy servers check neither reach nor LOS, and the move check would bounce the fake pos. */
-    private void sandwich(Vec3 fake, Runnable action) {
-        if (legacy112.getValue()) {
-            action.run();
-            return;
-        }
-        sendDesyncMove(fake);
-        action.run();
-        sendRealMove();
+    /** Restore the real position even when an interaction throws or is cancelled. */
+    private boolean sandwich(Vec3 fake, BooleanSupplier action) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (legacy112.getValue()) return action.getAsBoolean();
+        return dev.guizhou.util.InteractionTransaction.run(() -> sendDesyncMove(fake), action, this::sendRealMove);
     }
 
-    private void sendDesyncMove(Vec3 pos) {
-        mc.player.connection.send(new ServerboundMovePlayerPacket.PosRot(
+    private boolean sendDesyncMove(Vec3 pos) {
+        return PacketSendUtil.send(new ServerboundMovePlayerPacket.PosRot(
                 pos.x, pos.y, pos.z,
                 GuizhouWare.rotationManager.getServerYaw(),
                 GuizhouWare.rotationManager.getServerPitch(),

@@ -109,6 +109,8 @@ public class GuangxiCrystalModule extends Module {
     /** FacePlace (Mio): when the target is low HP or nearly stripped of armor, cells the target
      *  itself occupies become placeable and bypass MinDamage — the classic finisher. */
     private final Setting<Boolean> facePlace        = bool("FacePlace", true).setPage("General");
+    /** Only for servers that explicitly permit a crystal overlapping a living target. */
+    private final Setting<Boolean> entityOverlap = bool("EntityOverlap", false).setPage("General");
     private final Setting<Double>  facePlaceHealth  = num("FacePlaceHealth", 8.0, 0.0, 36.0).setPage("General");
     private final Setting<Integer> facePlaceArmor   = num("FacePlaceArmor", 2, 0, 4).setPage("General");
 
@@ -1330,7 +1332,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 rejLocked++;
                 continue;
             }
-            LivingEntity faceEntity = faceOverlapAllowed(c.airPos, potentialTargets);
+            LivingEntity faceEntity = entityOverlap.getValue() ? faceOverlapAllowed(c.airPos, potentialTargets) : null;
             if (faceEntity == null && isBlocked(c.airPos)) {
                 if (c.bound > topRejectBound) { topRejectBound = c.bound; topReject = c.airPos + " blocked"; }
                 rejBlocked++;
@@ -1371,7 +1373,12 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 rejBal++;
                 continue;
             }
-            if (best == null || totalDmg > best.damage) best = new PlaceTarget(c.base, totalDmg, faceEntity);
+            if (best == null || totalDmg > best.damage) {
+                // Do not let an unreachable high-damage candidate starve a valid runner-up.
+                if (GuizhouWare.placementManager.prepareInteractionHit(c.base, null, mc.player.getEyePosition(),
+                        placeRangeValue(), wallPlace.getValue() ? wallRange.getValue() : 0.0, false) == null) continue;
+                best = new PlaceTarget(c.base, totalDmg, faceEntity);
+            }
         }
         logPlacePick(best, topReject, topRejectBound,
                 scanAir, scanPlaceR, scanBreakR, scanLowBound,
@@ -1638,15 +1645,12 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         return isBlockedExcept(airPos, null);
     }
 
-    /** Like {@link #isBlocked} but {@code allow} may legally overlap the cell (FacePlace). */
+    /** Explicit server compatibility exception; vanilla rejects an occupied crystal column. */
     private boolean isBlockedExcept(BlockPos airPos, LivingEntity allow) {
-        AABB cell = new AABB(airPos);
+        AABB cell = new AABB(airPos).expandTowards(0, 1, 0);
         for (Entity e : snapshotEntities()) {
-            if (!e.getBoundingBox().intersects(cell)) continue;
+            if (e.isRemoved() || !e.getBoundingBox().intersects(cell)) continue;
             if (e == allow) continue;
-            if (e instanceof ItemEntity) continue;
-            if (e instanceof EndCrystal crystal && crystal.tickCount < 5) continue;
-            if (e instanceof EndCrystal crystal && crystal.blockPosition().equals(airPos)) continue;
             return true;
         }
         return false;
@@ -1670,18 +1674,15 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     /**
      * Returns the face-eligible target allowed to occupy this cell, or null when the cell must
      * stay entity-clean. When the only blocker is a FacePlace-eligible target the cell becomes a
-     * face-place candidate (crystals legally place through standing entities).
+     * server-compatibility candidate. Vanilla rejects placement through standing entities.
      */
     @org.jetbrains.annotations.Nullable
     private LivingEntity faceOverlapAllowed(BlockPos airPos, List<TargetCache> targets) {
-        AABB cell = new AABB(airPos);
+        AABB cell = new AABB(airPos).expandTowards(0, 1, 0);
         LivingEntity allowed = null;
         outer:
         for (Entity e : snapshotEntities()) {
-            if (!e.getBoundingBox().intersects(cell)) continue;
-            if (e instanceof ItemEntity) continue;
-            if (e instanceof EndCrystal crystal && crystal.tickCount < 5) continue;
-            if (e instanceof EndCrystal crystal && crystal.blockPosition().equals(airPos)) continue;
+            if (e.isRemoved() || !e.getBoundingBox().intersects(cell)) continue;
             if (e instanceof LivingEntity living) {
                 for (int i = 0, n = targets.size(); i < n; i++) {
                     if (targets.get(i).entity == living && isFacePlaceEligible(targets.get(i))) {
@@ -1728,16 +1729,17 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         }
 
         diagPlaceAttempt++;
-        boolean sent;
-        GuizhouWare.placementManager.setSneakSandwich(sneakPlace.getValue());
-        GuizhouWare.placementManager.setCrystalWallRangeSq(
-                wallPlace.getValue() ? wallRange.getValue() * wallRange.getValue() : -1.0);
-        try {
-            sent = placeCrystalShared(target.base, trustBase, target.faceEntity());
-        } finally {
-            GuizhouWare.placementManager.setSneakSandwich(false);
-            GuizhouWare.placementManager.setCrystalWallRangeSq(-1.0);
+        var options = new dev.guizhou.manager.PlacementManager.CrystalOptions(
+                placeRangeValue(), wallPlace.getValue() ? wallRange.getValue() : 0.0, sneakPlace.getValue());
+        var hit = GuizhouWare.placementManager.prepareInteractionHit(target.base, null,
+                mc.player.getEyePosition(), options.range(), options.wallRange(), trustBase);
+        if (hit == null) return false;
+        if (rotate.getValue()) {
+            float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
+            if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                    "AutoCrystal_place", 60, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
         }
+        boolean sent = placeCrystalShared(target.base, trustBase, target.faceEntity(), options);
         if (sent) {
             diagPlaceSent++;
             recordPlace(air);
@@ -1751,13 +1753,19 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
      * Crystal placement shared with PistonCrystal: a held crystal (either hand) places directly
      * with that hand and zero swap packets; NONE refuses to swap; SILENT hotbar-swaps and reverts;
      * INVENTORY window-swaps from anywhere (main inventory included) and reverts within the tick.
-     * {@code faceEntity} (FacePlace) may legally occupy the target cell.
+     * {@code faceEntity} is an explicit non-vanilla entity-overlap compatibility exception.
      */
     public boolean placeCrystalShared(BlockPos base, boolean trustBase) {
         return placeCrystalShared(base, trustBase, null);
     }
 
     public boolean placeCrystalShared(BlockPos base, boolean trustBase, LivingEntity faceEntity) {
+        return placeCrystalShared(base, trustBase, faceEntity,
+                dev.guizhou.manager.PlacementManager.CrystalOptions.DEFAULT);
+    }
+
+    private boolean placeCrystalShared(BlockPos base, boolean trustBase, LivingEntity faceEntity,
+                                       dev.guizhou.manager.PlacementManager.CrystalOptions options) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (weaponControlBusy()) return false;
         boolean mainCrystal = mc.player.getMainHandItem().is(Items.END_CRYSTAL);
@@ -1765,7 +1773,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (mainCrystal || offCrystal) {
             return GuizhouWare.placementManager.placeCrystalDirect(base, trustBase,
                     offCrystal && !mainCrystal ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND,
-                    faceEntity);
+                    faceEntity, options);
         }
         return switch (autoSwap.getValue()) {
             case NONE -> false;
@@ -1773,7 +1781,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 ownSwapPackets.set(2); // swap + swap-back must not trigger the break switch-pause
                 try {
                     yield GuizhouWare.placementManager.placeCrystal(base, trustBase,
-                            SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, faceEntity);
+                            SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, faceEntity, options);
                 } finally {
                     ownSwapPackets.set(0);
                 }
@@ -1782,7 +1790,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 ownSwapPackets.set(2);
                 try {
                     yield GuizhouWare.placementManager.placeCrystal(base, trustBase,
-                            SwapMode.ALTSILENT, InventoryUtil.FULL_SCOPE, faceEntity);
+                            SwapMode.ALTSILENT, InventoryUtil.FULL_SCOPE, faceEntity, options);
                 } finally {
                     ownSwapPackets.set(0);
                 }
