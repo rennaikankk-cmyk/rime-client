@@ -27,6 +27,10 @@ public final class LicenseActionHookTest {
         check(!method(BASE + "combat/AutoSwordModule", "moveTo", null).hasAuthorization(), "TP return survives revocation");
         guarded(BASE + "combat/AutoTotemModule", "onTick", null, "refillOffhandTotem");
         guarded(BASE + "combat/AutoTotemModule", "refillOffhandTotem", null, "swapToOffhand");
+        guarded(BASE + "combat/GuangxiElytraChaseModule", "attack", null, "send");
+        guarded(BASE + "combat/GuangxiElytraChaseModule", "onPreTick", null, "syncFlightControl", "classifyTarget");
+        check(!method(BASE + "combat/GuangxiElytraChaseModule", "resetState", null).hasAuthorization(), "Air cleanup survives revocation");
+        guarded("dev/guizhou/util/elytra/ElytraWeaponController", "update", null, "swap", "send", "useItem");
         crystalActions();
         miningActionsAndCleanup();
         autoMineCallbacks();

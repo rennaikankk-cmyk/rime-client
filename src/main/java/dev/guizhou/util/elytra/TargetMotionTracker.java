@@ -8,6 +8,13 @@ public final class TargetMotionTracker {
     private static final double MAX_SAMPLE_SPEED = 20.0;
 
     public enum Equipment { ELYTRA, ARMOR, OTHER }
+
+    /** A packet's onGround flag alone must not turn unsupported flight into a ground approach. */
+    public static boolean grounded(boolean onGround, boolean gliding, double verticalSpeed,
+                                   boolean supportKnown, boolean supported) {
+        if (gliding || !Double.isFinite(verticalSpeed)) return false;
+        return supportKnown ? supported && (onGround || Math.abs(verticalSpeed) < 0.1) : onGround;
+    }
     public enum Mode {
         UNKNOWN("UNKNOWN"), GROUND("GROUND"), GLIDE("GLIDE"), GLIDE_ACCELERATING("GLIDE ACCEL"),
         ARMORED_AIR("ARMOR AIR"), AIRBORNE("AIRBORNE");

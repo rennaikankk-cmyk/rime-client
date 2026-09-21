@@ -141,6 +141,7 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        aerialAttackGeometryTest: 'dev.guizhou.util.elytra.AerialAttackGeometryTest',
         auraPolicyTest: 'dev.guizhou.util.combat.AuraPolicyTest',
         rotationMathTest: 'dev.guizhou.manager.RotationMathTest',
         placementVisualTest: 'dev.guizhou.util.render.placement.PlacementVisualTest',

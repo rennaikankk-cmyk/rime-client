@@ -6,6 +6,12 @@ public final class TargetMotionTrackerTest {
     private static int assertions;
 
     public static void main(String[] args) {
+        check(!TargetMotionTracker.grounded(true,false,0,true,false), "Unsupported onGround flag is airborne");
+        check(TargetMotionTracker.grounded(false,false,0,true,true), "Stationary supported target does not need a movement packet");
+        check(!TargetMotionTracker.grounded(true,true,0,true,true), "Glide observation takes priority over ground flags");
+        check(TargetMotionTracker.grounded(true,false,0,false,false), "Unknown terrain retains the received ground flag");
+        check(!TargetMotionTracker.grounded(false,false,-1,true,true), "A falling target is not already grounded");
+        check(!TargetMotionTracker.grounded(true,false,Double.NaN,true,true), "Invalid motion cannot establish grounding");
         measuredVelocityUsesElapsedTicks();
         duplicateTickDoesNotInventMotion();
         landingAndTakeoffResetHistory();

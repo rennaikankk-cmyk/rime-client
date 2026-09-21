@@ -270,6 +270,7 @@ public final class ObfuscatedJarTest {
         requiredMethod(heartbeat, authorized + "()Z");
         requiredMethod(heartbeat, denied + "()V");
         Map<String, List<String>> checkpoints = Map.ofEntries(
+                Map.entry("ElytraWeaponController", List.of("update")),
                 Map.entry("AutoSwordModule", List.of("onPreTick", "attack", "sendTeleport")),
                 Map.entry("AutoTotemModule", List.of("onTick", "refillOffhandTotem")),
                 Map.entry("GuangxiCrystalModule", List.of("onPreTick", "onCrystalSpawn", "onBlockUpdate",
@@ -278,7 +279,7 @@ public final class ObfuscatedJarTest {
                 Map.entry("GuangxiMineModule", List.of("onTick", "onAttackBlock", "requestBreak", "startMine",
                         "begin", "stopBreak", "sendAction", "isAvailable", "fireFinish", "fireSubmitted")),
                 Map.entry("AutoMineModule", List.of("onPreTick", "onMineFinish", "onPacket", "lambda$onPacket$", "placeGlass")),
-                Map.entry("GuangxiElytraChaseModule", List.of("onPreTick", "onPostMovement")),
+                Map.entry("GuangxiElytraChaseModule", List.of("onPreTick", "onPostMovement", "attack")),
                 Map.entry("GuangxiBedModule", List.of("onPreTick")),
                 Map.entry("GuangxiElytraModule", List.of("onPreTick")),
                 Map.entry("AutoUseModule", List.of("onPreTick", "shouldKeepUsing")),

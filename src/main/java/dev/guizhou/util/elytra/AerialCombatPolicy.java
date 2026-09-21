@@ -124,6 +124,14 @@ public final class AerialCombatPolicy {
         return candidateDistance <= currentDistance - improvement;
     }
 
+    /** Search immediately on target loss, otherwise bound empty/dynamic scans to once per four ticks. */
+    public static boolean shouldSearch(long tick, long lastSearch, boolean lostTarget,
+                                       boolean hasTarget, boolean dynamic) {
+        if (lostTarget) return true;
+        if (hasTarget && !dynamic) return false;
+        return tick < lastSearch || lastSearch <= Long.MIN_VALUE / 2 || tick - lastSearch >= 4;
+    }
+
     /** Two nonstationary measurements within 60 degrees support longer prediction. */
     public static boolean coherent(Vector current, Vector previous) {
         if (!validVelocity(current) || !validVelocity(previous)) return false;

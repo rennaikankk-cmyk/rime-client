@@ -8,6 +8,13 @@ public final class AerialCombatPolicyTest {
     private static int checks;
 
     public static void main(String[] args) {
+        check(AerialCombatPolicy.shouldSearch(0,Long.MIN_VALUE/2,false,false,false), "Initial scan runs immediately");
+        check(!AerialCombatPolicy.shouldSearch(1,0,false,false,false), "Empty scan waits instead of repeating each tick");
+        check(AerialCombatPolicy.shouldSearch(4,0,false,false,false), "Empty scan retries within four ticks");
+        check(AerialCombatPolicy.shouldSearch(1,0,true,false,false), "Target loss reacquires immediately");
+        check(!AerialCombatPolicy.shouldSearch(100,0,false,true,false), "Locked target avoids unnecessary scan");
+        check(AerialCombatPolicy.shouldSearch(4,0,false,true,true), "Dynamic target scan remains bounded");
+        check(AerialCombatPolicy.shouldSearch(0,100,false,false,false), "Tick rollback never strands scanning");
         relativeEncounters();
         highThreatEncounters();
         pursuitIsNotIncomingThreat();

@@ -11,6 +11,13 @@ import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.features.modules.movement.GuangxiElytraModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.RotationRequest;
+import dev.guizhou.manager.RotationOptions;
+import dev.guizhou.util.PacketSendUtil;
+import dev.guizhou.util.elytra.AerialAttackGeometry;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.HitResult;
+import java.util.function.Consumer;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.elytra.AerialCombatPolicy;
 import dev.guizhou.util.elytra.AerialIntercept;
@@ -40,8 +47,8 @@ import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageTypes;
@@ -91,6 +98,8 @@ public class GuangxiElytraChaseModule extends Module {
     private final Setting<Boolean> playerOnly = bool("PlayerOnly", true).setPage("General");
     private final Setting<Boolean> dynamicTarget = bool("DynamicTarget", false).setPage("General");
     private final Setting<Boolean> autoControlElytra = bool("AutoControlElytra", true).setPage("General");
+    private final Setting<Boolean> attackRotate = bool("Rotate", true).setPage("Mace");
+    private final RotationOptions attackRotation = new RotationOptions(this, attackRotate);
     private final Setting<Boolean> autoWeapon = bool("AutoWeapon", true).setPage("General");
     private final Setting<Boolean> autoSpearUse = bool("AutoSpearUse", true).setPage("General");
     private final Setting<Boolean> adaptiveCombat = bool("AdaptiveCombat", true).setPage("General");
@@ -146,12 +155,9 @@ public class GuangxiElytraChaseModule extends Module {
     private RouteContext routeContext;
     private boolean routeAvoiding;
     private final MaceDiveController maceDive = new MaceDiveController();
-    private volatile boolean sendingAttack;
-    private PacketEvent.Send pendingAttack;
-    private PacketEvent.Send pendingRotation;
-    private float sentYaw;
-    private float sentPitch;
-    private boolean sentRotationKnown;
+    private boolean sendingAttack, attackAccepted;
+    private int sendingTargetId = -1;
+    private final Consumer<Packet<?>> submissions = this::onSubmitted;
     private volatile long attackGeneration;
     private volatile long combatPhase;
     private boolean weaponControlActive;
@@ -340,7 +346,7 @@ public class GuangxiElytraChaseModule extends Module {
     /** Catch a reach window opened by this tick's movement/fall accumulation. */
     @Subscribe(priority = 100)
     private void onPostMovement(UpdateWalkingPlayerEvent event) {
-        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); resetState(); return; }
         if (event.getStage() != Stage.POST || paused() || !isValid(target)
                 || combatAction != AerialCombatPolicy.Action.CHASE) return;
         Behavior active = behavior instanceof MxsBehavior mxs ? mxs.active : behavior;
@@ -361,6 +367,7 @@ public class GuangxiElytraChaseModule extends Module {
     @Override
     public void onEnable() {
         resetRuntime();
+        PacketSendUtil.addSubmissionListener(submissions);
         syncFlightControl();
         if ((mode.getValue() == Mode.MACE || mode.getValue() == Mode.MXS) && !autoMaceDive.getValue()) {
             dev.guizhou.features.commands.Command.sendMessage("重锤自动下砸未开启：滑翔中不会产生重击。可在 Mace 页开启 AutoMaceDive；需在快捷栏放胸甲。旧配置保留了关闭状态。");
@@ -374,11 +381,20 @@ public class GuangxiElytraChaseModule extends Module {
         if (flight != null) flight.releaseByChase();
         controllingFlight = false;
         resetRuntime();
+        PacketSendUtil.removeSubmissionListener(submissions);
+    }
+
+    private void resetState() {
+        resetRuntime();
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        if (flight != null) flight.releaseByChase();
+        controllingFlight = false;
     }
 
     private void resetRuntime() {
         spearCommit.reset();
         clearDiveAim();
+        if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("ElytraChase_attack");
         flightRoute.reset();
         invalidatePlanning();
         routeAvoiding = false;
@@ -401,9 +417,8 @@ public class GuangxiElytraChaseModule extends Module {
         lastAttackTick = Integer.MIN_VALUE / 2;
         latencyTicks = 1;
         confirmationTicks = 6;
-        pendingAttack = null;
-        pendingRotation = null;
-        sentRotationKnown = false;
+        sendingAttack = attackAccepted = false;
+        sendingTargetId = -1;
         tactics.reset();
         combatAction = AerialCombatPolicy.Action.CHASE;
         defensiveHeading = Vec3.ZERO;
@@ -506,9 +521,9 @@ public class GuangxiElytraChaseModule extends Module {
 
     @Subscribe(priority = 100)
     private void onPreTick(PreTickEvent event) {
-        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); resetState(); return; }
         clearDiveAim();
-if (nullCheck() || mc.player == null) {
+        if (nullCheck() || mc.player == null) {
             if (trackedLevel != null || trackedPlayer != null) resetRuntime();
             return;
         }
@@ -521,6 +536,7 @@ if (nullCheck() || mc.player == null) {
         latencyTicks = readPingTicks();
 
         if (behavior == null || behaviorMode != mode.getValue()) {
+            GuizhouWare.rotationManager.cancel("ElytraChase_attack");
             maceDive.requestRecovery();
             weapons.release();
             clearSpearAim();
@@ -539,11 +555,10 @@ if (nullCheck() || mc.player == null) {
             defensiveHeading = Vec3.ZERO;
         }
 
-        if (!isValid(target)) {
-            target = null;
-        }
+        boolean lostTarget = target != null && !isValid(target);
+        if (lostTarget) target = null;
         long tick = mc.player.tickCount;
-        if (target == null || dynamicTarget.getValue() && tick - lastTargetSearchTick >= 4) {
+        if (AerialCombatPolicy.shouldSearch(tick,lastTargetSearchTick,lostTarget,target != null,dynamicTarget.getValue())) {
             Entity candidate = searchTarget();
             lastTargetSearchTick = tick;
             if (candidate != null && (target == null || AerialCombatPolicy.shouldSwitchTarget(true,
@@ -552,6 +567,7 @@ if (nullCheck() || mc.player == null) {
             }
         }
         if (target != lastTarget) {
+            GuizhouWare.rotationManager.cancel("ElytraChase_attack");
             flightRoute.reset();
             invalidatePlanning();
             maceDive.requestRecovery();
@@ -568,6 +584,7 @@ if (nullCheck() || mc.player == null) {
         classifyTarget();
         weaponControlActive = false;
         if (paused() || target == null) {
+            GuizhouWare.rotationManager.cancel("ElytraChase_attack");
             invalidatePlanning();
             maceDive.requestRecovery();
             weapons.release();
@@ -616,6 +633,7 @@ if (nullCheck() || mc.player == null) {
             tactics.reset();
         }
         if (next != combatAction) {
+            GuizhouWare.rotationManager.cancel("ElytraChase_attack");
             invalidatePlanning();
             maceDive.requestRecovery();
             combatPhase++;
@@ -683,8 +701,7 @@ if (nullCheck() || mc.player == null) {
                 || mc.player.getDeltaMovement().y >= -0.05
                 || maceDive.isActive() && !maceDive.canAttack()) return false;
         double reach = mc.player.entityInteractionRange();
-        return observedTargetBox().distanceToSqr(mc.player.getEyePosition()) <= reach * reach
-                && mc.player.hasLineOfSight(target);
+        return AerialAttackGeometry.aimPoint(mc.player.getEyePosition(),observedTargetBox(),reach,this::visibleSegment) != null;
     }
 
     private Vec3 spearAttackEye() {
@@ -842,14 +859,17 @@ if (nullCheck() || mc.player == null) {
             targetMotion = MotionClass.NORMAL;
             return;
         }
-        // Stationary remote entities (including local practice dummies) may never
-        // receive a movement packet carrying onGround. Verify support locally too.
-        targetGrounded = target.onGround() || Math.abs(target.getDeltaMovement().y) < 0.1
-                && !(target instanceof LivingEntity living && living.isFallFlying())
-                && mc.level.getBlockCollisions(target,
-                target.getBoundingBox().deflate(0.01).move(0.0, -0.08, 0.0)).iterator().hasNext();
-        long previousRevision = targetHistory.revision();
         boolean gliding = target instanceof LivingEntity living && living.isFallFlying();
+        AABB feet = observedTargetBox().deflate(0.01,0,0.01);
+        AABB supportBox = new AABB(feet.minX,feet.minY-0.08,feet.minZ,feet.maxX,feet.minY+0.01,feet.maxZ);
+        boolean supportKnown = mc.level.hasChunkAt(BlockPos.containing(supportBox.minX,supportBox.minY,supportBox.minZ))
+                && mc.level.hasChunkAt(BlockPos.containing(supportBox.minX,supportBox.minY,supportBox.maxZ))
+                && mc.level.hasChunkAt(BlockPos.containing(supportBox.maxX,supportBox.minY,supportBox.minZ))
+                && mc.level.hasChunkAt(BlockPos.containing(supportBox.maxX,supportBox.minY,supportBox.maxZ));
+        boolean supported = supportKnown && mc.level.getBlockCollisions(target,supportBox).iterator().hasNext();
+        targetGrounded = TargetMotionTracker.grounded(target.onGround(),gliding,target.getDeltaMovement().y,
+                supportKnown,supported);
+        long previousRevision = targetHistory.revision();
         var chest = ((LivingEntity) target).getItemBySlot(EquipmentSlot.CHEST);
         TargetMotionTracker.Equipment equipment = chest.is(Items.ELYTRA) ? TargetMotionTracker.Equipment.ELYTRA
                 : chest.is(ItemTags.CHEST_ARMOR) ? TargetMotionTracker.Equipment.ARMOR : TargetMotionTracker.Equipment.OTHER;
@@ -1598,6 +1618,7 @@ if (nullCheck() || mc.player == null) {
         }
 
         void switchTo(boolean useMace) {
+            GuizhouWare.rotationManager.cancel("ElytraChase_attack");
             combatPhase++;
             Behavior next = useMace ? mace : spear;
             if (active != next || usingMace != useMace) {
@@ -1686,47 +1707,63 @@ if (nullCheck() || mc.player == null) {
     }
 
     private boolean attack(Entity entity) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (mc.gameMode == null || mc.getConnection() == null || !isValid(entity) || entity != target || paused()
                 || EatUtil.shouldDefer() || mc.player.isUsingItem()
                 || !mc.player.getMainHandItem().is(Items.MACE)
-                || lastAttackTick == mc.player.tickCount) return false;
+                || lastAttackTick == mc.player.tickCount
+                || GuizhouWare.swapManager.serverSlot() != mc.player.getInventory().getSelectedSlot()) return false;
         double reach = mc.player.entityInteractionRange();
         Vec3 eye = mc.player.getEyePosition();
         AABB box = observedTargetBox();
-        if (!Double.isFinite(reach) || reach <= 0.0
-                || box.distanceToSqr(eye) > reach * reach
-                || !mc.player.hasLineOfSight(entity)) return false;
+        Vec3 aim = AerialAttackGeometry.aimPoint(eye,box,reach,this::visibleSegment);
+        if (aim == null) return false;
         if (!willUseMaceAttack() && mc.player.getAttackStrengthScale(0.5F) <= 0.95F) return false;
-        Vec3 aim = new Vec3(Math.clamp(eye.x, box.minX, box.maxX),
-                Math.clamp(eye.y, box.minY, box.maxY), Math.clamp(eye.z, box.minZ, box.maxZ))
-                .lerp(box.getCenter(), 0.05);
-        float[] angles = MathUtil.calcAngle(eye, aim);
+        float[] angles = MathUtil.calcAngle(eye,aim);
         var rotation = GuizhouWare.rotationManager;
-        if (!rotation.trySubmit(new RotationRequest("ElytraChase_attack", 70, angles[0], angles[1],
-                RotationRequest.Mode.SILENT, false, true))) return false;
-        acceptPendingRotation();
-        if (!sentRotationKnown) return false;
-        Vec3 actualLook = Vec3.directionFromRotation(sentPitch, sentYaw);
-        if (!box.contains(eye) && box.clip(eye, eye.add(actualLook.scale(reach))).isEmpty()) return false;
-
-        boolean smash = willUseMaceAttack();
-        attackGeneration++;
-        maceFeedback.clear();
-        pendingAttack = null;
-        sendingAttack = true;
-        PacketEvent.Send attempt;
-        try {
-            mc.gameMode.attack(mc.player, entity);
-            attempt = pendingAttack;
-        } finally {
-            sendingAttack = false;
-            pendingAttack = null;
+        if (attackRotate.getValue()) {
+            long expectedPhase = combatPhase;
+            var expectedMode = mode.getValue();
+            var expectedPlayer = mc.player;
+            var expectedLevel = mc.level;
+            RotationRequest request = attackRotation.request("ElytraChase_attack",70,
+                    angles[0],angles[1],RotationRequest.Mode.SILENT);
+            var enabled = request.continueWhile;
+            request.continueWhile = () -> enabled.getAsBoolean() && combatPhase == expectedPhase
+                    && mode.getValue() == expectedMode && mc.player == expectedPlayer && mc.level == expectedLevel
+                    && target == entity && isValid(entity) && !paused()
+                    && combatAction == AerialCombatPolicy.Action.CHASE
+                    && mc.player.getMainHandItem().is(Items.MACE)
+                    && AerialAttackGeometry.aimPoint(mc.player.getEyePosition(),observedTargetBox(),
+                        mc.player.entityInteractionRange(),this::visibleSegment) != null;
+            if (!rotation.tryAction(request)) return false;
         }
-        if (attempt == null || attempt.isCancelled()) return false;
+        float yaw = rotation.getServerYaw(), pitch = rotation.getServerPitch();
+        if (!rotation.isSynchronized(yaw,pitch)
+                || !AerialAttackGeometry.canHit(eye,box,reach,yaw,pitch,this::visibleSegment)) return false;
+        // A synchronous rotation listener may have changed the target, world or held item.
+        if (!isValid(entity) || entity != target || !mc.player.getMainHandItem().is(Items.MACE)
+                || GuizhouWare.swapManager.serverSlot() != mc.player.getInventory().getSelectedSlot()) return false;
+        if (mc.player != trackedPlayer || mc.level != trackedLevel
+                || !AerialAttackGeometry.canHit(mc.player.getEyePosition(),observedTargetBox(),reach,
+                    rotation.getServerYaw(),rotation.getServerPitch(),this::visibleSegment)) return false;
+        boolean smash = willUseMaceAttack();
+        sendingAttack = true;
+        sendingTargetId = entity.getId();
+        attackAccepted = false;
+        try { PacketSendUtil.send(ServerboundInteractPacket.createAttackPacket(entity,mc.player.isShiftKeyDown())); }
+        finally { sendingAttack = false; sendingTargetId = -1; }
+        if (!attackAccepted) return false;
         lastAttackTick = mc.player.tickCount;
-        if (smash) maceFeedback.arm(entity.getId(), lastAttackTick, confirmationTicks());
+        mc.player.resetAttackStrengthTicker();
+        if (smash) maceFeedback.arm(entity.getId(),lastAttackTick,confirmationTicks());
         mc.player.swing(InteractionHand.MAIN_HAND);
         return true;
+    }
+
+    private boolean visibleSegment(Vec3 from, Vec3 to) {
+        return mc.level.clip(new ClipContext(from,to,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,mc.player))
+                .getType() == HitResult.Type.MISS;
     }
 
     private Vec3 predictedTarget() {
@@ -1781,36 +1818,21 @@ if (nullCheck() || mc.player == null) {
         if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("ElytraChase_spear");
     }
 
-    private void acceptPendingRotation() {
-        PacketEvent.Send event = pendingRotation;
-        pendingRotation = null;
-        if (event != null && !event.isCancelled() && event.getPacket() instanceof ServerboundMovePlayerPacket move) {
-            sentYaw = move.getYRot(0.0F);
-            sentPitch = move.getXRot(0.0F);
-            sentRotationKnown = Float.isFinite(sentYaw) && Float.isFinite(sentPitch);
-        }
+    /** Final local submissions only: interactions and cancelled attacks do not erase hit feedback. */
+    private void onSubmitted(Packet<?> packet) {
+        if (!mc.isSameThread() || !isEnabled() || mc.player != trackedPlayer || mc.level != trackedLevel
+                || !(packet instanceof ServerboundInteractPacket interact)) return;
+        interact.dispatch(new ServerboundInteractPacket.Handler() {
+            public void onInteraction(InteractionHand hand) {}
+            public void onInteraction(InteractionHand hand, Vec3 location) {}
+            public void onAttack() { acceptAttack(interact.entityId); }
+        });
     }
 
-    @Subscribe(priority = Integer.MIN_VALUE)
-    private void onPacketSend(PacketEvent.Send event) {
-        if (sendingAttack && mc.isSameThread() && event.getPacket() instanceof ServerboundInteractPacket) {
-            pendingAttack = event;
-            return;
-        }
-        long expectedSession = session;
-        if (event.getPacket() instanceof ServerboundMovePlayerPacket move && move.hasRotation()) {
-            mc.execute(() -> {
-                if (session != expectedSession || !isEnabled()) return;
-                acceptPendingRotation();
-                pendingRotation = event;
-            });
-            return;
-        }
-        if (!(event.getPacket() instanceof ServerboundInteractPacket)) return;
-        long expectedAttack = attackGeneration;
-        mc.execute(() -> {
-            if (!event.isCancelled() && session == expectedSession && attackGeneration == expectedAttack) maceFeedback.clear();
-        });
+    private void acceptAttack(int entityId) {
+        attackGeneration++;
+        maceFeedback.clear();
+        if (sendingAttack && entityId == sendingTargetId) attackAccepted = true;
     }
 
     @Subscribe
@@ -1840,8 +1862,18 @@ if (nullCheck() || mc.player == null) {
             long expectedSession = session;
             mc.execute(() -> {
                 if (session != expectedSession || !isEnabled()) return;
-                pendingRotation = null;
-                sentRotationKnown = false;
+                flightRoute.reset();
+                spearCommit.reset();
+                clearDiveAim();
+                clearSpearAim();
+                GuizhouWare.rotationManager.cancel("ElytraChase_attack");
+                weapons.release();
+                weaponControlActive = false;
+                if (behavior != null) behavior.enter();
+                tactics.reset();
+                combatAction = AerialCombatPolicy.Action.CHASE;
+                defensiveHeading = Vec3.ZERO;
+                combatPhase++;
                 maceFeedback.clear();
                 maceDive.requestRecovery();
                 invalidatePlanning();

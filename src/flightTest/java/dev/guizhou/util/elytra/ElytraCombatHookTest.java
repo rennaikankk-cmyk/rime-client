@@ -188,50 +188,37 @@ public final class ElytraCombatHookTest {
 
     private static void verifyAttackRotation() throws IOException {
         Trace attack = method(read(CHASE), "attack");
-        int submit = attack.call(ROTATION, "trySubmit");
-        int accepted = attack.call(CHASE, "acceptPendingRotation");
-        int pitch = attack.field(CHASE, "sentPitch", Opcodes.GETFIELD);
-        int yaw = attack.field(CHASE, "sentYaw", Opcodes.GETFIELD);
-        int look = attack.call("net/minecraft/world/phys/Vec3", "directionFromRotation");
-        int clip = attack.call("net/minecraft/world/phys/AABB", "clip");
-        int empty = attack.call("java/util/Optional", "isEmpty");
-        int send = attack.call("net/minecraft/client/multiplayer/MultiPlayerGameMode", "attack");
-        check(submit < accepted && accepted < pitch && accepted < yaw && pitch < look && yaw < look
-                        && look < clip && clip < empty && empty < send,
-                "Attack must submit rotation and verify the resulting server ray before sending");
-        for (int required : new int[]{submit, accepted, pitch, yaw, look}) {
-            check(!canReach(attack, 0, send, required, new HashSet<>()),
-                    "A path to attack bypasses rotation submission or actual server angles");
-        }
-        Step miss = attack.steps.get(empty + 1);
-        check(miss.opcode == Opcodes.IFEQ, "Only a nonempty target-box intersection may continue");
-        assertFalseReturn(attack, empty + 2, "A ray missing the target box");
-        int contains = attack.call("net/minecraft/world/phys/AABB", "contains");
-        check(look < contains && contains < clip,
-                "The only geometric shortcut must check whether the eye is inside the target box");
+        int submit = attack.call(ROTATION, "tryAction");
+        int yaw = attack.call(ROTATION, "getServerYaw");
+        int pitch = attack.call(ROTATION, "getServerPitch");
+        int ray = attack.call("dev/guizhou/util/elytra/AerialAttackGeometry", "canHit");
+        int send = attack.call("dev/guizhou/util/PacketSendUtil", "send");
+        check(submit < yaw && yaw < pitch && pitch < ray && ray < send,
+                "Rotate uses the shared action arbitration and final submitted angles");
+        for (int required : new int[]{yaw,pitch,ray})
+            check(!canReach(attack,0,send,required,new HashSet<>()),"Even Rotate-off attacks require actual ray validation");
+        check(attack.hasCall("dev/guizhou/manager/SwapManager", "serverSlot"), "Attacks verify submitted weapon selection");
+        check(!attack.hasCall("net/minecraft/client/player/LocalPlayer", "hasLineOfSight"),
+                "Final attack must not use visibility of the stale rendered entity");
     }
 
     private static void verifyAcceptedAttack() throws IOException {
-        Map<String, Trace> methods = read(CHASE);
-        Trace attack = method(methods, "attack");
-        int send = attack.call("net/minecraft/client/multiplayer/MultiPlayerGameMode", "attack");
-        int cancelled = attack.call("dev/guizhou/event/impl/network/PacketEvent$Send", "isCancelled");
-        int arm = attack.call("dev/guizhou/util/elytra/CombatHitWindow", "arm");
-        int tick = attack.field(CHASE, "lastAttackTick", Opcodes.PUTFIELD);
-        check(send < cancelled && cancelled < tick && tick < arm,
-                "Only an accepted attack may start the hit confirmation window");
-        check(!canReach(attack, 0, arm, cancelled, new HashSet<>()),
-                "Cancelled dispatch must not arm a pending hit");
-        Step branch = attack.steps.get(cancelled + 1);
-        check(branch.opcode == Opcodes.IFEQ, "Only a noncancelled attack may continue");
-        assertFalseReturn(attack, cancelled + 2, "Cancelled attack");
-        check(method(methods, "onPacketSend").priority == Integer.MIN_VALUE,
-                "Outgoing attack and rotation observation must follow packet cancellation policies");
-        Trace rotation = method(methods, "acceptPendingRotation");
-        int rotateCancelled = rotation.call("dev/guizhou/event/impl/network/PacketEvent$Send", "isCancelled");
-        int acceptedYaw = rotation.field(CHASE, "sentYaw", Opcodes.PUTFIELD);
-        check(!canReach(rotation, 0, acceptedYaw, rotateCancelled, new HashSet<>()),
-                "Unaccepted rotation must not become the attack ray");
+        Map<String,Trace> methods = read(CHASE);
+        Trace attack = method(methods,"attack");
+        int send = attack.call("dev/guizhou/util/PacketSendUtil","send");
+        int accepted = attack.field(CHASE,"attackAccepted",Opcodes.GETFIELD);
+        int tick = attack.field(CHASE,"lastAttackTick",Opcodes.PUTFIELD);
+        int arm = attack.call("dev/guizhou/util/elytra/CombatHitWindow","arm");
+        check(send < accepted && accepted < tick && tick < arm,"Only a matching final attack arms feedback");
+        check(!canReach(attack,0,arm,accepted,new HashSet<>()),"No feedback without submission validation");
+        check(attack.steps.get(accepted+1).opcode == Opcodes.IFNE,"An unaccepted attack branches to failure");
+        assertFalseReturn(attack,accepted+2,"Unaccepted attack");
+        check(method(methods,"onEnable").hasCall("dev/guizhou/util/PacketSendUtil","addSubmissionListener"),
+                "Final packet observer is registered while enabled");
+        check(method(methods,"onDisable").hasCall("dev/guizhou/util/PacketSendUtil","removeSubmissionListener"),
+                "Disable removes the observer");
+        check(!attack.hasCall("net/minecraft/client/multiplayer/MultiPlayerGameMode","attack"),
+                "Cancelled sends cannot reset vanilla cooldown through speculative local attack");
     }
 
     /** The silent arbitration window must not outlive its tick: the post-movement attack
@@ -428,13 +415,13 @@ public final class ElytraCombatHookTest {
         check(consumed.opcode == Opcodes.IFEQ && feedback.target(consumed) > hit,
                 "An unmatched or consumed mace confirmation must skip the mace hit callback");
         check(feedback.hasCall(CHASE, "spearPhase"), "Spear damage feedback must require an active spear phase");
-        Trace outgoing = method(methods, "onPacketSend");
+        Trace outgoing = method(methods, "onSubmitted");
         check(outgoing.steps.stream().noneMatch(step -> step.opcode == Opcodes.INSTANCEOF
                         && "net/minecraft/network/protocol/game/ServerboundSetCarriedItemPacket".equals(step.owner)),
                 "Temporary firework and restored-hotbar selection must not erase an already-sent mace confirmation");
         check(outgoing.steps.stream().filter(step -> step.opcode == Opcodes.INSTANCEOF
-                        && "net/minecraft/network/protocol/game/ServerboundInteractPacket".equals(step.owner)).count() == 2,
-                "The accepted owned attack must remain distinct from intervening entity interactions");
+                        && "net/minecraft/network/protocol/game/ServerboundInteractPacket".equals(step.owner)).count() == 1 && outgoing.hasCall("net/minecraft/network/protocol/game/ServerboundInteractPacket", "dispatch"),
+                "Interactions must be decoded before accepted attacks invalidate feedback");
     }
 
     private static void verifyImmediateAttack() throws IOException {

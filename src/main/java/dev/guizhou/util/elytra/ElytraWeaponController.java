@@ -2,6 +2,12 @@ package dev.guizhou.util.elytra;
 
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.util.inventory.InventoryUtil;
+import dev.guizhou.util.PacketSendUtil;
+import dev.guizhou.manager.HeartbeatManager;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import java.util.function.Consumer;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
@@ -21,8 +27,10 @@ public final class ElytraWeaponController {
     private ItemStack useStack;
     private boolean ownsUse;
     private int lastUseAttemptTick = Integer.MIN_VALUE;
+    private int lastSlotAttemptTick = Integer.MIN_VALUE;
 
     public boolean update(boolean spear, boolean autoSwitch, boolean autoUse) {
+        if (!HeartbeatManager.authorized()) { release(); return false; }
         if (player != mc.player || level != mc.level) {
             forget();
             player = mc.player;
@@ -45,16 +53,17 @@ public final class ElytraWeaponController {
         if (ownsUse && mc.options.keyUse.isDown()) forgetUse();
         if (ownsUse && (!spear || !autoUse || SpearCombat.hasDamageWindowExpired(player))) {
             stopOwnedUse();
-            if (spear && autoUse) return matches(player.getMainHandItem(), true);
+            if (spear && autoUse) return selectionSubmitted() && matches(player.getMainHandItem(), true);
         }
 
         boolean desiredHeld = matches(player.getMainHandItem(), spear);
-        if (player.isUsingItem() && !ownsUse) return desiredHeld;
+        if (player.isUsingItem() && !ownsUse) return desiredHeld && selectionSubmitted();
         if (!desiredHeld) {
             if (!autoSwitch || mc.options.keyUse.isDown()) return false;
             int target = chooseHotbar(selected, slot -> matches(player.getInventory().getItem(slot), spear));
             if (target < 0) return false;
             stopOwnedUse();
+            lastSlotAttemptTick = player.tickCount;
             InventoryUtil.swap(target);
             slots.select(selected, target);
             selectedStack = player.getMainHandItem();
@@ -63,11 +72,29 @@ public final class ElytraWeaponController {
             selectedStack = player.getMainHandItem();
         }
 
+        if (!selectionSubmitted()) {
+            if (lastSlotAttemptTick == player.tickCount) return false;
+            lastSlotAttemptTick = player.tickCount;
+            PacketSendUtil.send(new ServerboundSetCarriedItemPacket(InventoryUtil.selected()));
+            if (!selectionSubmitted()) return false;
+        }
+
         if (spear && autoUse && !player.isUsingItem() && !mc.options.keyUse.isDown()
                 && lastUseAttemptTick != player.tickCount) {
             lastUseAttemptTick = player.tickCount;
             ItemStack held = player.getMainHandItem();
-            mc.gameMode.useItem(player, InteractionHand.MAIN_HAND);
+            boolean[] accepted = {false};
+            Consumer<Packet<?>> observer = packet -> {
+                if (packet instanceof ServerboundUseItemPacket use && use.getHand() == InteractionHand.MAIN_HAND
+                        && selectionSubmitted()) accepted[0] = true;
+            };
+            PacketSendUtil.addSubmissionListener(observer);
+            try { mc.gameMode.useItem(player, InteractionHand.MAIN_HAND); }
+            finally { PacketSendUtil.removeSubmissionListener(observer); }
+            if (!accepted[0]) {
+                if (player.isUsingItem() && player.getUseItem() == held) player.stopUsingItem();
+                return false;
+            }
             if (player.isUsingItem() && player.getUsedItemHand() == InteractionHand.MAIN_HAND
                     && player.getUseItem() == held && SpearCombat.isSpear(held)) {
                 useStack = held;
@@ -77,8 +104,12 @@ public final class ElytraWeaponController {
         return matches(player.getMainHandItem(), spear);
     }
 
+    private boolean selectionSubmitted() {
+        return sameSession() && GuizhouWare.swapManager.serverSlot() == InventoryUtil.selected();
+    }
+
     public boolean isHoldingUse() {
-        return !blocked() && ownsUse && usingOwnedStack()
+        return !blocked() && selectionSubmitted() && ownsUse && usingOwnedStack()
                 && slots.controlledSlot == InventoryUtil.selected();
     }
 
@@ -135,6 +166,7 @@ public final class ElytraWeaponController {
         level = null;
         selectedStack = null;
         lastUseAttemptTick = Integer.MIN_VALUE;
+        lastSlotAttemptTick = Integer.MIN_VALUE;
     }
 
     private static boolean matches(ItemStack stack, boolean spear) {

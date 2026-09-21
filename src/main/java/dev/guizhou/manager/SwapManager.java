@@ -2,10 +2,11 @@ package dev.guizhou.manager;
 
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
-import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.Feature;
 import dev.guizhou.util.inventory.InventoryUtil;
+import dev.guizhou.util.PacketSendUtil;
+import net.minecraft.network.protocol.Packet;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.inventory.SwapMode;
@@ -69,10 +70,12 @@ public class SwapManager extends Feature {
     private int starved = Integer.MIN_VALUE;
 
     /** Last slot the server was told we hold, tracked off the outgoing packet. */
-    private int serverSlot = -1;
+    private volatile int serverSlot = -1;
+    private Object slotPlayer, slotLevel, slotConnection;
 
     public void init() {
         EVENT_BUS.register(this, "SwapManager");
+        PacketSendUtil.addSubmissionListener(this::onSubmitted);
     }
 
     // ---------------------------------------------------------------- sub-tick swaps
@@ -337,6 +340,7 @@ public class SwapManager extends Feature {
      */
     @Subscribe(priority = 2000)
     private void onPreTick(PreTickEvent event) {
+        syncSlotSession();
         repinLatch();
 
         silentUsed = 0;
@@ -364,17 +368,23 @@ public class SwapManager extends Feature {
         }
     }
 
-    @Subscribe
-    private void onPacketSend(PacketEvent.Send event) {
-        if (event.getPacket() instanceof ServerboundSetCarriedItemPacket packet) {
-            serverSlot = packet.getSlot();
-        }
+    private void syncSlotSession() {
+        if (slotPlayer == mc.player && slotLevel == mc.level && slotConnection == mc.getConnection()) return;
+        slotPlayer = mc.player; slotLevel = mc.level; slotConnection = mc.getConnection();
+        serverSlot = mc.player == null ? -1 : InventoryUtil.selected();
     }
 
-    /** The slot the server believes we hold, falling back to the client's selection. */
+    /** Observe the final submitted selection, including replacements, after cancellation policies. */
+    private void onSubmitted(Packet<?> packet) {
+        if (!mc.isSameThread() || !(packet instanceof ServerboundSetCarriedItemPacket slot)) return;
+        syncSlotSession();
+        serverSlot = slot.getSlot();
+    }
+
+    /** Last locally submitted selection. This is not a server acknowledgement. */
     public int serverSlot() {
-        if (mc.player == null) return serverSlot;
-        return serverSlot == -1 ? InventoryUtil.selected() : serverSlot;
+        if (mc.isSameThread()) syncSlotSession();
+        return serverSlot;
     }
 
     // ---------------------------------------------------------------- internals

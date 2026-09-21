@@ -8,7 +8,7 @@ try {
     $fixtureClasses = Join-Path $repoRoot 'build/aura-fixture/classes'
     New-Item -ItemType Directory -Force $fixtureClasses | Out-Null
     $fixtureClasspath = Get-Content -Raw build/aura-fixture/classpath.txt
-    & "$env:JAVA_HOME/bin/javac.exe" -proc:none -encoding UTF-8 -cp $fixtureClasspath -d $fixtureClasses tools/aura-fixture/AuraFixture.java
+    & "$env:JAVA_HOME/bin/javac.exe" -proc:none -encoding UTF-8 -cp $fixtureClasspath -d $fixtureClasses tools/aura-fixture/AuraFixture.java tools/aura-fixture/AerialFixture.java
     if ($LASTEXITCODE -ne 0) { throw 'Fixture compilation failed.' }
     Copy-Item -LiteralPath tools/aura-fixture/fabric.mod.json -Destination $fixtureClasses
     & "$env:JAVA_HOME/bin/jar.exe" cf build/aura-fixture/fixture.jar -C $fixtureClasses .
