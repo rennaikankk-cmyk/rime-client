@@ -65,6 +65,7 @@ public class GuangxiElytraModule extends Module {
     private final java.util.Map<String, Setting<?>> policy = new java.util.LinkedHashMap<>();
     private final Setting<Mode> flightProfile = mode("Mode", Mode.Grim);
     private final Setting<Boolean> gzBoost = bool("GZBoost", false);
+    private final Setting<CoupledCruise.BoostMode> gzBoostMode = mode("GZBoostMode", CoupledCruise.BoostMode.Aggressive);
     private final Setting<Double> horizontalSpeed = num("SpeedBps", 40.0, 1.0, 300.0);
     private final Setting<Double> climbSpeed = num("ClimbBps", 40.0, 1.0, 300.0);
     private final Setting<Boolean> adaptiveSlowdown = bool("AdaptiveSlowdown", false);
@@ -228,6 +229,7 @@ public class GuangxiElytraModule extends Module {
     public GuangxiElytraModule() {
         super("GuangxiElytra", "Grim cruise and climb; NoAC direct flight. GZBoost enables fast cruise, Space climbs, Shift descends.", Category.MOVEMENT);
         gzBoost.setVisibility(v -> flightProfile.getValue() == Mode.Grim);
+        gzBoostMode.setVisibility(v -> flightProfile.getValue() == Mode.Grim && gzBoost.getValue());
         adaptiveSlowdown.setVisibility(v -> flightProfile.getValue() == Mode.Grim);
         horizontalSpeed.setVisibility(v -> flightProfile.getValue() == Mode.NoAC);
         climbSpeed.setVisibility(v -> flightProfile.getValue() == Mode.NoAC);
@@ -814,7 +816,7 @@ public class GuangxiElytraModule extends Module {
         if (autoFly.getValue() && !mc.options.keyUp.isDown() && !mc.options.keyDown.isDown()
                 && !mc.options.keyLeft.isDown() && !mc.options.keyRight.isDown()) forward = 1;
         Vec3 horizontal = ElytraPhysics.movementInputToVelocity(new Vec3(strafe, 0, forward), 1, viewAnchor.yaw());
-        return new CoupledCruise.Intent(horizontal, vertical, autoFly.getValue(), gzBoost.getValue());
+        return new CoupledCruise.Intent(horizontal, vertical, autoFly.getValue(), gzBoost.getValue(), gzBoostMode.getValue());
     }
 
     private CoupledCruise.Config cruiseConfig() {

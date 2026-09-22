@@ -48,8 +48,16 @@ public final class CoupledCruise {
 
     public enum Phase { LEVEL, DESCEND, CLIMB }
 
+    public enum BoostMode { Gentle, Aggressive }
+
     /** Vertical means manual jump/sneak; horizontal is the world-space WASD wish. */
-    public record Intent(Vec3 horizontal, double vertical, boolean autoFly, boolean accelerated) {
+    public record Intent(Vec3 horizontal, double vertical, boolean autoFly, boolean accelerated, BoostMode boostMode) {
+        public Intent {
+            if (boostMode == null) boostMode = BoostMode.Aggressive;
+        }
+        public Intent(Vec3 horizontal, double vertical, boolean autoFly, boolean accelerated) {
+            this(horizontal, vertical, autoFly, accelerated, BoostMode.Aggressive);
+        }
         public Intent(Vec3 horizontal, double vertical, boolean autoFly) {
             this(horizontal, vertical, autoFly, false);
         }
@@ -155,9 +163,10 @@ public final class CoupledCruise {
             double axial = smoothUnit(1 - axisAngle / 5);
             double diagonal = smoothUnit((axisAngle - 42) / 3);
             double basePitch = dualClimbAngle(config.dualClimbAngle(), Math.max(Math.abs(Math.sin(yaw)), Math.abs(Math.cos(yaw))));
-            double axialPitch = -89.25;
+            boolean gentle = intent.boostMode() == BoostMode.Gentle;
+            double axialPitch = gentle ? -86.25 : -89.25;
             double pitch = basePitch + axial * (axialPitch - basePitch) + diagonal * (-89.25 - basePitch);
-            double span = 72.5 * axial + 45 * diagonal;
+            double span = (gentle ? 20 : 72.5) * axial + 45 * diagonal;
             bankSide = !bankSide;
             return new Selection(lookAt(pitch, yaw), phase, vertical, false, true, true,
                     lookAt(0, yaw + Math.toRadians(bankSide ? span : -span)), true);
