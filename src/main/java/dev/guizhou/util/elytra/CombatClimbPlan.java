@@ -14,7 +14,7 @@ public final class CombatClimbPlan {
     public void reset() { committed = null; chosenTick = Long.MIN_VALUE; approachingApex = false; }
 
     public Choice choose(CoupledCruise.Config config, Vec3 apexOffset, Vec3 velocity, Vec3 previousLook,
-                         double gravity, boolean dual, long tick, Predicate<Vec3> clear) {
+                         double gravity, boolean dual, boolean accelerated, long tick, Predicate<Vec3> clear) {
         if (!finite(apexOffset) || !finite(velocity) || !finite(previousLook) || config == null
                 || !Double.isFinite(gravity) || gravity < 0 || clear == null) { reset(); return null; }
         if (tick < chosenTick) reset();
@@ -36,7 +36,12 @@ public final class CombatClimbPlan {
         Vec3 bestHeading = null;
         double bestScore = -Double.MAX_VALUE, heldScore = -Double.MAX_VALUE;
         for (Vec3 heading : headings) {
-            var selection = controller.select(config, new CoupledCruise.Intent(heading, 1, false), 0, 0, dual);
+            // The accelerated (GZBoost) climb is the same opt-in wish the manual
+            // path sends; CoupledCruise gates it on the dual-view protocol and the
+            // per-tick envelope still vetoes any lane the connection rejects.
+            // Candidate order fixes each heading's bank side, so a committed lane
+            // banks steadily instead of alternating every tick.
+            var selection = controller.select(config, new CoupledCruise.Intent(heading, 1, false, accelerated), 0, 0, dual);
             Vec3 simulated = ElytraPhysics.simulateGlide(velocity, selection.look(), gravity);
             var result = controller.apply(config, selection, velocity, simulated, selection.look(), previousLook);
             if (!result.feasible() || result.velocity().y <= 0 || result.velocity().y >= apexOffset.y - 3

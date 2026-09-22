@@ -121,7 +121,7 @@ public class GuangxiElytraChaseModule extends Module {
     private final Setting<Boolean> autoMaceDive = fixed("AutoMaceDive", true);
     private final Setting<Boolean> maceAdaptive = bool("MaceAdaptive", true).setPage("Advanced");
     private final Setting<Boolean> maceTerminal = fixed("MaceTerminal", true);
-    private final Setting<Double> maceHeight = num("MaceHeight", 80.0, 1.0, 128.0).setPage("Advanced");
+    private final Setting<Double> maceHeight = num("MaceHeight", 32.0, 1.0, 128.0).setPage("Advanced");
     private final Setting<Double> maceMinFallDistance = num("MaceMinFallDistance", 1.5, 0.0, 20.0).setPage("Advanced");
     private final Setting<Double> spearAttackDistance = num("SpearAttackDistance", 8.0, 1.0, 64.0).setPage("Advanced");
     private final Setting<Double> spearPullOverDistance = num("SpearPullOverDistance", 8.0, 1.0, 64.0).setPage("Advanced");
@@ -1846,9 +1846,31 @@ public class GuangxiElytraChaseModule extends Module {
     // ---------------------------------------------------------------
 
     private AABB maceTargetBox() {
-        // Mace uses the reference profile's NO_PREDICT contact point. The latest
-        // interpolation destination can already be several blocks beyond a fast crossing.
-        return target.getBoundingBox();
+        // The rendered box trails the last received destination by the client's
+        // interpolation span; during a fast crossing that lag is many blocks of
+        // phantom distance shared by dive start, pass tracking and the attack
+        // gate (rc8gzr1-mace-off-0 tick 711: rendered 15.1 blocks while the
+        // received estimate was 1.7 and the server held 2.8). Keep the reference
+        // profile's NO_PREDICT contact point, but take it at the freshest
+        // received position when tracked target motion explains the offset; a
+        // discontinuity motion cannot explain is teleport-class and keeps the
+        // rendered box.
+        return target.getBoundingBox().move(maceObservedOffset());
+    }
+
+    /** Received-minus-rendered offset, accepted beyond the flat cutoff only when
+     * the tracked target velocity explains both its direction and magnitude. */
+    private Vec3 maceObservedOffset() {
+        Vec3 offset = dev.guizhou.util.elytra.ObservedEntityPosition.rawOffset(target);
+        if (offset.lengthSqr() <= 144.0) return offset;
+        Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
+        double speed = velocity.length();
+        if (speed < 0.5) return Vec3.ZERO;
+        double length = offset.length();
+        // Interpolation lag runs along the motion direction; a teleport does not,
+        // and no motion of this speed covers more than a five-tick lag window.
+        if (offset.dot(velocity) < 0.9 * length * speed) return Vec3.ZERO;
+        return length <= speed * 5.0 + 1.5 ? offset : Vec3.ZERO;
     }
 
     private Vec3 maceAttackEye() {

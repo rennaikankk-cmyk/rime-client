@@ -630,8 +630,8 @@ public class GuangxiElytraModule extends Module {
             // Compare climb lanes using this connection's actual single/dual-view capability.
             var choice = combatClimb.choose(config, fv.climbApex(), mc.player.getDeltaMovement(),
                     lastLook == null ? mc.player.getLookAngle() : lastLook,
-                    mc.player.getAttributeValue(Attributes.GRAVITY), dualViewAvailable(), mc.player.tickCount,
-                    step -> clearRelativePath(Vec3.ZERO, step));
+                    mc.player.getAttributeValue(Attributes.GRAVITY), dualViewAvailable(), gzBoost.getValue(),
+                    mc.player.tickCount, step -> clearRelativePath(Vec3.ZERO, step));
             if (choice != null) {
                 pendingCombatClimb = true;
                 pendingCruise = choice.selection();
