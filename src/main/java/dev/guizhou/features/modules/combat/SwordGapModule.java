@@ -30,6 +30,11 @@ public class SwordGapModule extends Module {
             releaseLatch();
             return;
         }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            releaseLatch();
+            dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
+            return;
+        }
 
         // A silent swap may have interrupted our latch; re-sync so we can re-latch while RMB is held.
         if (latched && !GuizhouWare.swapManager.isLatched(latchOwner)) latched = false;

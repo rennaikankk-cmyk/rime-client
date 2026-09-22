@@ -68,6 +68,7 @@ public class GuangxiSpearTPModule extends Module {
     }
 
     private void execute() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); disable(); return; }
         if (requireCharge.getValue() && !chargedSpearReady()) {
             dev.guizhou.features.commands.Command.sendMessage("GuangxiSpearTP needs a charged spear (hold use until charged)");
             disable();
@@ -135,6 +136,7 @@ public class GuangxiSpearTPModule extends Module {
 
     @Subscribe
     private void onPacketSend(PacketEvent.Send event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); disable(); return; }
         if (freezeTicks <= 0) {
             return;
         }
@@ -146,6 +148,7 @@ public class GuangxiSpearTPModule extends Module {
 
     @Subscribe
     private void onPreTick(dev.guizhou.event.impl.entity.player.PreTickEvent event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); disable(); return; }
         if (nullCheck()) return;
         if (freezeTicks > 0 && --freezeTicks == 0) {
             disable();

@@ -35,7 +35,62 @@ public final class LicenseActionHookTest {
         miningActionsAndCleanup();
         autoMineCallbacks();
         anchorCallbacks();
+        newlyGatedModules();
         System.out.println("LicenseActionHookTest passed: " + checks + " authorization/action/cleanup checks");
+    }
+
+    /** Modules that send server-bound packets or alter movement outside PlacementManager;
+     * each tick/handler gate was added 2026-09-22 and must keep cleanup ungated. */
+    private static void newlyGatedModules() throws IOException {
+        guarded(BASE + "player/AutoXPModule", "onTick", null, "throwBottles");
+        guarded(BASE + "combat/KeyPotionModule", "onEnable", null, "withSwap");
+        guarded(BASE + "combat/PhaseModule", "onTick", null, "withSwap");
+        guarded(BASE + "world/FastPortalModule", "onPreTick", null, "withSwap");
+        guarded(BASE + "player/MiddleClickExtraModule", "onMouse", null, "withSwap");
+        guarded(BASE + "funny/TrickshotModule", "onTick", null, "withSwap");
+        guarded(BASE + "funny/MoFuckerModule", "onTick", null, "place", "collect");
+        guarded(BASE + "player/InstantRekitModule", "onTick", null, "rekit");
+        guarded(BASE + "player/ReplenishModule", "onTick", null, "swap");
+        guarded(BASE + "combat/GuangxiSpearTPModule", "execute", null, "attack", "send");
+        guarded(BASE + "client/GuangxiProbeModule", "onPreTick", null, "tickDig", "tickAttack", "tickMove");
+        check(method(BASE + "client/GuangxiProbeModule", "onEnable", null).hasAuthorization(),
+                "Probe must not start measuring without authorization");
+        guarded(BASE + "combat/AutoLogModule", "onTick", null, "checkThresholds");
+        guarded(BASE + "movement/VelocityModule", "phaseConditionMet", null, "getBlockCollisions");
+        check(method(BASE + "player/NoRotateModule", "isActive", null).hasAuthorization(),
+                "NoRotate must stop ignoring server rotations after revocation");
+        guarded(BASE + "movement/SprintModule", "onTick", null, "setSprinting");
+        check(method(BASE + "movement/SprintModule", "wantsSprint", null).hasAuthorization(),
+                "Sprint helper must respect revocation");
+        guarded(BASE + "player/FastuseModule", "onTick", null, "matches");
+        guarded(BASE + "combat/SwordGapModule", "onTick", null, "latch");
+        Code freeze = guarded(BASE + "combat/GuangxiSpearTPModule", "onPacketSend", null, "cancel");
+        check(freeze.calls("disable").stream().anyMatch(call -> freeze.reachable(call, false, null)),
+                "Revocation must end the spear freeze and permit vanilla movement packets");
+        check(method(BASE + "combat/GuangxiSpearTPModule", "onPreTick", null).hasAuthorization(),
+                "Spear freeze must expire on revocation even without a movement packet");
+        Code sprint = method(BASE + "movement/SprintModule", "onTick", null);
+        check(sprint.calls("cancel").stream().anyMatch(call -> sprint.reachable(call, false, null)),
+                "Denied sprint releases its outstanding rotation without blocking vanilla sprint");
+        Code probeCleanup = method(BASE + "client/GuangxiProbeModule", "onDisable", null);
+        check(!probeCleanup.hasAuthorization(), "Probe abort must remain available after revocation");
+        check(probeCleanup.calls("send").stream().anyMatch(call -> probeCleanup.reachable(call, false, null)),
+                "Disabling an outstanding probe must be able to send ABORT");
+        Code sword = method(BASE + "combat/SwordGapModule", "onTick", null);
+        check(sword.calls("releaseLatch").stream().anyMatch(call -> sword.reachable(call, false, null)),
+                "Denied SwordGap can release its held slot");
+        check(!method(BASE + "combat/SwordGapModule", "releaseLatch", null).hasAuthorization(),
+                "Slot restoration never requires a current lease");
+        // Cleanup paths must survive revocation.
+        for (String[] cleanup : new String[][]{
+                {BASE + "combat/SwordGapModule", "onDisable"},
+                {BASE + "combat/GuangxiSpearTPModule", "onDisable"},
+                {BASE + "funny/MoFuckerModule", "onEnable"},
+                {BASE + "player/AutoXPModule", "onDisable"},
+                {BASE + "world/FastPortalModule", "onDisable"}}) {
+            check(!method(cleanup[0], cleanup[1], null).hasAuthorization(),
+                    cleanup[1] + " cleanup must remain ungated");
+        }
     }
 
     private static void anchorCallbacks() throws IOException {

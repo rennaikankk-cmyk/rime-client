@@ -12,6 +12,6 @@ public class NoRotateModule extends Module {
     public static boolean isActive() {
         if (GuizhouWare.moduleManager == null) return false;
         NoRotateModule module = GuizhouWare.moduleManager.getModuleByClass(NoRotateModule.class);
-        return module != null && module.isEnabled();
+        return module != null && module.isEnabled() && dev.guizhou.manager.HeartbeatManager.authorized();
     }
 }

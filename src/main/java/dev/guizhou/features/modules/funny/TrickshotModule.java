@@ -36,6 +36,7 @@ public class TrickshotModule extends Module {
     @Subscribe
     private void onTick(TickEvent event) {
         if (mc.player == null || mc.level == null) { disable(); return; }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); disable(); return; }
         if (!mc.level.dimension().location().getPath().equals("the_end")) { disable(); return; }
 
         double px = mc.player.getX(), pz = mc.player.getZ();

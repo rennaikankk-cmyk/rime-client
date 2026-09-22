@@ -34,6 +34,8 @@ public class PhaseModule extends Module {
             return;
         }
 
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); disable(); return; }
+
         if (GuizhouWare.rotationManager.isSilentSyncRequiredAtLeast(PRIORITY)) return;
 
         Result pearl = InventoryUtil.find(Items.ENDER_PEARL, InventoryUtil.FULL_SCOPE);

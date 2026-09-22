@@ -43,6 +43,7 @@ public class MoFuckerModule extends Module {
     @Subscribe
     private void onTick(TickEvent event) {
         if (nullCheck() || mc.screen != null) { disable(); return; }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); disable(); return; }
 
         switch (state) {
             case PLACE   -> place();

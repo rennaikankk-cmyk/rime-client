@@ -38,6 +38,7 @@ public class FastPortalModule extends Module {
     @Subscribe
     private void onPreTick(PreTickEvent event) {
         if (nullCheck()) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
 
         if (cooldownTicks > 0) {
             cooldownTicks--;

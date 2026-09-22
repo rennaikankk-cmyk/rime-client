@@ -103,6 +103,7 @@ public class GuangxiProbeModule extends Module {
             disable();
             return;
         }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); disable(); return; }
         blockBuckets.clear();
         digSteps.clear();
         digAccepts.clear();
@@ -120,13 +121,20 @@ public class GuangxiProbeModule extends Module {
 
     @Override
     public void onDisable() {
+        // Abort our outstanding probe even when authorization has just been revoked.
+        BlockPos abort = pendingDigPos;
         pendingDigPos = null;
+        if (abort != null && !nullCheck() && mc.getConnection() != null) {
+            mc.getConnection().send(new ServerboundPlayerActionPacket(
+                    ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, abort, Direction.UP));
+        }
         pendingAttackTarget = null;
     }
 
     @Subscribe
     private void onPreTick(PreTickEvent event) {
         if (nullCheck()) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); disable(); return; }
         phaseTick++;
         switch (phase) {
             case SCAN_BLOCKS -> tickScanBlocks();

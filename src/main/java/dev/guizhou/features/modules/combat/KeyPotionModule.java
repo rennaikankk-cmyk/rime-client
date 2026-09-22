@@ -26,6 +26,7 @@ public class KeyPotionModule extends Module {
 
     @Subscribe
     public void onEnable() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); disable(); return; }
         if (nullCheck() || onGround.getValue() && !mc.player.onGround()) { disable(); return; }
 
         Result potion = InventoryUtil.find(Items.SPLASH_POTION, FULL_SCOPE);

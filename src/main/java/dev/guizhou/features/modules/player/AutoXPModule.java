@@ -55,6 +55,11 @@ public class AutoXPModule extends Module {
     @Subscribe
     private void onTick(TickEvent event) {
         if (nullCheck()) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
+            throwing = false;
+            return;
+        }
 
         handleThrowBind();
 

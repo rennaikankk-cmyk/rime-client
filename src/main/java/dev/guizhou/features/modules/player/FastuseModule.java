@@ -19,6 +19,7 @@ public class FastuseModule extends Module {
     @Override
     public void onTick() {
         if (nullCheck()) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
         if (matches(mc.player.getMainHandItem()) || matches(mc.player.getOffhandItem())) {
             mc.rightClickDelay = 0;
         }

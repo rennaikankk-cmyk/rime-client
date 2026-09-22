@@ -28,6 +28,7 @@ public class ReplenishModule extends Module {
     private void onTick(TickEvent event) {
         if (nullCheck()) return;
         if (mc.screen != null) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
 
         if (!InventoryUtil.cursor().isEmpty()) return;
 

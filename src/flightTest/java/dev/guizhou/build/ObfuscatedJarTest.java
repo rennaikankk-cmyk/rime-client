@@ -289,7 +289,30 @@ public final class ObfuscatedJarTest {
                 Map.entry("NoFallModule", List.of("onPreTick", "protects")),
                 Map.entry("NoSlowModule", List.of("onTick", "onPacketSend", "shouldCancelConsumeSlow", "isActive")),
                 Map.entry("AntiHungerModule", List.of("onPreTick", "onPacketSend")));
-        for (var checkpoint : checkpoints.entrySet()) {
+        // Newly gated callbacks may inspect null/UI state before their guard.
+        // LicenseActionHookTest checks denied-path reachability; preserve that exact
+        // control flow in the final artifact as well, without relaxing legacy checks.
+        Map<String, List<String>> reviewedCallbacks = Map.ofEntries(
+                Map.entry("AutoXPModule", List.of("onTick")),
+                Map.entry("KeyPotionModule", List.of("onEnable")),
+                Map.entry("PhaseModule", List.of("onTick")),
+                Map.entry("FastPortalModule", List.of("onPreTick")),
+                Map.entry("MiddleClickExtraModule", List.of("onMouse")),
+                Map.entry("TrickshotModule", List.of("onTick")),
+                Map.entry("MoFuckerModule", List.of("onTick")),
+                Map.entry("InstantRekitModule", List.of("onTick")),
+                Map.entry("ReplenishModule", List.of("onTick")),
+                Map.entry("GuangxiSpearTPModule", List.of("execute", "onPacketSend", "onPreTick")),
+                Map.entry("GuangxiProbeModule", List.of("onEnable", "onPreTick")),
+                Map.entry("AutoLogModule", List.of("onTick")),
+                Map.entry("VelocityModule", List.of("phaseConditionMet")),
+                Map.entry("NoRotateModule", List.of("isActive")),
+                Map.entry("SprintModule", List.of("onTick", "wantsSprint")),
+                Map.entry("FastuseModule", List.of("onTick")),
+                Map.entry("SwordGapModule", List.of("onTick")));
+        Map<String, List<String>> allCheckpoints = new LinkedHashMap<>(checkpoints);
+        allCheckpoints.putAll(reviewedCallbacks);
+        for (var checkpoint : allCheckpoints.entrySet()) {
             String simpleName = checkpoint.getKey();
             List<ClassInfo> matches = before.values().stream()
                     .filter(info -> info.name.endsWith("/" + simpleName)).toList();
@@ -308,7 +331,7 @@ public final class ObfuscatedJarTest {
                 String mappedName = mapping.requiredMember(source.name, methodMappingKey(sourceMethod));
                 MethodInfo outputMethod = requiredMethod(result, mappedName + mapping.descriptor(sourceMethod.descriptor));
                 verifyAuthorizationFlow(sourceMethod, outputMethod, owner, authorized, simpleName);
-                if (Set.of("onPreTick", "onTick", "onPostMovement", "onFlightWindow").contains(sourceMethod.name)) {
+                if (checkpoints.containsKey(simpleName) && Set.of("onPreTick", "onTick", "onPostMovement", "onFlightWindow").contains(sourceMethod.name)) {
                     verifyDeniedTickPrefix(source, sourceMethod);
                 }
             }

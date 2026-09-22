@@ -54,6 +54,7 @@ public class AutoLogModule extends Module {
     private void onTick(TickEvent event) {
         if (nullCheck()) return;
         if (mc.screen != null) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
         if (mc.player.isDeadOrDying()) { disable(); return; }
         updateTotemCount();
         nearbyPlayerNames = mc.level.players().stream()

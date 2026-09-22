@@ -25,7 +25,7 @@ public class SprintModule extends Module {
     }
 
     public boolean wantsSprint() {
-        if (!isEnabled() || nullCheck()) return false;
+        if (!isEnabled() || nullCheck() || !dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (mc.player.isUsingItem()) return false;
 
         if (mode.getValue() == Mode.OMNI && !mc.player.isFallFlying()) {
@@ -38,6 +38,11 @@ public class SprintModule extends Module {
     @Subscribe
     private void onTick(TickEvent event) {
         if (nullCheck()) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            GuizhouWare.rotationManager.cancel(ROTATION_ID);
+            dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
+            return;
+        }
 
         if (mode.getValue() == Mode.OMNI && !mc.player.isFallFlying()) {
             omni();
