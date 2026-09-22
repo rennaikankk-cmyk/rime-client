@@ -170,7 +170,7 @@ public final class ElytraWeaponController {
     }
 
     private static boolean matches(ItemStack stack, boolean spear) {
-        return spear ? SpearCombat.isSpear(stack) : stack.getItem() instanceof MaceItem;
+        return spear ? SpearCombat.isSpear(stack) : dev.guizhou.util.elytra.MappedCombatItems.isMace(stack);
     }
 
     static int chooseHotbar(int selected, IntPredicate matches) {

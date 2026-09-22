@@ -27,6 +27,12 @@ public final class SpearApproachTest {
             check(Math.abs(result.length() - slow.length()) < 1e-9, "Scene rotation preserves speed");
             check(result.normalize().distanceTo(axis) < 1e-9, "Direction is preserved");
         }
+        Vec3 damage = SpearApproach.limitStep(fast, offset, new Vec3(1,0,0), 3, 2, 4.5, 1.2, 1.5);
+        check(damage.x > 2.5 && damage.x <= fast.x, "Braking retains server-defined relative damage speed");
+        Vec3 ownSpeed = SpearApproach.limitStep(fast, offset, Vec3.ZERO, 3, 2, 4.5, 3, 0);
+        check(ownSpeed.x > 3 && ownSpeed.x <= fast.x, "Own speed condition also matters");
+        check(SpearApproach.limitStep(fast, offset, Vec3.ZERO, 3, 2, 4.5, Double.NaN, 0).equals(fast),
+                "Invalid thresholds never create a movement command");
         var window = new SpearApproach.CommitWindow(); Object first = new Object(), second = new Object();
         check(window.admit(10, first, true), "First charged tick");
         check(window.admit(10, first, true), "Repeated query does not consume a tick");

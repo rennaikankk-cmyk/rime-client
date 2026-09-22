@@ -8,7 +8,7 @@ import static dev.guizhou.util.traits.Util.mc;
  * Protocol capability probe for duplicate-rotation (dual view) packets.
  *
  * The reference client ships dual look only on Via target protocols at or
- * below the 1.20.7 family: on 1.21+ protocols the extra rotation packet that
+ * below 1.20.6: on 1.21+ protocols the extra rotation packet that
  * separates the motion view from the sent view is not accepted the same way.
  * ViaFabricPlus is optional at runtime and absent from the compile classpath,
  * so detection is reflective and cached per connection.
@@ -24,6 +24,21 @@ public final class DualViewSupport {
 
     public static boolean isDupRotSupported() {
         return status() == Status.SUPPORTED;
+    }
+
+    public static boolean usesModernInput() {
+        Status current = status();
+        if (current == Status.NO_VIA) return false; // Minecraft 1.21.1 native input.
+        int[] protocol = range(cachedVersionName);
+        return protocol != null && protocol[0] >= 2102;
+    }
+
+    public static boolean usesLegacyFireworkData() {
+        return status() == Status.SUPPORTED && legacyFireworkFamily(cachedVersionName);
+    }
+
+    public static boolean legacyFireworkFamily(String name) {
+        return familySupported(name) && range(name)[1] <= 2004;
     }
 
     /** Resolved once per connection; cheap on every later call. */
@@ -46,36 +61,53 @@ public final class DualViewSupport {
         return switch (status) {
             case SUPPORTED -> "双视角可用";
             case NO_VIA -> "未检测到 ViaFabricPlus";
-            case NEW_PROTOCOL -> "当前 Via 目标协议 " + cachedVersionName + " 高于 1.20.7";
+            case NEW_PROTOCOL -> "当前 Via 目标协议 " + cachedVersionName + " 不支持双视角";
             case OFFLINE -> "未连接服务器";
         };
     }
 
+    public static String protocolDescription() {
+        Status current = status();
+        if (current == Status.OFFLINE) return "未连接";
+        if (!cachedVersionName.isBlank()) return "Via 目标 " + cachedVersionName;
+        // API method names differ between the two maintained Minecraft branches.
+        try {
+            Object version = net.minecraft.SharedConstants.getCurrentVersion();
+            for (String method : new String[]{"name", "getName"}) {
+                try {
+                    Method getter = version.getClass().getMethod(method);
+                    getter.setAccessible(true);
+                    Object name = getter.invoke(version);
+                    if (name instanceof String text) return "原生协议 " + text;
+                } catch (ReflectiveOperationException ignored) { }
+            }
+        } catch (RuntimeException ignored) { }
+        return "客户端原生协议";
+    }
+
     /**
-     * Reference-client SupportVersion semantics: a version name maps to the
-     * last two numeric parts ("1.20" itself is (20,1), ranges take their high
-     * end), and duplicate rotation is allowed while the family is at or below
-     * (20,7). Unparsable names (snapshots, rc suffixes) are unsupported.
+     * Accept stable Java release names and full release ranges only. Elytra
+     * starts at 1.9; 1.20.6 is the last release before the 1.21 packet change.
+     * Unknown names, reversed ranges and prereleases fail closed.
      */
     public static boolean familySupported(String versionName) {
-        if (versionName == null || versionName.isEmpty()) return false;
-        String[] parts = versionName.split("\\.");
+        int[] bounds = range(versionName);
+        return bounds != null && bounds[0] >= 900 && bounds[1] >= bounds[0] && bounds[1] <= 2006;
+    }
+
+    private static int[] range(String versionName) {
+        if (versionName == null) return null;
+        var match = java.util.regex.Pattern.compile("1\\.(\\d{1,2})(?:\\.(\\d{1,2}))?(?:-1\\.(\\d{1,2})(?:\\.(\\d{1,2}))?)?")
+                .matcher(versionName);
+        if (!match.matches()) return null;
         try {
-            int major, minor;
-            if (parts.length == 2 && "1".equals(parts[0])) {
-                major = Integer.parseInt(parts[1]);
-                minor = 1;
-            } else if (parts.length >= 3) {
-                major = Integer.parseInt(parts[parts.length - 2]);
-                minor = Integer.parseInt(parts[parts.length - 1]);
-            } else {
-                return false;
-            }
-            if (major > 20) return false;
-            if (major < 20) return true;
-            return minor <= 7;
+            int low = Integer.parseInt(match.group(1)) * 100
+                    + (match.group(2) == null ? 0 : Integer.parseInt(match.group(2)));
+            int high = match.group(3) == null ? low : Integer.parseInt(match.group(3)) * 100
+                    + (match.group(4) == null ? 0 : Integer.parseInt(match.group(4)));
+            return new int[]{low, high};
         } catch (NumberFormatException e) {
-            return false;
+            return null;
         }
     }
 

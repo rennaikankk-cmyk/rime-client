@@ -29,8 +29,27 @@ public final class SpearAimSweepTest {
 
     public static void main(String[] args) throws IOException {
         verifySweepMath();
+        verifyConditionalSearch();
         verifyWiring();
         System.out.println("SpearAimSweepTest passed: " + checks + " checks");
+    }
+
+    private static void verifyConditionalSearch() {
+        var tracker=new SpearAimSweep.Tracker();
+        for(int tick=0;tick<=6;tick++)check(tracker.apply(80,tick,6,22,true)==80,"Initial opportunity aims steadily");
+        float previous=80;
+        for(int tick=7;tick<45;tick++) {
+            float angle=tracker.apply(80,tick,6,22,true);
+            check(Math.abs(angle-80)<=12.001,"Search amplitude stays below old broad sweep");
+            check(Math.abs(angle-previous)<=6.001,"Search offset changes gradually");
+            check(tracker.apply(80,tick,6,22,true)==angle,"Repeated same-tick evaluation keeps same angle");
+            previous=angle;
+        }
+        check(tracker.apply(80,45,6,22,false)==80,"Loss of damage opportunity stops search immediately");
+        check(tracker.apply(80,46,6,22,true)==80,"New opportunity starts with steady aim");
+        tracker.reset();
+        check(tracker.apply(80,100,6,22,true)==80,"Contact or phase reset clears search");
+        check(tracker.apply(80,101,6,0,true)==80,"Stationary target needs no uncertainty sweep");
     }
 
     private static void verifySweepMath() {
@@ -75,8 +94,10 @@ public final class SpearAimSweepTest {
         Trace aim = method(chase, "aimSpear");
         check(aim.hasCall(CHASE, "targetPacketOffset"),
                 "Spear aim must keep the packet-offset predictor (best calibrated basis)");
-        check(aim.hasCall(SWEEP, "applySweep"),
-                "aimSpear must route the final yaw through the charged sweep");
+        check(!aim.hasCall(SWEEP, "applySweep") && aim.hasCall(SWEEP + "$Tracker", "apply"),
+                "Live spear aim must use delayed conditional search, never unconditional sweep");
+        check(aim.hasCall(CHASE, "visibleSegment") && aim.hasCall("dev/guizhou/util/elytra/SpearCombat", "minimumDamageClosingSpeed"),
+                "Search requires visibility and damage-capable closing speed");
         check(!aim.hasCall(CHASE, "predictionVelocity") && !aim.hasCall("dev/guizhou/util/elytra/AerialCombatPolicy", "predictionVelocity"),
                 "aimSpear must not add the velocity lead on top of the packet offset (calibrated worse)");
         Trace clear = method(chase, "clearSpearAim");

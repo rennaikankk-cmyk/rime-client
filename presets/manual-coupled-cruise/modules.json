@@ -1,28 +1,11 @@
 {
   "GuangxiElytra": {
     "Enabled": "false",
-    "FlightMode": "CONTROL",
-    "MotionMode": "FIREWORKS",
     "FreeLook": "true",
     "AutoFly": "false",
-    "Takeoff": "true",
-    "GroundHop": "false",
     "TerrainGuard": "true",
-    "SafeLanding": "true",
-    "GrimBoost": "false",
-    "CoupledCruise": "true",
-    "CruisePitch": "15.0",
-    "CruiseClimbPitch": "-45.0",
-    "CruiseDescentPitch": "30.0",
-    "CruiseSmartClimb": "true",
-    "CruiseDescentFloor": "-1.7",
-    "CruisePorpoise": "false",
-    "CruiseHeightWindow": "60.0",
-    "CruiseSpeedCap": "15.0",
-    "CruiseBoxCap": "1.7",
-    "CruiseInset": "0.002",
-    "CruiseDualLook": "true",
-    "CruiseSpeedLog": "true"
+    "Mode": "Grim",
+    "AdaptiveSlowdown": "false"
   },
   "GuangxiElytraChase": {
     "Enabled": "false"

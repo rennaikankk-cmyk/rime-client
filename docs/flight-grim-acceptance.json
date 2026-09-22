@@ -1,0 +1,200 @@
+{
+  "date": "2026-09-22",
+  "client": "1.21.11 development launch",
+  "server": "Paper 1.20.4 build 499",
+  "grim": "2.3.73",
+  "viafabricplus": "4.4.2",
+  "target": "1.20.3-1.20.4",
+  "server_modes": {
+    "gamemode": "survival",
+    "allowFlight": false,
+    "grim_exemption": false,
+    "view_distance": 4
+  },
+  "measurement": "server accepted displacement / elapsed wall time, 420 tick trials, 120 tick client warmup excluded",
+  "flight_metrics": {
+    "level": {
+      "horizontal_bps": 33.683,
+      "vertical_bps": 0.0,
+      "seconds": 14.995,
+      "client_counts": {
+        "boost": 301,
+        "cruise": 301,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 301,
+      "max_abs_y_step": 0.0
+    },
+    "diagonal": {
+      "horizontal_bps": 47.614,
+      "vertical_bps": 0.0,
+      "seconds": 14.995,
+      "client_counts": {
+        "boost": 301,
+        "cruise": 301,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 301,
+      "max_abs_y_step": 0.0
+    },
+    "climb": {
+      "horizontal_bps": 32.467,
+      "vertical_bps": 123.884,
+      "seconds": 15.005,
+      "client_counts": {
+        "boost": 301,
+        "cruise": 301,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 301,
+      "max_abs_y_step": 12.52498867
+    },
+    "climb-diagonal": {
+      "horizontal_bps": 45.928,
+      "vertical_bps": 190.666,
+      "seconds": 14.999,
+      "client_counts": {
+        "boost": 301,
+        "cruise": 301,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 301,
+      "max_abs_y_step": 19.36877775
+    },
+    "vertical": {
+      "horizontal_bps": 0.0,
+      "vertical_bps": 31.787,
+      "seconds": 15.036,
+      "client_counts": {
+        "boost": 301,
+        "cruise": 301,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 301,
+      "max_abs_y_step": 3.17568627
+    },
+    "descent": {
+      "horizontal_bps": 19.195,
+      "vertical_bps": -4.672,
+      "seconds": 14.963,
+      "client_counts": {
+        "boost": 275,
+        "cruise": 38,
+        "safety": 263
+      },
+      "correction_seen": true,
+      "samples": 301,
+      "max_abs_y_step": 3.06923523
+    },
+    "autoclimb": {
+      "horizontal_bps": 32.487,
+      "vertical_bps": 123.96,
+      "seconds": 14.996,
+      "client_counts": {
+        "boost": 301,
+        "cruise": 301,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 301,
+      "max_abs_y_step": 12.52599398
+    }
+  },
+  "active_trial_grim_console_flags": {
+    "level": 0,
+    "diagonal": 0,
+    "climb": 0,
+    "climb-diagonal": 0,
+    "vertical": 0,
+    "descent": 0,
+    "autoclimb": 0
+  },
+  "noac_metrics": {
+    "level": {
+      "horizontal_bps": 60.165,
+      "vertical_bps": 0.0,
+      "seconds": 2.992,
+      "client_counts": {
+        "boost": 0,
+        "cruise": 0,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 61,
+      "max_abs_y_step": 0.0
+    },
+    "climb": {
+      "horizontal_bps": 59.766,
+      "vertical_bps": 79.688,
+      "seconds": 3.012,
+      "client_counts": {
+        "boost": 0,
+        "cruise": 0,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 61,
+      "max_abs_y_step": 4.0
+    },
+    "vertical": {
+      "horizontal_bps": 0.0,
+      "vertical_bps": 79.737,
+      "seconds": 3.01,
+      "client_counts": {
+        "boost": 0,
+        "cruise": 0,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 61,
+      "max_abs_y_step": 4.0
+    },
+    "autoclimb": {
+      "horizontal_bps": 59.882,
+      "vertical_bps": 79.843,
+      "seconds": 3.006,
+      "client_counts": {
+        "boost": 0,
+        "cruise": 0,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 61,
+      "max_abs_y_step": 4.0
+    },
+    "idle": {
+      "horizontal_bps": 0.0,
+      "vertical_bps": 0.0,
+      "seconds": 2.989,
+      "client_counts": {
+        "boost": 0,
+        "cruise": 0,
+        "safety": 0
+      },
+      "correction_seen": false,
+      "samples": 61,
+      "max_abs_y_step": 0.0
+    }
+  },
+  "limitations": [
+    "Loopback latency, one Grim version and default thresholds; not a universal or absolute maximum.",
+    "High-speed descent recorded one server correction; no correction in level/climb/vertical/autoclimb trials.",
+    "Login before trial reset produced Timer/Simulation flags and reset teleports produced moved-too-quickly warnings; these are retained in full logs and excluded from active-flight metrics.",
+    "1.21.1 and direct source ports are separately built, not independently flight-benchmarked."
+  ],
+  "evidence_sha256": {
+    "acceptance-autoclimb-client.csv": "0a28144405559aa75ea3eb7deb28874384860533078009593c78a0de7075b9fd",
+    "acceptance-climb-client.csv": "9d996f60764bc50bf80dd7f9d49869ac0da645bed9dfd6ef63784439fddc7e64",
+    "acceptance-climb-diagonal-client.csv": "48c41d25983f53695e06b020b1065d49d02282231283927ad089fea3b9f4b9be",
+    "acceptance-descent-client.csv": "353d7729d0055a17bfa18ebf5f2ae4bce7e4e74754239894330c1efff0def40e",
+    "acceptance-diagonal-client.csv": "d26479fa9aeb2d624d576466990a415dd62e5dd88fdb6798b7b591c08bc71a22",
+    "acceptance-level-client.csv": "76dac3c7b37811d34b612151d4e2607c995bfdca24f994a8da6e056d4963596b",
+    "acceptance-rotation.csv": "d538a9b3bcb23b654ae005059933bdc54fd03977351c317bf1d189a6666a2d49",
+    "acceptance-vertical-client.csv": "a748a30ae50f67f287f34d696cbd4e25c6ee162a951d456d58b3ed31e4fbc025"
+  }
+}

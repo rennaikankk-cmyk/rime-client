@@ -26,6 +26,14 @@ public final class AerialAttackGeometry {
                 : box.clip(eye,eye.add(Vec3.directionFromRotation(pitch,yaw).scale(reach))).orElse(null);
         return point != null && visible.test(eye,point);
     }
+    /** Both views must permit the hit; local motion or target interpolation must not extend reach. */
+    public static boolean canHitSubmitted(Vec3 localEye, Vec3 submittedEye, AABB receivedBox, AABB renderedBox,
+                                          double reach, float yaw, float pitch, BiPredicate<Vec3,Vec3> visible) {
+        return canHit(submittedEye, receivedBox, reach, yaw, pitch, visible)
+                && canHit(submittedEye, renderedBox, reach, yaw, pitch, visible)
+                && canHit(localEye, receivedBox, reach, yaw, pitch, visible)
+                && canHit(localEye, renderedBox, reach, yaw, pitch, visible);
+    }
     private static boolean valid(Vec3 eye,AABB box,double reach) {
         return eye != null && box != null && Double.isFinite(eye.lengthSqr())
                 && Double.isFinite(box.minX) && Double.isFinite(box.minY) && Double.isFinite(box.minZ)

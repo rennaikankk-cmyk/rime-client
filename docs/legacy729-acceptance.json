@@ -1,0 +1,810 @@
+{
+  "status": "research_candidate_not_released",
+  "acceptanceGoalMet": false,
+  "goal": "Improve both weapon duels against the supplied reference; do not infer winning from builds or alerts.",
+  "alertsAreVeto": false,
+  "referenceJarSha256": "1b70f13627d0c638a016b089e9d52c4a3b33c32ec1f920b9988ed95aa39c445c",
+  "referenceProfileSha256": "d9eb60ef708057aea51c9ee1c11b55545777b51a69cb803f0d31f1bafd01088a",
+  "environment": {
+    "server": "Fabric 1.21.11",
+    "grim": "2.3.73",
+    "newClient": "1.21.11 via target protocol 765 (1.20.3–1.20.4)",
+    "oldClient": "Original 1.21.1, backend Via conversion",
+    "viewDistance": 4,
+    "simulationDistance": 5,
+    "fpsCap": 60,
+    "health": 20,
+    "totems": 2,
+    "rockets": 64,
+    "goldenApples": 16,
+    "maxTicks": 1200
+  },
+  "invalidSeries": [
+    "u: translated mace/spear were not recognized; aborted, excluded from win-rate claims"
+  ],
+  "cases": [
+    {
+      "tag": "win-mace-off-v0",
+      "group": "v",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 5.442353248596191,
+        "LegacyReference": 3.4588241577148438
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 16
+      },
+      "equalStartArtifact": "start-win-mace-off-v0.json",
+      "settingsArtifact": "settings-win-mace-off-v0.properties"
+    },
+    {
+      "tag": "win-mace-off-v1",
+      "group": "v",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": true,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 23.33333110809326,
+        "LegacyReference": 17.80235481262207
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 18
+      },
+      "equalStartArtifact": "start-win-mace-off-v1.json",
+      "settingsArtifact": "settings-win-mace-off-v1.properties"
+    },
+    {
+      "tag": "win-mace-on-v0",
+      "group": "v",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 18.0,
+        "LegacyReference": 7.440004348754883
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 20
+      },
+      "equalStartArtifact": "start-win-mace-on-v0.json",
+      "settingsArtifact": "settings-win-mace-on-v0.properties"
+    },
+    {
+      "tag": "win-mace-on-v1",
+      "group": "v",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": true,
+      "ticks": 662,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 40.33333396911621,
+        "LegacyReference": 7.440004348754883
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 38
+      },
+      "equalStartArtifact": "start-win-mace-on-v1.json",
+      "settingsArtifact": "settings-win-mace-on-v1.properties"
+    },
+    {
+      "tag": "win-spear-off-v0",
+      "group": "v",
+      "weapon": "spear",
+      "armor": false,
+      "sideSwapped": false,
+      "ticks": 708,
+      "outcome": "new_win",
+      "healthLoss": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 39.33333396911621
+      },
+      "remainingRockets": {
+        "NewCandidate": 26,
+        "LegacyReference": 0
+      },
+      "equalStartArtifact": "start-win-spear-off-v0.json",
+      "settingsArtifact": "settings-win-spear-off-v0.properties"
+    },
+    {
+      "tag": "win-spear-off-v1",
+      "group": "v",
+      "weapon": "spear",
+      "armor": false,
+      "sideSwapped": true,
+      "ticks": 135,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 25.333333015441895,
+        "LegacyReference": 0.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 58
+      },
+      "equalStartArtifact": "start-win-spear-off-v1.json",
+      "settingsArtifact": "settings-win-spear-off-v1.properties"
+    },
+    {
+      "tag": "win-spear-on-v0",
+      "group": "v",
+      "weapon": "spear",
+      "armor": true,
+      "sideSwapped": false,
+      "ticks": 289,
+      "outcome": "new_win",
+      "healthLoss": {
+        "NewCandidate": 18.0,
+        "LegacyReference": 32.33333396911621
+      },
+      "remainingRockets": {
+        "NewCandidate": 50,
+        "LegacyReference": 0
+      },
+      "equalStartArtifact": "start-win-spear-on-v0.json",
+      "settingsArtifact": "settings-win-spear-on-v0.properties"
+    },
+    {
+      "tag": "win-spear-on-v1",
+      "group": "v",
+      "weapon": "spear",
+      "armor": true,
+      "sideSwapped": true,
+      "ticks": 160,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 26.00000023841858,
+        "LegacyReference": 0.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 57
+      },
+      "equalStartArtifact": "start-win-spear-on-v1.json",
+      "settingsArtifact": "settings-win-spear-on-v1.properties"
+    },
+    {
+      "tag": "win-mace-off-w0",
+      "group": "w",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 18.775059700012207,
+        "LegacyReference": 6.9176483154296875
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 19
+      },
+      "equalStartArtifact": "start-win-mace-off-w0.json",
+      "settingsArtifact": "settings-win-mace-off-w0.properties"
+    },
+    {
+      "tag": "win-mace-off-w1",
+      "group": "w",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": true,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 23.33333110809326,
+        "LegacyReference": 10.884706497192383
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 17
+      },
+      "equalStartArtifact": "start-win-mace-off-w1.json",
+      "settingsArtifact": "settings-win-mace-off-w1.properties"
+    },
+    {
+      "tag": "win-mace-on-w0",
+      "group": "w",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 18.0,
+        "LegacyReference": 2.976001739501953
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 18
+      },
+      "equalStartArtifact": "start-win-mace-on-w0.json",
+      "settingsArtifact": "settings-win-mace-on-w0.properties"
+    },
+    {
+      "tag": "win-mace-on-w1",
+      "group": "w",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": true,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 0.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 19
+      },
+      "equalStartArtifact": "start-win-mace-on-w1.json",
+      "settingsArtifact": "settings-win-mace-on-w1.properties"
+    },
+    {
+      "tag": "win-mace-off-x0",
+      "group": "x",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 16.327059745788574,
+        "LegacyReference": 10.376472473144531
+      },
+      "remainingRockets": {
+        "NewCandidate": 13,
+        "LegacyReference": 14
+      },
+      "equalStartArtifact": "start-win-mace-off-x0.json",
+      "settingsArtifact": "settings-win-mace-off-x0.properties"
+    },
+    {
+      "tag": "win-mace-off-x1",
+      "group": "x",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": true,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 3.4588241577148438
+      },
+      "remainingRockets": {
+        "NewCandidate": 12,
+        "LegacyReference": 16
+      },
+      "equalStartArtifact": "start-win-mace-off-x1.json",
+      "settingsArtifact": "settings-win-mace-off-x1.properties"
+    },
+    {
+      "tag": "win-mace-on-x0",
+      "group": "x",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 22.166664123535156,
+        "LegacyReference": 22.46400260925293
+      },
+      "remainingRockets": {
+        "NewCandidate": 18,
+        "LegacyReference": 16
+      },
+      "equalStartArtifact": "start-win-mace-on-x0.json",
+      "settingsArtifact": "settings-win-mace-on-x0.properties"
+    },
+    {
+      "tag": "win-mace-on-x1",
+      "group": "x",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": true,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 2.976001739501953
+      },
+      "remainingRockets": {
+        "NewCandidate": 19,
+        "LegacyReference": 18
+      },
+      "equalStartArtifact": "start-win-mace-on-x1.json",
+      "settingsArtifact": "settings-win-mace-on-x1.properties"
+    },
+    {
+      "tag": "win-spear-off-x0",
+      "group": "x",
+      "weapon": "spear",
+      "armor": false,
+      "sideSwapped": false,
+      "ticks": 1055,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 36.166666984558105,
+        "LegacyReference": 47.33333349227905
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 13
+      },
+      "equalStartArtifact": "start-win-spear-off-x0.json",
+      "settingsArtifact": "settings-win-spear-off-x0.properties"
+    },
+    {
+      "tag": "win-spear-off-x1",
+      "group": "x",
+      "weapon": "spear",
+      "armor": false,
+      "sideSwapped": true,
+      "ticks": 609,
+      "outcome": "new_win",
+      "healthLoss": {
+        "NewCandidate": 31.33333396911621,
+        "LegacyReference": 40.166666984558105
+      },
+      "remainingRockets": {
+        "NewCandidate": 30,
+        "LegacyReference": 0
+      },
+      "equalStartArtifact": "start-win-spear-off-x1.json",
+      "settingsArtifact": "settings-win-spear-off-x1.properties"
+    },
+    {
+      "tag": "win-spear-on-x0",
+      "group": "x",
+      "weapon": "spear",
+      "armor": true,
+      "sideSwapped": false,
+      "ticks": 224,
+      "outcome": "new_win",
+      "healthLoss": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 29.33333396911621
+      },
+      "remainingRockets": {
+        "NewCandidate": 53,
+        "LegacyReference": 0
+      },
+      "equalStartArtifact": "start-win-spear-on-x0.json",
+      "settingsArtifact": "settings-win-spear-on-x0.properties"
+    },
+    {
+      "tag": "win-spear-on-x1",
+      "group": "x",
+      "weapon": "spear",
+      "armor": true,
+      "sideSwapped": true,
+      "ticks": 559,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 36.33333396911621,
+        "LegacyReference": 19.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 39
+      },
+      "equalStartArtifact": "start-win-spear-on-x1.json",
+      "settingsArtifact": "settings-win-spear-on-x1.properties"
+    },
+    {
+      "tag": "win-mace-off-y0",
+      "group": "y",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 0.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 14,
+        "LegacyReference": 18
+      },
+      "equalStartArtifact": "start-win-mace-off-y0.json",
+      "settingsArtifact": "settings-win-mace-off-y0.properties"
+    },
+    {
+      "tag": "win-mace-off-y1",
+      "group": "y",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": true,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 5.442353248596191,
+        "LegacyReference": 0.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 13,
+        "LegacyReference": 15
+      },
+      "equalStartArtifact": "start-win-mace-off-y1.json",
+      "settingsArtifact": "settings-win-mace-off-y1.properties"
+    },
+    {
+      "tag": "win-mace-on-y0",
+      "group": "y",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 18.0,
+        "LegacyReference": 20.976000785827637
+      },
+      "remainingRockets": {
+        "NewCandidate": 20,
+        "LegacyReference": 19
+      },
+      "equalStartArtifact": "start-win-mace-on-y0.json",
+      "settingsArtifact": "settings-win-mace-on-y0.properties"
+    },
+    {
+      "tag": "win-mace-on-y1",
+      "group": "y",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": true,
+      "ticks": 649,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 31.33333396911621,
+        "LegacyReference": 4.46400260925293
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 41
+      },
+      "equalStartArtifact": "start-win-mace-on-y1.json",
+      "settingsArtifact": "settings-win-mace-on-y1.properties"
+    },
+    {
+      "tag": "win-spear-off-y0",
+      "group": "y",
+      "weapon": "spear",
+      "armor": false,
+      "sideSwapped": false,
+      "ticks": 709,
+      "outcome": "new_win",
+      "healthLoss": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 44.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 32,
+        "LegacyReference": 0
+      },
+      "equalStartArtifact": "start-win-spear-off-y0.json",
+      "settingsArtifact": "settings-win-spear-off-y0.properties"
+    },
+    {
+      "tag": "win-spear-off-y1",
+      "group": "y",
+      "weapon": "spear",
+      "armor": false,
+      "sideSwapped": true,
+      "ticks": 905,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 47.0,
+        "LegacyReference": 19.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 20
+      },
+      "equalStartArtifact": "start-win-spear-off-y1.json",
+      "settingsArtifact": "settings-win-spear-off-y1.properties"
+    },
+    {
+      "tag": "win-spear-on-y0",
+      "group": "y",
+      "weapon": "spear",
+      "armor": true,
+      "sideSwapped": false,
+      "ticks": 878,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 43.5,
+        "LegacyReference": 0.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 29
+      },
+      "equalStartArtifact": "start-win-spear-on-y0.json",
+      "settingsArtifact": "settings-win-spear-on-y0.properties"
+    },
+    {
+      "tag": "win-spear-on-y1",
+      "group": "y",
+      "weapon": "spear",
+      "armor": true,
+      "sideSwapped": true,
+      "ticks": 673,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 47.33333206176758,
+        "LegacyReference": 26.166666984558105
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 38
+      },
+      "equalStartArtifact": "start-win-spear-on-y1.json",
+      "settingsArtifact": "settings-win-spear-on-y1.properties"
+    },
+    {
+      "tag": "win-mace-off-z0",
+      "group": "z",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 0.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 14,
+        "LegacyReference": 16
+      },
+      "equalStartArtifact": "start-win-mace-off-z0.json",
+      "settingsArtifact": "settings-win-mace-off-z0.properties"
+    },
+    {
+      "tag": "win-mace-off-z1",
+      "group": "z",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": true,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 22.02306365966797,
+        "LegacyReference": 3.4588241577148438
+      },
+      "remainingRockets": {
+        "NewCandidate": 18,
+        "LegacyReference": 16
+      },
+      "equalStartArtifact": "start-win-mace-off-z1.json",
+      "settingsArtifact": "settings-win-mace-off-z1.properties"
+    },
+    {
+      "tag": "win-mace-on-z0",
+      "group": "z",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 1.4880008697509766
+      },
+      "remainingRockets": {
+        "NewCandidate": 18,
+        "LegacyReference": 20
+      },
+      "equalStartArtifact": "start-win-mace-on-z0.json",
+      "settingsArtifact": "settings-win-mace-on-z0.properties"
+    },
+    {
+      "tag": "win-mace-on-z1",
+      "group": "z",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": true,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 18.0,
+        "LegacyReference": 1.4880008697509766
+      },
+      "remainingRockets": {
+        "NewCandidate": 12,
+        "LegacyReference": 21
+      },
+      "equalStartArtifact": "start-win-mace-on-z1.json",
+      "settingsArtifact": "settings-win-mace-on-z1.properties"
+    },
+    {
+      "tag": "win-spear-off-z0",
+      "group": "z",
+      "weapon": "spear",
+      "armor": false,
+      "sideSwapped": false,
+      "ticks": 311,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 27.333333730697632,
+        "LegacyReference": 29.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 50
+      },
+      "equalStartArtifact": "start-win-spear-off-z0.json",
+      "settingsArtifact": "settings-win-spear-off-z0.properties"
+    },
+    {
+      "tag": "win-spear-off-z1",
+      "group": "z",
+      "weapon": "spear",
+      "armor": false,
+      "sideSwapped": true,
+      "ticks": 669,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 35.33333396911621,
+        "LegacyReference": 0.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 32
+      },
+      "equalStartArtifact": "start-win-spear-off-z1.json",
+      "settingsArtifact": "settings-win-spear-off-z1.properties"
+    },
+    {
+      "tag": "win-spear-on-z0",
+      "group": "z",
+      "weapon": "spear",
+      "armor": true,
+      "sideSwapped": false,
+      "ticks": 564,
+      "outcome": "new_win",
+      "healthLoss": {
+        "NewCandidate": 19.5,
+        "LegacyReference": 45.16666603088379
+      },
+      "remainingRockets": {
+        "NewCandidate": 37,
+        "LegacyReference": 0
+      },
+      "equalStartArtifact": "start-win-spear-on-z0.json",
+      "settingsArtifact": "settings-win-spear-on-z0.properties"
+    },
+    {
+      "tag": "win-spear-on-z1",
+      "group": "z",
+      "weapon": "spear",
+      "armor": true,
+      "sideSwapped": true,
+      "ticks": 414,
+      "outcome": "old_win",
+      "healthLoss": {
+        "NewCandidate": 30.000000953674316,
+        "LegacyReference": 19.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 0,
+        "LegacyReference": 46
+      },
+      "equalStartArtifact": "start-win-spear-on-z1.json",
+      "settingsArtifact": "settings-win-spear-on-z1.properties"
+    },
+    {
+      "tag": "win-mace-off-aa0",
+      "group": "aa",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 16.327059745788574,
+        "LegacyReference": 21.458824157714844
+      },
+      "remainingRockets": {
+        "NewCandidate": 15,
+        "LegacyReference": 13
+      },
+      "equalStartArtifact": "start-win-mace-off-aa0.json",
+      "settingsArtifact": "settings-win-mace-off-aa0.properties"
+    },
+    {
+      "tag": "win-mace-off-aa1",
+      "group": "aa",
+      "weapon": "mace",
+      "armor": false,
+      "sideSwapped": true,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 3.4588241577148438
+      },
+      "remainingRockets": {
+        "NewCandidate": 18,
+        "LegacyReference": 15
+      },
+      "equalStartArtifact": "start-win-mace-off-aa1.json",
+      "settingsArtifact": "settings-win-mace-off-aa1.properties"
+    },
+    {
+      "tag": "win-mace-on-aa0",
+      "group": "aa",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": false,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 20.447999954223633,
+        "LegacyReference": 0.0
+      },
+      "remainingRockets": {
+        "NewCandidate": 17,
+        "LegacyReference": 21
+      },
+      "equalStartArtifact": "start-win-mace-on-aa0.json",
+      "settingsArtifact": "settings-win-mace-on-aa0.properties"
+    },
+    {
+      "tag": "win-mace-on-aa1",
+      "group": "aa",
+      "weapon": "mace",
+      "armor": true,
+      "sideSwapped": true,
+      "ticks": 1200,
+      "outcome": "timeout_both_alive",
+      "healthLoss": {
+        "NewCandidate": 10.267366409301758,
+        "LegacyReference": 4.46400260925293
+      },
+      "remainingRockets": {
+        "NewCandidate": 17,
+        "LegacyReference": 20
+      },
+      "equalStartArtifact": "start-win-mace-on-aa1.json",
+      "settingsArtifact": "settings-win-mace-on-aa1.properties"
+    }
+  ],
+  "checks": {
+    "official": {
+      "passed": true,
+      "log": "check-final-main.log",
+      "productionStartupRetested": false
+    },
+    "mc1211": {
+      "passed": true,
+      "log": "check-final-mc1211.log",
+      "productionStartupRetested": false
+    },
+    "direct": {
+      "passed": true,
+      "log": "check-final-direct.log",
+      "productionStartupRetested": false
+    }
+  },
+  "sourceManifest": "source-aa.json",
+  "publication": {
+    "pushed": false,
+    "uploaded": false,
+    "newProductionJarBuilt": false
+  }
+}

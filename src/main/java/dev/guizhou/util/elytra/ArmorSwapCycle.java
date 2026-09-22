@@ -1,6 +1,6 @@
 package dev.guizhou.util.elytra;
 
-/** Orders an owned equipment pair around every movement window; gliding restarts only after an observed end. */
+/** Holds owned armor between glide restarts; only a fresh restart opens a wing/rocket window. */
 public final class ArmorSwapCycle {
     public interface Access {
         boolean intact();
@@ -44,13 +44,9 @@ public final class ArmorSwapCycle {
             recover(inventorySafe);
             return;
         }
-        if (!access.wearingWings()) {
-            // The movement window must observe the owned wings even while an earlier
-            // glide flag is still running; a window click never toggles the glide flag.
-            if (!swapTo(true)) return;
-        }
         // A repeated START while already gliding makes the vanilla server stop flight.
         if (!access.gliding()) {
+            if (!swapTo(true)) return;
             if (!access.startGliding()) {
                 recovering = true;
                 recover(inventorySafe);
@@ -58,7 +54,7 @@ public final class ArmorSwapCycle {
             }
             restartedThisWindow = true;
         }
-        returnArmor = access.gliding();
+        returnArmor = access.wearingWings() && access.gliding();
     }
 
     public void afterMovement(boolean requested, boolean inventorySafe, boolean canGlide) {
@@ -81,6 +77,16 @@ public final class ArmorSwapCycle {
 
     public void stop(boolean inventorySafe) {
         beforeMovement(false, inventorySafe, false);
+    }
+
+    /** Keep the owned chestplate during a bounded combat fall without restarting gliding. */
+    public void holdDescent(boolean inventorySafe, boolean canGlide) {
+        returnArmor = false;
+        restartedThisWindow = false;
+        if (!validate()) return;
+        if (!inventorySafe || !canGlide) recovering = true;
+        if (recovering) recover(inventorySafe);
+        else swapTo(false);
     }
 
     /** Another equipment owner or a new world must never trigger a stale return swap. */

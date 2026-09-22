@@ -442,7 +442,7 @@ public class TelemetryManager extends Feature {
             // Optional extension: absent when disabled, preserving the original receiver contract.
             // Its complete whitelist joins the per-tick tag, so changing cruise settings
             // cannot blend two configurations into one flight window.
-            var cruise = flight.getSettingByName("CoupledCruise");
+            var cruise = flight.diagnosticSetting("CoupledCruise");
             if (cruise != null && Boolean.TRUE.equals(cruise.getValue())) {
                 JsonObject coupled = new JsonObject();
                 putSetting(coupled, flight, "AutoFly", "auto_fly");
@@ -472,7 +472,9 @@ public class TelemetryManager extends Feature {
     }
 
     private static void putSetting(JsonObject target, Module module, String name, String key) {
-        Setting<?> setting = module.getSettingByName(name);
+        Setting<?> setting = module instanceof dev.guizhou.features.modules.movement.GuangxiElytraModule flight
+                ? flight.diagnosticSetting(name) : module instanceof GuangxiElytraChaseModule chase
+                ? chase.diagnosticSetting(name) : module.getSettingByName(name);
         if (setting == null) return;
         Object value = setting.getValue();
         if (value instanceof Boolean flag) target.addProperty(key, flag);
@@ -740,7 +742,9 @@ public class TelemetryManager extends Feature {
             data.addProperty("name", module.getName());
             JsonObject settings = new JsonObject();
             for (String name : new String[]{"ArmorFly", "AutoMaceDive", "GrimBoost", "SafeLanding", "TerrainGuard", "TerrainLookahead", "FreeLook"}) {
-                Setting<?> setting = module.getSettingByName(name);
+                Setting<?> setting = module instanceof dev.guizhou.features.modules.movement.GuangxiElytraModule flight
+                ? flight.diagnosticSetting(name) : module instanceof GuangxiElytraChaseModule chase
+                ? chase.diagnosticSetting(name) : module.getSettingByName(name);
                 if (setting != null) TelemetryPrivacy.setting(settings, name, setting.getValue());
             }
             for (Setting<?> setting : module.getSettings()) {

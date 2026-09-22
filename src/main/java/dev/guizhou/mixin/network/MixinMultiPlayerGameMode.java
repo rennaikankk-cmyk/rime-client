@@ -21,28 +21,29 @@ import static dev.guizhou.util.traits.Util.EVENT_BUS;
 public class MixinMultiPlayerGameMode {
 
     @Unique private float guizhouware$origUseYaw, guizhouware$origUsePitch;
+    @Unique private boolean guizhouware$useRotationApplied;
 
     @Inject(method = "useItem", at = @At("HEAD"))
     private void guizhouware$useItemRotateHead(Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
-        if (player != Minecraft.getInstance().player) return;
-        if (GuizhouWare.rotationManager == null || !GuizhouWare.rotationManager.isRotating()) return;
-        if (GuizhouWare.rotationManager.isBypassUseSpoof()) return;
-
+        guizhouware$useRotationApplied = false;
+        if (player != Minecraft.getInstance().player || GuizhouWare.rotationManager == null) return;
+        var rotations = GuizhouWare.rotationManager;
+        if (!rotations.isRotating() || rotations.isBypassUseSpoof()) return;
         guizhouware$origUseYaw = player.getYRot();
         guizhouware$origUsePitch = player.getXRot();
-        player.setYRot(GuizhouWare.rotationManager.getRotationYaw());
-        player.setXRot(GuizhouWare.rotationManager.getRotationPitch());
+        guizhouware$useRotationApplied = true;
+        player.setYRot(rotations.getRotationYaw());
+        player.setXRot(rotations.getRotationPitch());
     }
 
     @Inject(method = "useItem", at = @At("RETURN"))
     private void guizhouware$useItemRotateReturn(Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
-        if (player != Minecraft.getInstance().player) return;
-        if (GuizhouWare.rotationManager == null || !GuizhouWare.rotationManager.isRotating()) return;
-        if (GuizhouWare.rotationManager.isBypassUseSpoof()) return;
-
+        if (player != Minecraft.getInstance().player || !guizhouware$useRotationApplied) return;
+        guizhouware$useRotationApplied = false;
         player.setYRot(guizhouware$origUseYaw);
         player.setXRot(guizhouware$origUsePitch);
     }
+
     @Inject(method = "startDestroyBlock", at = @At("HEAD"), cancellable = true)
     private void guizhouware$onStartDestroyBlock(BlockPos pos, Direction direction, CallbackInfoReturnable<Boolean> cir) {
         Minecraft mc = Minecraft.getInstance();

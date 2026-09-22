@@ -17,6 +17,14 @@ public final class MaceApproach {
         return Math.clamp(Math.max(preferredHeight, Math.max(3.0, minimumFall + 1.5)), 3.0, 64.0);
     }
 
+    /** Two glide-exit ticks plus natural fall and a small pose/reach margin.
+     * This is a planning floor; the actual drop still requires the trajectory gate. */
+    public static double glideExitHeight(double minimumFall, double ownY, double targetY) {
+        if (!Double.isFinite(minimumFall) || !Double.isFinite(ownY) || !Double.isFinite(targetY)) return 8.0;
+        double closing = Math.clamp(Math.max(1.5, -ownY) + targetY, 1.5, 6.0);
+        return Math.min(64.0, Math.max(8.0, minimumFall + 1.5 + closing * 2.0));
+    }
+
     /** Change climb pitch without changing the requested travel distance. */
     public static Vec3 pullUpIntent(Vec3 intent, double degrees) {
         if (!finite(intent)) return Vec3.ZERO;
@@ -59,10 +67,19 @@ public final class MaceApproach {
      * Fleeing targets get a lower pass; an unreachable pass keeps horizontal pursuit. */
     public static Plan climb(Vec3 self, Vec3 target, Vec3 velocity, double speed,
                              double preferredHeight, double minimumFall, double latency, boolean stable) {
+        return climb(self, target, velocity, speed, preferredHeight, minimumFall, latency, stable, 3.0);
+    }
+
+    /** Includes the execution distance consumed while wings are being removed. */
+    public static Plan climb(Vec3 self, Vec3 target, Vec3 velocity, double speed,
+                             double preferredHeight, double minimumFall, double latency, boolean stable,
+                             double minimumApex) {
         if (!valid(self, target, velocity, speed) || !Double.isFinite(preferredHeight)
-                || !Double.isFinite(minimumFall) || !Double.isFinite(latency)) return invalid(self);
-        double height = chargeHeight(preferredHeight, minimumFall);
-        double floor = Math.max(3.0, minimumFall + 1.5);
+                || !Double.isFinite(minimumFall) || !Double.isFinite(latency)
+                || !Double.isFinite(minimumApex) || minimumApex < 0 || minimumApex > 64) return invalid(self);
+        double floor = Math.max(minimumApex, Math.max(3.0, minimumFall + 1.5));
+        if (floor > 64) return invalid(self);
+        double height = Math.max(chargeHeight(preferredHeight, minimumFall), floor);
         if (height < floor) return invalid(self);
         double delay = Math.clamp(latency * 0.5, 0.0, 1.5);
         Vec3 observed = target.add(velocity.scale(delay));
@@ -131,13 +148,19 @@ public final class MaceApproach {
             first = q / a;
             second = Math.abs(q) < 1.0E-12 ? Double.POSITIVE_INFINITY : c / q;
         }
-        double best = Double.POSITIVE_INFINITY;
-        for (double time : new double[]{first, second}) {
-            if (Double.isFinite(time) && time >= minimum && time >= 0.0
-                    && Math.abs(offset.add(velocity.scale(time)).length() + extraDistance - speed * time)
-                    < 1.0E-5 * Math.max(1.0, speed * time)) best = Math.min(best, time);
-        }
-        return best;
+        // This solver runs for up to thirteen apex candidates per plan. Validate
+        // roots numerically without allocating a temporary array and two Vec3s.
+        return Math.min(validRoot(first, minimum, offset, velocity, speed, extraDistance),
+                validRoot(second, minimum, offset, velocity, speed, extraDistance));
+    }
+
+    private static double validRoot(double time, double minimum, Vec3 offset, Vec3 velocity,
+                                    double speed, double extraDistance) {
+        if (!Double.isFinite(time) || time < minimum || time < 0) return Double.POSITIVE_INFINITY;
+        double x = offset.x + velocity.x * time, y = offset.y + velocity.y * time,
+                z = offset.z + velocity.z * time;
+        double residual = Math.abs(Math.sqrt(x*x + y*y + z*z) + extraDistance - speed*time);
+        return residual < 1.0E-5 * Math.max(1.0, speed*time) ? time : Double.POSITIVE_INFINITY;
     }
 
     private static double horizon(Vec3 velocity, boolean stable) {

@@ -17,6 +17,8 @@ public final class CoupledCruiseTest {
         realGlideCycle();
         randomizedConstraints();
         dualViewSelection();
+        acceleratedCruise();
+        acceleratedClimb();
         System.out.println("CoupledCruiseTest passed: " + checks + " checks");
     }
 
@@ -228,6 +230,87 @@ public final class CoupledCruiseTest {
             check(r.feasible() == (nearest.length() <= cfg.speedCap()), "empty/nonempty decided by exact closest point");
             if (r.feasible()) check(r.velocity().length() <= cfg.speedCap() + 1e-9, "feasible result respects total cap");
             if (s.vertical() < 0 && !s.pureVertical()) check(r.descentUnmet() == (r.velocity().y < cfg.descentFloor()-1e-9), "post-projection descent flag");
+        }
+    }
+
+    private static void acceleratedCruise() {
+        Config cfg = Config.defaults();
+        CoupledCruise c = new CoupledCruise();
+        Intent fast = new Intent(NORTH, 0, false, true);
+        Selection unsupported = c.select(cfg, fast, 0, 200, false);
+        check(!unsupported.dualActive() && unsupported.vertical() == 0, "unsupported protocol retains ordinary level flight");
+        check(!c.select(cfg, new Intent(Vec3.ZERO, 1, false, true), 0, 200, true).dualActive(), "GZBoost does not alter pure vertical input");
+        Selection up = c.select(cfg, fast, 0, 200, true);
+        check(up.dualActive() && up.vertical() == 1 && !up.banked(), "accelerated level starts its altitude cycle");
+        check(c.select(cfg, fast, 0, 202, true).vertical() == -1, "cycle returns toward entry altitude");
+        Selection ordinary = c.select(cfg, new Intent(NORTH, 0, false), 0, 202, true);
+        check(ordinary.vertical() == 0 && !ordinary.dualActive(), "disabling GZBoost restores ordinary cruise immediately");
+        check(c.select(cfg, fast, 0, 220, true).vertical() == 1, "reentering acceleration anchors the new altitude");
+        c.reset();
+        check(c.select(cfg, fast, 0, -100, true).vertical() == 1, "world reset discards accelerated altitude");
+        Selection left = c.select(cfg, new Intent(NORTH, -1, false, true), 0, 200, true);
+        Selection right = c.select(cfg, new Intent(NORTH, -1, false, true), 0, 198, true);
+        check(left.banked() && right.banked() && left.boxLook().x * right.boxLook().x < 0,
+                "cardinal descent alternates bounded transverse support");
+        check(!c.select(cfg, new Intent(new Vec3(1,0,1), -1, false, true), 0, 200, true).banked(),
+                "noncardinal headings are not silently redirected for banking");
+        Vec3 velocity = Vec3.ZERO;
+        double height = 6000;
+        for (int i = 0; i < 800; i++) {
+            Selection selection = c.select(cfg, new Intent(NORTH,-1,false,true), 0, height, true);
+            Vec3 simulated = ElytraPhysics.simulateGlide(velocity, selection.look(), .08);
+            Result result = c.apply(cfg, selection, velocity, simulated, selection.look(), selection.look());
+            Envelope box = CoupledCruise.envelope(cfg, velocity, simulated, selection.look(), selection.boxLook());
+            check(result.feasible() && box.contains(result.velocity(), 1e-8), "accelerated result remains inside the predicted envelope");
+            check(result.velocity().length() <= cfg.speedCap() + 1e-8, "acceleration retains the total speed limit");
+            velocity = result.velocity();
+            height += velocity.y;
+        }
+        check(velocity.z > 13 && velocity.y < 0 && Math.abs(velocity.x) < 1,
+                "model gains sustained forward speed with explicit altitude cost and bounded banking");
+    }
+
+    private static void acceleratedClimb() {
+        Config cfg = cap(15);
+        double cardinalY = Double.NaN, diagonalY = Double.NaN;
+        for (int angle = 0; angle < 360; angle += 45) {
+            CoupledCruise c = new CoupledCruise();
+            double yaw = Math.toRadians(angle);
+            Vec3 direction = new Vec3(-Math.sin(yaw), 0, Math.cos(yaw));
+            Vec3 v = Vec3.ZERO;
+            for (int tick = 0; tick < 600; tick++) {
+                Selection choice = c.select(cfg, new Intent(direction, 1, false, true), angle, 200, true);
+                Vec3 predicted = ElytraPhysics.simulateGlide(v, choice.look(), .08);
+                Result result = c.apply(cfg, choice, v, predicted, choice.look(), choice.look());
+                Envelope envelope = CoupledCruise.envelope(cfg, v, predicted, choice.look(), choice.boxLook());
+                check(result.feasible() && envelope.contains(result.velocity(), 1e-8), "boosted climb stays inside every envelope axis");
+                check(result.velocity().length() <= 15 + 1e-8, "boosted climb retains total speed bound");
+                v = result.velocity();
+            }
+            check(v.y > 10, "powered directional climb sustains the intended model gain");
+            if (angle % 90 == 0) {
+                if (Double.isNaN(cardinalY)) cardinalY = v.y;
+                check(Math.abs(v.y - cardinalY) < .005, "all cardinal axes have equivalent climb, including tiny sin/cos residues");
+            } else {
+                if (Double.isNaN(diagonalY)) diagonalY = v.y;
+                check(Math.abs(v.y - diagonalY) < .005, "all diagonal quadrants have equivalent climb");
+            }
+            Selection off = c.select(cfg, new Intent(direction, 1, false, false), angle, 200, true);
+            check(!off.banked(), "switching GZBoost off leaves the ordinary climb path");
+            check(!c.select(cfg, new Intent(direction, 1, false, true), angle, 200, false).dualActive(),
+                    "unsupported protocol cannot select boosted dual climb");
+        }
+        CoupledCruise turning = new CoupledCruise();
+        Vec3 v = Vec3.ZERO;
+        for (int tick = 0; tick < 720; tick++) {
+            double yaw = Math.toRadians(tick * .5);
+            Vec3 direction = new Vec3(-Math.sin(yaw), 0, Math.cos(yaw));
+            Selection choice = turning.select(cfg, new Intent(direction, 1, false, true), tick * .5, 200, true);
+            Vec3 predicted = ElytraPhysics.simulateGlide(v, choice.look(), .08);
+            Result result = turning.apply(cfg, choice, v, predicted, choice.look(), choice.look());
+            check(result.feasible() && result.velocity().length() <= 15 + 1e-8,
+                    "heading transitions remain feasible across both blend regions and all quadrants");
+            v = result.velocity();
         }
     }
 

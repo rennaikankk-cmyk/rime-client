@@ -62,9 +62,9 @@ public class AutoAnchorModule extends Module {
 
     private final Setting<Double>  minDamage     = num("MinDamage", 6.0, 0.0, 36.0).setPage("General");
     private final Setting<Double>  maxSelfDamage = num("MaxSelfDamage", 4.0, 0.0, 36.0).setPage("General");
-    private final Setting<Double> placeRange = num("PlaceRange", 5.0, 1.0, 6.0).setPage("General");
-    private final Setting<Double> wallRange = num("WallRange", 5.0, 0.0, 6.0).setPage("General");
-    private final Setting<Boolean> airPlace = bool("AirPlace", true).setPage("General");
+    private final Setting<Double> placeRange = num("PlaceRange", 4.5, 1.0, 6.0).setPage("General");
+    private final Setting<Double> wallRange = num("WallRange", 0.0, 0.0, 6.0).setPage("General");
+    private final Setting<Boolean> airPlace = bool("AirPlace", false).setPage("General");
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
     private final dev.guizhou.manager.RotationOptions rotationOptions = new dev.guizhou.manager.RotationOptions(this, rotate);
     private final Setting<Boolean> assumeBestArmor = bool("AssumeBestArmor", false).setPage("General");
@@ -207,6 +207,7 @@ public class AutoAnchorModule extends Module {
         if (!dev.guizhou.manager.HeartbeatManager.authorized() || !mc.isSameThread()) return;
         if (sessionLevel != mc.level || sessionPlayer != mc.player) resetSession();
         if (nullCheck() || mc.player.isDeadOrDying()) return;
+        if (GuizhouWare.tpsCounterService.isRubberbandRecent()) { resetSession(); return; }
         if (mc.player.containerMenu != mc.player.inventoryMenu || !mc.player.inventoryMenu.getCarried().isEmpty()
                 || mc.player.isShiftKeyDown() || EatUtil.shouldDefer()) return;
         int tick = mc.player.tickCount;

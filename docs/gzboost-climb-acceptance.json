@@ -1,0 +1,447 @@
+{
+  "date": "2026-09-22",
+  "scope": "GZBoost opt-in aggressive climb; default GZBoost remains false",
+  "release": {
+    "production_jar": false,
+    "pushed": false,
+    "deployed": false
+  },
+  "source_manifest": [
+    {
+      "repo": "guizhouware-upgrades",
+      "file": "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java",
+      "before": "6e15c9994184e8588f94da894454b7c2749caeaf803d9baf1bfaab478ce68301",
+      "after": "798abec629e9d080e6a12fc12daa27c65e05053c9070fe8fbcbb50f27e4fad3a"
+    },
+    {
+      "repo": "guizhouware-upgrades",
+      "file": "src/main/java/dev/guizhou/util/elytra/CoupledCruise.java",
+      "before": "ef704c0a8facb24402d0f4e5e89b8a4c4715c571092403b8bea88a7a071db3a4",
+      "after": "6fe42afde41d33aa7d0b902c7ee7753aaaefbfccb1aa86eb38c4b8ff7436ddc8"
+    },
+    {
+      "repo": "guizhouware-upgrades",
+      "file": "src/flightTest/java/dev/guizhou/util/elytra/CoupledCruiseTest.java",
+      "before": "80a33bf8a38f15bfca3d1a283e509c44c71ecae6025298c3801f7d83830929fa",
+      "after": "44ee442d0fac66e11412500b59f8fafdd7dfca107e102916c07bc262f70b5323"
+    },
+    {
+      "repo": "guizhouware-1.21.1",
+      "file": "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java",
+      "before": "f446ec8f7a694092d3974460866013d5d20aaadd3307541f162d5d5b59d08c93",
+      "after": "d492f8f038917259b4cd2a7b812d4d50dfd85eec1f9fd2c71ec6026d4aedc3d2"
+    },
+    {
+      "repo": "guizhouware-1.21.1",
+      "file": "src/main/java/dev/guizhou/util/elytra/CoupledCruise.java",
+      "before": "ef704c0a8facb24402d0f4e5e89b8a4c4715c571092403b8bea88a7a071db3a4",
+      "after": "6fe42afde41d33aa7d0b902c7ee7753aaaefbfccb1aa86eb38c4b8ff7436ddc8"
+    },
+    {
+      "repo": "guizhouware-1.21.1",
+      "file": "src/flightTest/java/dev/guizhou/util/elytra/CoupledCruiseTest.java",
+      "before": "80a33bf8a38f15bfca3d1a283e509c44c71ecae6025298c3801f7d83830929fa",
+      "after": "44ee442d0fac66e11412500b59f8fafdd7dfca107e102916c07bc262f70b5323"
+    },
+    {
+      "repo": "guizhouware-direct-jar",
+      "file": "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java",
+      "before": "6e15c9994184e8588f94da894454b7c2749caeaf803d9baf1bfaab478ce68301",
+      "after": "798abec629e9d080e6a12fc12daa27c65e05053c9070fe8fbcbb50f27e4fad3a"
+    },
+    {
+      "repo": "guizhouware-direct-jar",
+      "file": "src/main/java/dev/guizhou/util/elytra/CoupledCruise.java",
+      "before": "ef704c0a8facb24402d0f4e5e89b8a4c4715c571092403b8bea88a7a071db3a4",
+      "after": "6fe42afde41d33aa7d0b902c7ee7753aaaefbfccb1aa86eb38c4b8ff7436ddc8"
+    },
+    {
+      "repo": "guizhouware-direct-jar",
+      "file": "src/flightTest/java/dev/guizhou/util/elytra/CoupledCruiseTest.java",
+      "before": "80a33bf8a38f15bfca3d1a283e509c44c71ecae6025298c3801f7d83830929fa",
+      "after": "44ee442d0fac66e11412500b59f8fafdd7dfca107e102916c07bc262f70b5323"
+    }
+  ],
+  "runtime_client": "1.21.11 development client Via target 1.20.3-1.20.4",
+  "server": "Paper 1.20.4 build 499, Grim 2.3.73 original; chunk load/send rates 400; loopback",
+  "tests": {
+    "guizhouware-upgrades": {
+      "gradle_check": "passed",
+      "coupled_cruise_assertions": 19783,
+      "real_client_speed_tested": true
+    },
+    "guizhouware-1.21.1": {
+      "gradle_check": "passed",
+      "coupled_cruise_assertions": 19783,
+      "real_client_speed_tested": false
+    },
+    "guizhouware-direct-jar": {
+      "gradle_check": "passed",
+      "coupled_cruise_assertions": 19783,
+      "real_client_speed_tested": false
+    }
+  },
+  "runs": {
+    "climb10": {
+      "metrics": {
+        "climb10-climb-angle15_fast_lift": {
+          "after_120_client_ticks": {
+            "seconds": 36.4545565,
+            "horizontal_net_bps": 33.9785362218475,
+            "vertical_net_bps": 133.98874554707584,
+            "total_net_bps": 138.22997090739202,
+            "horizontal_path_bps": 33.97853618023197,
+            "height_range": 4884.50029491,
+            "min_reported_tps": 20.0
+          },
+          "last_15_seconds": {
+            "seconds": 14.9550175,
+            "horizontal_net_bps": 33.97138231724491,
+            "vertical_net_bps": 134.58255852258281,
+            "total_net_bps": 138.80388998521926,
+            "horizontal_path_bps": 33.97138227583905,
+            "height_range": 2012.6845179000002,
+            "min_reported_tps": 20.0
+          },
+          "unpowered_client_ticks_after_warmup": 0,
+          "controller_active_ticks_after_warmup": 731,
+          "cooldown_changes_after_warmup": 0,
+          "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+        },
+        "climb10-climb-diagonal_fast_lift": {
+          "after_120_client_ticks": {
+            "seconds": 36.4618705,
+            "horizontal_net_bps": 44.991336975124476,
+            "vertical_net_bps": 202.79911154777426,
+            "total_net_bps": 207.72987278524914,
+            "horizontal_path_bps": 45.000365207857186,
+            "height_range": 7394.43494277,
+            "min_reported_tps": 20.0
+          },
+          "last_15_seconds": {
+            "seconds": 14.9473669,
+            "horizontal_net_bps": 45.01391738456294,
+            "vertical_net_bps": 203.98092960908053,
+            "total_net_bps": 208.88866030134074,
+            "horizontal_path_bps": 45.02271771691522,
+            "height_range": 3048.9777954700003,
+            "min_reported_tps": 20.0
+          },
+          "unpowered_client_ticks_after_warmup": 0,
+          "controller_active_ticks_after_warmup": 731,
+          "cooldown_changes_after_warmup": 0,
+          "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+        },
+        "climb10-climb_fast_lift": {
+          "after_120_client_ticks": {
+            "seconds": 36.4950402,
+            "horizontal_net_bps": 32.6812655813981,
+            "vertical_net_bps": 145.94976077708225,
+            "total_net_bps": 149.56402572440143,
+            "horizontal_path_bps": 35.74660919353446,
+            "height_range": 5326.44238674,
+            "min_reported_tps": 20.0
+          },
+          "last_15_seconds": {
+            "seconds": 14.93104,
+            "horizontal_net_bps": 32.718357077280174,
+            "vertical_net_bps": 146.8415345622274,
+            "total_net_bps": 150.44243803669968,
+            "horizontal_path_bps": 35.79130294055247,
+            "height_range": 2192.4968262099997,
+            "min_reported_tps": 20.0
+          },
+          "unpowered_client_ticks_after_warmup": 0,
+          "controller_active_ticks_after_warmup": 731,
+          "cooldown_changes_after_warmup": 0,
+          "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+        },
+        "climb10-climb_fast_lift_wild": {
+          "after_120_client_ticks": {
+            "seconds": 36.5047644,
+            "horizontal_net_bps": 27.18882731358953,
+            "vertical_net_bps": 213.81183177284115,
+            "total_net_bps": 215.53359769823803,
+            "horizontal_path_bps": 41.50637692611755,
+            "height_range": 7805.1505448,
+            "min_reported_tps": 20.0
+          },
+          "last_15_seconds": {
+            "seconds": 14.9914261,
+            "horizontal_net_bps": 27.24523612933663,
+            "vertical_net_bps": 215.4985231565128,
+            "total_net_bps": 217.21398752009821,
+            "horizontal_path_bps": 42.4205422285683,
+            "height_range": 3230.63018456,
+            "min_reported_tps": 20.0
+          },
+          "unpowered_client_ticks_after_warmup": 0,
+          "controller_active_ticks_after_warmup": 731,
+          "cooldown_changes_after_warmup": 0,
+          "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+        },
+        "climb10-vertical_fast_lift": {
+          "after_120_client_ticks": {
+            "seconds": 36.4573488,
+            "horizontal_net_bps": 0.0,
+            "vertical_net_bps": 31.75046143399215,
+            "total_net_bps": 31.75046143399215,
+            "horizontal_path_bps": 0.0,
+            "height_range": 1157.53764706,
+            "min_reported_tps": 20.0
+          },
+          "last_15_seconds": {
+            "seconds": 14.9557766,
+            "horizontal_net_bps": 0.0,
+            "vertical_net_bps": 31.744596802816638,
+            "total_net_bps": 31.744596802816638,
+            "horizontal_path_bps": 0.0,
+            "height_range": 474.7650980399999,
+            "min_reported_tps": 20.0
+          },
+          "unpowered_client_ticks_after_warmup": 0,
+          "controller_active_ticks_after_warmup": 731,
+          "cooldown_changes_after_warmup": 0,
+          "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+        }
+      },
+      "events": {
+        "intervals": {
+          "climb10-climb_fast_lift": [
+            "17:40:57",
+            "17:41:40"
+          ],
+          "climb10-climb_fast_lift_wild": [
+            "17:41:41",
+            "17:42:24"
+          ],
+          "climb10-climb-diagonal_fast_lift": [
+            "17:42:25",
+            "17:43:07"
+          ],
+          "climb10-vertical_fast_lift": [
+            "17:43:09",
+            "17:43:51"
+          ],
+          "climb10-climb-angle15_fast_lift": [
+            "17:43:52",
+            "17:44:35"
+          ]
+        },
+        "teleport_acknowledgements": {
+          "climb10-climb_fast_lift": [],
+          "climb10-climb_fast_lift_wild": [],
+          "climb10-climb-diagonal_fast_lift": [],
+          "climb10-vertical_fast_lift": [],
+          "climb10-climb-angle15_fast_lift": []
+        },
+        "server_flags": {
+          "climb10-climb_fast_lift": [],
+          "climb10-climb_fast_lift_wild": [],
+          "climb10-climb-diagonal_fast_lift": [],
+          "climb10-vertical_fast_lift": [],
+          "climb10-climb-angle15_fast_lift": []
+        }
+      },
+      "completed_trials": [
+        "climb10-climb_fast_lift",
+        "climb10-climb_fast_lift_wild",
+        "climb10-climb-diagonal_fast_lift",
+        "climb10-vertical_fast_lift",
+        "climb10-climb-angle15_fast_lift"
+      ],
+      "note": "Completed."
+    },
+    "climb11": {
+      "metrics": {
+        "climb11-climb-angle1_fast": {
+          "after_120_client_ticks": {
+            "seconds": 26.4498585,
+            "horizontal_net_bps": 26.023733640782165,
+            "vertical_net_bps": 200.83713310186513,
+            "total_net_bps": 202.5161444062736,
+            "horizontal_path_bps": 44.770625311421206,
+            "height_range": 5312.113752089999,
+            "min_reported_tps": 20.0
+          },
+          "last_15_seconds": {
+            "seconds": 14.9601687,
+            "horizontal_net_bps": 26.006672103316912,
+            "vertical_net_bps": 202.21954309512563,
+            "total_net_bps": 203.8849935711081,
+            "horizontal_path_bps": 44.74028728662523,
+            "height_range": 3025.2384791399995,
+            "min_reported_tps": 20.0
+          },
+          "unpowered_client_ticks_after_warmup": 0,
+          "controller_active_ticks_after_warmup": 531,
+          "cooldown_changes_after_warmup": 0,
+          "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+        },
+        "climb11-climb-angle43_fast": {
+          "after_120_client_ticks": {
+            "seconds": 26.4437241,
+            "horizontal_net_bps": 45.10843706935982,
+            "vertical_net_bps": 196.05005160676288,
+            "total_net_bps": 201.17254740608817,
+            "horizontal_path_bps": 45.120727420503094,
+            "height_range": 5184.2934744799995,
+            "min_reported_tps": 20.0
+          },
+          "last_15_seconds": {
+            "seconds": 14.9434049,
+            "horizontal_net_bps": 45.11769868797641,
+            "vertical_net_bps": 197.46417718963096,
+            "total_net_bps": 202.5529758065208,
+            "horizontal_path_bps": 45.12999143554985,
+            "height_range": 2950.78715299,
+            "min_reported_tps": 20.0
+          },
+          "unpowered_client_ticks_after_warmup": 0,
+          "controller_active_ticks_after_warmup": 531,
+          "cooldown_changes_after_warmup": 0,
+          "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+        },
+        "climb11-climb-angle90_fast": {
+          "after_120_client_ticks": {
+            "seconds": 26.4496896,
+            "horizontal_net_bps": 27.23002835365681,
+            "vertical_net_bps": 213.66576268970658,
+            "total_net_bps": 215.39390100445036,
+            "horizontal_path_bps": 46.7680596154342,
+            "height_range": 5651.39310129,
+            "min_reported_tps": 20.0
+          },
+          "last_15_seconds": {
+            "seconds": 14.9453151,
+            "horizontal_net_bps": 27.23849706632851,
+            "vertical_net_bps": 215.41436677972754,
+            "total_net_bps": 217.12965052600111,
+            "horizontal_path_bps": 46.725145284389896,
+            "height_range": 3219.4355885900004,
+            "min_reported_tps": 20.0
+          },
+          "unpowered_client_ticks_after_warmup": 0,
+          "controller_active_ticks_after_warmup": 531,
+          "cooldown_changes_after_warmup": 0,
+          "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+        },
+        "climb11-climb_fast_turn": {
+          "after_120_client_ticks": {
+            "seconds": 26.445796,
+            "horizontal_net_bps": 33.083150254069984,
+            "vertical_net_bps": 208.71897000491117,
+            "total_net_bps": 211.32463952564635,
+            "horizontal_path_bps": 46.05031259363594,
+            "height_range": 5519.73930208,
+            "min_reported_tps": 20.0
+          },
+          "last_15_seconds": {
+            "seconds": 14.948983,
+            "horizontal_net_bps": 33.65084695201827,
+            "vertical_net_bps": 208.6000270138778,
+            "total_net_bps": 211.29683095299538,
+            "horizontal_path_bps": 46.0192500029245,
+            "height_range": 3118.35825763,
+            "min_reported_tps": 20.0
+          },
+          "unpowered_client_ticks_after_warmup": 0,
+          "controller_active_ticks_after_warmup": 531,
+          "cooldown_changes_after_warmup": 0,
+          "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+        }
+      },
+      "events": {
+        "intervals": {
+          "climb11-climb-angle90_fast": [
+            "17:47:40",
+            "17:48:13"
+          ],
+          "climb11-climb-angle1_fast": [
+            "17:48:14",
+            "17:48:47"
+          ],
+          "climb11-climb-angle43_fast": [
+            "17:48:48",
+            "17:49:20"
+          ],
+          "climb11-climb_fast_turn": [
+            "17:49:22",
+            "17:49:54"
+          ],
+          "climb11-vertical_fast": [
+            "17:49:56",
+            null
+          ]
+        },
+        "teleport_acknowledgements": {
+          "climb11-climb-angle90_fast": [],
+          "climb11-climb-angle1_fast": [],
+          "climb11-climb-angle43_fast": [],
+          "climb11-climb_fast_turn": [],
+          "climb11-vertical_fast": []
+        },
+        "server_flags": {
+          "climb11-climb-angle90_fast": [],
+          "climb11-climb-angle1_fast": [],
+          "climb11-climb-angle43_fast": [],
+          "climb11-climb_fast_turn": [],
+          "climb11-vertical_fast": []
+        }
+      },
+      "completed_trials": [
+        "climb11-climb-angle90_fast",
+        "climb11-climb-angle1_fast",
+        "climb11-climb-angle43_fast",
+        "climb11-climb_fast_turn"
+      ],
+      "note": "Final vertical trial interrupted at tick 440; excluded from acceptance and replaced by climb12."
+    },
+    "climb12": {
+      "metrics": {
+        "climb12-vertical_fast": {
+          "after_120_client_ticks": {
+            "seconds": 26.4491697,
+            "horizontal_net_bps": 0.0,
+            "vertical_net_bps": 31.757859665817794,
+            "total_net_bps": 31.757859665817794,
+            "horizontal_path_bps": 0.0,
+            "height_range": 839.96901961,
+            "min_reported_tps": 20.0
+          },
+          "last_15_seconds": {
+            "seconds": 14.9482658,
+            "horizontal_net_bps": 0.0,
+            "vertical_net_bps": 31.76054696859886,
+            "total_net_bps": 31.76054696859886,
+            "horizontal_path_bps": 0.0,
+            "height_range": 474.76509804,
+            "min_reported_tps": 20.0
+          },
+          "unpowered_client_ticks_after_warmup": 0,
+          "controller_active_ticks_after_warmup": 531,
+          "cooldown_changes_after_warmup": 0,
+          "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+        }
+      },
+      "events": {
+        "intervals": {
+          "climb12-vertical_fast": [
+            "18:32:31",
+            "18:33:04"
+          ]
+        },
+        "teleport_acknowledgements": {
+          "climb12-vertical_fast": []
+        },
+        "server_flags": {
+          "climb12-vertical_fast": []
+        }
+      },
+      "completed_trials": [
+        "climb12-vertical_fast"
+      ],
+      "note": "Completed."
+    }
+  }
+}

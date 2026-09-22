@@ -8,6 +8,7 @@ public final class MaceApproachTest {
 
     public static void main(String[] args) {
         minimumSmashHeight();
+        glideExitRoom();
         stationaryRecovery();
         Vec3 overhead = new Vec3(0.06, 90.0, 0.03);
         Vec3 angled = MaceApproach.pullUpIntent(overhead, 45.0);
@@ -92,6 +93,26 @@ public final class MaceApproachTest {
                     + legacy + " ticks, adaptive climb " + adaptive + " ticks (not a server benchmark)");
         }
         System.out.println("MaceApproachTest passed: " + checks + " checks");
+    }
+
+    private static void glideExitRoom() {
+        var box = new net.minecraft.world.phys.AABB(-0.3, 0, -0.3, 0.3, 1.8, 0.3);
+        var down = new Vec3(0, -1.75, 0);
+        check(3.0 + down.y * 2.0 < 0.5,
+                "Three-block apex crosses the missed-pass plane during two glide-exit ticks");
+        double floor = MaceApproach.glideExitHeight(1.5, 2, 0);
+        check(AerialIntercept.canStartDrop(new Vec3(0, floor + 1.62, 0), down, box,
+                Vec3.ZERO, 3, 1.5), "Execution floor leaves a charged natural-fall hit after glide exit");
+        for (Vec3 motion : new Vec3[]{Vec3.ZERO, new Vec3(0.8, 0, 0)}) {
+            var plan = MaceApproach.climb(Vec3.ZERO, new Vec3(3, 0, 0), motion,
+                    6, 3, 1.5, 0, true, floor);
+            check(!plan.reachable() || plan.height() >= floor,
+                    "Adaptive geometry may not spend the glide-exit distance on a shorter pass");
+        }
+        check(MaceApproach.glideExitHeight(1.5, -3, 2) > floor,
+                "Faster relative descent needs more execution room");
+        check(Double.isFinite(MaceApproach.glideExitHeight(1.5, Double.NaN, 0)),
+                "Invalid transient velocity leaves a finite planning floor");
     }
 
     private static void minimumSmashHeight() {

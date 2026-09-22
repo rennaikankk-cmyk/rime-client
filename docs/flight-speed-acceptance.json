@@ -1,0 +1,369 @@
+{
+  "date": "2026-09-22",
+  "scope": "manual Elytra flight; GZBoost opt-in setting, default false; no sprint-key activation",
+  "mode_values": [
+    "Grim",
+    "NoAC"
+  ],
+  "settings_runtime": "passed default, visibility, configuration round-trip",
+  "runtime_client": "1.21.11 development launch, ViaFabricPlus 4.4.2 target 1.20.3-1.20.4",
+  "server": "Paper 1.20.4 build 499, Grim 2.3.73, ViaVersion 5.12.0",
+  "grim_sha256": "a095331a8ba47286b27bdb9b51f0d35ae4a227632a2c50b25cedba85439f1810",
+  "server_changes": {
+    "player-max-chunk-load-rate": {
+      "default": 100,
+      "test": 400
+    },
+    "player-max-chunk-send-rate": {
+      "default": 75,
+      "test": 400
+    }
+  },
+  "exemption": false,
+  "allow_flight": false,
+  "measurement": "server net displacement / monotonic elapsed seconds; final 15-second and post-120-tick windows",
+  "clean07_metrics": {
+    "clean07-climb-diagonal": {
+      "after_120_client_ticks": {
+        "seconds": 46.451637,
+        "horizontal_net_bps": 45.968074366425654,
+        "vertical_net_bps": 192.31304419346944,
+        "total_net_bps": 197.7305510737189,
+        "horizontal_path_bps": 45.96807440687938,
+        "height_range": 8933.25571924,
+        "min_reported_tps": 20.0
+      },
+      "last_15_seconds": {
+        "seconds": 14.9531651,
+        "horizontal_net_bps": 45.9643472468319,
+        "vertical_net_bps": 193.05867820987285,
+        "total_net_bps": 198.45496831767798,
+        "horizontal_path_bps": 45.96434728753988,
+        "height_range": 2886.838289260001,
+        "min_reported_tps": 20.0
+      },
+      "unpowered_client_ticks_after_warmup": 55,
+      "controller_active_ticks_after_warmup": 931,
+      "cooldown_changes_after_warmup": 0,
+      "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+    },
+    "clean07-descent_fast": {
+      "after_120_client_ticks": {
+        "seconds": 46.4565248,
+        "horizontal_net_bps": 272.7473286947892,
+        "vertical_net_bps": -30.686923775667353,
+        "total_net_bps": 274.4681996169265,
+        "horizontal_path_bps": 273.06956325274376,
+        "height_range": 1425.60783542,
+        "min_reported_tps": 20.0
+      },
+      "last_15_seconds": {
+        "seconds": 14.95308,
+        "horizontal_net_bps": 280.26272420429757,
+        "vertical_net_bps": -30.684912639402757,
+        "total_net_bps": 281.93750804407335,
+        "horizontal_path_bps": 280.5702229246475,
+        "height_range": 458.83395349000057,
+        "min_reported_tps": 20.0
+      },
+      "unpowered_client_ticks_after_warmup": 0,
+      "controller_active_ticks_after_warmup": 931,
+      "cooldown_changes_after_warmup": 0,
+      "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+    },
+    "clean07-diagonal": {
+      "after_120_client_ticks": {
+        "seconds": 46.4625363,
+        "horizontal_net_bps": 47.56200215289136,
+        "vertical_net_bps": -0.04456754720899761,
+        "total_net_bps": 47.56202303369682,
+        "horizontal_path_bps": 47.56200221850875,
+        "height_range": 2.070721280000015,
+        "min_reported_tps": 20.0
+      },
+      "last_15_seconds": {
+        "seconds": 14.9628571,
+        "horizontal_net_bps": 47.53439921968556,
+        "vertical_net_bps": -0.04370234746143527,
+        "total_net_bps": 47.53441930929226,
+        "horizontal_path_bps": 47.534399280213925,
+        "height_range": 0.6539119800000037,
+        "min_reported_tps": 20.0
+      },
+      "unpowered_client_ticks_after_warmup": 57,
+      "controller_active_ticks_after_warmup": 931,
+      "cooldown_changes_after_warmup": 0,
+      "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+    },
+    "clean07-level_fast": {
+      "after_120_client_ticks": {
+        "seconds": 46.4466565,
+        "horizontal_net_bps": 155.89339923574477,
+        "vertical_net_bps": -0.05271084604335322,
+        "total_net_bps": 155.89340814706887,
+        "horizontal_path_bps": 155.89339923789777,
+        "height_range": 3.3305147199999965,
+        "min_reported_tps": 20.0
+      },
+      "last_15_seconds": {
+        "seconds": 14.9431132,
+        "horizontal_net_bps": 160.00774892945333,
+        "vertical_net_bps": -0.042918617520747104,
+        "total_net_bps": 160.00775468544862,
+        "horizontal_path_bps": 160.0077489287841,
+        "height_range": 3.314559199999991,
+        "min_reported_tps": 20.0
+      },
+      "unpowered_client_ticks_after_warmup": 0,
+      "controller_active_ticks_after_warmup": 931,
+      "cooldown_changes_after_warmup": 0,
+      "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+    }
+  },
+  "clean07_events": {
+    "intervals": {
+      "clean07-diagonal": [
+        "16:54:05",
+        "16:54:58"
+      ],
+      "clean07-descent_fast": [
+        "16:54:59",
+        "16:55:51"
+      ],
+      "clean07-level_fast": [
+        "16:55:53",
+        "16:56:45"
+      ],
+      "clean07-climb-diagonal": [
+        "16:56:47",
+        "16:57:39"
+      ]
+    },
+    "teleport_acknowledgements": {
+      "clean07-diagonal": [],
+      "clean07-descent_fast": [],
+      "clean07-level_fast": [],
+      "clean07-climb-diagonal": []
+    },
+    "server_flags": {
+      "clean07-diagonal": [],
+      "clean07-descent_fast": [],
+      "clean07-level_fast": [],
+      "clean07-climb-diagonal": []
+    }
+  },
+  "gzboost08_metrics": {
+    "gzboost08-descent_fast": {
+      "after_120_client_ticks": {
+        "seconds": 36.4004541,
+        "horizontal_net_bps": 236.4739436394892,
+        "vertical_net_bps": -30.238307289413758,
+        "total_net_bps": 238.39941536870708,
+        "horizontal_path_bps": 236.67175177578125,
+        "height_range": 1100.6881165500008,
+        "min_reported_tps": 20.0
+      },
+      "last_15_seconds": {
+        "seconds": 14.9645148,
+        "horizontal_net_bps": 196.32000659534003,
+        "vertical_net_bps": -29.560673748673775,
+        "total_net_bps": 198.53306631911443,
+        "horizontal_path_bps": 196.54615256974682,
+        "height_range": 442.36113981000017,
+        "min_reported_tps": 20.0
+      },
+      "unpowered_client_ticks_after_warmup": 0,
+      "controller_active_ticks_after_warmup": 721,
+      "cooldown_changes_after_warmup": 1,
+      "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+    },
+    "gzboost08-diagonal": {
+      "after_120_client_ticks": {
+        "seconds": 36.4480651,
+        "horizontal_net_bps": 47.57826818753585,
+        "vertical_net_bps": -0.04285887510665098,
+        "total_net_bps": 47.57828749133643,
+        "horizontal_path_bps": 47.57826821656379,
+        "height_range": 1.5621230699999842,
+        "min_reported_tps": 20.0
+      },
+      "last_15_seconds": {
+        "seconds": 14.9577383,
+        "horizontal_net_bps": 47.71104963912439,
+        "vertical_net_bps": -0.04128856432793708,
+        "total_net_bps": 47.71106750443272,
+        "horizontal_path_bps": 47.71104966597972,
+        "height_range": 0.6175835399999983,
+        "min_reported_tps": 20.0
+      },
+      "unpowered_client_ticks_after_warmup": 43,
+      "controller_active_ticks_after_warmup": 731,
+      "cooldown_changes_after_warmup": 0,
+      "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+    },
+    "gzboost08-diagonal_sprint_only": {
+      "after_120_client_ticks": {
+        "seconds": 36.4522395,
+        "horizontal_net_bps": 47.57177390295323,
+        "vertical_net_bps": -0.04484717489031101,
+        "total_net_bps": 47.57179504226005,
+        "horizontal_path_bps": 47.57177397211684,
+        "height_range": 1.634779960000003,
+        "min_reported_tps": 19.99
+      },
+      "last_15_seconds": {
+        "seconds": 14.9472518,
+        "horizontal_net_bps": 47.582751108246995,
+        "vertical_net_bps": -0.04617841722583336,
+        "total_net_bps": 47.5827735160068,
+        "horizontal_path_bps": 47.58275117641033,
+        "height_range": 0.6902404299999887,
+        "min_reported_tps": 20.0
+      },
+      "unpowered_client_ticks_after_warmup": 45,
+      "controller_active_ticks_after_warmup": 731,
+      "cooldown_changes_after_warmup": 0,
+      "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+    },
+    "gzboost08-level_fast": {
+      "after_120_client_ticks": {
+        "seconds": 36.4497404,
+        "horizontal_net_bps": 154.54951241984702,
+        "vertical_net_bps": -0.07447297155510069,
+        "total_net_bps": 154.54953036303905,
+        "horizontal_path_bps": 154.54951242176747,
+        "height_range": 3.32582192000001,
+        "min_reported_tps": 20.0
+      },
+      "last_15_seconds": {
+        "seconds": 14.9471207,
+        "horizontal_net_bps": 159.28887688382684,
+        "vertical_net_bps": -0.1687480693187963,
+        "total_net_bps": 159.28896626829444,
+        "horizontal_path_bps": 159.2888768791437,
+        "height_range": 3.314559199999991,
+        "min_reported_tps": 20.0
+      },
+      "unpowered_client_ticks_after_warmup": 0,
+      "controller_active_ticks_after_warmup": 731,
+      "cooldown_changes_after_warmup": 0,
+      "note": "Cooldown changes are a proxy; packet traces distinguish actual server teleports. Trial-reset teleports are outside the measured window."
+    }
+  },
+  "gzboost08_events": {
+    "intervals": {
+      "gzboost08-diagonal_sprint_only": [
+        "17:07:39",
+        "17:08:21"
+      ],
+      "gzboost08-descent_fast": [
+        "17:08:22",
+        "17:09:05"
+      ],
+      "gzboost08-level_fast": [
+        "17:09:06",
+        "17:09:49"
+      ],
+      "gzboost08-diagonal": [
+        "17:09:50",
+        "17:10:32"
+      ]
+    },
+    "teleport_acknowledgements": {
+      "gzboost08-diagonal_sprint_only": [],
+      "gzboost08-descent_fast": [
+        "[17:08:51] [Render thread/INFO] (Minecraft) [STDOUT]: LAB_TELEPORT_ACK trial=1 step=579 id=5"
+      ],
+      "gzboost08-level_fast": [],
+      "gzboost08-diagonal": []
+    },
+    "server_flags": {
+      "gzboost08-diagonal_sprint_only": [],
+      "gzboost08-descent_fast": [
+        "[17:08:51 WARN]: FlightLab moved too quickly! -3.74582675988222E-9,-3.069123434705034,27.96729072339076"
+      ],
+      "gzboost08-level_fast": [],
+      "gzboost08-diagonal": []
+    }
+  },
+  "conclusion": "Toggle behavior passed. Earlier 280.26 horizontal bps descent is conditional, not stable maximum: final toggle run had one vanilla moved-too-quickly correction in descent. Other final cases had no corrections in active intervals.",
+  "release": {
+    "production_jar_built": false,
+    "pushed": false,
+    "deployed": false
+  },
+  "checks": {
+    "guizhouware-upgrades": {
+      "gradle_check": "passed",
+      "CoupledCruiseTest_checks": 9431,
+      "runtime_tested": true
+    },
+    "guizhouware-1.21.1": {
+      "gradle_check": "passed",
+      "CoupledCruiseTest_checks": 9431,
+      "runtime_tested": false
+    },
+    "guizhouware-direct-jar": {
+      "gradle_check": "passed",
+      "CoupledCruiseTest_checks": 9431,
+      "runtime_tested": false
+    }
+  },
+  "source_manifest": [
+    {
+      "repo": "guizhouware-upgrades",
+      "file": "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java",
+      "before": "6b275694b78d9ec3d9b6a99357414da5c9d075bdb22bf2d4a7ff578b7f13ef96",
+      "after": "6e15c9994184e8588f94da894454b7c2749caeaf803d9baf1bfaab478ce68301"
+    },
+    {
+      "repo": "guizhouware-upgrades",
+      "file": "src/main/java/dev/guizhou/util/elytra/CoupledCruise.java",
+      "before": "34023313884b7a005a570b8af19aba6280b79b1db86e76c1059542c7bd5332db",
+      "after": "ef704c0a8facb24402d0f4e5e89b8a4c4715c571092403b8bea88a7a071db3a4"
+    },
+    {
+      "repo": "guizhouware-upgrades",
+      "file": "src/flightTest/java/dev/guizhou/util/elytra/CoupledCruiseTest.java",
+      "before": "5a7fa5106bbde88ade4e246d9b89bd42c7a4882b9396197b5301b1d653e2842b",
+      "after": "80a33bf8a38f15bfca3d1a283e509c44c71ecae6025298c3801f7d83830929fa"
+    },
+    {
+      "repo": "guizhouware-1.21.1",
+      "file": "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java",
+      "before": "7c1bfdddb705b19a2e36f8c1935d594322897016d519686db9cb0e6f5330cffd",
+      "after": "f446ec8f7a694092d3974460866013d5d20aaadd3307541f162d5d5b59d08c93"
+    },
+    {
+      "repo": "guizhouware-1.21.1",
+      "file": "src/main/java/dev/guizhou/util/elytra/CoupledCruise.java",
+      "before": "5b5b24ace794e0005a78c34d710f024e290f1dccc86b00e57ffc77f129bb6c27",
+      "after": "ef704c0a8facb24402d0f4e5e89b8a4c4715c571092403b8bea88a7a071db3a4"
+    },
+    {
+      "repo": "guizhouware-1.21.1",
+      "file": "src/flightTest/java/dev/guizhou/util/elytra/CoupledCruiseTest.java",
+      "before": "5a7fa5106bbde88ade4e246d9b89bd42c7a4882b9396197b5301b1d653e2842b",
+      "after": "80a33bf8a38f15bfca3d1a283e509c44c71ecae6025298c3801f7d83830929fa"
+    },
+    {
+      "repo": "guizhouware-direct-jar",
+      "file": "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java",
+      "before": "0c3bccf7adbe78a49d0381c743b37f01974b62a16ef52c29a73350a7e4d287f6",
+      "after": "6e15c9994184e8588f94da894454b7c2749caeaf803d9baf1bfaab478ce68301"
+    },
+    {
+      "repo": "guizhouware-direct-jar",
+      "file": "src/main/java/dev/guizhou/util/elytra/CoupledCruise.java",
+      "before": "5b5b24ace794e0005a78c34d710f024e290f1dccc86b00e57ffc77f129bb6c27",
+      "after": "ef704c0a8facb24402d0f4e5e89b8a4c4715c571092403b8bea88a7a071db3a4"
+    },
+    {
+      "repo": "guizhouware-direct-jar",
+      "file": "src/flightTest/java/dev/guizhou/util/elytra/CoupledCruiseTest.java",
+      "before": "5a7fa5106bbde88ade4e246d9b89bd42c7a4882b9396197b5301b1d653e2842b",
+      "after": "80a33bf8a38f15bfca3d1a283e509c44c71ecae6025298c3801f7d83830929fa"
+    }
+  ],
+  "subsequent_climb_update": "gzboost-climb-acceptance.json"
+}

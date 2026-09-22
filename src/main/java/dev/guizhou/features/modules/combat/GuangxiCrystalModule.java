@@ -120,7 +120,7 @@ public class GuangxiCrystalModule extends Module {
 
     /** WallPlace (Mio): attempt placement on bases without line of sight within a reduced range —
      *  servers that don't validate placement LOS (vanilla, most legacy) accept it. */
-    private final Setting<Boolean> wallPlace  = bool("WallPlace", true).setPage("General");
+    private final Setting<Boolean> wallPlace  = bool("WallPlace", false).setPage("General");
     private final Setting<Double>  wallRange  = num("WallRange", 4.5, 0.5, 6.0).setPage("General");
 
     private enum AutoSwapMode { NONE, SILENT, INVENTORY }
@@ -181,8 +181,8 @@ public class GuangxiCrystalModule extends Module {
 
     private enum RangePreset { B2B2T, VANILLA, CUSTOM }
 
-    private final Setting<RangePreset> rangePreset = mode("RangePreset", RangePreset.B2B2T).setPage("General");
-    private final Setting<Double> placeRange = num("PlaceRange", 6.0, 0.0, 6.0).setPage("General");
+    private final Setting<RangePreset> rangePreset = mode("RangePreset", RangePreset.VANILLA).setPage("General");
+    private final Setting<Double> placeRange = num("PlaceRange", 4.5, 0.0, 6.0).setPage("General");
     private final Setting<Double> breakRange = num("BreakRange", 3.0, 0.0, 6.0).setPage("General");
     private static final double  ARMOR_BALANCE  = 0.20;
     private static final boolean NO_SELF_POP    = true; // retained for config compatibility; Reserve now drives the margin

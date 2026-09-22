@@ -16,6 +16,7 @@ public final class FlightVelocity {
     private boolean avoiding;
     private boolean precision;
     private boolean directional;
+    private Vec3 climbApex;
 
     public FlightVelocity(Vec3 vec, double maxVelocity) {
         this(vec.x, vec.y, vec.z, maxVelocity);
@@ -54,13 +55,20 @@ public final class FlightVelocity {
         return directional;
     }
 
+    public void requestClimb(Vec3 apexOffset) { climbApex = apexOffset; }
+    public Vec3 climbApex() { return climbApex; }
+
     public void set(Vec3 vec) {
+        climbApex = null;
         this.x = vec.x;
         this.y = vec.y;
         this.z = vec.z;
         braking = false;
         avoiding = false;
     }
+
+    /** Refine an existing intent without discarding its phase or precision metadata. */
+    public void refine(Vec3 vec) { this.x = vec.x; this.y = vec.y; this.z = vec.z; }
 
     public void requestAvoidance(Vec3 vec) {
         set(vec);

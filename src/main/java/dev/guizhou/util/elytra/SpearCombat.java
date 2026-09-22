@@ -21,6 +21,15 @@ public final class SpearCombat {
         return spec(stack) != null;
     }
 
+    public static double minimumDamageSpeed(ItemStack stack) {
+        var weapon = spec(stack);
+        return weapon == null || weapon.damage() == null ? 0 : weapon.damage().minSpeed() / 20.0;
+    }
+    public static double minimumDamageClosingSpeed(ItemStack stack) {
+        var weapon = spec(stack);
+        return weapon == null || weapon.damage() == null ? 0 : weapon.damage().minRelativeSpeed() / 20.0;
+    }
+
     public static int chargeTicks(ItemStack stack) {
         SpearCapability1211.Spec weapon = spec(stack);
         return weapon == null ? 0 : weapon.delayTicks();

@@ -23,6 +23,14 @@ public final class AerialAttackGeometryTest {
         check(AerialAttackGeometry.aimPoint(eye,box,Double.POSITIVE_INFINITY,open)==null,"infinite reach rejected");
         check(AerialAttackGeometry.aimPoint(new Vec3(Double.NaN,0,0),box,3,open)==null,"invalid eye rejected");
         check(AerialAttackGeometry.canHit(box.getCenter(),box,3,0,0,open),"eye inside box has zero-distance hit");
+        check(AerialAttackGeometry.canHitSubmitted(eye,eye,box,box,3,0,0,open),"synchronized hit accepted");
+        check(!AerialAttackGeometry.canHitSubmitted(eye,eye.add(0,0,-3),box,box,3,0,0,open),"local forward motion cannot extend submitted reach");
+        check(!AerialAttackGeometry.canHitSubmitted(eye.add(0,0,-3),eye,box,box,3,0,0,open),"retreat invalidates previously reachable target");
+        check(!AerialAttackGeometry.canHitSubmitted(eye,null,box,box,3,0,0,open),"missing or cleared submission fails closed");
+        check(!AerialAttackGeometry.canHitSubmitted(eye,eye,box,box.move(0,0,4),3,0,0,open),"interpolation cannot pull rendered target into reach");
+        check(!AerialAttackGeometry.canHitSubmitted(eye,eye,box.move(0,0,4),box,3,0,0,open),"received far target cannot use rendered near box");
+        check(!AerialAttackGeometry.canHitSubmitted(eye,eye.add(3,0,0),box,box,3,0,0,open),"submitted side origin must hit the box too");
+        check(!AerialAttackGeometry.canHitSubmitted(eye,eye,box,box,3,0,0,(a,b)->false),"submitted geometry retains occlusion");
         System.out.println("AerialAttackGeometryTest passed: "+checks+" checks");
     }
     private static void check(boolean value,String message) { checks++; if(!value)throw new AssertionError(message); }

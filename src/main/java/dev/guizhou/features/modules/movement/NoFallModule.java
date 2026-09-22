@@ -66,7 +66,7 @@ public final class NoFallModule extends Module {
                 || !move.hasPosition() || corrected.get()) return false;
         ensureSession();
         if (mc.player.tickCount < pauseUntil
-                || pauseMace.getValue() && mc.player.getMainHandItem().is(Items.MACE)
+                || pauseMace.getValue() && dev.guizhou.util.elytra.MappedCombatItems.isMace(mc.player.getMainHandItem())
                 || !GroundSpoofPolicy.falling(mc.player.fallDistance, fallDistance.getValue(),
                         mc.player.getDeltaMovement().y, mc.player.onGround())) return false;
         // Search only blocks below the feet: an entity or a wall beside the body is not ground.

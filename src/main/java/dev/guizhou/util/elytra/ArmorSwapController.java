@@ -81,7 +81,8 @@ public final class ArmorSwapController {
         if (!cycle.active() && requested && canGlide() && safeInventory() && player.isFallFlying()) {
             acquire();
         }
-        cycle.beforeMovement(requested, safeInventory(), canGlide());
+        if (holdingMaceDescent()) cycle.holdDescent(safeInventory(), canGlide());
+        else cycle.beforeMovement(requested, safeInventory(), canGlide());
         finishMonitoring();
     }
 
@@ -89,14 +90,20 @@ public final class ArmorSwapController {
     private void onTick(TickEvent event) {
         // Chase runs after preparation and can take ownership of the same pair for a mace dive.
         if (GuangxiElytraChaseModule.isMaceDiveActive()) cycle.abandon();
+        else if (holdingMaceDescent()) cycle.holdDescent(safeInventory(), canGlide());
         else cycle.afterMovement(flight.wantsArmorSwap(), safeInventory(), canGlide());
         finishMonitoring();
+    }
+
+    @Subscribe(priority = Integer.MIN_VALUE)
+    private void onRocketPreparation(UpdateWalkingPlayerEvent event) {
+        if (event.getStage() == Stage.PRE) flight.finishRocketUse();
     }
 
     /** Close the normal wing window immediately after the movement packet. The
      * tail listener remains responsible for recovery and windows without a send.
      * An unsafe early opportunity must not turn a deferred return into recovery. */
-    @Subscribe(priority = Integer.MAX_VALUE)
+    @Subscribe(priority = 10000)
     private void onPostMovement(UpdateWalkingPlayerEvent event) {
         if (event.getStage() != Stage.POST || !cycle.active()
                 || GuangxiElytraChaseModule.isMaceDiveActive()
@@ -140,10 +147,8 @@ public final class ArmorSwapController {
                 @Override public boolean gliding() { return sameSession() && player.isFallFlying(); }
                 @Override public boolean startGliding() {
                     if (!canGlide() || !safeInventory() || !usableWings(player.getItemBySlot(EquipmentSlot.CHEST))
-                            || !player.tryToStartFallFlying()) return false;
-                    mc.getConnection().send(new ServerboundPlayerCommandPacket(
-                            player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
-                    return true;
+                            || !ElytraJumpInput.canStart(player) || !player.tryToStartFallFlying()) return false;
+                    return dev.guizhou.util.elytra.ElytraJumpInput.sendStart(player);
                 }
                 @Override public void restored() { flight.finishArmorSwapRecovery(); }
             });
@@ -180,8 +185,12 @@ public final class ArmorSwapController {
     private boolean canSwapWhileUsing() {
         boolean using = player.isUsingItem();
         ItemStack used = player.getUseItem();
-        return preservesHeldUse(using, dev.guizhou.util.elytra.SpearCombat.isSpear(used), used,
+        return preservesHeldUse(using, SpearCombat.isSpear(used), used,
                 using ? player.getItemInHand(player.getUsedItemHand()) : ItemStack.EMPTY);
+    }
+
+    private boolean holdingMaceDescent() {
+        return cycle.active() && flight.armorFlyRequested() && GuangxiElytraChaseModule.preservesMaceDescent();
     }
 
     static boolean preservesHeldUse(boolean using, boolean kinetic, Object used, Object held) {

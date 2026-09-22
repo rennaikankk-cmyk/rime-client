@@ -49,14 +49,16 @@ public final class ArmorSwapHeldUseTest {
             check(fields.get("safeInventory").contains(guard), "Existing inventory field guard: " + guard);
         }
         var adapter = calls.get("canSwapWhileUsing");
-        // 1.21.1: no native KINETIC_WEAPON component; the closed-range Via-translated
-        // spear adapter (SpearCombat.isSpear) is the equivalent eligibility read.
         for (String read : List.of("isUsingItem", "getUseItem", "isSpear", "getUsedItemHand", "getItemInHand",
                 "preservesHeldUse")) {
             check(adapter.contains(read), "Use eligibility must read live hand/stack state: " + read);
         }
         check(adapter.contains("isSpear"),
-                "Only verified translated spears qualify for the held-use exception");
+                "Native and verified Via-translated spears share the held-use exception");
+        check(calls.get("onPreTick").contains("holdDescent") && calls.get("onTick").contains("holdDescent"),
+                "Both movement hooks preserve an owned mace fall rather than restoring wings");
+        check(calls.get("holdingMaceDescent").containsAll(List.of("active", "armorFlyRequested", "preservesMaceDescent")),
+                "A held fall requires current equipment ownership, user-requested armor flight and combat descent");
         check(calls.get("swapPair").containsAll(List.of("safeInventory", "ownsPair", "mayPickup", "mayPlace")),
                 "Every chest click still requires the intact pair and slot permissions");
         check(calls.get("acquire").contains("selected"), "Acquisition must still exclude the held hotbar slot");

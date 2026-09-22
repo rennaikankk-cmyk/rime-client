@@ -133,7 +133,8 @@ public final class AerialDuelPredictor {
 
     private static Threat maceThreat(Input input, AABB body, int horizon) {
         if (input.targetWeapon != Weapon.MACE || !input.targetAttackActive || input.targetOnGround
-                || input.targetGliding || input.targetVelocity.y >= -0.15
+                || input.targetGliding && (input.targetMotion == null
+                || input.targetMotion.mode() != TargetMotionTracker.Mode.ARMORED_AIR) || input.targetVelocity.y >= -0.15
                 || input.targetPosition.y <= input.selfPosition.y + 0.5 || input.targetReach <= 0.0) return null;
         // Defensive envelope only: a short or plugin-like observation must not hide an ordinary falling attacker.
         Threat falling = maceThreatPath(input, body, horizon, false);

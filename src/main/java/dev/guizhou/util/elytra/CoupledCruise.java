@@ -13,7 +13,7 @@ import net.minecraft.world.phys.Vec3;
  * anchors the envelope's second view on the box look instead of the previous
  * tick's real look. The box look is only legitimate when the caller reported
  * it to the server with a duplicate rotation packet on a Via target protocol
- * of the 1.20.7 family or below — the caller owns that capability gate
+ * before 1.21 (elytra-capable releases only) — the caller owns that capability gate
  * (DualViewSupport) and the extra packet.
  */
 public final class CoupledCruise {
@@ -49,11 +49,19 @@ public final class CoupledCruise {
     public enum Phase { LEVEL, DESCEND, CLIMB }
 
     /** Vertical means manual jump/sneak; horizontal is the world-space WASD wish. */
-    public record Intent(Vec3 horizontal, double vertical, boolean autoFly) {}
+    public record Intent(Vec3 horizontal, double vertical, boolean autoFly, boolean accelerated) {
+        public Intent(Vec3 horizontal, double vertical, boolean autoFly) {
+            this(horizontal, vertical, autoFly, false);
+        }
+    }
 
     /** boxLook is the decoupled second view; null unless dualActive. */
     public record Selection(Vec3 look, Phase phase, int vertical, boolean pureVertical, boolean active,
-                            boolean dualActive, Vec3 boxLook) {
+                            boolean dualActive, Vec3 boxLook, boolean banked) {
+        public Selection(Vec3 look, Phase phase, int vertical, boolean pureVertical, boolean active,
+                         boolean dualActive, Vec3 boxLook) {
+            this(look, phase, vertical, pureVertical, active, dualActive, boxLook, false);
+        }
         private static Selection idle() {
             return new Selection(Vec3.ZERO, Phase.LEVEL, 0, false, false, false, null);
         }
@@ -72,12 +80,16 @@ public final class CoupledCruise {
         }
     }
 
+    private double acceleratedReferenceY = Double.NaN;
+    private boolean bankSide;
     private double referenceY = Double.NaN;
     private Phase phase = Phase.LEVEL;
     private Config lastConfig;
 
     public void reset() {
         referenceY = Double.NaN;
+        acceleratedReferenceY = Double.NaN;
+        bankSide = false;
         phase = Phase.LEVEL;
         lastConfig = null;
     }
@@ -128,10 +140,45 @@ public final class CoupledCruise {
             referenceY = Double.NaN;
             phase = Phase.LEVEL;
         }
+        boolean accelerated = intent.accelerated() && dualView && !pureVertical && vertical <= 0;
+        if (!accelerated) acceleratedReferenceY = Double.NaN;
         // Preserve pure vertical explicitly; cos(89.5 degrees) is not zero.
         if (pureVertical) return new Selection(new Vec3(0, vertical, 0), phase, vertical, true, true, false, null);
         double yaw = horizontal ? Math.atan2(-intent.horizontal().x, intent.horizontal().z)
                 : Math.toRadians(headingYaw % 360);
+        // GZBoost climbs distribute horizontal support between two envelope views.
+        // Near an axis this includes real side-to-side motion; near a diagonal it
+        // alternates the axis budget. Smooth weights avoid an angle threshold jump.
+        if (vertical > 0 && dualView && intent.accelerated()) {
+            double axisAngle = Math.toDegrees(Math.atan2(Math.min(Math.abs(Math.sin(yaw)), Math.abs(Math.cos(yaw))),
+                    Math.max(Math.abs(Math.sin(yaw)), Math.abs(Math.cos(yaw)))));
+            double axial = smoothUnit(1 - axisAngle / 5);
+            double diagonal = smoothUnit((axisAngle - 42) / 3);
+            double basePitch = dualClimbAngle(config.dualClimbAngle(), Math.max(Math.abs(Math.sin(yaw)), Math.abs(Math.cos(yaw))));
+            double axialPitch = -89.25;
+            double pitch = basePitch + axial * (axialPitch - basePitch) + diagonal * (-89.25 - basePitch);
+            double span = 72.5 * axial + 45 * diagonal;
+            bankSide = !bankSide;
+            return new Selection(lookAt(pitch, yaw), phase, vertical, false, true, true,
+                    lookAt(0, yaw + Math.toRadians(bankSide ? span : -span)), true);
+        }
+        if (accelerated) {
+            boolean descentRequested = vertical < 0;
+            if (!descentRequested) {
+                if (!Double.isFinite(acceleratedReferenceY)) acceleratedReferenceY = playerY;
+                vertical = playerY > acceleratedReferenceY ? -1 : 1;
+            } else acceleratedReferenceY = Double.NaN;
+            Vec3 motion = lookAt(0, yaw);
+            Vec3 box = new Vec3(0, vertical, 0);
+            // Banking gives a small additional gain only along a cardinal axis.
+            // It is deliberately opt-in through GZBoost, as it moves sideways.
+            boolean banked = descentRequested && (Math.abs(motion.x) < 1e-6 || Math.abs(motion.z) < 1e-6);
+            if (banked) {
+                bankSide = !bankSide;
+                box = lookAt(71.85, yaw + (bankSide ? Math.PI / 2 : -Math.PI / 2));
+            }
+            return new Selection(motion, phase, vertical, false, true, true, box, banked);
+        }
         double pitch = vertical > 0 ? config.climbPitch() : vertical < 0
                 ? config.descentPitch() : config.cruisePitch();
         if (vertical > 0 && config.smartClimb()) {
@@ -160,6 +207,11 @@ public final class CoupledCruise {
         }
         Vec3 look = lookAt(pitch, yaw);
         return new Selection(look, phase, vertical, false, true, dualActive, boxLook);
+    }
+
+    private static double smoothUnit(double value) {
+        double x = Math.max(0, Math.min(1, value));
+        return x * x * (3 - 2 * x);
     }
 
     private static Vec3 lookAt(double pitchDeg, double yawRad) {
@@ -223,6 +275,10 @@ public final class CoupledCruise {
                 : edge(selection.look().x, box.min.x, box.max.x);
         double z = selection.pureVertical() ? clamp(0, box.min.z, box.max.z)
                 : edge(selection.look().z, box.min.z, box.max.z);
+        if (selection.banked()) {
+            if (Math.abs(selection.boxLook().x) > 1e-6 && (Math.abs(selection.look().x) < 1e-6 || selection.look().x * selection.boxLook().x <= 0)) x = edge(selection.boxLook().x, box.min.x, box.max.x);
+            if (Math.abs(selection.boxLook().z) > 1e-6 && (Math.abs(selection.look().z) < 1e-6 || selection.look().z * selection.boxLook().z <= 0)) z = edge(selection.boxLook().z, box.min.z, box.max.z);
+        }
         double y = selection.vertical() > 0 ? box.max.y
                 : selection.vertical() < 0 && selection.pureVertical() ? box.min.y
                 : clamp(selection.vertical() < 0 ? config.descentFloor() : 0, box.min.y, box.max.y);

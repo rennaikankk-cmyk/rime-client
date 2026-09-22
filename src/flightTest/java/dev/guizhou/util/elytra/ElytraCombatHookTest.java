@@ -72,8 +72,13 @@ public final class ElytraCombatHookTest {
         Map<String, Trace> chase = read(CHASE);
         Map<String, Trace> mace = read(CHASE + "$MaceBehavior");
         Map<String, Trace> spear = read(CHASE + "$SpearBehavior");
-        check(method(mace, "inject").hasCall("dev/guizhou/util/elytra/MaceApproach", "pullUpIntent"),
-                "Custom climb pitch must use the magnitude-preserving intent transformation");
+        check(method(mace, "inject").hasCall("dev/guizhou/util/elytra/FlightVelocity", "requestClimb")
+                        && method(mace, "inject").hasCall("dev/guizhou/util/elytra/FlightVelocity", "preserveDirection"),
+                "Climb planning is separate from exact intercept direction");
+        Map<String, Trace> flight = read("dev/guizhou/features/modules/movement/GuangxiElytraModule");
+        check(method(flight, "onPreTick").hasCall("dev/guizhou/util/elytra/CombatClimbPlan", "choose")
+                        && method(flight, "onPreTick").hasCall("dev/guizhou/features/modules/movement/GuangxiElytraModule", "dualViewAvailable"),
+                "Climb lane optimization uses the same protocol gate as cruise");
         for (String name : List.of("tickFollow", "tickDive")) {
             check(method(mace, name).hasCall(CHASE + "$MaceBehavior", "aimDiveExit"),
                     "Glide exit must retain dive steering from entry through flag acknowledgement");
@@ -101,10 +106,10 @@ public final class ElytraCombatHookTest {
         check(method(chase, "aimSpear").hasCall(FLIGHT, "isArmorSwapActive"),
                 "Standing-eye compensation must depend on an active owned armor cycle");
         for (String name : List.of("tickFollow", "strikePlan", "tryAttack", "shouldStartDive", "tickDive")) {
-            check(method(mace, name).hasCall(CHASE, "observedTargetBox"),
-                    "Mace approach, attack and recovery must agree on the latest received target box: " + name);
+            check(method(mace, name).hasCall(CHASE, "maceTargetBox"),
+                    "Mace approach, attack and recovery must agree on the client-observed target box: " + name);
         }
-        check(method(chase, "attack").hasCall(CHASE, "observedTargetBox"),
+        check(method(chase, "attack").hasCall(CHASE, "maceTargetBox"),
                 "Final reach and accepted-rotation ray must test the observed box used by the approach");
         check(method(mace, "shouldStartDive").hasCall("dev/guizhou/util/elytra/AerialIntercept", "dropApproachRange"),
                 "Fast opposing passes need a speed-aware glide-exit approach gate");
@@ -194,11 +199,23 @@ public final class ElytraCombatHookTest {
 
     private static void verifyAttackRotation() throws IOException {
         Trace attack = method(read(CHASE), "attack");
+        check(attack.hasCall(CHASE, "maceAttackEye"),
+                "Mace rotation and final geometry must account for the owned armor pose");
         int submit = attack.call(ROTATION, "tryAction");
+        check(attack.hasCall(ROTATION, "tryAction"), "Mace actions use shared immediate rotation arbitration");
+        check(attack.field(CHASE, "attackBoundary", Opcodes.GETFIELD) < attack.call("dev/guizhou/util/PacketSendUtil", "send"),
+                "Final mace action must be gated by the normal pre-movement boundary");
         int yaw = attack.call(ROTATION, "getServerYaw");
         int pitch = attack.call(ROTATION, "getServerPitch");
         int ray = attack.call("dev/guizhou/util/elytra/AerialAttackGeometry", "canHit");
         int send = attack.call("dev/guizhou/util/PacketSendUtil", "send");
+        int phaseGate = attack.field(CHASE, "attackBoundary", Opcodes.GETFIELD);
+        check(!canReach(attack,0,send,phaseGate,new HashSet<>()), "Every attack send passes the pre-tick boundary guard");
+        Trace pre = method(read(CHASE), "onPreTick");
+        Trace post = method(read(CHASE), "onPostMovement");
+        check(pre.steps.stream().anyMatch(step -> step.opcode == Opcodes.PUTFIELD && "attackBoundary".equals(step.name))
+                && post.steps.stream().anyMatch(step -> step.opcode == Opcodes.PUTFIELD && "attackBoundary".equals(step.name)),
+                "Both guarded tick boundaries can consume a short-lived mace opportunity");
         check(submit < yaw && yaw < pitch && pitch < ray && ray < send,
                 "Rotate uses the shared action arbitration and final submitted angles");
         for (int required : new int[]{yaw,pitch,ray})
@@ -469,7 +486,7 @@ public final class ElytraCombatHookTest {
                         && post.hasCall("dev/guizhou/event/impl/entity/player/UpdateWalkingPlayerEvent", "getStage")
                         && post.hasCall("dev/guizhou/manager/HeartbeatManager", "authorized")
                         && post.hasCall(CHASE, "paused"),
-                "Post-movement reach checks share the guarded attack transaction");
+                "Post-movement reach checks prepare the guarded next-tick attack transaction");
         Trace restart = method(read(CHASE + "$MaceBehavior"), "restartPass");
         int pullUpState = restart.field(CHASE + "$MaceBehavior", "state", Opcodes.PUTFIELD);
         int resumedMiss = restart.call(CHASE + "$MaceBehavior", "resumeAfterPass");
@@ -548,7 +565,12 @@ public final class ElytraCombatHookTest {
         Trace flight = method(methods, "onElytra");
         int injection = flight.call(CHASE + "$Behavior", "inject");
         int path = flight.call(CHASE, "safeFlightVector");
-        int apply = flight.callAfter("dev/guizhou/util/elytra/FlightVelocity", "set", path);
+        int apply = flight.callAfter("dev/guizhou/util/elytra/FlightVelocity", "refine", path);
+        check(flight.steps.subList(injection + 1, flight.steps.size()).stream().noneMatch(step ->
+                        "dev/guizhou/util/elytra/FlightVelocity".equals(step.owner) && "set".equals(step.name)),
+                "Unobstructed post-injection transforms must not erase the combat climb request");
+        check(flight.call("dev/guizhou/util/elytra/CombatSteering$Motion", "apply") < path,
+                "Collision checks must validate the smoothed path, not the old intent");
         check(injection < path && path < apply, "Route filtering must cover the final flight request");
         check(flight.hasCall("dev/guizhou/util/elytra/FlightVelocity", "requestBraking"),
                 "A fully blocked path must explicitly request braking");
@@ -613,11 +635,17 @@ public final class ElytraCombatHookTest {
                         && trajectoryCheck.hasCall(terrain + "$Clearance", "clear"),
                 "Trajectory validation must simulate glide and query terrain along the movement");
         Trace velocity = method(movementMethods, "applyFlightVelocity");
-        int safetyFlag = velocity.field(FLIGHT, "pendingSafetySteering", Opcodes.GETFIELD);
         int boostEnvelope = velocity.call("dev/guizhou/util/elytra/ElytraPhysics", "clampToGrimEnvelope");
-        Step guardedBoost = velocity.steps.get(safetyFlag + 1);
-        check(safetyFlag < boostEnvelope && guardedBoost.opcode == Opcodes.IFNE
-                        && !canReach(velocity, velocity.target(guardedBoost), boostEnvelope, -1, new HashSet<>()),
+        boolean guardedEnvelope = false;
+        for (int i = 0; i + 1 < boostEnvelope; i++) {
+            Step flag = velocity.steps.get(i), branch = velocity.steps.get(i + 1);
+            if (flag.opcode == Opcodes.GETFIELD && FLIGHT.equals(flag.owner)
+                    && "pendingSafetySteering".equals(flag.name) && branch.opcode == Opcodes.IFNE
+                    && !canReach(velocity, velocity.target(branch), boostEnvelope, -1, new HashSet<>())) {
+                guardedEnvelope = true;
+            }
+        }
+        check(guardedEnvelope,
                 "Safety steering must not be expanded back into boosted collision speed by the velocity hook");
         int finalSweep = velocity.callAfter(FLIGHT, "clearRelativePath", boostEnvelope);
         int finalTrajectory = velocity.callAfter(terrain, "trajectoryClear", finalSweep);
@@ -711,8 +739,7 @@ public final class ElytraCombatHookTest {
         for (String gate : List.of("isEnabled", "paused", "isValid")) {
             check(ownership.hasCall(CHASE, gate), "Mace descent ownership must check " + gate);
         }
-        check(ownership.steps.stream().anyMatch(step -> step.opcode == Opcodes.GETSTATIC
-                        && "net/minecraft/world/item/Items".equals(step.owner) && "MACE".equals(step.name))
+        check(ownership.hasCall("dev/guizhou/util/elytra/MappedCombatItems", "isMace")
                         && ownership.steps.stream().anyMatch(step -> step.opcode == Opcodes.INSTANCEOF
                         && (CHASE + "$MaceBehavior").equals(step.owner))
                         && ownership.steps.stream().anyMatch(step -> step.opcode == Opcodes.GETFIELD

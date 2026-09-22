@@ -61,7 +61,7 @@ public class GuangxiPistonModule extends Module {
 
     private static final double NUDGE = 1.0 / 16.0;
 
-    private final Setting<Double> placeReach = num("PlaceRange", 5.0, 1.0, 6.0).setPage("General");
+    private final Setting<Double> placeReach = num("PlaceRange", 4.5, 1.0, 6.0).setPage("General");
     private final Setting<Double> breakReach = num("BreakRange", 3.0, 0.5, 6.0).setPage("General");
 
     private final Setting<Double>  minDamage    = num("MinDamage",    6.0, 0.0, 36.0).setPage("General");
@@ -159,6 +159,7 @@ public class GuangxiPistonModule extends Module {
             sessionPlayer = mc.player;
         }
         if (nullCheck() || mc.player.isDeadOrDying()) return;
+        if (GuizhouWare.tpsCounterService.isRubberbandRecent()) { clearActive(); return; }
         selfProfile = profileOf(mc.player);
         attacks.expire(System.currentTimeMillis(), 5000);
 
@@ -282,8 +283,7 @@ public class GuangxiPistonModule extends Module {
                 }
                 case BASE -> {
                     if (!needsBase(setup.base())) { enterStage(setup.keepPower() ? Stage.CRYSTAL : Stage.PISTON); continue; }
-                    if (canSubmit() && GuizhouWare.placementManager.placeDirect(setup.base(), null, Items.OBSIDIAN,
-                            dev.guizhou.util.inventory.SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, placeReach.getValue())) submitted(setup.base());
+                    if (canSubmit() && placeStrictBlock(setup.base(), Items.OBSIDIAN, null)) submitted(setup.base());
                     return;
                 }
                 case CRYSTAL -> {
@@ -301,9 +301,11 @@ public class GuangxiPistonModule extends Module {
                         enterStage(setup.keepPower() ? Stage.PISTON : Stage.POWER);
                         continue;
                     }
-                    if (canSubmit() && GuizhouWare.placementManager.placeCrystal(setup.base(), false,
+                    if (canSubmit() && aimInteraction(GuizhouWare.placementManager.prepareInteractionHit(setup.base(), null,
+                            mc.player.getEyePosition(), placeReach.getValue(), 0.0, false), null)
+                            && GuizhouWare.placementManager.placeCrystal(setup.base(), false,
                             dev.guizhou.util.inventory.SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, null,
-                            new dev.guizhou.manager.PlacementManager.CrystalOptions(placeReach.getValue(), placeReach.getValue(), false))) submitted(setup.crystal());
+                            new dev.guizhou.manager.PlacementManager.CrystalOptions(placeReach.getValue(), 0.0, false))) submitted(setup.crystal());
                     return;
                 }
                 case PISTON -> {
@@ -322,21 +324,16 @@ public class GuangxiPistonModule extends Module {
                         }
                     }
                     int slot = pistonSlot();
-                    if (canSubmit() && slot >= 0 && (rotate.getValue()
-                            ? GuizhouWare.rotationManager.tryAction(rotationOptions.request(
-                                ROTATION_ID, ROTATION_PRIORITY, setup.dir().toYRot(), 0f, RotationRequest.Mode.SILENT))
-                            : Direction.fromYRot(GuizhouWare.rotationManager.getServerYaw()) == setup.dir())) {
+                    if (canSubmit() && slot >= 0) {
                         Item item = mc.player.getInventory().getItem(slot).getItem();
-                        if (GuizhouWare.placementManager.placeDirect(setup.piston(), null, item,
-                                dev.guizhou.util.inventory.SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, placeReach.getValue())) submitted(setup.piston());
+                        if (placeStrictBlock(setup.piston(), item, setup.dir())) submitted(setup.piston());
                     }
                     return;
                 }
                 case POWER -> {
                     if (mc.level.getBlockState(setup.redstone()).is(Blocks.REDSTONE_BLOCK)) { enterStage(Stage.EXTEND); continue; }
                     if (setup.keepPower()) { clearActive(); return; }
-                    if (canSubmit() && GuizhouWare.placementManager.placeDirect(setup.redstone(), null, Items.REDSTONE_BLOCK,
-                            dev.guizhou.util.inventory.SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, placeReach.getValue())) submitted(setup.redstone());
+                    if (canSubmit() && placeStrictBlock(setup.redstone(), Items.REDSTONE_BLOCK, null)) submitted(setup.redstone());
                     return;
                 }
                 case EXTEND -> {
@@ -363,6 +360,39 @@ public class GuangxiPistonModule extends Module {
                 }
             }
         }
+    }
+
+    /** Visible face and piston orientation must be achievable by the same submitted rotation. */
+    private boolean aimInteraction(net.minecraft.world.phys.BlockHitResult hit, Direction facing) {
+        if (hit == null) return false;
+        float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
+        if (facing != null && Direction.fromYRot(angles[0]) != facing) return false;
+        if (rotate.getValue() && !GuizhouWare.rotationManager.tryAction(rotationOptions.request(
+                ROTATION_ID, ROTATION_PRIORITY, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
+        float yaw = GuizhouWare.rotationManager.getServerYaw(), pitch = GuizhouWare.rotationManager.getServerPitch();
+        return Math.abs(Mth.wrapDegrees(yaw - angles[0])) < 2.0 && Math.abs(pitch - angles[1]) < 2.0;
+    }
+
+    private boolean placeStrictBlock(BlockPos pos, Item item, Direction facing) {
+        var manager = GuizhouWare.placementManager;
+        net.minecraft.world.phys.BlockHitResult hit = null;
+        for (Direction side : Direction.values()) {
+            var candidate = manager.preparePlaceHit(pos, side, false, placeReach.getValue(), 0.0);
+            if (candidate == null) continue;
+            float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), candidate.getLocation());
+            if (facing == null || Direction.fromYRot(angles[0]) == facing) { hit = candidate; break; }
+        }
+        if (!aimInteraction(hit, facing)) return false;
+        var prepared = hit;
+        boolean[] sent = {false};
+        boolean swapped = GuizhouWare.swapManager.withSwap(item, InventoryUtil.HOTBAR_SCOPE,
+                dev.guizhou.util.inventory.SwapMode.SILENT, dev.guizhou.util.inventory.SwapPriority.PLACEMENT,
+                () -> {
+                    if (PlaceUtil.canPlace(pos, placeReach.getValue())) sent[0] = manager.sendUseItemOnDirect(prepared,
+                            InteractionHand.MAIN_HAND, mc.player.getEyePosition(), placeReach.getValue(), 0.0);
+                });
+        if (swapped && sent[0]) manager.notePlacement(pos);
+        return swapped && sent[0];
     }
 
     private EndCrystal crystalAt(BlockPos pos) {

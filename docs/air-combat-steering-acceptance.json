@@ -1,0 +1,454 @@
+{
+  "date": "2026-09-22",
+  "status": "build and startup accepted; local candidate only; performance goals not met",
+  "candidates": [
+    {
+      "label": "mc1211",
+      "version": "1.3.1-rc.22-mc1211.7",
+      "minecraft": "1.21.1",
+      "artifact": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\guizhouware-1.21.1\\build\\libs\\guizhouware-e282719-1.3.1-rc.22-mc1211.7-obfuscated.jar",
+      "sha256": "ca9268f8d1d860fde2ddd0da6ab22a32c02a1133dcdcd295ee264f5bd39e97de",
+      "distribution": "local uncredentialed candidate; not deployed",
+      "buildLog": "work\\combat-grim-lab\\port-build12.log",
+      "runs": [
+        {
+          "runtime": "microsoft-21.0.7",
+          "passed": true,
+          "seconds": 55.1,
+          "result": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-mc1211-ca9268f8d1d8\\microsoft-21.0.7\\result.json",
+          "logs": [
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-mc1211-ca9268f8d1d8\\microsoft-21.0.7\\stdout.log",
+              "sha256": "1bcaaaaf42724a434876122d8e2db0f0d2b52ea2c30ec14cb9b42dcc5911fed6",
+              "lines": 125
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-mc1211-ca9268f8d1d8\\microsoft-21.0.7\\stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "lines": 0
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-mc1211-ca9268f8d1d8\\microsoft-21.0.7\\game\\logs\\latest.log",
+              "sha256": "1bcaaaaf42724a434876122d8e2db0f0d2b52ea2c30ec14cb9b42dcc5911fed6",
+              "lines": 125
+            }
+          ],
+          "observedWarnings": [
+            "\tat knot/com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59) ~[005-authlib-6.0.54.jar:?]",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[Download-2/ERROR]: Failed to fetch user properties",
+            "[IO-Worker-1/ERROR]: Couldn't connect to realms",
+            "[IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[Render thread/WARN]: Missing sound for event: minecraft:entity.goat.screaming.horn_break",
+            "[Render thread/WARN]: Missing sound for event: minecraft:item.goat_horn.play",
+            "[Render thread/WARN]: Shader guizhouware:skybox_aurora could not find uniform named ColorModulator in the specified shader program.",
+            "[Render thread/WARN]: Shader guizhouware:skybox_nebula could not find uniform named ColorModulator in the specified shader program.",
+            "[Render thread/WARN]: Shader guizhouware:skybox_sunset could not find uniform named ColorModulator in the specified shader program.",
+            "[Render thread/WARN]: Shader guizhouware:skybox_trippy could not find uniform named ColorModulator in the specified shader program.",
+            "[Render thread/WARN]: Shader rendertype_entity_translucent_emissive could not find sampler named Sampler2 in the specified shader program.",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'"
+          ]
+        },
+        {
+          "runtime": "adoptium-21.0.12.1",
+          "passed": true,
+          "seconds": 67.9,
+          "result": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-mc1211-ca9268f8d1d8\\adoptium-21.0.12.1\\result.json",
+          "logs": [
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-mc1211-ca9268f8d1d8\\adoptium-21.0.12.1\\stdout.log",
+              "sha256": "04ab9fce90c6b93b92cf4e2c4b9097453b6e362737090ea798f3dc6c5f03d957",
+              "lines": 125
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-mc1211-ca9268f8d1d8\\adoptium-21.0.12.1\\stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "lines": 0
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-mc1211-ca9268f8d1d8\\adoptium-21.0.12.1\\game\\logs\\latest.log",
+              "sha256": "04ab9fce90c6b93b92cf4e2c4b9097453b6e362737090ea798f3dc6c5f03d957",
+              "lines": 125
+            }
+          ],
+          "observedWarnings": [
+            "\tat knot/com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59) ~[005-authlib-6.0.54.jar:?]",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[Download-2/ERROR]: Failed to fetch user properties",
+            "[IO-Worker-1/ERROR]: Couldn't connect to realms",
+            "[IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[Render thread/WARN]: Missing sound for event: minecraft:entity.goat.screaming.horn_break",
+            "[Render thread/WARN]: Missing sound for event: minecraft:item.goat_horn.play",
+            "[Render thread/WARN]: Shader guizhouware:skybox_aurora could not find uniform named ColorModulator in the specified shader program.",
+            "[Render thread/WARN]: Shader guizhouware:skybox_nebula could not find uniform named ColorModulator in the specified shader program.",
+            "[Render thread/WARN]: Shader guizhouware:skybox_sunset could not find uniform named ColorModulator in the specified shader program.",
+            "[Render thread/WARN]: Shader guizhouware:skybox_trippy could not find uniform named ColorModulator in the specified shader program.",
+            "[Render thread/WARN]: Shader rendertype_entity_translucent_emissive could not find sampler named Sampler2 in the specified shader program.",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "official",
+      "version": "1.3.1-rc.22-combat.7",
+      "minecraft": "1.21.11",
+      "artifact": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\guizhouware-upgrades\\build\\libs\\guizhouware-f02e299-1.3.1-rc.22-combat.7-obfuscated.jar",
+      "sha256": "182dae7f838fe578afe68c88d5bc0489b4d21a349a5704173c87d49e7d618e11",
+      "distribution": "local uncredentialed candidate; not deployed",
+      "buildLog": "work\\combat-grim-lab\\main-build3.log",
+      "runs": [
+        {
+          "runtime": "microsoft-21.0.7",
+          "passed": true,
+          "seconds": 57.2,
+          "result": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-official-182dae7f838f\\microsoft-21.0.7\\result.json",
+          "logs": [
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-official-182dae7f838f\\microsoft-21.0.7\\stdout.log",
+              "sha256": "efd926438ca62718406201ca161eed9228b46297aac2f04901b3f0ec5af0ba36",
+              "lines": 125
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-official-182dae7f838f\\microsoft-21.0.7\\stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "lines": 0
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-official-182dae7f838f\\microsoft-21.0.7\\game\\logs\\latest.log",
+              "sha256": "efd926438ca62718406201ca161eed9228b46297aac2f04901b3f0ec5af0ba36",
+              "lines": 125
+            }
+          ],
+          "observedWarnings": [
+            "\tat knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[Download-2/ERROR]: Failed to fetch Realms feature flags",
+            "[Download-2/ERROR]: Failed to fetch user properties",
+            "[Download-2/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[IO-Worker-1/ERROR]: Couldn't connect to realms",
+            "[IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'"
+          ]
+        },
+        {
+          "runtime": "adoptium-21.0.12.1",
+          "passed": true,
+          "seconds": 65.3,
+          "result": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-official-182dae7f838f\\adoptium-21.0.12.1\\result.json",
+          "logs": [
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-official-182dae7f838f\\adoptium-21.0.12.1\\stdout.log",
+              "sha256": "27ecd8bd624934787fc190008b2b40ddba713b3a7994d1fdea557c68ec734519",
+              "lines": 125
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-official-182dae7f838f\\adoptium-21.0.12.1\\stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "lines": 0
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-official-182dae7f838f\\adoptium-21.0.12.1\\game\\logs\\latest.log",
+              "sha256": "e59c27c306412e67cc548d5fa911f04b686e1f64530d2280a8d313cbb814998d",
+              "lines": 125
+            }
+          ],
+          "observedWarnings": [
+            "\tat knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[Download-2/ERROR]: Failed to fetch Realms feature flags",
+            "[Download-2/ERROR]: Failed to fetch user properties",
+            "[Download-2/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[IO-Worker-1/ERROR]: Couldn't connect to realms",
+            "[IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "direct",
+      "version": "1.3.1-rc.22-direct.12",
+      "minecraft": "1.21.11",
+      "artifact": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\guizhouware-direct-jar\\build\\libs\\guizhouware-34e6c75-1.3.1-rc.22-direct.12-obfuscated.jar",
+      "sha256": "abca14a15baab258f9b37e34751d1fb8f4d3eddcf61f77993d3cadbc069dcbb9",
+      "distribution": "local uncredentialed candidate; not deployed",
+      "buildLog": "work\\combat-grim-lab\\direct-build11.log",
+      "runs": [
+        {
+          "runtime": "microsoft-21.0.7",
+          "passed": true,
+          "seconds": 68.3,
+          "result": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-direct-abca14a15baa\\microsoft-21.0.7\\result.json",
+          "logs": [
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-direct-abca14a15baa\\microsoft-21.0.7\\stdout.log",
+              "sha256": "fb6ff68e634381442e621e19a189179caae7c9dec10560718ecfb6afdff7d409",
+              "lines": 125
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-direct-abca14a15baa\\microsoft-21.0.7\\stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "lines": 0
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-direct-abca14a15baa\\microsoft-21.0.7\\game\\logs\\latest.log",
+              "sha256": "fb6ff68e634381442e621e19a189179caae7c9dec10560718ecfb6afdff7d409",
+              "lines": 125
+            }
+          ],
+          "observedWarnings": [
+            "\tat knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[Download-2/ERROR]: Failed to fetch Realms feature flags",
+            "[Download-2/ERROR]: Failed to fetch user properties",
+            "[Download-2/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[IO-Worker-1/ERROR]: Couldn't connect to realms",
+            "[IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'"
+          ]
+        },
+        {
+          "runtime": "adoptium-21.0.12.1",
+          "passed": true,
+          "seconds": 64.9,
+          "result": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-direct-abca14a15baa\\adoptium-21.0.12.1\\result.json",
+          "logs": [
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-direct-abca14a15baa\\adoptium-21.0.12.1\\stdout.log",
+              "sha256": "adb50bf5cafa38b1939794f8b75403886d2686ce203a1be0d653bbecc4a3d5d2",
+              "lines": 125
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-direct-abca14a15baa\\adoptium-21.0.12.1\\stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "lines": 0
+            },
+            {
+              "path": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-direct-abca14a15baa\\adoptium-21.0.12.1\\game\\logs\\latest.log",
+              "sha256": "adb50bf5cafa38b1939794f8b75403886d2686ce203a1be0d653bbecc4a3d5d2",
+              "lines": 125
+            }
+          ],
+          "observedWarnings": [
+            "\tat knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[Download-2/ERROR]: Failed to fetch Realms feature flags",
+            "[Download-2/ERROR]: Failed to fetch user properties",
+            "[Download-2/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[IO-Worker-1/ERROR]: Couldn't connect to realms",
+            "[IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'"
+          ]
+        }
+      ]
+    }
+  ],
+  "verificationScope": "Three complete build/check/verifyObfuscatedJar runs; six startup-only sessions without credentials or enabled modules. Gameplay uses separate development source, never a license-bypassed distributable JAR.",
+  "sourceManifest": "source-m.json",
+  "performanceGoals": {
+    "highWinRate": false,
+    "allGrimConfigurationsMaximumSpeed": false,
+    "zeroGrimAlerts": false,
+    "armorFlyOnOffTested": true
+  },
+  "expectedWarnings": "Uncredentialed Mojang/Realms authentication; existing 1.21.1 sound and skybox/vanilla shader uniforms. No startup mixin/linkage/class-verification crash found.",
+  "duels": [
+    {
+      "tag": "grim-spear-plain-j",
+      "weapon": "SPEAR",
+      "alerts": {
+        "LegacyReference": {
+          "BadPacketsJ": 39,
+          "Simulation": 19,
+          "AimModulo360": 2,
+          "NoSlow": 3,
+          "AntiKB": 1
+        }
+      },
+      "start": "[12:51:09] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START SPEAR grim-spear-plain-j 20",
+      "outcome": "[12:51:46] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-spear-plain-j ticks=727 healthLoss={NewCandidate=39.33333396911621, LegacyReference=30.62549066543579} alive=[LegacyReference]",
+      "clientSamples": 727,
+      "stateSamples": {
+        "null": 1,
+        "0": 153,
+        "1": 296,
+        "2": 238,
+        "3": 39
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-spear-armor-j",
+      "weapon": "SPEAR",
+      "alerts": {
+        "LegacyReference": {
+          "BadPacketsJ": 42,
+          "Simulation": 6,
+          "AimModulo360": 1
+        },
+        "NewCandidate": {
+          "Simulation": 7
+        }
+      },
+      "start": "[12:51:53] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START SPEAR grim-spear-armor-j 20 swap",
+      "outcome": "[12:52:18] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-spear-armor-j ticks=490 healthLoss={NewCandidate=29.33333396911621, LegacyReference=43.33333396911621} alive=[NewCandidate]",
+      "clientSamples": 490,
+      "stateSamples": {
+        "null": 1,
+        "0": 135,
+        "1": 147,
+        "2": 161,
+        "3": 46
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-mace-plain-m",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 13,
+          "BadPacketsJ": 24,
+          "AimModulo360": 7,
+          "Timer": 18,
+          "Hitboxes": 1,
+          "Reach": 1
+        },
+        "NewCandidate": {
+          "Simulation": 18,
+          "AimModulo360": 1,
+          "Post": 1
+        }
+      },
+      "start": "[13:22:55] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-plain-m 20",
+      "outcome": "[13:23:27] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-plain-m ticks=645 healthLoss={NewCandidate=36.83333206176758, LegacyReference=0.0} alive=[LegacyReference]",
+      "clientSamples": 644,
+      "stateSamples": {
+        "null": 1,
+        "1": 578,
+        "0": 44,
+        "2": 21
+      },
+      "diveSamples": 1
+    },
+    {
+      "tag": "grim-mace-armor-m",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "BadPacketsJ": 30,
+          "AimModulo360": 2,
+          "Simulation": 7,
+          "Timer": 12,
+          "Reach": 3,
+          "Hitboxes": 1
+        },
+        "NewCandidate": {
+          "Simulation": 1
+        }
+      },
+      "start": "[13:23:35] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-armor-m 20 swap",
+      "outcome": "[13:24:15] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-armor-m ticks=796 healthLoss={NewCandidate=44.44799995422363, LegacyReference=0.0} alive=[LegacyReference]",
+      "clientSamples": 796,
+      "stateSamples": {
+        "null": 1,
+        "1": 736,
+        "0": 50,
+        "2": 9
+      },
+      "diveSamples": 1
+    }
+  ],
+  "steeringMetrics": [
+    {
+      "tag": "grim-mace-armor-m",
+      "rows": 796,
+      "nonurgentGliding": {
+        "samples": 724,
+        "over90": 2,
+        "over90Per100": 0.28,
+        "meanDegrees": 6.99
+      },
+      "samePhase": {
+        "samples": 717,
+        "over90": 2,
+        "over90Per100": 0.28,
+        "meanDegrees": 6.52
+      },
+      "phaseChanges": 7
+    },
+    {
+      "tag": "grim-mace-plain-m",
+      "rows": 644,
+      "nonurgentGliding": {
+        "samples": 575,
+        "over90": 4,
+        "over90Per100": 0.7,
+        "meanDegrees": 7.17
+      },
+      "samePhase": {
+        "samples": 565,
+        "over90": 3,
+        "over90Per100": 0.53,
+        "meanDegrees": 6.33
+      },
+      "phaseChanges": 10
+    },
+    {
+      "tag": "grim-spear-armor-j",
+      "rows": 490,
+      "nonurgentGliding": {
+        "samples": 330,
+        "over90": 29,
+        "over90Per100": 8.79,
+        "meanDegrees": 33.86
+      },
+      "samePhase": {
+        "samples": 271,
+        "over90": 15,
+        "over90Per100": 5.54,
+        "meanDegrees": 27.65
+      },
+      "phaseChanges": 59
+    },
+    {
+      "tag": "grim-spear-plain-j",
+      "rows": 727,
+      "nonurgentGliding": {
+        "samples": 528,
+        "over90": 34,
+        "over90Per100": 6.44,
+        "meanDegrees": 29.16
+      },
+      "samePhase": {
+        "samples": 448,
+        "over90": 13,
+        "over90Per100": 2.9,
+        "meanDegrees": 24.23
+      },
+      "phaseChanges": 80
+    }
+  ],
+  "limitations": [
+    "Mace m: both trials lost, zero health damage to reference; no high-win-rate acceptance.",
+    "Spear j: latest unchanged spear implementation; one win, one loss; ArmorFly run had seven Simulation alerts.",
+    "Direction metric includes knockback and server corrections; different encounters, not an isolated visual benchmark.",
+    "Native new client versus attached original 1.21.1 client using imported 729 NBT through backend Via. No anti-cheat exemptions; reference also generated alerts.",
+    "Via to 1.20.4 combat expansion not revalidated in this revision; historical manual speed values are not a combat or universal speed guarantee.",
+    "server-via7 failed before a new measured round because an old arm instruction would overwrite an existing audit. Existing evidence preserved; server-via8 and matrix-m-retry are the final runs."
+  ],
+  "evidence": {
+    "work\\combat-grim-lab\\source-m.json": "0913fbb5efeab0e6311e01eccc3ff2167bce2500bc8a0190b52e398c207e104b",
+    "work\\combat-grim-lab\\server-via8.log": "6b1485a842c01ae82daca3b6ce390cefc193990f69e755bed43cb0241a11b3cd",
+    "work\\combat-grim-lab\\matrix-m-retry.log": "25186515d6294c0aae978897dc29a646ea802cd6e05a3630dfeea9759369c2e8",
+    "work\\combat-grim-lab\\duel-results.json": "d26604c7d0b63af8cc89507b9f60f5f2f01b665333a94c3b05dbf03f87f1c11d",
+    "work\\combat-grim-lab\\steering-metrics.json": "5b1bcf55f449b798a7805692c83a20b758c77fb85d0dc0a0e9f0e09dcff87182"
+  }
+}

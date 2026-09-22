@@ -14,6 +14,14 @@ public final class SpearApproach {
      */
     public static Vec3 limitStep(Vec3 requested, Vec3 toTarget, Vec3 targetVelocity,
                                  double boxDistance, double minRange, double maxRange) {
+        return limitStep(requested, toTarget, targetVelocity, boxDistance, minRange, maxRange, 0, 0);
+    }
+
+    public static Vec3 limitStep(Vec3 requested, Vec3 toTarget, Vec3 targetVelocity,
+                                 double boxDistance, double minRange, double maxRange,
+                                 double minimumSpeed, double minimumClosingSpeed) {
+        if (!Double.isFinite(minimumSpeed) || !Double.isFinite(minimumClosingSpeed)
+                || minimumSpeed < 0 || minimumClosingSpeed < 0) return requested;
         if (!finite(requested) || !finite(toTarget) || !finite(targetVelocity)
                 || !Double.isFinite(boxDistance) || !Double.isFinite(minRange)
                 || !Double.isFinite(maxRange) || minRange < 0 || maxRange <= minRange
@@ -27,7 +35,10 @@ public final class SpearApproach {
         if (aligned < 0.8) return requested;
         double targetAdvance = targetVelocity.dot(axis);
         double room = Math.max(0.0, boxDistance - minRange - 0.35);
-        double limit = Math.max(0.65, (room * 0.65 + targetAdvance) / aligned);
+        // Preserve damage-producing closure. A charged pass may use most of the remaining
+        // lane, while the next tick still owns inner-range escape and final ray alignment.
+        double damageFloor = Math.max(minimumSpeed, targetAdvance + minimumClosingSpeed) / aligned;
+        double limit = Math.max(Math.max(0.65, damageFloor + 0.1), (room * 0.9 + targetAdvance) / aligned);
         return limit < speed ? requested.scale(limit / speed) : requested;
     }
 

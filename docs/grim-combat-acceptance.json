@@ -1,0 +1,579 @@
+{
+  "date": "2026-09-22",
+  "status": "local candidates; build/startup accepted; aerial win-rate goal not achieved",
+  "candidates": [
+    {
+      "label": "official",
+      "version": "1.3.1-rc.22-combat.6",
+      "artifact": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\guizhouware-upgrades\\build\\libs\\guizhouware-f02e299-1.3.1-rc.22-combat.6-obfuscated.jar",
+      "sha256": "c01a9a1fba72f396b8f94eaa76cb7c50fa8e13756b6c6ed5cc750bd989d43a74",
+      "buildLog": "main-build.log",
+      "runs": [
+        {
+          "runtime": "microsoft-21.0.7",
+          "passed": true,
+          "seconds": 49.8,
+          "logs": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-official-c01a9a1fba72\\microsoft-21.0.7",
+          "observedWarnings": [
+            "[12:21:10] [Download-2/ERROR]: Failed to fetch user properties",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "\tat knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[12:21:14] [Download-2/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[12:21:14] [Download-2/ERROR]: Failed to fetch Realms feature flags",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'",
+            "[12:21:18] [IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[12:21:18] [IO-Worker-1/ERROR]: Couldn't connect to realms"
+          ]
+        },
+        {
+          "runtime": "adoptium-21.0.12.1",
+          "passed": true,
+          "seconds": 50.8,
+          "logs": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-official-c01a9a1fba72\\adoptium-21.0.12.1",
+          "observedWarnings": [
+            "[12:22:02] [Download-2/ERROR]: Failed to fetch user properties",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "\tat knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[12:22:05] [Download-2/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[12:22:05] [Download-2/ERROR]: Failed to fetch Realms feature flags",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'",
+            "[12:22:08] [IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[12:22:08] [IO-Worker-1/ERROR]: Couldn't connect to realms"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "mc1211",
+      "version": "1.3.1-rc.22-mc1211.6",
+      "artifact": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\guizhouware-1.21.1\\build\\libs\\guizhouware-e282719-1.3.1-rc.22-mc1211.6-obfuscated.jar",
+      "sha256": "a34fc7703d695c62e73f35beec36c474b96acfeef18980c83122db52f60713f0",
+      "buildLog": "port-build4.log",
+      "runs": [
+        {
+          "runtime": "microsoft-21.0.7",
+          "passed": true,
+          "seconds": 55.0,
+          "logs": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-mc1211-a34fc7703d69\\microsoft-21.0.7",
+          "observedWarnings": [
+            "[12:21:27] [Download-2/ERROR]: Failed to fetch user properties",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "\tat knot/com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59) ~[005-authlib-6.0.54.jar:?]",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[12:21:31] [Render thread/WARN]: Missing sound for event: minecraft:item.goat_horn.play",
+            "[12:21:31] [Render thread/WARN]: Missing sound for event: minecraft:entity.goat.screaming.horn_break",
+            "[12:21:32] [Render thread/WARN]: Shader rendertype_entity_translucent_emissive could not find sampler named Sampler2 in the specified shader program.",
+            "[12:21:32] [Render thread/WARN]: Shader guizhouware:skybox_aurora could not find uniform named ColorModulator in the specified shader program.",
+            "[12:21:32] [Render thread/WARN]: Shader guizhouware:skybox_nebula could not find uniform named ColorModulator in the specified shader program.",
+            "[12:21:32] [Render thread/WARN]: Shader guizhouware:skybox_sunset could not find uniform named ColorModulator in the specified shader program.",
+            "[12:21:32] [Render thread/WARN]: Shader guizhouware:skybox_trippy could not find uniform named ColorModulator in the specified shader program.",
+            "[12:21:32] [IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[12:21:32] [IO-Worker-1/ERROR]: Couldn't connect to realms",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'"
+          ]
+        },
+        {
+          "runtime": "adoptium-21.0.12.1",
+          "passed": true,
+          "seconds": 54.7,
+          "logs": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-mc1211-a34fc7703d69\\adoptium-21.0.12.1",
+          "observedWarnings": [
+            "[12:22:21] [Download-2/ERROR]: Failed to fetch user properties",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "\tat knot/com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59) ~[005-authlib-6.0.54.jar:?]",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[12:22:25] [Render thread/WARN]: Missing sound for event: minecraft:item.goat_horn.play",
+            "[12:22:25] [Render thread/WARN]: Missing sound for event: minecraft:entity.goat.screaming.horn_break",
+            "[12:22:26] [Render thread/WARN]: Shader rendertype_entity_translucent_emissive could not find sampler named Sampler2 in the specified shader program.",
+            "[12:22:26] [Render thread/WARN]: Shader guizhouware:skybox_aurora could not find uniform named ColorModulator in the specified shader program.",
+            "[12:22:26] [Render thread/WARN]: Shader guizhouware:skybox_nebula could not find uniform named ColorModulator in the specified shader program.",
+            "[12:22:26] [Render thread/WARN]: Shader guizhouware:skybox_sunset could not find uniform named ColorModulator in the specified shader program.",
+            "[12:22:26] [Render thread/WARN]: Shader guizhouware:skybox_trippy could not find uniform named ColorModulator in the specified shader program.",
+            "[12:22:26] [IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[12:22:26] [IO-Worker-1/ERROR]: Couldn't connect to realms",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "direct",
+      "version": "1.3.1-rc.22-direct.11",
+      "artifact": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\guizhouware-direct-jar\\build\\libs\\guizhouware-34e6c75-1.3.1-rc.22-direct.11-obfuscated.jar",
+      "sha256": "4a669a90b8edd92943461d9d93d3ddc95efb24b1accfdad57bda785d9e4ceeba",
+      "buildLog": "direct-build4.log",
+      "runs": [
+        {
+          "runtime": "microsoft-21.0.7",
+          "passed": true,
+          "seconds": 55.8,
+          "logs": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-direct-4a669a90b8ed\\microsoft-21.0.7",
+          "observedWarnings": [
+            "[12:21:37] [Download-2/ERROR]: Failed to fetch user properties",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "\tat knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[12:21:39] [Download-2/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[12:21:39] [Download-2/ERROR]: Failed to fetch Realms feature flags",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'",
+            "[12:21:43] [IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[12:21:43] [IO-Worker-1/ERROR]: Couldn't connect to realms"
+          ]
+        },
+        {
+          "runtime": "adoptium-21.0.12.1",
+          "passed": true,
+          "seconds": 52.7,
+          "logs": "C:\\Users\\renna\\Documents\\Codex\\2026-09-20\\new-chat\\work\\smoke\\combat-grim22-direct-4a669a90b8ed\\adoptium-21.0.12.1",
+          "observedWarnings": [
+            "[12:22:32] [Download-2/ERROR]: Failed to fetch user properties",
+            "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+            "\tat knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)",
+            "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401",
+            "[12:22:34] [Download-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[12:22:34] [Download-1/ERROR]: Failed to fetch Realms feature flags",
+            "net.minecraft.class_4355: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'",
+            "[12:22:36] [IO-Worker-1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0",
+            "[12:22:36] [IO-Worker-1/ERROR]: Couldn't connect to realms"
+          ]
+        }
+      ]
+    }
+  ],
+  "duels": [
+    {
+      "tag": "grim-mace-b",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 27,
+          "BadPacketsJ": 36,
+          "Reach": 2,
+          "AimModulo360": 2,
+          "Timer": 18
+        },
+        "NewCandidate": {
+          "MultiActionsC": 857,
+          "BadPacketsJ": 192,
+          "Simulation": 3
+        }
+      },
+      "start": "[11:32:59] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-b 20",
+      "outcome": "[11:33:46] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-b ticks=946 healthLoss={NewCandidate=41.0, LegacyReference=0.0} alive=[LegacyReference]",
+      "clientSamples": 945,
+      "stateSamples": {
+        "null": 1,
+        "1": 870,
+        "0": 74
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-mace-armor-c",
+      "weapon": "MACE",
+      "alerts": {
+        "NewCandidate": {
+          "Post": 31,
+          "BadPacketsJ": 30,
+          "ElytraC": 3,
+          "Timer": 7,
+          "TimerLimit": 7,
+          "Simulation": 8
+        },
+        "LegacyReference": {
+          "Simulation": 11,
+          "AntiKB": 1,
+          "AimModulo360": 3,
+          "Reach": 3,
+          "Timer": 12
+        }
+      },
+      "start": "[11:39:27] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-armor-c 20",
+      "outcome": "[11:39:56] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-armor-c ticks=591 healthLoss={NewCandidate=43.33333444595337, LegacyReference=0.0} alive=[LegacyReference]",
+      "clientSamples": 591,
+      "stateSamples": {
+        "null": 1,
+        "1": 561,
+        "2": 3,
+        "0": 26
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-mace-armor-d",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 11,
+          "Timer": 8
+        },
+        "NewCandidate": {
+          "ElytraC": 1,
+          "AimModulo360": 1,
+          "Simulation": 1
+        }
+      },
+      "start": "[11:42:45] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-armor-d 20 swap",
+      "outcome": "[11:43:07] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-armor-d ticks=432 healthLoss={NewCandidate=37.33333396911621, LegacyReference=0.0} alive=[LegacyReference]",
+      "clientSamples": 432,
+      "stateSamples": {
+        "null": 1,
+        "1": 405,
+        "2": 4,
+        "0": 22
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-mace-plain-e",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 10,
+          "Timer": 20,
+          "AimModulo360": 1
+        },
+        "NewCandidate": {
+          "Simulation": 3,
+          "Post": 1
+        }
+      },
+      "start": "[11:46:42] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-plain-e 20",
+      "outcome": "[11:47:42] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-plain-e ticks=1200 healthLoss={NewCandidate=34.218037605285645, LegacyReference=0.0} alive=[LegacyReference, NewCandidate]",
+      "clientSamples": 1200,
+      "stateSamples": {
+        "null": 1,
+        "1": 1116,
+        "2": 35,
+        "0": 48
+      },
+      "diveSamples": 5
+    },
+    {
+      "tag": "grim-mace-armor-e",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 15,
+          "Timer": 10,
+          "AimModulo360": 1,
+          "Hitboxes": 1,
+          "Reach": 1
+        },
+        "NewCandidate": {
+          "Simulation": 6,
+          "AimModulo360": 1,
+          "Timer": 1,
+          "TickTimer": 2,
+          "TimerLimit": 1,
+          "Post": 1
+        }
+      },
+      "start": "[11:47:50] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-armor-e 20 swap",
+      "outcome": "[11:48:27] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-armor-e ticks=736 healthLoss={NewCandidate=50.33333349227905, LegacyReference=7.12811279296875} alive=[LegacyReference]",
+      "clientSamples": 736,
+      "stateSamples": {
+        "null": 1,
+        "1": 681,
+        "0": 52,
+        "2": 1,
+        "3": 1
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-spear-plain-e",
+      "weapon": "SPEAR",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 10,
+          "NoSlow": 1,
+          "AimModulo360": 1
+        },
+        "NewCandidate": {
+          "Simulation": 3
+        }
+      },
+      "start": "[11:48:35] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START SPEAR grim-spear-plain-e 20",
+      "outcome": "[11:48:48] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-spear-plain-e ticks=271 healthLoss={NewCandidate=21.666666984558105, LegacyReference=33.99999952316284} alive=[NewCandidate]",
+      "clientSamples": 271,
+      "stateSamples": {
+        "null": 1,
+        "0": 75,
+        "1": 83,
+        "2": 91,
+        "3": 21
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-spear-armor-e",
+      "weapon": "SPEAR",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 4,
+          "AimModulo360": 2,
+          "NoSlow": 1
+        }
+      },
+      "start": "[11:48:57] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START SPEAR grim-spear-armor-e 20 swap",
+      "outcome": "[11:49:08] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-spear-armor-e ticks=232 healthLoss={NewCandidate=18.0, LegacyReference=28.333333492279053} alive=[NewCandidate]",
+      "clientSamples": 232,
+      "stateSamples": {
+        "null": 1,
+        "0": 60,
+        "1": 53,
+        "2": 82,
+        "3": 36
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-mace-plain-f",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 4,
+          "Timer": 14,
+          "AimModulo360": 4,
+          "PacketOrderB": 1
+        },
+        "NewCandidate": {
+          "Simulation": 5
+        }
+      },
+      "start": "[11:59:15] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-plain-f 20",
+      "outcome": "[12:00:15] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-plain-f ticks=1200 healthLoss={NewCandidate=42.609018325805664, LegacyReference=0.0} alive=[NewCandidate, LegacyReference]",
+      "clientSamples": 1199,
+      "stateSamples": {
+        "null": 1,
+        "1": 1130,
+        "2": 42,
+        "0": 26
+      },
+      "diveSamples": 2
+    },
+    {
+      "tag": "grim-mace-armor-f",
+      "weapon": "MACE",
+      "alerts": {
+        "NewCandidate": {
+          "Simulation": 10,
+          "AimModulo360": 1
+        },
+        "LegacyReference": {
+          "Hitboxes": 3,
+          "Simulation": 6,
+          "AimModulo360": 3,
+          "Timer": 12,
+          "Reach": 1
+        }
+      },
+      "start": "[12:00:24] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-armor-f 20 swap",
+      "outcome": "[12:01:01] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-armor-f ticks=747 healthLoss={NewCandidate=38.33333396911621, LegacyReference=0.0} alive=[LegacyReference]",
+      "clientSamples": 746,
+      "stateSamples": {
+        "null": 1,
+        "1": 672,
+        "0": 71,
+        "2": 2
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-spear-plain-f",
+      "weapon": "SPEAR",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 31,
+          "AimModulo360": 2,
+          "NoSlow": 10
+        }
+      },
+      "start": "[12:01:10] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START SPEAR grim-spear-plain-f 20",
+      "outcome": "[12:01:30] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-spear-plain-f ticks=411 healthLoss={NewCandidate=34.33333396911621, LegacyReference=29.166666507720947} alive=[NewCandidate]",
+      "clientSamples": 410,
+      "stateSamples": {
+        "null": 1,
+        "0": 122,
+        "1": 127,
+        "2": 116,
+        "3": 44
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-spear-armor-f",
+      "weapon": "SPEAR",
+      "alerts": {
+        "NewCandidate": {
+          "Simulation": 8
+        },
+        "LegacyReference": {
+          "Simulation": 4,
+          "AimModulo360": 1
+        }
+      },
+      "start": "[12:01:38] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START SPEAR grim-spear-armor-f 20 swap",
+      "outcome": "[12:01:53] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-spear-armor-f ticks=292 healthLoss={NewCandidate=31.33333396911621, LegacyReference=25.0} alive=[LegacyReference]",
+      "clientSamples": 291,
+      "stateSamples": {
+        "null": 1,
+        "0": 90,
+        "1": 72,
+        "2": 71,
+        "3": 57
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-mace-plain-g",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 9,
+          "Timer": 10,
+          "Hitboxes": 1,
+          "AimModulo360": 1
+        },
+        "NewCandidate": {
+          "Post": 1,
+          "Simulation": 6
+        }
+      },
+      "start": "[12:11:13] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-plain-g 20",
+      "outcome": "[12:12:13] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-plain-g ticks=1200 healthLoss={NewCandidate=42.77568435668945, LegacyReference=0.0} alive=[NewCandidate, LegacyReference]",
+      "clientSamples": 1200,
+      "stateSamples": {
+        "null": 1,
+        "0": 15,
+        "1": 1137,
+        "2": 47
+      },
+      "diveSamples": 5
+    },
+    {
+      "tag": "grim-mace-armor-g",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 3,
+          "Timer": 2,
+          "Reach": 1,
+          "AimModulo360": 2
+        }
+      },
+      "start": "[12:12:22] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-armor-g 20 swap",
+      "outcome": "[12:12:40] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-armor-g ticks=366 healthLoss={NewCandidate=35.166666984558105, LegacyReference=0.0} alive=[LegacyReference]",
+      "clientSamples": 366,
+      "stateSamples": {
+        "null": 1,
+        "1": 333,
+        "0": 30,
+        "2": 2
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-spear-plain-g",
+      "weapon": "SPEAR",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 4
+        }
+      },
+      "start": "[12:12:48] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START SPEAR grim-spear-plain-g 20",
+      "outcome": "[12:12:56] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-spear-plain-g ticks=158 healthLoss={NewCandidate=27.33333396911621, LegacyReference=19.0} alive=[LegacyReference]",
+      "clientSamples": 158,
+      "stateSamples": {
+        "null": 1,
+        "0": 61,
+        "1": 53,
+        "3": 11,
+        "2": 32
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-spear-armor-g",
+      "weapon": "SPEAR",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 5,
+          "AimModulo360": 2,
+          "NoSlow": 1
+        }
+      },
+      "start": "[12:13:04] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START SPEAR grim-spear-armor-g 20 swap",
+      "outcome": "[12:13:24] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-spear-armor-g ticks=393 healthLoss={NewCandidate=8.27199935913086, LegacyReference=39.0} alive=[NewCandidate]",
+      "clientSamples": 393,
+      "stateSamples": {
+        "null": 1,
+        "0": 128,
+        "1": 116,
+        "2": 123,
+        "3": 25
+      },
+      "diveSamples": 0
+    },
+    {
+      "tag": "grim-mace-plain-h",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "AimModulo360": 5,
+          "Timer": 10,
+          "Simulation": 10
+        },
+        "NewCandidate": {
+          "Simulation": 1
+        }
+      },
+      "start": "[12:16:49] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-plain-h 20",
+      "outcome": "[12:17:49] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-plain-h ticks=1200 healthLoss={NewCandidate=41.99999713897705, LegacyReference=0.0} alive=[NewCandidate, LegacyReference]",
+      "clientSamples": 1200,
+      "stateSamples": {
+        "null": 1,
+        "1": 1150,
+        "2": 49
+      },
+      "diveSamples": 1
+    },
+    {
+      "tag": "grim-mace-armor-h",
+      "weapon": "MACE",
+      "alerts": {
+        "LegacyReference": {
+          "Simulation": 22,
+          "AimModulo360": 8,
+          "Timer": 14,
+          "Reach": 5,
+          "Hitboxes": 1
+        },
+        "NewCandidate": {
+          "Simulation": 1
+        }
+      },
+      "start": "[12:17:58] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_SERVER START MACE grim-mace-armor-h 20 swap",
+      "outcome": "[12:18:58] [Server thread/INFO] (Minecraft) [STDOUT]: DUEL_DONE tag=grim-mace-armor-h ticks=1200 healthLoss={NewCandidate=36.0, LegacyReference=0.0} alive=[NewCandidate, LegacyReference]",
+      "clientSamples": 1200,
+      "stateSamples": {
+        "null": 1,
+        "1": 1113,
+        "0": 84,
+        "2": 2
+      },
+      "diveSamples": 0
+    }
+  ],
+  "limitations": [
+    "Native 1.21.11 combat sample; Via 1.20.4 combat optimization not live benchmarked in this revision",
+    "Mace g/h produced zero damage against reference; spear mixed small samples",
+    "Some active duels reported Grim Simulation/Post; not a zero-alert certification",
+    "Release smoke has no license credentials or world; not gameplay authentication evidence",
+    "1.21.1 has nonfatal existing sound/shader warnings; uncredentialed Mojang/Realms authentication failures expected",
+    "Smoke shell wrapper emitted a redirection error after the two run scripts completed; each result.json and all game logs independently inspected"
+  ]
+}

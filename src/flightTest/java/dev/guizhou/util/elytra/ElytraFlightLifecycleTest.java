@@ -404,14 +404,15 @@ public final class ElytraFlightLifecycleTest {
         }
     }
 
-    private static void verifyGlideRestart(Map<String, Trace> methods) {
+    private static void verifyGlideRestart(Map<String, Trace> methods) throws IOException {
         Trace restart = methods.get("resumeGliding");
         check(restart != null, "Recovery needs one real glide restart path");
         int canStart = restart.call("canStartGliding");
         int start = restart.call("tryToStartFallFlying");
-        int command = restart.fieldAfter(Opcodes.GETSTATIC, "START_FALL_FLYING", start);
-        int send = restart.call("send");
-        check(canStart < start && start < command && command < send && !restart.hasCall("startFallFlying"),
+        int command = restart.call("sendStart");
+        Trace sequence = readClass("dev/guizhou/util/elytra/ElytraJumpInput").get("sendStart");
+        check(sequence.hasCall("authorized") && sequence.hasCall("send"), "Legacy glide commands remain authorized and observable");
+        check(canStart < start && start < command && !restart.hasCall("startFallFlying"),
                 "Recovery must validate and actually start gliding before sending START_FALL_FLYING");
         Step succeeded = restart.steps.get(start + 1);
         check(succeeded.opcode == Opcodes.IFNE && restart.target(succeeded) <= command,

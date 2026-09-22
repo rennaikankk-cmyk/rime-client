@@ -166,7 +166,7 @@ public class AutoSwordModule extends Module {
             recoverSlot = -1;
         }
         if (weaponMode.getValue() != WeaponMode.SWAP || swapAction.getValue() != SwapAction.SWAPBACK) releaseWeapon();
-        if (paused()) { clearTarget(); return; }
+        if (paused() || GuizhouWare.tpsCounterService.isRubberbandRecent()) { clearTarget(); return; }
         Entity next = findTarget(tp.getValue() && !tpBlocked);
         if (next != currentTarget) { changedAt = mc.player.tickCount; desiredSlot = -1; }
         currentTarget = next;
