@@ -126,6 +126,7 @@ public class GuangxiElytraChaseModule extends Module {
     // ---- Advanced ----
     private final Setting<Boolean> maceUseExtraAttack = bool("MaceUseExtraAttack", true).setPage("Advanced");
     private final Setting<RocketPolicy> rocketPolicy = mode("RocketPolicy", RocketPolicy.Economy).setPage("Advanced");
+    private final Setting<Boolean> climbExit = bool("ClimbExit", true).setPage("Advanced");
     private final Setting<Boolean> autoMaceDive = fixed("AutoMaceDive", true);
     private final Setting<Boolean> maceAdaptive = bool("MaceAdaptive", true).setPage("Advanced");
     private final Setting<Boolean> maceTerminal = fixed("MaceTerminal", true);
@@ -180,6 +181,7 @@ public class GuangxiElytraChaseModule extends Module {
     private volatile long combatPhase;
     private boolean weaponControlActive;
     private boolean controllingFlight;
+    private boolean exitAimActive;
     private TargetsModule targetRules;
     private final AerialCombatPolicy tactics = new AerialCombatPolicy();
     private AerialCombatPolicy.Action combatAction = AerialCombatPolicy.Action.CHASE;
@@ -1445,6 +1447,24 @@ public class GuangxiElytraChaseModule extends Module {
                 return tickPullUp();
             }
             aimNextClimb();
+            // Post-attack fall ticks have no look control; without a pre-turn the
+            // first recovery boost follows the stale dive look. Reuse the dive
+            // rotation slot so the existing cancel paths own the lifecycle.
+            if (climbExit.getValue() && GuizhouWare.rotationManager != null) {
+                if (!mc.player.isFallFlying()) {
+                    MaceApproach.Plan plan = climbPlan();
+                    Vec3 aim = plan.aim();
+                    if (Double.isFinite(aim.x) && Double.isFinite(aim.y) && Double.isFinite(aim.z)) {
+                        float[] angles = MathUtil.calcAngle(maceAttackEye(), aim);
+                        GuizhouWare.rotationManager.submit(new RotationRequest("ElytraChase_dive", 70,
+                                angles[0], angles[1], RotationRequest.Mode.MOTION, true, true));
+                        exitAimActive = true;
+                    }
+                } else if (exitAimActive) {
+                    clearDiveAim();
+                    exitAimActive = false;
+                }
+            }
             return WAIT_ATTACK;
         }
 
