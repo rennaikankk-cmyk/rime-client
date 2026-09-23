@@ -132,6 +132,10 @@ public class GuangxiElytraChaseModule extends Module {
     private final Setting<Boolean> maceTerminal = fixed("MaceTerminal", true);
     private final Setting<Double> maceHeight = num("MaceHeight", 32.0, 1.0, 128.0).setPage("Advanced");
     private final Setting<Double> maceMinFallDistance = num("MaceMinFallDistance", 1.5, 0.0, 20.0).setPage("Advanced");
+    /** 0 = commit at the earliest in-range moment (measured best: strike frequency
+     * dominates). Above 0 the dive waits for a deeper fall-at-hit window; measured
+     * at 30 it halved smashes and totem burn (evidence-20260922-r16). */
+    private final Setting<Double> smashCharge = num("SmashCharge", 0.0, 0.0, 40.0).setPage("Advanced");
     private final Setting<Double> spearAttackDistance = num("SpearAttackDistance", 8.0, 1.0, 64.0).setPage("Advanced");
     private final Setting<Double> spearPullOverDistance = num("SpearPullOverDistance", 8.0, 1.0, 64.0).setPage("Advanced");
     private final Setting<Double> spearNoEntryDistance = fixed("SpearNoEntryDistance", 0.0, 0.0, 20.0);
@@ -1363,8 +1367,11 @@ public class GuangxiElytraChaseModule extends Module {
         private boolean shouldStartDive() {
             var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
             Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
+            // A charged smash waits for a deeper fall window before committing, so
+            // the drop may start from higher above the target than the plain gate.
+            double charge = Math.max(0.0, smashCharge.getValue());
             double approachRange = AerialIntercept.dropApproachRange(mc.player.getDeltaMovement(),
-                    velocity, mc.player.entityInteractionRange());
+                    velocity, mc.player.entityInteractionRange()) + charge;
             if (!autoMaceDive.getValue() || !autoControlElytra.getValue()
                     || flight == null || flight.isArmorSwapActive() || !flight.canRecoverDiveFlight()
                     || !mc.player.isFallFlying() || mc.player.getAbilities().flying
@@ -1381,7 +1388,8 @@ public class GuangxiElytraChaseModule extends Module {
                     new AerialCombatPolicy.Vector(velocity.x, velocity.y, velocity.z),
                     new AerialCombatPolicy.Vector(previous.x, previous.y, previous.z));
             if (reliable && AerialIntercept.canStartDrop(standingEye, mc.player.getDeltaMovement(),
-                    maceTargetBox(), velocity, mc.player.entityInteractionRange(), maceMinFallDistance.getValue())) return true;
+                    maceTargetBox(), velocity, mc.player.entityInteractionRange(),
+                    Math.max(maceMinFallDistance.getValue(), charge))) return true;
             // Accept a nearby two-tick lane without requiring the opponent to keep a
             // constant velocity for the entire future fall. Recheck each actual step.
             Vec3 lane = maceTargetBox().getCenter().add(velocity.scale(2))

@@ -63,9 +63,12 @@ public final class AerialIntercept {
                                        Vec3 targetVelocity, double reach, double minimumFall) {
         if (!finite(standingEye) || !finite(velocity) || !finite(target) || !finite(targetVelocity)) return false;
         // Require room for two ticks of glide-exit latency, not just a single exact-tick hit.
+        // A charged smash waits for a deeper fall window, so the lane preview must
+        // extend far enough to see that landing tick (bounded by the 16-tick cap).
+        int horizon = (int) Math.min(16, 10 + Math.ceil(Math.max(0.0, minimumFall - 1.5) * 0.4));
         for (int delay = 0; delay <= 2; delay++) {
             if (dropHitTick(standingEye.add(velocity.scale(delay)), velocity,
-                    target.move(targetVelocity.scale(delay)), targetVelocity, reach, minimumFall, 10) < 0) return false;
+                    target.move(targetVelocity.scale(delay)), targetVelocity, reach, minimumFall, horizon) < 0) return false;
         }
         return true;
     }
