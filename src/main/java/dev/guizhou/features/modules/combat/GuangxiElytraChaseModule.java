@@ -91,6 +91,13 @@ public class GuangxiElytraChaseModule extends Module {
     public enum Mode { FOLLOW, MACE, SPEAR, MXS }
     public enum ThreatMode { ALL_PLAYERS, ADAPTIVE }
 
+    /** Unlimited chains rockets like manual GZBoost (short overlap); Economy keeps
+     * the reuse-until-removal pacing. Measured in combat the chaining burns ~2.7x
+     * rockets without lifting climb speed (envelope ramp x short segments cap
+     * combat near 120 b/s regardless) and drew Reach/Hitboxes attention, so
+     * Economy is the evidence-based default; Unlimited stays available as opt-in. */
+    public enum RocketPolicy { Economy, Unlimited }
+
     /** Observed motion for the status display, not a player classification. */
     public enum MotionClass { RUSHING, FLEEING, UNKNOWN, NORMAL, STILL }
 
@@ -118,6 +125,7 @@ public class GuangxiElytraChaseModule extends Module {
 
     // ---- Advanced ----
     private final Setting<Boolean> maceUseExtraAttack = bool("MaceUseExtraAttack", true).setPage("Advanced");
+    private final Setting<RocketPolicy> rocketPolicy = mode("RocketPolicy", RocketPolicy.Economy).setPage("Advanced");
     private final Setting<Boolean> autoMaceDive = fixed("AutoMaceDive", true);
     private final Setting<Boolean> maceAdaptive = bool("MaceAdaptive", true).setPage("Advanced");
     private final Setting<Boolean> maceTerminal = fixed("MaceTerminal", true);
@@ -376,6 +384,12 @@ public class GuangxiElytraChaseModule extends Module {
     public boolean wantsFlight() {
         return isEnabled() && autoControlElytra.getValue() && !paused() && isValid(target)
                 && !maceDive.isActive() && !fallingMaceWindow();
+    }
+
+    /** Flight seam: chase-controlled ticks may chain rockets with the manual
+     * GZBoost overlap under the Unlimited policy. */
+    public boolean combatBoostChaining() {
+        return rocketPolicy.getValue() == RocketPolicy.Unlimited && hasHeading();
     }
 
     private boolean fallingMaceWindow() {

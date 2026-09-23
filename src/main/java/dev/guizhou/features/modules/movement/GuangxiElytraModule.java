@@ -1641,10 +1641,19 @@ public class GuangxiElytraModule extends Module {
         // The server owns randomized lifetime, and Via can replace the item data.
         // An observed live attachment still supplies thrust even after that estimate.
         // Reuse it until removal instead of stacking rockets every few ticks.
-        // Only GZBoost manual flight reserves a short overlap, including climb.
-        // Combat and ordinary cruise keep reusing the live rocket until removal.
-        return attachedBoost && (!acceleratedManualBoost()
+        // GZBoost manual flight and Unlimited-policy chase flight reserve a short
+        // overlap, including climb; ordinary cruise and Economy keep reusing the
+        // live rocket until removal.
+        return attachedBoost && (!(acceleratedManualBoost() || combatChainingRequested())
                 || boostCoverageTicks > rocketArrivalTicks() + 1);
+    }
+
+    /** Chase-controlled chaining mirrors the manual overlap instead of reusing
+     * the live rocket to removal; the per-tick envelope still vets every tick. */
+    private boolean combatChainingRequested() {
+        var chase = GuizhouWare.moduleManager.getModuleByClass(
+                dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.class);
+        return chase != null && chase.combatBoostChaining();
     }
 
     private void scanAttachedBoosts() {
