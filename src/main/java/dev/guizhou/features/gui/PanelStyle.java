@@ -19,7 +19,9 @@ import org.joml.Vector2f;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -129,6 +131,8 @@ final class PanelStyle extends ShellStyle {
     }
 
     private void rebuildPanels() {
+        moduleCache.clear();
+        moduleQuery = "\0";
         panels.clear();
         for (Module.Category c : categories()) panels.add(new Panel(c, c.name()));
         if (look.descriptionPanel) panels.add(new Panel(null, DESCRIPTION));
@@ -225,6 +229,7 @@ final class PanelStyle extends ShellStyle {
     @Override
     void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
         computeScale();
+        settingsCache.clear();
         hits.clear();
         modalFrom = -1;
         hovered = null;
@@ -318,15 +323,31 @@ final class PanelStyle extends ShellStyle {
 
     // ------------------------------------------------------------ panels
 
+    private String moduleQuery = "\0";
+    private final Map<Module.Category, List<Module>> moduleCache = new EnumMap<>(Module.Category.class);
+    private final Map<Module, List<Setting<?>>> settingsCache = new IdentityHashMap<>();
+
     private List<Module> modules(Module.Category c) {
         String q = query.toLowerCase(Locale.ROOT).trim();
-        return GuizhouWare.moduleManager.stream().filter(m -> !m.hidden && m.getCategory() == c)
+        if (!q.equals(moduleQuery)) {
+            moduleQuery = q;
+            moduleCache.clear();
+        }
+        List<Module> cached = moduleCache.get(c);
+        if (cached != null) return cached;
+        List<Module> built = GuizhouWare.moduleManager.stream().filter(m -> !m.hidden && m.getCategory() == c)
                 .filter(m -> q.isEmpty() || (m.getName() + " " + m.getDisplayName()).toLowerCase(Locale.ROOT).contains(q))
                 .sorted(Comparator.comparing(Module::getDisplayName, String.CASE_INSENSITIVE_ORDER)).toList();
+        moduleCache.put(c, built);
+        return built;
     }
 
     private List<Setting<?>> settingsOf(Module m) {
-        return m.getSettings().stream().filter(s -> s != m.enabled && s.isVisible()).toList();
+        List<Setting<?>> cached = settingsCache.get(m);
+        if (cached != null) return cached;
+        List<Setting<?>> built = m.getSettings().stream().filter(s -> s != m.enabled && s.isVisible()).toList();
+        settingsCache.put(m, built);
+        return built;
     }
 
     private float expandedHeight(Module m) {

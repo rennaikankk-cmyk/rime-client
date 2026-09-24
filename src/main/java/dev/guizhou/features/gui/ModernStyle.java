@@ -166,7 +166,7 @@ final class ModernStyle extends ShellStyle {
     }
 
     private final double[] localPoint = new double[2];
-    private List<Module> frameModules = List.of();
+    private List<Module> frameModules;
 
     /** Screen pixels to window-local units, undoing the entrance transform. */
     private double[] local(double sx, double sy) {
@@ -182,10 +182,12 @@ final class ModernStyle extends ShellStyle {
     @Override
     void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
         layout();
-        frameModules = GuizhouWare.moduleManager.stream().filter(m -> !m.hidden)
-                .filter(m -> m.getCategory() != Module.Category.HUD)
-                .filter(m -> m.getCategory() != Module.Category.FUNNY || GuizhouWare.commandManager.isFunnyVisible())
-                .toList();
+        if (frameModules == null) {
+            frameModules = GuizhouWare.moduleManager.stream().filter(m -> !m.hidden)
+                    .filter(m -> m.getCategory() != Module.Category.HUD)
+                    .filter(m -> m.getCategory() != Module.Category.FUNNY || GuizhouWare.commandManager.isFunnyVisible())
+                    .toList();
+        }
         hits.clear();
         modalFrom = -1;
         hoverTarget = null;
@@ -943,7 +945,7 @@ final class ModernStyle extends ShellStyle {
     }
 
     private List<Module> allModules() {
-        return frameModules;
+        return frameModules == null ? List.of() : frameModules;
     }
 
     private List<Module> modulesIn(Module.Category c) {

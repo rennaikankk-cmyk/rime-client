@@ -154,6 +154,7 @@ public class ConfigManager {
                 JsonElement json = jsonable.toJson();
                 ConfigFiles.write(dir.resolve(jsonable.getFileName()), GSON.toJson(json));
             }
+            invalidateNamed();
             return true;
         } catch (Throwable e) {
             LOGGER.error("Failed to save config '{}'", name, e);
@@ -180,7 +181,12 @@ public class ConfigManager {
         return complete;
     }
 
+    private List<String> namedCache;
+
+    /** Directory names only. Cached until a save or delete; the GUI must not rescan every frame. */
     public List<String> listNamed() {
+        List<String> cached = namedCache;
+        if (cached != null) return cached;
         List<String> out = new java.util.ArrayList<>();
         try (var stream = Files.list(CONFIGS_DIR)) {
             stream.filter(Files::isDirectory)
@@ -189,7 +195,12 @@ public class ConfigManager {
                     .forEach(out::add);
         } catch (Throwable ignored) {
         }
-        return out;
+        namedCache = List.copyOf(out);
+        return namedCache;
+    }
+
+    private void invalidateNamed() {
+        namedCache = null;
     }
 
     public boolean deleteNamed(String name) {
@@ -207,6 +218,7 @@ public class ConfigManager {
             LOGGER.error("Failed to delete config '{}'", name, e);
             return false;
         }
+        invalidateNamed();
         return true;
     }
 

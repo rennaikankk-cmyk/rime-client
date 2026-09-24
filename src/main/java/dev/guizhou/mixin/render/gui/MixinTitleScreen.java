@@ -37,9 +37,10 @@ import java.util.Locale;
 import static dev.guizhou.util.render.ShadcnDraw.*;
 
 /**
- * Minimal title screen: an optional custom background, one small centered card
- * with the three primary actions, date and version in the corners. Reuses the
- * vanilla widget instances, so actions, enabled gates and keyboard/narration stay.
+ * Minimal title screen: an optional custom background and one centered card.
+ * Every labelled button, including ones added by other mods, goes in a wrapping
+ * grid. Language and accessibility stay as corner icons. Reuses the vanilla
+ * widget instances, so actions, enabled gates and keyboard/narration stay.
  */
 @Mixin(TitleScreen.class)
 public abstract class MixinTitleScreen extends Screen {
@@ -52,6 +53,7 @@ public abstract class MixinTitleScreen extends Screen {
 
     @Unique private float guizhouware$cardX, guizhouware$cardY, guizhouware$cardW, guizhouware$cardH, guizhouware$scale = 1;
     @Unique private final List<AbstractWidget> guizhouware$corner = new ArrayList<>();
+    @Unique private final List<AbstractWidget> guizhouware$seen = new ArrayList<>();
 
     protected MixinTitleScreen(Component title) { super(title); }
 
@@ -69,49 +71,105 @@ public abstract class MixinTitleScreen extends Screen {
         return Icon.GRID;
     }
 
+    @Unique
+    private static int guizhouware$rank(String key) {
+        return switch (key) {
+            case "menu.singleplayer" -> 0;
+            case "menu.multiplayer" -> 1;
+            case "menu.online" -> 2;
+            case "menu.options" -> 3;
+            case "menu.quit" -> 1_000;
+            default -> 100;
+        };
+    }
+
+    /** Language and accessibility stay icons. Labelled buttons from other mods stay in the card. */
+    @Unique
+    private static boolean guizhouware$iconButton(AbstractWidget b, String key) {
+        String type = b.getClass().getSimpleName().toLowerCase(Locale.ROOT);
+        if (type.contains("sprite") || type.contains("image")) return true;
+        String k = key.toLowerCase(Locale.ROOT);
+        return k.contains("language") || k.contains("accessibility");
+    }
+
     @Inject(method = "init", at = @At("TAIL"))
-    private void guizhouware$layout(CallbackInfo ci) {
+    private void guizhouware$onInit(CallbackInfo ci) {
         guizhouware$loadBackground();
+        guizhouware$layout();
+    }
+
+    /**
+     * Other mods append title-screen buttons after this mixin, often with literal
+     * labels. Rebuilding the grid every frame keeps those buttons inside the card
+     * instead of on the vanilla column underneath it.
+     */
+    @Unique
+    private void guizhouware$layout() {
         guizhouware$corner.clear();
-        var gui = ClickGuiModule.getInstance();
-        float requested = gui == null ? 1 : gui.menuScale.getValue().floatValue() / 100f;
-        requested = Float.isFinite(requested) ? Math.clamp(requested, .6f, 1.5f) : 1;
-        // The card stays a small centred element, roughly 30% of the screen width.
-        float s = Math.clamp(Math.min(requested * width / 780f, height / 190f), .5f, 1.3f);
-        guizhouware$scale = s;
-        int bw = Math.round(72 * s), bh = Math.round(16 * s), gap = Math.round(5 * s), pad = Math.round(9 * s);
-        guizhouware$cardW = bw * 3 + gap * 2 + pad * 2;
-        guizhouware$cardH = Math.round(66 * s);
-        guizhouware$cardX = Math.round((width - guizhouware$cardW) / 2f);
-        guizhouware$cardY = Math.round((height - guizhouware$cardH) / 2f);
-        int rowY = Math.round(guizhouware$cardY + 26 * s), rowX = Math.round(guizhouware$cardX + pad);
-        int cornerX = width - 6;
+        List<AbstractWidget> live = new ArrayList<>();
+        List<AbstractWidget> primary = new ArrayList<>();
         for (var child : children()) {
-            if (!(child instanceof AbstractWidget b)) continue;
+            if (child instanceof AbstractWidget b) live.add(b);
+        }
+        guizhouware$seen.retainAll(live);
+        for (AbstractWidget b : live) {
+            if (!guizhouware$seen.contains(b)) guizhouware$seen.add(b);
+        }
+        for (AbstractWidget b : live) {
+            if (!b.visible) continue;
             if (b instanceof PlainTextButton) {
-                // Credits stay clickable (and keyboard reachable) in the quiet top-left corner.
                 b.setPosition(6, 6);
                 continue;
             }
             String key = guizhouware$key(b);
-            int order = switch (key) {
-                case "menu.singleplayer" -> 0;
-                case "menu.multiplayer" -> 1;
-                case "menu.options" -> 2;
-                default -> -1;
-            };
-            if (order >= 0) {
-                b.setRectangle(bw, bh, rowX + order * (bw + gap), rowY);
-            } else if (key.equals("menu.quit")) {
-                b.setRectangle(Math.round(58 * s), bh, width - Math.round(58 * s) - 6, height - bh - 6);
-            } else {
-                // Realms, language, accessibility and mod-menu entries: small corner icons.
-                int size = Math.round(14 * s);
-                cornerX -= size;
-                b.setRectangle(size, size, cornerX, 6);
-                cornerX -= 4;
+            if (guizhouware$iconButton(b, key)) {
                 guizhouware$corner.add(b);
+            } else {
+                primary.add(b);
             }
+        }
+        primary.sort((a, c) -> {
+            int rank = Integer.compare(guizhouware$rank(guizhouware$key(a)), guizhouware$rank(guizhouware$key(c)));
+            return rank != 0 ? rank : Integer.compare(guizhouware$seen.indexOf(a), guizhouware$seen.indexOf(c));
+        });
+
+        var gui = ClickGuiModule.getInstance();
+        float requested = gui == null ? 1 : gui.menuScale.getValue().floatValue() / 100f;
+        requested = Float.isFinite(requested) ? Math.clamp(requested, .6f, 1.5f) : 1;
+        int count = Math.max(1, primary.size());
+        int cols = count <= 3 ? count : count <= 6 ? 2 : 3;
+        int rows = (count + cols - 1) / cols;
+        float s = Math.clamp(Math.min(requested * width / 780f, height / (120f + rows * 24f)), .5f, 1.3f);
+        guizhouware$scale = s;
+        int gap = Math.max(4, Math.round(5 * s));
+        int pad = Math.max(8, Math.round(9 * s));
+        int header = Math.max(24, Math.round(28 * s));
+        int footer = Math.max(16, Math.round(18 * s));
+        int maxW = Math.max(96, width - 24);
+        int inner = Math.max(48, maxW - pad * 2 - gap * Math.max(0, cols - 1));
+        int bw = Math.min(168, inner / cols);
+        int bh = Math.max(14, Math.round(18 * s));
+        int maxH = Math.max(bh + header + footer, height - 36);
+        int rowGap = Math.max(0, rows - 1) * gap;
+        if (header + rows * bh + rowGap + footer > maxH) {
+            bh = Math.max(14, (maxH - header - footer - rowGap) / rows);
+        }
+        guizhouware$cardW = Math.min(maxW, cols * bw + gap * Math.max(0, cols - 1) + pad * 2);
+        guizhouware$cardH = header + rows * bh + rowGap + footer;
+        guizhouware$cardX = Math.round((width - guizhouware$cardW) / 2f);
+        guizhouware$cardY = Math.round(Math.clamp((height - guizhouware$cardH) / 2f, 22, Math.max(22, height - guizhouware$cardH - 16)));
+        int rowX = Math.round(guizhouware$cardX + pad);
+        int rowY = Math.round(guizhouware$cardY + header);
+        for (int i = 0; i < primary.size(); i++) {
+            int col = i % cols, row = i / cols;
+            primary.get(i).setRectangle(bw, bh, rowX + col * (bw + gap), rowY + row * (bh + gap));
+        }
+        int cornerX = width - 6;
+        int size = Math.max(14, Math.round(16 * s));
+        for (int i = guizhouware$corner.size() - 1; i >= 0; i--) {
+            cornerX -= size;
+            guizhouware$corner.get(i).setRectangle(size, size, cornerX, 6);
+            cornerX -= 4;
         }
     }
 
@@ -142,6 +200,7 @@ public abstract class MixinTitleScreen extends Screen {
 
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
     private void guizhouware$render(GuiGraphics g, int mx, int my, float delta, CallbackInfo ci) {
+        guizhouware$layout();
         float s = guizhouware$scale;
         g.fill(0, 0, width, height, 0xFF08080A);
         if (guizhouware$backgroundW > 0) {
@@ -161,10 +220,8 @@ public abstract class MixinTitleScreen extends Screen {
         float cx = guizhouware$cardX, cy = guizhouware$cardY, cw = guizhouware$cardW, ch = guizhouware$cardH;
         round(g, cx, cy, cw, ch, 3 * s, 0xB00E0E11);
         outline(g, cx, cy, cw, ch, 3 * s, 1, 0x26FFFFFF);
-        float brand = 13 * s, gw = width("Guizhou", brand, HudFonts.BOLD), ww = width("Ware", brand, HudFonts.BOLD);
-        float bx = cx + (cw - gw - ww) / 2, by = cy + 8 * s;
-        text(g, "Guizhou", bx, by, brand, HudFonts.BOLD, 0xFFFFFFFF);
-        text(g, "Ware", bx + gw, by, brand, HudFonts.BOLD, 0xFFE5484D);
+        float brand = 13 * s, rw = width("Rime", brand, HudFonts.BOLD);
+        text(g, "Rime", cx + (cw - rw) / 2, cy + 8 * s, brand, HudFonts.BOLD, 0xFFFFFFFF);
         String notice = gui == null ? "" : gui.menuNotice.getValue().trim();
         if (notice.isEmpty()) notice = "欢迎回来，" + Minecraft.getInstance().getUser().getName();
         textCentered(g, fit(notice, cw - 16 * s, 7.5f * s), cx + cw / 2, cy + ch - 15 * s, 7.5f * s, HudFonts.REGULAR, 0xB4FFFFFF);
