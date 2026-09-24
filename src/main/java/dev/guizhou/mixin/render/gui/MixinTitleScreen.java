@@ -27,7 +27,11 @@ public abstract class MixinTitleScreen extends Screen {
     protected MixinTitleScreen(Component title) {super(title);}
 
     @Inject(method="init",at=@At("TAIL"))
-    private void guizhouware$layout(CallbackInfo ci) {
+    private void guizhouware$onInit(CallbackInfo ci) { guizhouware$layout(); }
+
+    /** Mods append buttons after init. Place every labelled button again each frame. */
+    @Unique
+    private void guizhouware$layout() {
         List<AbstractWidget> buttons=children().stream().filter(AbstractWidget.class::isInstance)
                 .map(AbstractWidget.class::cast).filter(b->!(b instanceof PlainTextButton)).toList();
         List<AbstractWidget> primary=buttons.stream().filter(b->b.getWidth()>=180).toList();
@@ -53,6 +57,7 @@ public abstract class MixinTitleScreen extends Screen {
     }
     @Inject(method="render",at=@At("HEAD"),cancellable=true)
     private void guizhouware$render(GuiGraphics g,int mx,int my,float delta,CallbackInfo ci) {
+        guizhouware$layout();
         g.fill(0,0,width,height,BG);
         // Quiet static geometry: no blur pass, animated shader, or browser runtime.
         int grid=48;
