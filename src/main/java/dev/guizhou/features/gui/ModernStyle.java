@@ -582,7 +582,7 @@ final class ModernStyle extends ShellStyle {
         boolean visible = my >= top && my < bottom;
         boolean hover = visible && contains(mx, my, sx - 8, sy, sw + 16, sh);
         boolean fully = sy >= top - 1 && sy + sh <= bottom + 1;
-        if (hover) { hint = s.getName() + (s.getDescription().isBlank() ? "" : " · " + s.getDescription()) + " · 右键恢复默认"; hoverTarget = s; }
+        if (hover) { hint = s.hoverHint(); hoverTarget = s; }
         float hv = ease(s, hover ? 1 : 0, 18);
         if (hv > .01f) round(g, sx - 8, sy + 2, sw + 16, sh - 4, 8, alpha(SURFACE, hv * .7f));
         if (fully) hit(sx - 8, sy, sw * .6f, sh, b -> {

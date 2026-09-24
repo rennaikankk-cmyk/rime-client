@@ -10,6 +10,7 @@ import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.combat.*;
 import dev.guizhou.features.modules.player.*;
 import dev.guizhou.features.settings.Bind;
+import dev.guizhou.features.settings.SettingText;
 import dev.guizhou.features.modules.client.ClickGuiModule;
 import dev.guizhou.features.modules.client.HudClientModule;
 import dev.guizhou.features.modules.client.InterfaceFeedbackModule;
@@ -154,6 +155,7 @@ public class ModuleManager implements Jsonable, Util {
     }
 
     public void register(Module module) {
+        SettingText.fill(module);
         getModules().add(module);
         fastRegistry.put(module.getClass(), module);
         String prefix = "module." + module.getName();

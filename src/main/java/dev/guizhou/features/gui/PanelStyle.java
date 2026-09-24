@@ -495,7 +495,7 @@ final class PanelStyle extends ShellStyle {
         Object v = s.getValue();
         boolean inside = my >= top && my < bottom;
         boolean hover = inside && contains(mx, my, sx, sy, sw, sh);
-        if (hover) hint = s.getName() + (s.getDescription().isBlank() ? "" : " · " + s.getDescription()) + " · 右键恢复默认";
+        if (hover) hint = s.hoverHint();
         if (hover) { g.fill((int) sx, (int) sy, (int) (sx + sw), (int) (sy + sh), 0x14FFFFFF); hoverTarget = s; }
         float size = look.text - .5f, ty = sy + (sh - size) / 2 + .5f;
         String label = settingLabel(owner, s);
