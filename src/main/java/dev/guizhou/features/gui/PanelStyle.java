@@ -235,9 +235,9 @@ final class PanelStyle extends ShellStyle {
         hovered = null;
         hoverTarget = null;
         hint = "";
-        ClickGuiModule gui = ClickGuiModule.getInstance();
         boolean world = mc.level != null;
-        if (world && (gui == null || gui.blurBackground.getValue())) screen.blurWorld(g);
+        // Dim the world in place. Vanilla renderBlurredBackground copies the
+        // whole framebuffer and blurs it every frame; that is the open-GUI stall.
         if (world) g.fill(0, 0, width, height, look.dim);
         else RenderUtil.gradient(g, 0, 0, width, height, 0xFF0B0B10, 0xFF07070A, 0xFF07070A, 0xFF0B0B10);
 
