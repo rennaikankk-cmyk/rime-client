@@ -93,15 +93,12 @@ public class GuizhouWareGui extends Screen {
         current = null;
     }
 
-    /** Blurs the world behind panel styles. The fullscreen capture is reused for a few frames. */
-    private int blurCapturedAt = Integer.MIN_VALUE;
-
+    /**
+     * Draws the vanilla blurred world. The capture is still once per frame because the
+     * blur texture is produced and drawn by the same Screen call; skipping it removes the image.
+     */
     void blurWorld(GuiGraphics g) {
-        int now = minecraft != null && minecraft.level != null ? (int) minecraft.level.getGameTime() : 0;
-        if (blurCapturedAt == Integer.MIN_VALUE || now - blurCapturedAt >= 8 || now < blurCapturedAt) {
-            renderBlurredBackground(g);
-            blurCapturedAt = now;
-        }
+        renderBlurredBackground(g);
     }
 
     private boolean shown;
@@ -115,7 +112,6 @@ public class GuizhouWareGui extends Screen {
         detour = null;
         modern.clearBack();
         current = null;
-        blurCapturedAt = Integer.MIN_VALUE;
         active();
     }
 
