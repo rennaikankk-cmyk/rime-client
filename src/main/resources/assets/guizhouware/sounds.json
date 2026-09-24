@@ -5,5 +5,77 @@
         "name": "guizhouware:autohorse"
       }
     ]
+  },
+  "ui.hover": {
+    "sounds": [
+      {
+        "name": "guizhouware:ui/hover",
+        "preload": true
+      }
+    ]
+  },
+  "ui.click": {
+    "sounds": [
+      {
+        "name": "guizhouware:ui/click",
+        "preload": true
+      }
+    ]
+  },
+  "ui.toggle_on": {
+    "sounds": [
+      {
+        "name": "guizhouware:ui/toggle_on",
+        "preload": true
+      }
+    ]
+  },
+  "ui.toggle_off": {
+    "sounds": [
+      {
+        "name": "guizhouware:ui/toggle_off",
+        "preload": true
+      }
+    ]
+  },
+  "ui.open": {
+    "sounds": [
+      {
+        "name": "guizhouware:ui/open",
+        "preload": true
+      }
+    ]
+  },
+  "ui.close": {
+    "sounds": [
+      {
+        "name": "guizhouware:ui/close",
+        "preload": true
+      }
+    ]
+  },
+  "ui.success": {
+    "sounds": [
+      {
+        "name": "guizhouware:ui/success",
+        "preload": true
+      }
+    ]
+  },
+  "ui.error": {
+    "sounds": [
+      {
+        "name": "guizhouware:ui/error",
+        "preload": true
+      }
+    ]
+  },
+  "ui.startup": {
+    "sounds": [
+      {
+        "name": "guizhouware:ui/startup",
+        "preload": true
+      }
+    ]
   }
 }

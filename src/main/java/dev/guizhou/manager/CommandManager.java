@@ -49,6 +49,8 @@ public class CommandManager extends Feature implements Jsonable {
         register(new dev.guizhou.features.commands.impl.TimingsCommand());
         register(new DiagnosticsCommand());
         register(new TelemetryCommand());
+        register(new WaypointCommand());
+        register(new PanicCommand());
         dev.guizhou.features.debug.MoveLimitDebug.get();
 
         LOGGER.info("Registered {} commands", commandList.size());
@@ -56,18 +58,7 @@ public class CommandManager extends Feature implements Jsonable {
     }
 
     public void onChatSent(String message) {
-        try {
-            int result = dispatcher.execute(message.substring(
-                    commandPrefix.length()).trim(), this);
-            if (result == SINGLE_SUCCESS) {
-                Command.sendMessage("{green} Command executed successfully");
-            } else if (result == SINGLE_FAILURE) {
-                Command.sendMessage("{red} Failed to execute command");
-            }
-        } catch (CommandSyntaxException e) {
-            LOGGER.error("Failed to execute command", e);
-            Command.sendMessage("{red} %s", e.getMessage());
-        }
+        dev.guizhou.features.commands.ui.CommandRunner.run(this, message);
     }
 
     public void register(Command command) {

@@ -6,8 +6,10 @@ import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
+import dev.guizhou.util.combat.LethalPredictor;
+import dev.guizhou.util.combat.TotemSafety;
 import dev.guizhou.util.inventory.InventoryUtil;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import dev.guizhou.util.player.ScreenGate;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -36,13 +38,32 @@ public class AutoTotemModule extends Module {
     private final Setting<Boolean> crapple = bool("Crapple", false);
     private final Setting<Boolean> combatSync = bool("CombatSync", true);
 
+    private final Setting<Boolean> lethal = bool("Lethal", true).setPage("Lethal");
+    private final Setting<Double> lethalMargin = num("LethalMargin", 2.0, 0.0, 10.0).setPage("Lethal");
+    private final Setting<Boolean> lethalCrystals = bool("Crystals", true).setPage("Lethal");
+    private final Setting<Boolean> lethalPlaceable = bool("CrystalSpots", true).setPage("Lethal");
+    private final Setting<Boolean> lethalBlocks = bool("AnchorsBeds", true).setPage("Lethal");
+    private final Setting<Boolean> lethalFall = bool("Fall", true).setPage("Lethal");
+    private final Setting<Boolean> lethalElytra = bool("Elytra", true).setPage("Lethal");
+    private final Setting<Boolean> lethalMelee = bool("Melee", true).setPage("Lethal");
+    private final Setting<Double> enemyRange = num("EnemyRange", 10.0, 3.0, 20.0).setPage("Lethal");
+
     private int lastSwapTick = Integer.MIN_VALUE;
     private Item pinned;
+    private String lastThreat;
+    private int lethalHoldUntil;
+    private static final int LETHAL_HOLD_TICKS = 10;
 
     public AutoTotemModule() {
-        super("AutoTotem", "Keeps the offhand on a totem, crystal, gapple, bed or anchor.", Category.COMBAT);
+        super("AutoTotem", "Keeps the offhand on a totem, crystal, gapple, bed or anchor. Lethal forces a totem "
+                + "whenever a nearby crystal, crystal spot, anchor, bed, fall, elytra impact or armed enemy could kill you.",
+                Category.COMBAT);
         safeHealth.setVisibility(v -> gappleOnUse.getValue());
         crapple.setVisibility(v -> item.getValue() == ItemMode.GAPPLE || gappleOnUse.getValue());
+        for (Setting<?> setting : java.util.List.of(lethalMargin, lethalCrystals, lethalPlaceable, lethalBlocks,
+                lethalFall, lethalElytra, lethalMelee, enemyRange)) {
+            setting.setVisibility(v -> lethal.getValue());
+        }
     }
 
     /** Combat actions ask for an item immediately before they use it. */
@@ -59,11 +80,6 @@ public class AutoTotemModule extends Module {
 
     @Subscribe(priority = 500)
     private void onPreTick(PreTickEvent event) {
-        sync(false);
-    }
-
-    @Override
-    public void onTick() {
         sync(false);
     }
 
@@ -88,8 +104,7 @@ public class AutoTotemModule extends Module {
     private void sync(boolean ignoreDelay) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         if (nullCheck() || mc.player.isDeadOrDying()) return;
-        if (mc.player.containerMenu != mc.player.inventoryMenu || !mc.player.inventoryMenu.getCarried().isEmpty()) return;
-        if (mc.screen != null && !(mc.screen instanceof InventoryScreen)) return;
+        if (!ScreenGate.allowsInventoryUpkeep(true)) return;
 
         Item wanted = choose();
         if (wanted == null || holding(wanted)) return;
@@ -103,6 +118,21 @@ public class AutoTotemModule extends Module {
     private Item choose() {
         float hp = mc.player.getHealth() + mc.player.getAbsorptionAmount();
         if (hp <= health.getValue()) return Items.TOTEM_OF_UNDYING;
+        if (lethal.getValue()) {
+            LethalPredictor.Threat threat = LethalPredictor.predict(new LethalPredictor.Options(
+                    lethalCrystals.getValue(), lethalPlaceable.getValue(), lethalBlocks.getValue(),
+                    lethalFall.getValue(), lethalElytra.getValue(), lethalMelee.getValue(), enemyRange.getValue()));
+            if (TotemSafety.lethal(mc.player.getHealth(), mc.player.getAbsorptionAmount(), threat.damage(),
+                    lethalMargin.getValue())) {
+                lastThreat = threat.source();
+                lethalHoldUntil = mc.player.tickCount + LETHAL_HOLD_TICKS;
+                return Items.TOTEM_OF_UNDYING;
+            }
+            // Hysteresis: a threat hovering at the line must not flip the offhand every tick.
+            int left = lethalHoldUntil - mc.player.tickCount;
+            if (left > 0 && left <= LETHAL_HOLD_TICKS) return Items.TOTEM_OF_UNDYING;
+        }
+        lastThreat = null;
         if (gappleOnUse.getValue() && mc.options.keyUse.isDown() && hp >= safeHealth.getValue() && mainHandAllowsGapple()) {
             return gappleItem();
         }
@@ -172,6 +202,7 @@ public class AutoTotemModule extends Module {
         if (wanted == BED ? mc.player.getOffhandItem().is(ItemTags.BEDS) : mc.player.getOffhandItem().is(wanted)) {
             count += mc.player.getOffhandItem().getCount();
         }
-        return item.getValue().name() + " " + count;
+        String label = lastThreat != null && wanted == Items.TOTEM_OF_UNDYING ? "LETHAL " + lastThreat : item.getValue().name();
+        return label + " " + count;
     }
 }

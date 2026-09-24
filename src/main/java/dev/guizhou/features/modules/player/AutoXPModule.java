@@ -25,7 +25,7 @@ public class AutoXPModule extends Module {
 
     private final Setting<Bind> throwBind = key("Throw", Bind.none());
     private final Setting<Boolean> pauseInAir = bool("PauseInAir", true);
-    private final Setting<Boolean> autoRepair = bool("AutoRepair", true);
+    private final Setting<Boolean> autoRepair = bool("AutoRepair", false);
 
     private static final int THROWS_PER_BATCH = 6;
     private static final long BATCH_INTERVAL_MS = 300;

@@ -16,6 +16,11 @@ public class ClickGuiModule extends Module {
     private static ClickGuiModule INSTANCE;
 
     public Setting<String>  prefix           = str("Prefix", ".");
+    public Setting<Style>   style            = mode("Style", Style.PURPLE);
+    public Setting<Boolean> blurBackground   = bool("BlurBackground", true);
+    public Setting<Boolean> descriptions     = bool("Descriptions", true);
+    public Setting<String>  menuNotice       = str("MenuNotice", "");
+    public Setting<String>  menuWatermark    = str("MenuWatermark", "");
     public Setting<Theme>   theme            = mode("Theme", Theme.GUIZHOUWARE);
     public Setting<Color>   customColor      = color("Custom Color", 114, 168, 216, 220);
     public Setting<Boolean> smooth           = bool("Smooth", true);
@@ -27,6 +32,10 @@ public class ClickGuiModule extends Module {
     public Setting<Boolean> clickGuiFont = bool("ClickGUI Font", false);
     public Setting<Boolean> hudFont      = bool("HUD Font", false);
     public Setting<String>  fontName     = str("Font Name", "");
+    /** Comma-separated module names pinned in the ClickGUI favourites view. */
+    public Setting<String>  favorites    = str("Favorites", "");
+    /** Panel positions and collapse flags per panel style: STYLE.CATEGORY=x,y,collapsed;... */
+    public Setting<String>  panelLayout  = str("PanelLayout", "");
 
     /* IB (InternalBeyond) 色板：雾蓝玻璃 + 烛火暗红点缀，低饱和统一气质 */
     private static final Color CAT_COMBAT   = new Color(160,  82,  82); // Infernal 烛火暗红
@@ -38,8 +47,8 @@ public class ClickGuiModule extends Module {
     private static final Color CAT_CLIENT   = new Color( 90, 105, 135); // 深夜蓝灰
     private static final Color CAT_HUD      = new Color(128, 176, 224); // 雾浅蓝
 
-    private static final Color GUIZHOUWARE_ACCENT = new Color( 80, 128, 176); // IB 深雾蓝 #5080b0
-    private static final Color GUIZHOUWARE_MODULE = new Color(114, 168, 216); // IB 亮雾蓝 #72a8d8
+    private static final Color GUIZHOUWARE_ACCENT = new Color(139, 124, 255); // iris #8B7CFF
+    private static final Color GUIZHOUWARE_MODULE = new Color(139, 124, 255);
 
     public Color categoryAccent(Module.Category cat) {
         return categoryAccent(cat, 0f);
@@ -100,6 +109,8 @@ public class ClickGuiModule extends Module {
         clickGuiFont.setVisibility(v -> false);
         hudFont.setVisibility(v -> false);
         fontName.setVisibility(v -> false);
+        favorites.setVisibility(v -> false);
+        panelLayout.setVisibility(v -> false);
 
         INSTANCE = this;
     }
@@ -110,7 +121,7 @@ public class ClickGuiModule extends Module {
                 && event.getSetting().getFeature().equals(this)) {
             if (event.getSetting().equals(this.prefix)) {
                 GuizhouWare.commandManager.setCommandPrefix(this.prefix.getPlannedValue());
-                Command.sendMessage("Prefix set to {global} %s",
+                Command.sendMessage("命令前缀已改为 {accent} %s",
                         GuizhouWare.commandManager.getCommandPrefix());
             }
             if (event.getSetting().equals(this.clickGuiFont)
@@ -129,7 +140,7 @@ public class ClickGuiModule extends Module {
 
     @Override
     public void onLoad() {
-        Color fixedAccent = new Color(120, 175, 220, 220);
+        Color fixedAccent = new Color(139, 124, 255, 230);
         GuizhouWare.colorManager.register("ui",          () -> fixedAccent);
         GuizhouWare.colorManager.register("chat",        this::chatAccent);
         GuizhouWare.colorManager.register("chatBracket", this::chatAccent);
@@ -149,5 +160,13 @@ public class ClickGuiModule extends Module {
 
     public enum Theme {
         GUIZHOUWARE, COLORS, CUSTOM, RAINBOW
+    }
+
+    /** ClickGUI layout. PURPLE and BLUE are classic multi-column panels; MODERN is the card browser. */
+    public enum Style implements dev.guizhou.features.gui.Labeled {
+        PURPLE("紫色面板"), BLUE("蓝框面板"), MODERN("现代");
+        private final String label;
+        Style(String label) { this.label = label; }
+        @Override public String label() { return label; }
     }
 }

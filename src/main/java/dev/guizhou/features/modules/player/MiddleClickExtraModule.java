@@ -30,6 +30,7 @@ public class MiddleClickExtraModule extends Module {
         if (nullCheck() || mc.screen != null) return;
         if (event.getButton() != GLFW.GLFW_MOUSE_BUTTON_MIDDLE) return;
         if (event.getAction() != GLFW.GLFW_PRESS) return;
+        if (MiddleClickFriendModule.consumesClick()) return;
 
         if (fireworkInAir.getValue() && mc.player.isFallFlying()) {
             Result firework = InventoryUtil.find(Items.FIREWORK_ROCKET, FULL_SCOPE);

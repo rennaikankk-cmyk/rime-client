@@ -7,7 +7,9 @@ import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.DamageSyncTracker;
+import dev.guizhou.util.render.HudDraw;
 import dev.guizhou.util.render.MatrixCapture;
+import dev.guizhou.util.render.ShadcnDraw;
 import dev.guizhou.util.traits.Jsonable;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.component.DataComponents;
@@ -43,10 +45,10 @@ public class NametagsModule extends Module {
     public Setting<Boolean> showStrength   = bool("ShowStrength",   true).setPage("Info");
 
     public Setting<Color>   nameColor   = color("NameColor",   255, 255, 255, 255).setPage("Colors");
-    public Setting<Color>   friendColor = color("FriendColor",   0, 255, 100, 255).setPage("Colors");
-    public Setting<Color>   enemyColor  = color("EnemyColor",  255,  60,  60, 255).setPage("Colors");
-    public Setting<Color>   bgColor     = color("BgColor",       0,   0,   0, 128).setPage("Colors");
-    public Setting<Color>   distColor   = color("DistColor",   170, 170, 170, 255).setPage("Colors");
+    public Setting<Color>   friendColor = color("FriendColor", 0x4A, 0xDE, 0x80, 255).setPage("Colors");
+    public Setting<Color>   enemyColor  = color("EnemyColor",  0xF8, 0x71, 0x71, 255).setPage("Colors");
+    public Setting<Color>   bgColor     = color("BgColor",     0x15, 0x18, 0x20, 184).setPage("Colors");
+    public Setting<Color>   distColor   = color("DistColor",   0x8A, 0x92, 0xA6, 255).setPage("Colors");
     public Setting<Color>   popColor    = color("PopColor",   255,  80,  80, 255).setPage("Colors");
 
     public Setting<Float>   gap         = num("Gap",       1.0f, 0.1f, 15.0f).setPage("Render");
@@ -124,10 +126,30 @@ public class NametagsModule extends Module {
         GuizhouWare.configManager.addConfig(pearlCacheJson);
     }
 
+    /** Untouched pre-2026-09-25 defaults follow the graphite palette; customised colours stay. */
+    private void migrateLegacyColors() {
+        migrate(friendColor, 0xFF00FF64);
+        migrate(enemyColor, 0xFFFF3C3C);
+        migrate(bgColor, 0x80000000);
+        migrate(distColor, 0xFFAAAAAA);
+    }
+
+    private static void migrate(Setting<Color> setting, int legacy) {
+        if (setting.getValue().getRGB() == legacy) setting.setValue(setting.getDefaultValue());
+    }
+
+    /** Rounded tag plate; a hairline in the name colour marks friend / enemy at a glance. */
+    private static void plate(GuiGraphics graphics, float x, float y, float w, float h, int bg, int nameArgb) {
+        HudDraw.roundDirect(graphics, x, y, w, h, 1.5f, bg);
+        if (w > 8f) HudDraw.roundDirect(graphics, x + 3f, y + h - 1f, w - 6f, 1f, 0,
+                ShadcnDraw.alpha(nameArgb, .55f * ((bg >>> 24) / 255f) + .25f));
+    }
+
     @Override
     public void onRender2D(Render2DEvent event) {
         if (nullCheck()) return;
         if (MatrixCapture.projection == null) return;
+        migrateLegacyColors();
 
         GuiGraphics graphics = event.getContext();
         float delta = event.getDelta();
@@ -240,7 +262,7 @@ public class NametagsModule extends Module {
         graphics.pose().translate(anchorX, anchorY);
         graphics.pose().scale(s, s);
 
-        graphics.fill(-halfW - 2, textTopY - 1, halfW + 2, 1, bgColor.getValue().getRGB());
+        plate(graphics, -halfW - 3, textTopY - 1.5f, halfW * 2 + 6, textH + 3f, bgColor.getValue().getRGB(), nameArgb);
         Fonts.drawNametagString(graphics, name, -halfW, textTopY, nameArgb);
 
         graphics.pose().popMatrix();
@@ -285,7 +307,7 @@ public class NametagsModule extends Module {
         graphics.pose().translate(anchorX, anchorY);
         graphics.pose().scale(s, s);
 
-        graphics.fill(-halfW - 2, textTopY - 1, halfW + 2, 1, bgColor.getValue().getRGB());
+        plate(graphics, -halfW - 3, textTopY - 1.5f, halfW * 2 + 6, textH + 3f, bgColor.getValue().getRGB(), nameArgb);
 
         if (iconCount > 0) {
             float itemScale = iconSize / 16.0f;

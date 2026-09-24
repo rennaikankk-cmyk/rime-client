@@ -27,6 +27,7 @@ public final class LicenseActionHookTest {
         autoMineCallbacks();
         anchorCallbacks();
         swordAttack();
+        utilityActions();
         System.out.println("LicenseActionHookTest passed: " + checks + " authorization/action/cleanup checks");
     }
 
@@ -47,6 +48,33 @@ public final class LicenseActionHookTest {
         guarded(SWORD, "strike", null, "attack");
         guarded(BASE + "combat/KillAuraModule", "onPreTick", null, "selectTargets", "tryAttack");
         check(!method(SWORD, "onDisable", null).hasAuthorization(), "Disabling AutoSword must stay able to drop its target");
+    }
+
+    /** Server-facing actions of the utility modules; their cleanup stays ungated. */
+    private static void utilityActions() throws IOException {
+        String surround = BASE + "combat/SurroundModule";
+        guarded(surround, "breakCrystal", null, "trySubmit", "attack", "swing");
+        guarded(surround, "centerInput", null, "sin", "cos");
+        check(!method(surround, "onDisable", null).hasAuthorization(), "Surround cleanup survives revocation");
+
+        String holeFill = BASE + "combat/HoleFillModule";
+        guarded(holeFill, "onTick", null, "fill");
+        guarded(holeFill, "fill", null, "placeBatch");
+        check(!method(holeFill, "onDisable", null).hasAuthorization(), "HoleFill cleanup survives revocation");
+
+        String armor = BASE + "player/AutoArmorModule";
+        guarded(armor, "onTick", null, "equip");
+        guarded(armor, "equip", null, "click");
+
+        String eat = BASE + "player/AutoEatModule";
+        guarded(eat, "onPreTick", null, "startMeal");
+        guarded(eat, "startMeal", null, "latch", "useItem");
+        guarded(eat, "shouldKeepEating", null, "ownsMeal");
+        Code eatCleanup = method(eat, "resetState", null);
+        check(!eatCleanup.hasAuthorization() && !eatCleanup.calls("release").isEmpty(),
+                "AutoEat must hand the hotbar back even when revoked");
+
+        guarded(BASE + "client/AutoReconnectModule", "reconnect", null, "startConnecting");
     }
 
     private static void crystalActions() throws IOException {

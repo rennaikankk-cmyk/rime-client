@@ -2,6 +2,9 @@ package dev.guizhou.util.player;
 
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.features.commands.Command;
+import dev.guizhou.features.commands.ui.ChatFeed;
+import dev.guizhou.features.commands.ui.ChatPalette;
+import dev.guizhou.features.commands.ui.ChatTone;
 import dev.guizhou.mixin.client.ChatComponentAccessor;
 import net.minecraft.client.GuiMessage;
 import net.minecraft.client.gui.components.ChatComponent;
@@ -29,6 +32,11 @@ public class ChatUtil {
     }
 
     public static void sendSilentMessage(Component message) {
+        // The chat line lists and PERSISTENT are client-thread state; Netty callers are re-queued.
+        if (!mc.isSameThread()) {
+            mc.execute(() -> sendSilentMessage(message));
+            return;
+        }
         if (Command.nullCheck()) {
             return;
         }
@@ -79,6 +87,10 @@ public class ChatUtil {
     }
 
     private static void addPersistent(String key, Component component) {
+        if (!mc.isSameThread()) {
+            mc.execute(() -> addPersistent(key, component));
+            return;
+        }
         if (Command.nullCheck()) {
             return;
         }
@@ -98,19 +110,13 @@ public class ChatUtil {
 
     private static Component prefixedWith(Component icon, Component message) {
         return Component.empty()
-                .append(Component.literal("[").withColor(GuizhouWare.colorManager.getAsInt("chatBracket")))
+                .append(ChatFeed.brand())
+                .append(ChatFeed.text(" › ", ChatPalette.SUBTLE))
                 .append(icon)
-                .append(Component.literal("]").withColor(GuizhouWare.colorManager.getAsInt("chatBracket")))
-                .append(Component.literal(" ").withColor(GuizhouWare.colorManager.getAsInt("chatBracket")))
                 .append(message);
     }
 
     private static Component prefixed(Component message) {
-        return Component.empty()
-                .append(Component.literal("[").withColor(GuizhouWare.colorManager.getAsInt("chatBracket")))
-                .append(getClientNameComponent())
-                .append(Component.literal("]").withColor(GuizhouWare.colorManager.getAsInt("chatBracket")))
-                .append(Component.literal(" ").withColor(GuizhouWare.colorManager.getAsInt("chatBracket")))
-                .append(message);
+        return ChatFeed.compose(ChatTone.INFO, null, message, 1);
     }
 }

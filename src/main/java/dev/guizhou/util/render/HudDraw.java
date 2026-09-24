@@ -1,0 +1,273 @@
+package dev.guizhou.util.render;
+
+import dev.guizhou.util.render.font.HudFonts;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.resources.Identifier;
+
+/**
+ * HUD panel language on top of {@link ShadcnDraw}. Short-corner framed boards,
+ * text first; colour is for status only. Rounded shapes rasterize their corner
+ * rows per physical pixel. Colours go through {@link HudAppearance} exactly once.
+ */
+public final class HudDraw {
+    /** Translucent panel body; low RGB bits are the HudAppearance background key. */
+    public static final int CARD = 0xE6151820;
+    public static final int TRACK = 0xFF1D212C;
+    public static final int RULE = 0xB32B3140;
+
+    public static final float RADIUS = 2f, PAD = 6f;
+    public static final float LABEL = 6.5f, VALUE = 11f, UNIT = 7f, BODY = 8.5f;
+
+    private static final Identifier ICONS = Identifier.fromNamespaceAndPath("guizhouware", "textures/gui/hud_icons.png");
+    private static final int ICON_CELL = 96, ICON_COLUMNS = 8, ATLAS_W = 768, ATLAS_H = 288;
+
+    public enum HudIcon {
+        WARNING, ERROR, SUCCESS, INFO, SKULL, TOTEM, HEART, SHIELD,
+        SIGNAL, GAUGE, PIN, RADAR, ACTIVITY, PACKAGE, CLOCK, MONITOR,
+        BELL, KEY
+    }
+
+    private HudDraw() {}
+
+    // ------------------------------------------------------------ palette
+
+    public static int accent() { return HudAppearance.color(ShadcnDraw.ACCENT); }
+
+    /** Second brand stop; follows a customised element accent instead of staying cyan. */
+    public static int accent2() { return HudAppearance.color(ShadcnDraw.ACCENT_2); }
+
+    /** Health / durability semantic: >60% success, >30% warning, else danger. */
+    public static int grade(float fraction) {
+        return fraction > .6f ? ShadcnDraw.SUCCESS : fraction > .3f ? ShadcnDraw.WARNING : ShadcnDraw.DANGER;
+    }
+
+    /** Background opacity of the element in scope, for shadows that should vanish with the card. */
+    public static float backgroundAlpha() {
+        return (HudAppearance.color(0xFF151820) >>> 24) / 255f;
+    }
+
+    public static int fade(int color, float alpha) { return ShadcnDraw.alpha(color, alpha); }
+
+    // ------------------------------------------------------------ composites
+
+    /** Thin-line panel: fill plus hairline. No shadow, no glow. */
+    public static void card(GuiGraphics g, float x, float y, float w, float h, float r) {
+        card(g, x, y, w, h, r, 1f);
+    }
+
+    public static void card(GuiGraphics g, float x, float y, float w, float h, float r, float alpha) {
+        round(g, x, y, w, h, r, fade(CARD, alpha));
+        outline(g, x, y, w, h, r, 1f, fade(0xFF2B3140, alpha));
+    }
+
+    /** Brand hairline on a vanilla container panel; keeps the inventory texture intact. */
+    public static void containerAccent(GuiGraphics g, float x, float y, float w) {
+        if (w <= 20f) return;
+        ShadcnDraw.round(g, x + 8f, y + 1f, w - 16f, 1f, 0, fade(ShadcnDraw.ACCENT, .7f));
+    }
+
+    /** Thin accent rule along the panel top, between the corners. */
+    public static void topGlow(GuiGraphics g, float x, float y, float w, float r, float alpha) {
+        float inset = Math.max(r, 2f);
+        if (w <= inset * 2) return;
+        ShadcnDraw.round(g, x + inset, y, w - inset * 2, 1f, 0, fade(accent(), .55f * alpha));
+    }
+
+    /** Track plus solid fill; fraction is clamped. Short corners, not a capsule. */
+    public static void bar(GuiGraphics g, float x, float y, float w, float h, float fraction, int fill) {
+        float r = Math.min(1f, h / 2f);
+        ShadcnDraw.round(g, x, y, w, h, r, TRACK);
+        float f = Math.clamp(Float.isFinite(fraction) ? fraction : 0f, 0f, 1f);
+        if (f * w >= .5f) ShadcnDraw.round(g, x, y, Math.max(h, w * f), h, r, fill);
+    }
+
+    public static void barGradient(GuiGraphics g, float x, float y, float w, float h, float fraction, int left, int right) {
+        bar(g, x, y, w, h, fraction, left);
+    }
+
+    /** Status text in the semantic colour; no capsule, no badge. */
+    public static float pill(GuiGraphics g, String text, float x, float y, float h, float size, int color) {
+        float w = ShadcnDraw.width(text, size, HudFonts.SEMI);
+        textMid(g, text, x, y + h / 2f, size, HudFonts.SEMI, color);
+        return w;
+    }
+
+    /** Small framed bind hint. */
+    public static float keycap(GuiGraphics g, String text, float x, float y, float h, float size) {
+        float w = ShadcnDraw.width(text, size, HudFonts.SEMI) + 6f;
+        ShadcnDraw.round(g, x, y, w, h, 1.5f, ShadcnDraw.SURFACE);
+        ShadcnDraw.outline(g, x, y, w, h, 1.5f, 1f, ShadcnDraw.BORDER);
+        textMid(g, text, x + 3f, y + h / 2f, size, HudFonts.SEMI, ShadcnDraw.MUTED);
+        return w;
+    }
+
+    public static float keycapWidth(String text, float size) {
+        return ShadcnDraw.width(text, size, HudFonts.SEMI) + 6f;
+    }
+
+    public static void dot(GuiGraphics g, float cx, float cy, float d, int color) {
+        ShadcnDraw.round(g, cx - d / 2f, cy - d / 2f, d, d, d / 2f, color);
+    }
+
+    /** Horizontal hairline. */
+    public static void rule(GuiGraphics g, float x, float y, float w) {
+        ShadcnDraw.round(g, x, y, w, .5f, 0, RULE);
+    }
+
+    /** Vertical hairline. */
+    public static void ruleV(GuiGraphics g, float x, float y, float h) {
+        ShadcnDraw.round(g, x, y, .5f, h, 0, RULE);
+    }
+
+    // ------------------------------------------------------------ text
+
+    /** Draws text vertically centred on midY; Geist caps sit slightly above the em box centre. */
+    public static void textMid(GuiGraphics g, String text, float x, float midY, float size, int weight, int color) {
+        ShadcnDraw.text(g, text, x, midY - size * .56f, size, weight, color);
+    }
+
+    public static void textMidRight(GuiGraphics g, String text, float right, float midY, float size, int weight, int color) {
+        textMid(g, text, right - ShadcnDraw.width(text, size, weight), midY, size, weight, color);
+    }
+
+    public static void textMidCentered(GuiGraphics g, String text, float cx, float midY, float size, int weight, int color) {
+        textMid(g, text, cx - ShadcnDraw.width(text, size, weight) / 2f, midY, size, weight, color);
+    }
+
+    // ------------------------------------------------------------ icons
+
+    public static void icon(GuiGraphics g, HudIcon icon, float x, float y, float size, int color) {
+        color = HudAppearance.color(color);
+        if (size <= 0 || (color >>> 24) == 0) return;
+        int index = icon.ordinal();
+        float factor = size / ICON_CELL;
+        var pose = g.pose();
+        pose.pushMatrix();
+        try {
+            pose.translate(x, y);
+            pose.scale(factor, factor);
+            g.blit(RenderPipelines.GUI_TEXTURED, ICONS, 0, 0,
+                    (float) (index % ICON_COLUMNS * ICON_CELL), (float) (index / ICON_COLUMNS * ICON_CELL),
+                    ICON_CELL, ICON_CELL, ATLAS_W, ATLAS_H, color);
+        } finally {
+            pose.popMatrix();
+        }
+    }
+
+    /** Status mark: a short vertical accent, not a badge tile. */
+    public static void iconTile(GuiGraphics g, HudIcon icon, float x, float y, float box, int color) {
+        ShadcnDraw.round(g, x + box * .35f, y + 1f, 2f, box - 2f, 1f, color);
+    }
+
+    // ------------------------------------------------------------ fast rounded shapes
+
+    public static void round(GuiGraphics g, float x, float y, float w, float h, float r, int color) {
+        roundRaw(g, x, y, w, h, r, HudAppearance.color(color));
+    }
+
+    public static void outline(GuiGraphics g, float x, float y, float w, float h, float r, float thickness, int color) {
+        color = HudAppearance.color(color);
+        if (w <= 0 || h <= 0 || (color >>> 24) == 0) return;
+        shape(g, x, y, w, h, r, thickness, color, true);
+    }
+
+    /** Same as {@link #round} for a colour already passed through HudAppearance. */
+    public static void roundDirect(GuiGraphics g, float x, float y, float w, float h, float r, int color) {
+        roundRaw(g, x, y, w, h, r, color);
+    }
+
+    public static void outlineDirect(GuiGraphics g, float x, float y, float w, float h, float r, float thickness, int color) {
+        if (w <= 0 || h <= 0 || (color >>> 24) == 0) return;
+        shape(g, x, y, w, h, r, thickness, color, true);
+    }
+
+    private static void roundRaw(GuiGraphics g, float x, float y, float w, float h, float r, int color) {
+        if (w <= 0 || h <= 0 || (color >>> 24) == 0) return;
+        shape(g, x, y, w, h, r, 0, color, false);
+    }
+
+    // Render-thread scratch spans; shape() never nests.
+    private static final float[] OUTER = new float[2], INNER = new float[2];
+
+    private static void shape(GuiGraphics g, float x, float y, float w, float h, float radius, float ring,
+                              int color, boolean hollow) {
+        var pose = g.pose();
+        float k = deviceScale(g);
+        pose.pushMatrix();
+        try {
+            pose.scale(1f / k, 1f / k);
+            float X = x * k, Y = y * k, W = w * k, H = h * k;
+            float R = Math.max(0, Math.min(radius * k, Math.min(W, H) / 2f));
+            float T = hollow ? Math.min(Math.max(k * 0.75f, ring * k), Math.min(W, H) / 2f) : 0;
+            float edge = hollow ? Math.max(R, T) : R;
+            int top = (int) Math.floor(Y), bottom = (int) Math.ceil(Y + H);
+            int bandTop = (int) Math.ceil(Y + edge), bandBottom = (int) Math.floor(Y + H - edge);
+            if (bandBottom <= bandTop) { bandTop = bottom; bandBottom = bottom; }
+            for (int row = top; row < bottom; row++) {
+                if (row == bandTop) {
+                    if (hollow) {
+                        band(g, X, X + T, bandTop, bandBottom, color);
+                        band(g, X + W - T, X + W, bandTop, bandBottom, color);
+                    } else {
+                        band(g, X, X + W, bandTop, bandBottom, color);
+                    }
+                    row = bandBottom - 1;
+                    continue;
+                }
+                float cov = Math.min(Y + H, row + 1) - Math.max(Y, row);
+                if (cov <= 0) continue;
+                float cy = row + 0.5f;
+                if (!span(X, Y, W, H, R, cy, OUTER)) continue;
+                if (!hollow || !span(X + T, Y + T, W - 2 * T, H - 2 * T, Math.max(0, R - T), cy, INNER)) {
+                    band(g, OUTER[0], OUTER[1], row, row + 1, fadeCov(color, cov));
+                } else {
+                    band(g, OUTER[0], INNER[0], row, row + 1, fadeCov(color, cov));
+                    band(g, INNER[1], OUTER[1], row, row + 1, fadeCov(color, cov));
+                }
+            }
+        } finally {
+            pose.popMatrix();
+        }
+    }
+
+    private static boolean span(float x, float y, float w, float h, float r, float cy, float[] out) {
+        if (w <= 0 || h <= 0 || cy < y || cy > y + h) return false;
+        float inset = 0;
+        if (r > 0) {
+            float dy = cy < y + r ? y + r - cy : cy > y + h - r ? cy - (y + h - r) : 0;
+            if (dy > r) return false;
+            inset = r - (float) Math.sqrt(Math.max(0, r * r - dy * dy));
+        }
+        out[0] = x + inset;
+        out[1] = x + w - inset;
+        return true;
+    }
+
+    /** Horizontal extent [a,b) over integer rows [y0,y1) with fractional-edge coverage. */
+    private static void band(GuiGraphics g, float a, float b, int y0, int y1, int color) {
+        if (b <= a || y1 <= y0) return;
+        int ia = (int) Math.ceil(a), ib = (int) Math.floor(b);
+        if (ia > ib) {
+            int px = (int) Math.floor(a);
+            g.fill(px, y0, px + 1, y1, fadeCov(color, b - a));
+            return;
+        }
+        if (ib > ia) g.fill(ia, y0, ib, y1, color);
+        if (a < ia) g.fill(ia - 1, y0, ia, y1, fadeCov(color, ia - a));
+        if (b > ib) g.fill(ib, y0, ib + 1, y1, fadeCov(color, b - ib));
+    }
+
+    private static int fadeCov(int color, float coverage) {
+        return ShadcnDraw.alpha(color, coverage);
+    }
+
+    private static float deviceScale(GuiGraphics g) {
+        var m = g.pose();
+        float poseScale = (float) Math.sqrt(m.m00() * m.m00() + m.m01() * m.m01());
+        double gui = Minecraft.getInstance().getWindow() == null ? 1 : Minecraft.getInstance().getWindow().getGuiScale();
+        float k = (float) (poseScale * gui);
+        return Float.isFinite(k) && k > 0.25f ? Math.min(k, 8f) : 1f;
+    }
+}

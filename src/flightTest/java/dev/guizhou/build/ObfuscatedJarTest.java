@@ -285,7 +285,12 @@ public final class ObfuscatedJarTest {
                 Map.entry("GuangxiPistonModule", List.of("onTick")),
                 Map.entry("NoFallModule", List.of("onPreTick", "protects")),
                 Map.entry("NoSlowModule", List.of("onTick", "onPacketSend", "shouldCancelConsumeSlow", "isActive")),
-                Map.entry("AntiHungerModule", List.of("onPreTick", "onPacketSend")));
+                Map.entry("AntiHungerModule", List.of("onPreTick", "onPacketSend")),
+                Map.entry("SurroundModule", List.of("breakCrystal", "centerInput")),
+                Map.entry("HoleFillModule", List.of("onTick", "fill")),
+                Map.entry("AutoArmorModule", List.of("onTick", "equip")),
+                Map.entry("AutoEatModule", List.of("onPreTick", "startMeal", "shouldKeepEating")),
+                Map.entry("AutoReconnectModule", List.of("reconnect")));
         for (var checkpoint : checkpoints.entrySet()) {
             String simpleName = checkpoint.getKey();
             List<ClassInfo> matches = before.values().stream()

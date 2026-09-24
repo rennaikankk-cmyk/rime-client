@@ -42,6 +42,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
         LOGGER.info("Pre-initializing {} v{}",
                 BuildConfig.NAME, BuildConfig.VERSION);
         Registry.register(BuiltInRegistries.SOUND_EVENT, AUTOHORSE_SOUND_ID, AUTOHORSE_SOUND);
+        dev.guizhou.util.render.UiSounds.register();
         configManager = new ConfigManager();
         eventManager = new EventManager();
         positionManager = new PositionManager();
@@ -90,6 +91,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
                     .forEach(dev.guizhou.features.modules.Module::disable);
         }
         moduleManager.onLoad();
+        new ConfigAutosave().init();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> configManager.save()));
 
         long endTime = System.nanoTime();

@@ -41,7 +41,7 @@ public class NukerModule extends Module {
     private Block selectedBlock = null;
 
     public NukerModule() {
-        super("Nuker", "Breaks all blocks around you through SpeedMine. Requires SpeedMine.", Category.WORLD);
+        super("Nuker", "Breaks all blocks around you through PacketMine. Requires PacketMine.", Category.WORLD);
     }
 
     @Override

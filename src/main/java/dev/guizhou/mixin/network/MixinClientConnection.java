@@ -4,13 +4,10 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import dev.guizhou.event.impl.network.PacketEvent;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.BundlePacket;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
-import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
-import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -33,10 +30,6 @@ public class MixinClientConnection {
     public void channelRead0(ChannelHandlerContext chc, Packet<?> packet, CallbackInfo ci) {
         if (this.channel.isOpen() && packet != null) {
             try {
-                if (silentSwapFix(packet)) {
-                    ci.cancel();
-                    return;
-                }
                 if (packet instanceof BundlePacket<?> bundle) {
                     // Bundled children are dispatched inside packet handling, never through
                     // channelRead0 — post them here or receive listeners never see them
@@ -52,19 +45,6 @@ public class MixinClientConnection {
             } catch (Exception ignored) {
             }
         }
-    }
-
-    private static boolean silentSwapFix(Packet<?> packet) {
-        if (!(packet instanceof ClientboundContainerSetSlotPacket slot)) return false;
-        if (slot.getContainerId() != 0) return false;
-        int s = slot.getSlot();
-        if (s < 36 || s > 44) return false;
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return false;
-        ItemStack packetStack = slot.getItem();
-        ItemStack handStack = mc.player.getMainHandItem();
-        if (packetStack.isEmpty() || handStack.isEmpty()) return false;
-        return ItemStack.isSameItem(packetStack, handStack) && packetStack.getCount() == handStack.getCount();
     }
 
     @Inject(method = "sendPacket", at = @At("HEAD"), cancellable = true)

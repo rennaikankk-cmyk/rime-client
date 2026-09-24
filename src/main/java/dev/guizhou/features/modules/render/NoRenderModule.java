@@ -1,6 +1,8 @@
 package dev.guizhou.features.modules.render;
 
 import dev.guizhou.GuizhouWare;
+import dev.guizhou.event.impl.ClientEvent;
+import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 
@@ -22,7 +24,7 @@ public class NoRenderModule extends Module {
     public final Setting<Boolean> noPotIcon = bool("NoPotIcon", true).setPage("Overlays");
     public final Setting<Boolean> noCrosshair = bool("NoCrosshair", false).setPage("Overlays");
     public final Setting<Boolean> noItemName = bool("NoItemName", false).setPage("Overlays");
-    public final Setting<Boolean> noArmor = bool("NoArmor", true).setPage("Overlays");
+    public final Setting<Boolean> noArmor = bool("NoArmor", false).setPage("Overlays");
     public final Setting<Boolean> noNausea = bool("NoNausea", true).setPage("Overlays");
 
     public final Setting<Boolean> noTotemParticle = bool("NoPopParticle", false).setPage("Particles");
@@ -51,6 +53,13 @@ public class NoRenderModule extends Module {
     @Override
     public void onDisable() {
         reloadRenderer();
+    }
+
+    /** NoLiquid/NoWall are baked into chunk meshes; the event fires before the value is stored. */
+    @Subscribe
+    private void onSettingChange(ClientEvent event) {
+        if (event.getType() != ClientEvent.Type.SETTING_UPDATE) return;
+        if (event.getSetting() == noLiquid || event.getSetting() == noWall) mc.execute(this::reloadRenderer);
     }
 
     private void reloadRenderer() {

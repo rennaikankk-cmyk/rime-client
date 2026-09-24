@@ -12,7 +12,8 @@ public class VelocityModule extends Module {
     public final Setting<Boolean> blockPush = bool("BlockPush", true);
 
     public VelocityModule() {
-        super("Velocity", "Cancels knockback, explosions, and entity/block push.", Category.MOVEMENT);
+        super("Velocity", "Cancels knockback, explosions, and entity/block push. With PhaseOnly (default, Grim-safe) "
+                + "it only acts while you are inside a block; on open ground it does nothing.", Category.MOVEMENT);
     }
 
     public boolean shouldCancelKnockback() {

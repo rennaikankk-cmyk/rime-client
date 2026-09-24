@@ -38,6 +38,7 @@
     "network.MovePlayerPacketAccessor",
     "render.GLBufferAccessor",
     "render.MixinBlockRenderDispatcher",
+    "render.MixinCamera",
     "render.MixinChestRenderer",
     "render.MixinClientLevelNoRender",
     "render.MixinCustomHeadLayer",
@@ -62,8 +63,10 @@
     "render.RenderTypeAccessor",
     "render.gui.MixinBossHealthOverlay",
     "render.gui.MixinCommandSuggestions",
+    "render.gui.MixinCommandSuggestionsList",
     "render.gui.MixinHeldItemTooltip",
     "render.gui.MixinInGameHud",
+    "render.gui.MixinLoadingOverlay",
     "render.gui.MixinScreen",
     "render.gui.MixinTitleScreen"
   ],

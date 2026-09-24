@@ -105,7 +105,7 @@ public class AutoMineModule extends Module {
     private final GuangxiMineModule.MineFinishListener finishListener = this::onMineFinish;
 
     public AutoMineModule() {
-        super("AutoMine", "Automatically mines feasible target blocks. Requires GuangxiMine.", Category.COMBAT);
+        super("AutoMine", "Automatically mines feasible target blocks. Requires PacketMine.", Category.COMBAT);
         antiSurroundInnerSnap.setVisibility(v -> antiSurroundMode.getValue() == AntiSurroundMode.Auto
                 || antiSurroundMode.getValue() == AntiSurroundMode.Inner);
         antiSurroundOuterSnap.setVisibility(v -> antiSurroundMode.getValue() == AntiSurroundMode.Auto

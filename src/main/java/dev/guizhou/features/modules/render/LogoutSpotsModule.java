@@ -28,11 +28,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class LogoutSpotsModule extends Module {
 
-    public Setting<Color>   spotColor = color("SpotColor",  255, 100, 100, 255);
-    public Setting<Color>   sideColor = color("SideColor",  255, 100, 100,  55);
+    public Setting<Color>   spotColor = color("SpotColor",  0xF8, 0x71, 0x71, 255);
+    public Setting<Color>   sideColor = color("SideColor",  0xF8, 0x71, 0x71,  55);
     public Setting<Float>   lineWidth = num("LineWidth",    1.5f, 0.5f, 5.0f);
     public Setting<Boolean> showTime  = bool("ShowTime",    true);
-    public Setting<Color>   nameColor = color("NameColor",  255, 100, 100, 255);
+    public Setting<Color>   nameColor = color("NameColor",  0xF8, 0x71, 0x71, 255);
 
     private static final EquipmentSlot[] ARMOR_SLOTS = {
         EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET
@@ -41,6 +41,8 @@ public class LogoutSpotsModule extends Module {
     private final Map<UUID, SpotData>   playerCache       = new ConcurrentHashMap<>();
     private final Map<UUID, LogoutSpot> loggedPlayers     = new ConcurrentHashMap<>();
     private final Map<UUID, Integer>    ticksOnPlayerList = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer>    lastSeenTick      = new ConcurrentHashMap<>();
+    private static final int STALE_TICKS = 40;
 
     private ResourceKey<Level> lastDimension = null;
     private ClientLevel lastLevel = null;
@@ -67,14 +69,26 @@ public class LogoutSpotsModule extends Module {
         if (mc.level != lastLevel || (lastDimension != null && !dim.equals(lastDimension))) {
             playerCache.clear();
             ticksOnPlayerList.clear();
+            lastSeenTick.clear();
         }
         lastLevel = mc.level;
         lastDimension = dim;
 
+        int now = mc.player.tickCount;
         for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
             playerCache.put(player.getUUID(), new SpotData(player, dim));
+            lastSeenTick.put(player.getUUID(), now);
         }
+        // A player who walked out of render distance and later logs off must not get a spot at
+        // the stale position. The grace window covers the entity-removal packet racing the
+        // tab-list removal that creates the spot.
+        lastSeenTick.entrySet().removeIf(entry -> {
+            int age = now - entry.getValue();
+            if (age >= 0 && age <= STALE_TICKS) return false;
+            playerCache.remove(entry.getKey());
+            return true;
+        });
 
         loggedPlayers.entrySet().removeIf(entry -> {
             UUID uuid = entry.getKey();
@@ -117,9 +131,21 @@ public class LogoutSpotsModule extends Module {
         return n == 0 ? null : String.valueOf(n);
     }
 
+    /** Untouched pre-2026-09-25 defaults follow the danger token; customised colours stay. */
+    private void migrateLegacyColors() {
+        migrate(spotColor, 0xFFFF6464);
+        migrate(sideColor, 0x37FF6464);
+        migrate(nameColor, 0xFFFF6464);
+    }
+
+    private static void migrate(Setting<Color> setting, int legacy) {
+        if (setting.getValue().getRGB() == legacy) setting.setValue(setting.getDefaultValue());
+    }
+
     @Override
     public void onRender3D(Render3DEvent event) {
         if (nullCheck()) return;
+        migrateLegacyColors();
         ResourceKey<Level> dim = mc.level.dimension();
         float delta = event.getDelta();
         for (LogoutSpot spot : loggedPlayers.values()) {
@@ -141,6 +167,7 @@ public class LogoutSpotsModule extends Module {
     public void onRender2D(Render2DEvent event) {
         if (nullCheck()) return;
         if (MatrixCapture.projection == null) return;
+        migrateLegacyColors();
 
         NametagsModule nametags = GuizhouWare.moduleManager.getModuleByClass(NametagsModule.class);
         GuiGraphics graphics = event.getContext();
@@ -166,6 +193,7 @@ public class LogoutSpotsModule extends Module {
         loggedPlayers.clear();
         playerCache.clear();
         ticksOnPlayerList.clear();
+        lastSeenTick.clear();
         lastDimension = null;
         lastLevel = null;
     }

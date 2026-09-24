@@ -5,6 +5,8 @@ import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.features.modules.client.HudModule;
 import dev.guizhou.features.modules.combat.GuangxiElytraChaseModule;
 import dev.guizhou.features.modules.movement.GuangxiElytraModule;
+import dev.guizhou.util.render.HudDraw;
+import dev.guizhou.util.render.ShadcnDraw;
 import dev.guizhou.util.render.font.HudFonts;
 import dev.guizhou.util.render.targethud.TargetHudMath;
 import net.minecraft.client.gui.GuiGraphics;
@@ -25,14 +27,13 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Two-layer air-combat HUD, a faithful port of the shadcn/ui prototype
- * (targethud-shadcn: TargetHudAir + FlightHud). Layout follows the measured
- * DOM geometry: card 380 wide, target card 367.5 tall, flight card 344
- * (unlocked layout, footer at y239.94), radius 14, content inset l/r 16,
- * top 32, bottom 32.
+ * Two-layer air-combat HUD (target layer + flight layer). Geometry keeps the
+ * measured prototype canvas: card 380 wide, target card 367.5 tall, flight
+ * card 344, content inset l/r 16, top 32. Styling is a short-corner framed
+ * board: text first, colour only for status, no pills or glow.
  *
- * One design canvas, one uniform scale — every primitive, icon cell and text
- * size multiplies by the same factor. Text is Geist (400/600/700, bundled)
+ * One design canvas, one uniform scale — every primitive and text size
+ * multiplies by the same factor. Text is Geist (400/600/700, bundled)
  * at explicit CSS-px sizes, no MC drop shadow. Continuous values ease per
  * frame (140ms half-life); discrete values live in a snapshot that freezes
  * on target loss so the 300ms bidirectional cross-fade never invents data.
@@ -42,23 +43,25 @@ import java.util.UUID;
  */
 public class TargetHudModule extends HudModule {
 
-    // ---- shadcn dark palette (measured from the prototype) ----
-    private static final int CARD     = 0xFF171717;
-    private static final int FG       = 0xFFFAFAFA;
-    private static final int PRIMARY  = 0xFFE5E5E5;
-    private static final int MUTED_FG = 0xFFA1A1A1;
-    private static final int TRACK    = 0xFF262626;
-    private static final int BORDER   = 0x1AFFFFFF;
+    // ---- graphite + iris palette; low RGB bits are HudAppearance keys ----
+    private static final int CARD     = 0xEB151820;
+    private static final int FG       = 0xFFECEEF4;
+    private static final int PRIMARY  = 0xFF8B7CFF;
+    private static final int CYAN     = 0xFF5CC8FF;
+    private static final int MUTED_FG = 0xFF8A92A6;
+    private static final int SUBTLE   = 0xFF5D6478;
+    private static final int TRACK    = 0xFF1D212C;
+    private static final int BORDER   = 0xFF2B3140;
     private static final int DESTR    = 0xFFF87171;
+    private static final int GOOD     = 0xFF4ADE80;
+    private static final int WARN     = 0xFFFBBF24;
     private static final int GHOST    = 0x59FFFFFF;
-    private static final int DARK     = 0xFF171717;
-    private static final int CHIP_BG  = 0xCC0A0A0A;
 
     // ---- measured card geometry (CSS px) ----
     private static final float W = 380f;
     private static final float TARGET_H = 367.5f;
     private static final float FLIGHT_H = 344f;
-    private static final float RADIUS = 14f;
+    private static final float RADIUS = 2f;
     private static final float PAD = 16f;
     private static final float TOP = 32f;
     private static final float CONTENT_W = 348f;
@@ -70,13 +73,6 @@ public class TargetHudModule extends HudModule {
     private static final int[][] RING_OUTER = ringOffsets(46, false);
     private static final int[][] RING_INNER = ringOffsets(25, true);
 
-    // Original Lucide paths from the prototype, baked once into a small atlas.
-    private static final Identifier ICON_ATLAS = Identifier.fromNamespaceAndPath(
-            "guizhouware", "textures/gui/air_hud_icons.png");
-    private static final int ICON_HEART = 0, ICON_SHIELD = 1, ICON_WIND = 2,
-            ICON_SPARKLE = 3, ICON_TIMER = 4, ICON_FEATHER = 5, ICON_FLAME = 6,
-            ICON_ARROW_UP = 7, ICON_ARROW_DOWN = 8;
-
     // eased continuous state
     private float dist = 8, bearing, relAlt, closure, myVel, tgtVel, energy, smash = -1;
     private float envReq = Float.NaN, envApl = Float.NaN;
@@ -87,13 +83,12 @@ public class TargetHudModule extends HudModule {
     private long fadeStarted;
     private float displayedHp;
     private float ghostHp = 20;
-    private float pulseA = 0.6f;
     private long lastFrame;
 
     // discrete snapshot — frozen while the target layer fades out
     private String sName = "", sWeapon = "—", sIntent = "OFF", sPing = "—";
     private String sMotion = "待观察";
-    private float sHp, sArmor, sMaxHp = 20;
+    private float sHp, sAbsorb, sArmor, sMaxHp = 20;
     private int sTotems;
     private long sElapsedMs;
     private UUID trackedId;
@@ -105,6 +100,11 @@ public class TargetHudModule extends HudModule {
 
     public TargetHudModule() {
         super("TargetHud");
+    }
+
+    @Override
+    protected boolean autoPlace() {
+        return false; // the measured canvas is reserved first; smaller cards move around it
     }
 
     @Override
@@ -122,9 +122,9 @@ public class TargetHudModule extends HudModule {
         long now = System.nanoTime() / 1_000_000L;
         float dt = lastFrame == 0 ? 16f : Math.max(0f, now - lastFrame);
         lastFrame = now;
-        pulseA = 0.55f + 0.45f * (float) Math.sin(now / 160.0);
 
         LivingEntity target = currentTarget();
+        if (target == null && editorOpen()) target = mc.player; // layout preview with live sample data
         if (target != null) {
             UUID id = target.getUUID();
             if (!id.equals(trackedId)) adopt(target);
@@ -192,6 +192,7 @@ public class TargetHudModule extends HudModule {
         sMotion = "待观察";
         sPing = "—";
         sHp = 0;
+        sAbsorb = 0;
         sArmor = 0;
         sMaxHp = 20;
         sTotems = 0;
@@ -204,6 +205,12 @@ public class TargetHudModule extends HudModule {
         Entity t = GuangxiElytraChaseModule.hudTarget();
         if (t == null || !t.isAlive() || t.isRemoved() || t.level() != mc.level) return null;
         return t instanceof LivingEntity living ? living : null;
+    }
+
+    private static boolean editorOpen() {
+        var hud = GuizhouWare.moduleManager == null ? null
+                : GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.client.HudClientModule.class);
+        return hud != null && hud.isEditorOpen();
     }
 
     /** New lock: snap every continuous target field so nothing blends across entities. */
@@ -228,6 +235,7 @@ public class TargetHudModule extends HudModule {
         displayedHp = sHp;
         ghostHp = sHp;
         sMaxHp = Math.max(1f, target.getMaxHealth());
+        sAbsorb = target.getAbsorptionAmount();
         sArmor = target.getArmorValue();
         sName = target.getName().getString();
         sPing = pingOf(target);
@@ -263,6 +271,7 @@ public class TargetHudModule extends HudModule {
         sMotion = FlightMotionLabels.label(GuangxiElytraChaseModule.hudTargetMotion());
         sHp = target.getHealth();
         sMaxHp = Math.max(1f, target.getMaxHealth());
+        sAbsorb = target.getAbsorptionAmount();
         sArmor = target.getArmorValue();
         sTotems = totems(target);
         sPing = pingOf(target);
@@ -328,60 +337,57 @@ public class TargetHudModule extends HudModule {
         int ox = x0, oy = y0 + px(slide, s);
         cardAt(ctx, ox, oy, TARGET_H, s, a);
 
-        // header: avatar 44, nick 15/600 (clamped), sub 12, weapon outline + intent badge
-        avatar(ctx, ox + px(PAD, s), oy + px(TOP, s), 44f, s, a);
+        // header: avatar, nick, distance, weapon + intent as coloured text
+        int tone = intentTone(sIntent);
+        avatar(ctx, ox + px(PAD, s), oy + px(TOP, s), 44f, s, a, tone);
         String intentCn = intentLabel(sIntent);
-        float intentW = HudFonts.width(intentCn, 12f, HudFonts.SEMI) + 32f;
-        float weaponW = HudFonts.width(sWeapon, 12f, HudFonts.SEMI) + 20f;
+        float intentW = HudFonts.width(intentCn, 12f, HudFonts.SEMI);
+        float weaponW = HudFonts.width(sWeapon, 12f, HudFonts.SEMI);
         float badgeY = 44f;
-        badge(ctx, ox + px(W - PAD - intentW, s), oy + px(badgeY, s), px(intentW, s), px(20f, s),
-                intentCn, 12f, intentBg(sIntent), intentFg(sIntent), s, a, true, true);
-        badge(ctx, ox + px(W - PAD - intentW - 6f - weaponW, s), oy + px(badgeY, s), px(weaponW, s), px(20f, s),
-                sWeapon, 12f, 0, FG, s, a, false, false);
+        statusText(ctx, ox + W - PAD - intentW, oy + badgeY, intentCn, 12f, tone, a);
+        statusText(ctx, ox + W - PAD - intentW - 8f - weaponW, oy + badgeY, sWeapon, 12f, MUTED_FG, a);
         float nickX = PAD + 56f;
         float nickAvail = (W - PAD - intentW - 6f - weaponW - 8f) - nickX;
         text(ctx, clip(sName, nickAvail, 15f, HudFonts.SEMI), nickX, 34.3f, 15f, HudFonts.SEMI, c(FG, a), ox, oy, s);
-        text(ctx, String.format("%.1f 格", dist), nickX, 57.7f, 12f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
-        text(ctx, "目标运动 · " + sMotion, PAD, 78f, 10f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        String distText = String.format("%.1f", dist);
+        text(ctx, distText, nickX, 56.7f, 12f, HudFonts.SEMI, c(FG, a), ox, oy, s);
+        text(ctx, "格", nickX + HudFonts.width(distText, 12f, HudFonts.SEMI) + 3f, 57.7f, 11f, HudFonts.REGULAR,
+                c(MUTED_FG, a), ox, oy, s);
+        text(ctx, "目标运动", PAD, 78f, 10f, HudFonts.SEMI, c(SUBTLE, a), ox, oy, s);
+        text(ctx, sMotion, PAD + HudFonts.width("目标运动", 10f, HudFonts.SEMI) + 6f, 78f, 10f, HudFonts.REGULAR,
+                c(MUTED_FG, a), ox, oy, s);
 
-        // radar 104x104 at y92 — thin rings + cross, no square backing
+        // radar 104x104 at y92 — thin rings + cross on a faint disc
         float blockY = 92f;
         int cx = ox + px(PAD + 52f, s), cy = oy + px(blockY + 52f, s);
         int ringColor = c(BORDER, a);
-        int crossColor = c(0x0FFFFFFF, a);
-        for (int[] o : RING_OUTER) {
-            int fx = px(o[0], s), fy = px(o[1], s);
-            ctx.fill(cx + fx, cy + fy, cx + fx + Math.max(1, px(1, s)), cy + fy + Math.max(1, px(1, s)), ringColor);
-        }
-        for (int[] o : RING_INNER) {
-            int fx = px(o[0], s), fy = px(o[1], s);
-            ctx.fill(cx + fx, cy + fy, cx + fx + Math.max(1, px(1, s)), cy + fy + Math.max(1, px(1, s)), ringColor);
-        }
-        line(ctx, cx - px(48f, s), cy, cx + px(48f, s), cy, crossColor);
-        line(ctx, cx, cy - px(48f, s), cx, cy + px(48f, s), crossColor);
+        int crossColor = c(0x14FFFFFF, a);
+        for (int[] o : RING_OUTER) ctx.fill(cx + o[0], cy + o[1], cx + o[0] + 1, cy + o[1] + 1, ringColor);
+        for (int[] o : RING_INNER) ctx.fill(cx + o[0], cy + o[1], cx + o[0] + 1, cy + o[1] + 1, ringColor);
+        ctx.fill(cx - 48, cy, cx + 48, cy + 1, crossColor);
+        ctx.fill(cx, cy - 48, cx + 1, cy + 48, crossColor);
         double[] p = TargetHudMath.radarProject(bearing, dist, 43f, 20f);
         int tx = cx + px((float) p[0], s), ty = cy + px((float) p[1], s);
-        line(ctx, cx, cy, tx, ty, c(0x80A1A1A1, a));
-        int dot = Math.max(1, px(2, s));
-        ctx.fill(cx - dot, cy - dot, cx + dot, cy + dot, c(PRIMARY, a));
+        line(ctx, cx, cy, tx, ty, c(0x668A92A6, a));
+        HudDraw.roundDirect(ctx, cx - 2f, cy - 2f, 4f, 4f, 1f, c(PRIMARY, a));
         triangle(ctx, tx, ty, triRot, c(DESTR, a), s);
         String chip = String.format("%d° · %+.0f", Math.round(bearing), relAlt);
-        float chipW = HudFonts.width(chip, 10f, HudFonts.REGULAR) + 10f;
-        int chipX = cx - px(chipW / 2f, s);
-        int chipY = oy + px(208f, s);
-        roundedAbs(ctx, chipX, chipY, px(chipW, s), px(13f, s), Math.max(1, px(3f, s)), c(CHIP_BG, a));
-        text(ctx, chip, PAD + 52f - chipW / 2f + 5f, 211.1f, 10f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        float chipW = HudFonts.width(chip, 10f, HudFonts.REGULAR);
+        text(ctx, chip, PAD + 52f - chipW / 2f, 208.9f, 10f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
 
         // right column at measured label y: 94 / 141.7 / 193.41 (+bar 213.41)
         float rx = PAD + 120f, rw = 228f;
-        text(ctx, "接近率 CLOSURE", rx, 94f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        label(ctx, "接近率", "CLOSURE", rx, 94f, a, ox, oy, s);
         boolean closing = closure >= 0;
         String bigClosure = String.format("%+.1f", closure);
-        text(ctx, bigClosure, rx, 110f, 22f, HudFonts.BOLD, c(closing ? PRIMARY : DESTR, a), ox, oy, s);
+        text(ctx, bigClosure, rx, 110f, 22f, HudFonts.BOLD, c(closing ? GOOD : DESTR, a), ox, oy, s);
         float afterX = rx + HudFonts.width(bigClosure, 22f, HudFonts.BOLD) + 5f;
-        text(ctx, "b/t " + (closing ? "接近中" : "被拉开"), afterX, 121f, 11f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
+        text(ctx, "b/t", afterX, 121f, 11f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
+        String closingText = closing ? "接近中" : "被拉开";
+        statusText(ctx, ox + afterX + HudFonts.width("b/t", 11f, HudFonts.SEMI) + 6f, oy + 118.5f,
+                closingText, 10f, closing ? GOOD : DESTR, a);
 
-        text(ctx, "拦截解算 INTERCEPT", rx, 141.7f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        label(ctx, "拦截解算", "INTERCEPT", rx, 141.7f, a, ox, oy, s);
         double t = TargetHudMath.interceptTicks(dist, closure, 0.05);
         if (t >= 0) {
             String bigT = "T−" + (int) Math.ceil(t);
@@ -391,37 +397,36 @@ public class TargetHudModule extends HudModule {
         } else {
             text(ctx, "无解 · 平追回退", rx, 159.7f, 15f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
             float cuX = rx + HudFonts.width("无解 · 平追回退", 15f, HudFonts.SEMI) + 5f;
-            text(ctx, "catch-up", cuX, 165.7f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+            text(ctx, "catch-up", cuX, 165.7f, 11f, HudFonts.REGULAR, c(SUBTLE, a), ox, oy, s);
         }
 
-        text(ctx, "能量优势 E+", rx, 193.4f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        label(ctx, "能量优势", "E+", rx, 193.4f, a, ox, oy, s);
         textRight(ctx, String.format("%+d", Math.round(energy)), PAD + CONTENT_W, 191.4f, 14f,
-                HudFonts.SEMI, c(energy >= 0 ? PRIMARY : DESTR, a), ox, oy, s);
+                HudFonts.BOLD, c(energy >= 0 ? PRIMARY : DESTR, a), ox, oy, s);
         float barY = 213.4f;
-        rounded(ctx, rx, barY, rw, 6f, 3f, c(TRACK, a), ox, oy, s);
-        int midX = ox + px(rx + rw / 2f, s);
-        ctx.fill(midX, oy + px(barY, s), midX + 1, oy + px(barY + 6f, s), c(BORDER, a));
+        rounded(ctx, rx, barY, rw, 4f, 1f, c(TRACK, a), ox, oy, s);
         float frac = Math.min(1f, Math.abs(energy) / 100f);
         if (frac > 0.005f) {
-            if (energy >= 0) rounded(ctx, rx + rw / 2f, barY, rw / 2f * frac, 6f, 3f, c(PRIMARY, a), ox, oy, s);
-            else rounded(ctx, rx + rw / 2f - rw / 2f * frac, barY, rw / 2f * frac, 6f, 3f, c(DESTR, a), ox, oy, s);
+            if (energy >= 0) rounded(ctx, rx + rw / 2f, barY, rw / 2f * frac, 4f, 1f, c(PRIMARY, a), ox, oy, s);
+            else rounded(ctx, rx + rw / 2f - rw / 2f * frac, barY, rw / 2f * frac, 4f, 1f, c(DESTR, a), ox, oy, s);
         }
+        ctx.fill(ox + px(rx + rw / 2f, s), oy + px(barY - 2f, s), ox + px(rx + rw / 2f, s) + 1, oy + px(barY + 8f, s), c(MUTED_FG, a * .6f));
 
         // full-width smash + envelope rows at measured y
         float smashY = 225.4f;
         text(ctx, "砸落窗口", PAD, smashY, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
         float smashLabelW = HudFonts.width("砸落窗口", 11f, HudFonts.REGULAR) + 8f;
         boolean ready = smash >= 0.999f;
-        float smashValueW = ready ? 38f : 30f;
+        float smashValueW = ready ? 44f : 30f;
         float smashBarW = CONTENT_W - smashLabelW - smashValueW - 6f;
         float smashFrac = Math.max(0f, Math.min(1f, smash));
-        rounded(ctx, PAD + smashLabelW, 231.25f, smashBarW, 4f, 2f, c(TRACK, a), ox, oy, s);
-        rounded(ctx, PAD + smashLabelW, 231.25f, smashBarW * smashFrac, 4f, 2f, c(ready ? PRIMARY : 0x99A1A1A1, a), ox, oy, s);
+        rounded(ctx, PAD + smashLabelW, 231.25f, smashBarW, 3f, 1f, c(TRACK, a), ox, oy, s);
+        if (ready) rounded(ctx, PAD + smashLabelW, 231.25f, smashBarW, 3f, 1f, c(GOOD, a), ox, oy, s);
+        else if (smashFrac > .01f) rounded(ctx, PAD + smashLabelW, 231.25f, smashBarW * smashFrac, 3f, 1f, c(PRIMARY, a), ox, oy, s);
         if (ready) {
-            badge(ctx, ox + px(W - PAD - 36f, s), oy + px(smashY - 3f, s), px(36f, s), px(18f, s),
-                    "READY", 10f, 0xE6E5E5E5, DARK, s, a, true, false);
+            textRight(ctx, "READY", W - PAD, smashY, 10f, HudFonts.SEMI, c(GOOD, a), ox, oy, s);
         } else {
-            textRight(ctx, Math.round(smashFrac * 100) + "%", W - PAD, smashY, 10f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+            textRight(ctx, Math.round(smashFrac * 100) + "%", W - PAD, smashY, 10f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
         }
 
         float envY = 247.1f;
@@ -432,52 +437,51 @@ public class TargetHudModule extends HudModule {
                 Float.isNaN(envApl) ? "—" : String.format("%.1f", envApl));
         float envValueW = HudFonts.width(envText, 10f, HudFonts.REGULAR) + 8f;
         float envBarW = CONTENT_W - envLabelW - envValueW - 6f;
-        rounded(ctx, PAD + envLabelW, 252.95f, envBarW, 4f, 2f, c(TRACK, a), ox, oy, s);
+        rounded(ctx, PAD + envLabelW, 252.95f, envBarW, 3f, 1f, c(TRACK, a), ox, oy, s);
         if (!Float.isNaN(envReq)) {
-            rounded(ctx, PAD + envLabelW, 252.95f, envBarW * Math.min(1f, envReq / 8f), 4f, 2f, c(0x59A1A1A1, a), ox, oy, s);
+            rounded(ctx, PAD + envLabelW, 252.95f, envBarW * Math.min(1f, envReq / 8f), 3f, 1f, c(0x668A92A6, a), ox, oy, s);
         }
         if (!Float.isNaN(envApl)) {
-            rounded(ctx, PAD + envLabelW, 252.95f, envBarW * Math.min(1f, envApl / 8f), 4f, 2f, c(PRIMARY, a), ox, oy, s);
+            rounded(ctx, PAD + envLabelW, 252.95f, envBarW * Math.min(1f, envApl / 8f), 3f, 1f, c(CYAN, a), ox, oy, s);
         }
         textRight(ctx, envText, W - PAD, envY, 10f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
 
         // separator + hp/armor row + footer at measured y
-        ctx.fill(ox + px(PAD, s), oy + px(276.8f, s), ox + px(W - PAD, s), oy + px(277.8f, s), c(BORDER, a));
+        rounded(ctx, PAD, 276.8f, CONTENT_W, 1f, 0f, c(BORDER, a), ox, oy, s);
 
-        icon(ctx, ICON_HEART, PAD, 292.8f, c(MUTED_FG, a), ox, oy, s);
         float hpFrac = Math.max(0f, Math.min(1f, displayedHp / sMaxHp));
         float ghostFrac = Math.max(0f, Math.min(1f, ghostHp / sMaxHp));
-        rounded(ctx, 40f, 296.8f, 93f, 6f, 3f, c(TRACK, a), ox, oy, s);
-        rounded(ctx, 40f, 296.8f, 93f * ghostFrac, 6f, 3f, c(GHOST, a), ox, oy, s);
-        rounded(ctx, 40f, 296.8f, 93f * hpFrac, 6f, 3f, c(DESTR, a), ox, oy, s);
-        textRight(ctx, String.format("%.1f", displayedHp), 183f, 292.8f, 12f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
-        icon(ctx, ICON_SHIELD, 197f, 292.8f, c(MUTED_FG, a), ox, oy, s);
-        rounded(ctx, 221f, 296.8f, 91f, 6f, 3f, c(TRACK, a), ox, oy, s);
-        rounded(ctx, 221f, 296.8f, 91f * Math.max(0f, Math.min(1f, sArmor / 20f)), 6f, 3f, c(PRIMARY, a), ox, oy, s);
-        textRight(ctx, String.valueOf((int) Math.ceil(sArmor)), 364f, 292.8f, 12f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        float absFrac = Math.max(0f, Math.min(1f - hpFrac, sAbsorb / sMaxHp));
+        int hpTone = HudDraw.grade(hpFrac);
+        text(ctx, "HP", PAD, 292.8f, 11f, HudFonts.SEMI, c(hpTone, a), ox, oy, s);
+        rounded(ctx, 40f, 297.3f, 93f, 4f, 1f, c(TRACK, a), ox, oy, s);
+        rounded(ctx, 40f, 297.3f, 93f * ghostFrac, 4f, 1f, c(GHOST, a), ox, oy, s);
+        if (absFrac > .005f) rounded(ctx, 40f, 297.3f, 93f * (hpFrac + absFrac), 4f, 1f, c(WARN, a), ox, oy, s);
+        rounded(ctx, 40f, 297.3f, 93f * hpFrac, 4f, 1f, c(hpTone, a), ox, oy, s);
+        String hpText = sAbsorb > .05f ? String.format("%.1f+%.0f", displayedHp, sAbsorb) : String.format("%.1f", displayedHp);
+        textRight(ctx, hpText, 183f, 292.8f, 12f, HudFonts.SEMI, c(FG, a), ox, oy, s);
+        text(ctx, "甲", 197f, 292.8f, 11f, HudFonts.SEMI, c(CYAN, a), ox, oy, s);
+        rounded(ctx, 221f, 297.3f, 91f, 4f, 1f, c(TRACK, a), ox, oy, s);
+        rounded(ctx, 221f, 297.3f, 91f * Math.max(0f, Math.min(1f, sArmor / 20f)), 4f, 1f, c(CYAN, a), ox, oy, s);
+        textRight(ctx, String.valueOf((int) Math.ceil(sArmor)), 364f, 292.8f, 12f, HudFonts.SEMI, c(FG, a), ox, oy, s);
 
-        // footer y319.81 with inline icons at y321.66
         String speeds = String.format("敌速 %.1f · 我速 %.1f", tgtVel, myVel);
-        String totemsText = "×" + sTotems;
+        String totemsText = "图腾 ×" + sTotems;
         String clockText = clock(sElapsedMs / 1000L);
         float wS = HudFonts.width(speeds, 11f, HudFonts.REGULAR);
         float wT = HudFonts.width(totemsText, 11f, HudFonts.REGULAR);
         float wP = HudFonts.width(sPing, 11f, HudFonts.REGULAR);
         float wC = HudFonts.width(clockText, 11f, HudFonts.REGULAR);
-        float iconSlot = 12f;
-        float total = iconSlot + wS + iconSlot + wT + wP + iconSlot + wC;
+        float total = wS + wT + wP + wC;
         float gap = Math.max(4f, (CONTENT_W - total) / 3f);
         float fx = PAD;
-        icon(ctx, ICON_WIND, fx, 321.7f, c(MUTED_FG, a), ox, oy, s);
-        text(ctx, speeds, fx + iconSlot, 319.8f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
-        fx += iconSlot + wS + gap;
-        icon(ctx, ICON_SPARKLE, fx, 321.7f, c(MUTED_FG, a), ox, oy, s);
-        text(ctx, totemsText, fx + iconSlot, 319.8f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
-        fx += iconSlot + wT + gap;
+        text(ctx, speeds, fx, 319.8f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        fx += wS + gap;
+        text(ctx, totemsText, fx, 319.8f, 11f, HudFonts.REGULAR, c(sTotems > 0 ? WARN : MUTED_FG, a), ox, oy, s);
+        fx += wT + gap;
         text(ctx, sPing, fx, 319.8f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
         fx += wP + gap;
-        icon(ctx, ICON_TIMER, fx, 321.7f, c(MUTED_FG, a), ox, oy, s);
-        text(ctx, clockText, fx + iconSlot, 319.8f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        text(ctx, clockText, fx, 319.8f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
     }
 
     // ---------------------------------------------------------------- flight layer
@@ -491,20 +495,21 @@ public class TargetHudModule extends HudModule {
         boolean armorFly = flight != null && flight.armorFlyRequested();
         boolean rocket = flight != null && flight.isEnabled() && flight.isBoostAttached();
 
-        text(ctx, "FLIGHT · 巡航层", PAD, TOP + 3f, 13f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
+        text(ctx, "巡航层", PAD, TOP + 2f, 14f, HudFonts.SEMI, c(FG, a), ox, oy, s);
+        text(ctx, "FLIGHT", PAD + HudFonts.width("巡航层", 14f, HudFonts.SEMI) + 6f, TOP + 4.5f, 10f, HudFonts.SEMI,
+                c(SUBTLE, a), ox, oy, s);
         String b1Text = armorFly ? "甲飞" : gliding ? "滑翔" : "地面";
         String b2Text = rocket ? "烟花附着" : "烟花待命";
-        float b2W = HudFonts.width(b2Text, 11f, HudFonts.SEMI) + 32f;
-        float b1W = HudFonts.width(b1Text, 11f, HudFonts.SEMI) + 32f;
-        iconBadge(ctx, ox + px(W - PAD - b2W, s), oy + px(TOP, s), px(b2W, s), px(20f, s),
-                b2Text, ICON_FLAME, TRACK, rocket ? FG : MUTED_FG, s, a, rocket);
-        iconBadge(ctx, ox + px(W - PAD - b2W - 6f - b1W, s), oy + px(TOP, s), px(b1W, s), px(20f, s),
-                b1Text, ICON_FEATHER, TRACK, FG, s, a, armorFly || gliding);
+        float b2W = HudFonts.width(b2Text, 11f, HudFonts.SEMI);
+        float b1W = HudFonts.width(b1Text, 11f, HudFonts.SEMI);
+        statusText(ctx, ox + W - PAD - b2W, oy + TOP + 2f, b2Text, 11f, rocket ? WARN : MUTED_FG, a);
+        statusText(ctx, ox + W - PAD - b2W - 10f - b1W, oy + TOP + 2f, b1Text, 11f,
+                armorFly || gliding ? PRIMARY : MUTED_FG, a);
 
         // heading tape: 348 wide, 61.23 tall, 15° marks, cardinals labelled
         float tapeY = 64f;
         float tapeH = 61.23f;
-        rounded(ctx, PAD, tapeY, CONTENT_W, tapeH, 8f, c(0x6626262B, a), ox, oy, s);
+        rounded(ctx, PAD, tapeY, CONTENT_W, tapeH, 2f, c(0x991D212C, a), ox, oy, s);
         float pxPerDeg = CONTENT_W / 120f;
         int start = (int) Math.floor((heading - 60f) / 15f) * 15;
         for (int d = start; d <= heading + 60f; d += 15) {
@@ -512,11 +517,13 @@ public class TargetHudModule extends HudModule {
             if (dx < PAD + 8f || dx > PAD + CONTENT_W - 8f) continue;
             int norm = Math.floorMod(d, 360);
             String label = norm == 0 ? "N" : norm == 90 ? "E" : norm == 180 ? "S" : norm == 270 ? "W" : null;
+            float edgeFade = 1f - Math.min(1f, Math.abs(dx - PAD - CONTENT_W / 2f) / (CONTENT_W / 2f)) * .7f;
             float tickTop = label != null ? tapeY + 11f : tapeY + 19f;
-            ctx.fill(ox + px(dx, s), oy + px(tickTop, s), ox + px(dx + 1f, s), oy + px(tapeY + 31f, s), c(MUTED_FG, a));
+            ctx.fill(ox + px(dx, s), oy + px(tickTop, s), ox + px(dx + 1f, s), oy + px(tapeY + 31f, s),
+                    c(label != null ? MUTED_FG : SUBTLE, a * edgeFade));
             if (label != null) {
-                text(ctx, label, dx - HudFonts.width(label, 11f, HudFonts.REGULAR) / 2f, tapeY + 35f, 11f,
-                        HudFonts.REGULAR, c(FG, a), ox, oy, s);
+                text(ctx, label, dx - HudFonts.width(label, 11f, HudFonts.SEMI) / 2f, tapeY + 35f, 11f,
+                        HudFonts.SEMI, c(norm == 0 ? PRIMARY : FG, a * edgeFade), ox, oy, s);
             }
         }
         float bearingDx = Math.max(-58f, Math.min(58f, bearing));
@@ -531,52 +538,51 @@ public class TargetHudModule extends HudModule {
 
         // airspeed + vertical/altitude at measured y (both columns right-aligned to 364)
         float rowY = 137.2f;
-        icon(ctx, ICON_WIND, PAD, rowY, c(MUTED_FG, a), ox, oy, s);
-        text(ctx, "空速", PAD + 13f, rowY, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        text(ctx, "空速", PAD, rowY, 11f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
         String bigSpeed = String.format("%.1f", myVel);
         text(ctx, bigSpeed, PAD, 151.2f, 26f, HudFonts.BOLD, c(FG, a), ox, oy, s);
         float speedSuffixX = PAD + HudFonts.width(bigSpeed, 26f, HudFonts.BOLD) + 5f;
         text(ctx, String.format("b/t · %.0f m/s", myVel * 20f), speedSuffixX, 166.2f, 12f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
-        icon(ctx, vspeed >= 0 ? ICON_ARROW_UP : ICON_ARROW_DOWN, W - PAD - HudFonts.width(String.format("Y %d", Math.round(mc.player.getY())), 26f, HudFonts.BOLD) - 16f, rowY + 1f, c(MUTED_FG, a), ox, oy, s);
-        textRight(ctx, String.format("垂直 %+.1f b/t", vspeed), W - PAD, rowY, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
-        textRight(ctx, String.format("Y %d", Math.round(mc.player.getY())), W - PAD, 151.2f, 26f, HudFonts.BOLD, c(FG, a), ox, oy, s);
+        String altitude = String.format("Y %d", Math.round(mc.player.getY()));
+        textRight(ctx, String.format("垂直 %+.1f b/t", vspeed), W - PAD, rowY, 11f, HudFonts.SEMI,
+                c(vspeed >= 0 ? GOOD : WARN, a), ox, oy, s);
+        textRight(ctx, altitude, W - PAD, 151.2f, 26f, HudFonts.BOLD, c(FG, a), ox, oy, s);
 
         // energy reserve at measured y
         float enY = 201.9f;
-        text(ctx, "能量储备 ENERGY", PAD, enY, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
-        textRight(ctx, String.format("%+d", Math.round(flightEnergy)), W - PAD, enY - 2f, 14f, HudFonts.SEMI, c(PRIMARY, a), ox, oy, s);
-        rounded(ctx, PAD, 221.9f, CONTENT_W, 6f, 3f, c(TRACK, a), ox, oy, s);
-        rounded(ctx, PAD, 221.9f, CONTENT_W * Math.max(0f, Math.min(1f, (50f + flightEnergy / 2f) / 100f)), 6f, 3f, c(PRIMARY, a), ox, oy, s);
+        label(ctx, "能量储备", "ENERGY", PAD, enY, a, ox, oy, s);
+        textRight(ctx, String.format("%+d", Math.round(flightEnergy)), W - PAD, enY - 2f, 14f, HudFonts.BOLD, c(PRIMARY, a), ox, oy, s);
+        rounded(ctx, PAD, 222.4f, CONTENT_W, 4f, 1f, c(TRACK, a), ox, oy, s);
+        float reserve = Math.max(0f, Math.min(1f, (50f + flightEnergy / 2f) / 100f));
+        if (reserve > .005f) rounded(ctx, PAD, 222.4f, CONTENT_W * reserve, 4f, 1f, c(PRIMARY, a), ox, oy, s);
 
-        // unlocked-layout footer sits right after energy (real DOM behavior, y239.94)
         text(ctx, "未锁定目标 — 显示我方飞行状态；锁定后切换为目标层", PAD, 239.9f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
     }
 
     // ---------------------------------------------------------------- shared drawing
 
+    /** Thin-line graphite panel. */
     private void cardAt(GuiGraphics ctx, int ox, int oy, float h, float s, float a) {
-        rounded(ctx, 3f, 4f, W, h, RADIUS, c(0x2E000000, a), ox, oy, s);
-        rounded(ctx, 0f, 0f, W, h, RADIUS, c(BORDER, a), ox, oy, s);
-        rounded(ctx, 1f, 1f, W - 2f, h - 2f, RADIUS - 1f, c(CARD, a), ox, oy, s);
+        HudDraw.roundDirect(ctx, ox, oy, W, h, RADIUS, c(CARD, a));
+        HudDraw.outlineDirect(ctx, ox, oy, W, h, RADIUS, 1f, c(BORDER, a));
     }
 
-    /** Rounded avatar frame with the skin face (players) or a stable pixel face. */
-    private void avatar(GuiGraphics ctx, int x, int y, float size, float s, float a) {
-        int box = px(size, s);
-        int r = Math.max(2, Math.round(8f * s));
-        roundedAbs(ctx, x, y, box, box, r, c(BORDER, a));
-        int inset = Math.max(1, Math.round(s));
-        int inner = box - inset * 2;
+    /** Short-corner avatar frame with the skin face or a stable pixel face. */
+    private void avatar(GuiGraphics ctx, int x, int y, float size, float s, float a, int tone) {
+        HudDraw.roundDirect(ctx, x, y, size, size, 2f, c(TRACK, a));
+        HudDraw.outlineDirect(ctx, x, y, size, size, 2f, 1f, c(tone, a * .85f));
+        int inset = 4;
+        int inner = Math.round(size) - inset * 2;
         if (inner < 4) return;
         Identifier skin = faceTexture();
         if (skin != null) {
             float sc = inner / 8f;
             var pose = ctx.pose();
             pose.pushMatrix();
+            pose.translate(x + inset, y + inset);
             pose.scale(sc, sc);
-            ctx.blit(RenderPipelines.GUI_TEXTURED, skin,
-                    Math.round((x + inset) / sc), Math.round((y + inset) / sc),
-                    8f, 8f, 8, 8, 64, 64, c(0xFFFFFFFF, a));
+            ctx.blit(RenderPipelines.GUI_TEXTURED, skin, 0, 0, 8f, 8f, 8, 8, 64, 64, alpha(0xFFFFFFFF, a));
+            ctx.blit(RenderPipelines.GUI_TEXTURED, skin, 0, 0, 40f, 8f, 8, 8, 64, 64, alpha(0xFFFFFFFF, a));
             pose.popMatrix();
         } else {
             pixelFace(ctx, x + inset, y + inset, inner, a);
@@ -603,34 +609,22 @@ public class TargetHudModule extends HudModule {
         int h = trackedId == null ? 0 : trackedId.hashCode();
         int u = Math.max(1, size / 8);
         int w = u * 8;
-        ctx.fill(x, y, x + w, y + 2 * u, c(hairs[(h >>> 8) & 3], a));
-        ctx.fill(x, y + 2 * u, x + w, y + 8 * u, c(tones[(h >>> 3) & 3], a));
-        ctx.fill(x + u, y + 3 * u, x + 2 * u, y + 4 * u, c(0xFF3B2A6B, a));
-        ctx.fill(x + 6 * u, y + 3 * u, x + 7 * u, y + 4 * u, c(0xFF3B2A6B, a));
-        ctx.fill(x + 3 * u, y + 5 * u, x + 5 * u, y + 6 * u, c(0xFF7A4F35, a));
+        ctx.fill(x, y, x + w, y + 2 * u, alpha(hairs[(h >>> 8) & 3], a));
+        ctx.fill(x, y + 2 * u, x + w, y + 8 * u, alpha(tones[(h >>> 3) & 3], a));
+        ctx.fill(x + u, y + 3 * u, x + 2 * u, y + 4 * u, alpha(0xFF3B2A6B, a));
+        ctx.fill(x + 6 * u, y + 3 * u, x + 7 * u, y + 4 * u, alpha(0xFF3B2A6B, a));
+        ctx.fill(x + 3 * u, y + 5 * u, x + 5 * u, y + 6 * u, alpha(0xFF7A4F35, a));
     }
 
-    private void badge(GuiGraphics ctx, int x, int y, int w, int h, String label, float sizePx,
-                       int bg, int fg, float s, float a, boolean filled, boolean withDot) {
-        int r = Math.max(2, h / 2);
-        if (filled) {
-            roundedAbs(ctx, x, y, w, h, r, c(bg, a));
-        } else {
-            roundedAbs(ctx, x, y, w, h, r, c(BORDER, a));
-            roundedAbs(ctx, x + 1, y + 1, w - 2, h - 2, Math.max(1, r - 1), c(CARD, a));
-        }
-        float size = sizePx * s;
-        float tw = HudFonts.width(label, sizePx, HudFonts.SEMI) * s;
-        int dotGap = Math.round(12f * s);
-        int dot = Math.max(2, Math.round(6f * s));
-        int tx = x + (int) ((w - tw - (withDot ? dotGap : 0)) / 2f);
-        int ty = y + (int) ((h - size) / 2f) - Math.round(s);
-        if (withDot) {
-            // status dot with a soft pulse
-            ctx.fill(tx, y + h / 2 - dot / 2, tx + dot, y + h / 2 - dot / 2 + dot, c(fg, a * pulseA));
-            tx += dotGap;
-        }
-        HudFonts.draw(ctx, label, Math.max(tx, x + 2), Math.max(ty, y + 1), size, HudFonts.SEMI, c(fg, a));
+    /** Status word in the semantic colour; no capsule. */
+    private void statusText(GuiGraphics ctx, float x, float y, String label, float sizePx, int tone, float a) {
+        HudFonts.draw(ctx, label, x, y, sizePx, HudFonts.SEMI, c(tone, a));
+    }
+
+    /** Chinese label with a quieter latin tag, the section header style. */
+    private void label(GuiGraphics ctx, String cn, String tag, float dx, float dy, float a, int ox, int oy, float s) {
+        text(ctx, cn, dx, dy, 11f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
+        text(ctx, tag, dx + HudFonts.width(cn, 11f, HudFonts.SEMI) + 5f, dy + 1f, 9.5f, HudFonts.SEMI, c(SUBTLE, a), ox, oy, s);
     }
 
     private void text(GuiGraphics ctx, String str, float dx, float dy, float sizePx, int weight, int color, int ox, int oy, float s) {
@@ -642,11 +636,10 @@ public class TargetHudModule extends HudModule {
         text(ctx, str, dxRight - w, dy, sizePx, weight, color, ox, oy, s);
     }
 
-    /** Truncate with an ellipsis so the header never paints under the badges. */
+    /** Truncate with an ellipsis so the header never paints under the status words. */
     private static String clip(String text, float maxWidth, float sizePx, int weight) {
         if (HudFonts.width(text, sizePx, weight) <= maxWidth) return text;
         String ellipsis = "…";
-        float ellW = HudFonts.width(ellipsis, sizePx, weight);
         String trimmed = text;
         while (trimmed.length() > 1 && HudFonts.width(trimmed + ellipsis, sizePx, weight) > maxWidth) {
             trimmed = trimmed.substring(0, trimmed.length() - 1);
@@ -654,48 +647,8 @@ public class TargetHudModule extends HudModule {
         return trimmed + ellipsis;
     }
 
-    private void icon(GuiGraphics ctx, int index, float dx, float dy, int color, int ox, int oy, float s) {
-        if ((color >>> 24) == 0) return;
-        float size = index == ICON_HEART || index == ICON_SHIELD ? 14f : 12f;
-        float factor = size * s / 96f;
-        var pose = ctx.pose();
-        pose.pushMatrix();
-        pose.scale(factor, factor);
-        ctx.blit(RenderPipelines.GUI_TEXTURED, ICON_ATLAS,
-                Math.round((ox + dx * s) / factor), Math.round((oy + dy * s) / factor),
-                (float) (index * 96), 0f, 96, 96, 864, 96, color);
-        pose.popMatrix();
-    }
-
-    private void iconBadge(GuiGraphics ctx, int x, int y, int w, int h, String label,
-                           int icon, int bg, int fg, float s, float a, boolean filled) {
-        badge(ctx, x, y, w, h, "", 11f, bg, fg, s, a, filled, false);
-        icon(ctx, icon, 8f, 4f, c(fg, a), x, y, s);
-        HudFonts.draw(ctx, label, x + 24f * s, y + 4f * s, 11f * s, HudFonts.SEMI, c(fg, a));
-    }
-
     private void rounded(GuiGraphics ctx, float dx, float dy, float dw, float dh, float r, int color, int ox, int oy, float s) {
-        roundedAbs(ctx, ox + Math.round(dx * s), oy + Math.round(dy * s),
-                Math.round(dw * s), Math.round(dh * s), Math.round(r * s), color);
-    }
-
-    private void roundedAbs(GuiGraphics ctx, int x, int y, int w, int h, int r, int color) {
-        if (w <= 0 || h <= 0) return;
-        int rr = Math.max(0, Math.min(Math.min(w, h) / 2, r));
-        if (h > 2 * rr) ctx.fill(x, y + rr, x + w, y + h - rr, color);
-        for (int row = 0; row < h; row++) {
-            if (row >= rr && row < h - rr) continue;
-            int inset = 0;
-            if (row < rr) {
-                int d = rr - row;
-                inset = rr - (int) Math.floor(Math.sqrt((double) rr * rr - (double) d * d) + 0.5);
-            } else if (row >= h - rr) {
-                int d = row - (h - rr - 1);
-                inset = rr - (int) Math.floor(Math.sqrt((double) rr * rr - (double) d * d) + 0.5);
-            }
-            if (inset * 2 >= w) continue;
-            ctx.fill(x + inset, y + row, x + w - inset, y + row + 1, color);
-        }
+        HudDraw.roundDirect(ctx, ox + dx * s, oy + dy * s, dw * s, dh * s, r * s, color);
     }
 
     private void line(GuiGraphics ctx, int x0, int y0, int x1, int y1, int color) {
@@ -712,7 +665,7 @@ public class TargetHudModule extends HudModule {
     }
 
     private void diamond(GuiGraphics ctx, int cx, int cy, int color, float s) {
-        int span = Math.max(2, Math.round(5f * s));
+        int span = Math.max(2, Math.round(7f * s));
         for (int i = 0; i < span; i++) {
             int half = i < (span + 1) / 2 ? i : span - 1 - i;
             if (half < 0) continue;
@@ -786,21 +739,18 @@ public class TargetHudModule extends HudModule {
         };
     }
 
-    private static int intentBg(String intent) {
+    /** Semantic tone per intent: dive = danger, evade = warning, idle/wait = muted, else the accent. */
+    private static int intentTone(String intent) {
         return switch (intent) {
-            case "DIVE" -> 0xE6F87171;
-            case "EVADE" -> 0xE6F59E0B;
-            case "WAIT" -> 0xFF26262B;
-            default -> 0xE6E5E5E5;
+            case "DIVE" -> DESTR;
+            case "EVADE" -> WARN;
+            case "WAIT", "OFF" -> MUTED_FG;
+            default -> PRIMARY;
         };
     }
 
-    private static int intentFg(String intent) {
-        return switch (intent) {
-            case "DIVE", "EVADE" -> 0xFFFFFFFF;
-            case "WAIT" -> MUTED_FG;
-            default -> DARK;
-        };
+    private static int alpha(int argb, float factor) {
+        return ShadcnDraw.alpha(argb, factor);
     }
 
     private static String clock(long seconds) {

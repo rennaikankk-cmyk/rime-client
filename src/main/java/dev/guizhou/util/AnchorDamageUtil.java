@@ -56,11 +56,22 @@ public final class AnchorDamageUtil implements Util {
         return mc.player == null ? 0f : damage(Target.of(mc.player), explosionPos, anchorPos);
     }
 
+    /** Same exposure model for other blast powers; an end crystal uses {@code diameter = 12}. */
+    public static float explosionDamage(Target target, Vec3 explosionPos, double diameter, BlockPos removedSource) {
+        double distance = target.pos().distanceTo(explosionPos);
+        if (distance > diameter || mc.level == null) return 0f;
+        return targetDamage(target, distance, exposure(explosionPos, target.box(), removedSource, null), diameter);
+    }
+
     private static float targetDamage(Target target, double distance, double exposure) {
-        if (mc.level == null || distance > DIAMETER || exposure <= 0) return 0f;
-        double impact = (1.0 - distance / DIAMETER) * exposure;
+        return targetDamage(target, distance, exposure, DIAMETER);
+    }
+
+    private static float targetDamage(Target target, double distance, double exposure, double diameter) {
+        if (mc.level == null || distance > diameter || exposure <= 0) return 0f;
+        double impact = (1.0 - distance / diameter) * exposure;
         if (impact <= 0) return 0f;
-        float raw = (float) ((impact * impact + impact) / 2.0 * 7.0 * DIAMETER + 1.0);
+        float raw = (float) ((impact * impact + impact) / 2.0 * 7.0 * diameter + 1.0);
         switch (mc.level.getDifficulty()) {
             case PEACEFUL -> { return 0f; }
             case EASY -> raw = Math.min(raw / 2f + 1f, raw);

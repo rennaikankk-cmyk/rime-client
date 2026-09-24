@@ -10,24 +10,37 @@ import dev.guizhou.features.modules.client.HudClientModule;
 import dev.guizhou.features.modules.client.HudModule;
 import dev.guizhou.features.modules.client.HudPosition;
 import dev.guizhou.features.settings.Bind;
+import dev.guizhou.util.render.Anim;
+import dev.guizhou.util.render.HudDraw;
 import dev.guizhou.util.render.ShadcnDraw;
 import dev.guizhou.util.render.font.HudFonts;
 import dev.guizhou.util.traits.Jsonable;
 import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 
+/**
+ * Watch list of chosen modules. Each row eases between the active colour and
+ * muted text as its module toggles; a thin edge mark on the anchored side
+ * shows the on state. Meta and bind render as muted text and a framed hint.
+ * Row order: as added, by name, or longest first.
+ */
 public class ActiveModulesHudModule extends HudModule implements Jsonable {
 
-    private static final float TEXT = 11f;
-    private static final float ROW = 15f;
-    private static final float PAD = 6f;
+    public enum Sort { ADDED, NAME, WIDTH }
+
+    private static final float NAME = 8.5f, META = 7f, ROW = 13f, PAD = 6f, EDGE = 2f;
 
     private static ActiveModulesHudModule INSTANCE;
 
     private final LinkedHashSet<String> entries = new LinkedHashSet<>();
+    private final Anim anim = new Anim();
+    private final List<Line> lines = new ArrayList<>();
+
+    private record Line(String id, String display, String meta, String bind, boolean enabled, float width) {}
 
     public ActiveModulesHudModule() {
         super("ActiveModules");
@@ -72,28 +85,35 @@ public class ActiveModulesHudModule extends HudModule implements Jsonable {
                 ? 0xFF000000 | (hudClient.activeModuleColor.getValue().getRGB() & 0xFFFFFF)
                 : ShadcnDraw.ACCENT;
         HudPosition pos = hudClient != null ? hudClient.positionOf(this) : HudPosition.CENTER_RIGHT;
+        Sort sort = hudClient != null ? hudClient.activeModulesSort.getValue() : Sort.ADDED;
+        boolean edge = hudClient == null || hudClient.activeModulesEdge.getValue();
 
-        record Line(String display, String meta, String suffix, boolean enabled) {}
-        List<Line> lines = new ArrayList<>();
+        lines.clear();
         float textW = 0f;
         for (String name : entries) {
             Module module = GuizhouWare.moduleManager.getModuleByName(name);
             if (module == null) continue;
             String display = module.getDisplayName();
-            String metaRaw = module.getMeta();
-            String meta = metaRaw != null ? " (" + metaRaw + ")" : "";
+            String meta = module.getMeta();
+            meta = meta == null || meta.isEmpty() ? "" : meta;
             Bind bind = module.getBind().getKey() > 0 ? module.getBind() : null;
-            String suffix = bind != null ? " [" + bind.toString() + "]" : "";
-            textW = Math.max(textW, ShadcnDraw.width(display + meta + suffix, TEXT));
-            lines.add(new Line(display, meta, suffix, module.isEnabled()));
+            String bindText = bind != null ? bind.toString() : "";
+            float w = ShadcnDraw.width(display, NAME, HudFonts.SEMI)
+                    + (meta.isEmpty() ? 0f : 4f + ShadcnDraw.width(meta, META))
+                    + (bindText.isEmpty() ? 0f : 5f + HudDraw.keycapWidth(bindText, 6f));
+            textW = Math.max(textW, w);
+            lines.add(new Line(module.getName(), display, meta, bindText, module.isEnabled(), w));
         }
         if (lines.isEmpty()) {
             bounds(0, 0, 0, 0);
             return;
         }
+        if (sort == Sort.NAME) lines.sort(Comparator.comparing(Line::display, String.CASE_INSENSITIVE_ORDER));
+        else if (sort == Sort.WIDTH) lines.sort(Comparator.comparingDouble(Line::width).reversed());
 
-        float cardW = PAD * 2 + textW;
-        float cardH = PAD * 2 + lines.size() * ROW - (ROW - TEXT - 2f);
+        float edgeRoom = edge ? EDGE + 5f : 0f;
+        float cardW = PAD * 2 + edgeRoom + textW;
+        float cardH = PAD * 2 - 2f + lines.size() * ROW;
         int defX = pos.isLeft() ? 4 : Math.round(screenWidth() - cardW - 4f);
         int defY = pos.isBottom()
                 ? Math.round(bottomAnchor() - 4f - (hudClient != null ? hudClient.stackBelowHeight(this) : 0) - cardH)
@@ -101,38 +121,29 @@ public class ActiveModulesHudModule extends HudModule implements Jsonable {
         int[] o = origin(defX, defY, (int) cardW, (int) cardH);
         int ox = o[0], oy = o[1];
 
-        ShadcnDraw.panel(ctx, ox, oy, cardW, cardH, 6f);
-        float rx = pos.isLeft() ? ox + PAD : ox + cardW - PAD;
-        float firstRow = oy + PAD - 1f;
-        for (int i = 0; i < lines.size(); i++) {
+        HudDraw.card(ctx, ox, oy, cardW, cardH, HudDraw.RADIUS);
+        boolean left = pos.isLeft();
+        int accent = HudDraw.accent();
+        int n = lines.size();
+        for (int i = 0; i < n; i++) {
             Line line = lines.get(i);
-            float ry = firstRow + i * ROW;
-            float x = rx;
-            float afterName = x + ShadcnDraw.width(line.display(), TEXT);
-            if (pos.isLeft()) {
-                ShadcnDraw.text(ctx, line.display(), x, ry, TEXT, line.enabled() ? activeColor : ShadcnDraw.MUTED);
-                if (!line.meta().isEmpty()) {
-                    ShadcnDraw.text(ctx, line.meta(), afterName, ry, TEXT, ShadcnDraw.MUTED);
-                    afterName += ShadcnDraw.width(line.meta(), TEXT);
-                }
-                if (!line.suffix().isEmpty()) {
-                    ShadcnDraw.text(ctx, line.suffix(), afterName, ry, TEXT, activeColor);
-                }
-            } else {
-                float end = x;
-                if (!line.suffix().isEmpty()) {
-                    float sx = end - ShadcnDraw.width(line.suffix(), TEXT);
-                    ShadcnDraw.text(ctx, line.suffix(), sx, ry, TEXT, activeColor);
-                    end = sx;
-                }
-                if (!line.meta().isEmpty()) {
-                    float mx = end - ShadcnDraw.width(line.meta(), TEXT);
-                    ShadcnDraw.text(ctx, line.meta(), mx, ry, TEXT, ShadcnDraw.MUTED);
-                    end = mx;
-                }
-                ShadcnDraw.text(ctx, line.display(), end - ShadcnDraw.width(line.display(), TEXT), ry, TEXT,
-                        line.enabled() ? activeColor : ShadcnDraw.MUTED);
+            float on = anim.to(line.id(), line.enabled() ? 1f : 0f, 12f);
+            float mid = oy + PAD - 1f + i * ROW + ROW / 2f;
+            if (edge) {
+                float ex = left ? ox + PAD : ox + cardW - PAD - EDGE;
+                ShadcnDraw.round(ctx, ex, mid - ROW / 2f + 1.5f, 1.5f, ROW - 3f, 0,
+                        ShadcnDraw.mix(HudDraw.fade(ShadcnDraw.SUBTLE, .45f), accent, on));
             }
+            int nameColor = ShadcnDraw.mix(ShadcnDraw.MUTED, activeColor, on);
+            float x = left ? ox + PAD + edgeRoom : ox + cardW - PAD - edgeRoom - line.width();
+            HudDraw.textMid(ctx, line.display(), x, mid, NAME, HudFonts.SEMI, nameColor);
+            x += ShadcnDraw.width(line.display(), NAME, HudFonts.SEMI);
+            if (!line.meta().isEmpty()) {
+                x += 4f;
+                HudDraw.textMid(ctx, line.meta(), x, mid, META, HudFonts.REGULAR, ShadcnDraw.MUTED);
+                x += ShadcnDraw.width(line.meta(), META);
+            }
+            if (!line.bind().isEmpty()) HudDraw.keycap(ctx, line.bind(), x + 5f, mid - 4.5f, 9f, 6f);
         }
         bounds(ox, oy, (int) cardW, (int) cardH);
     }

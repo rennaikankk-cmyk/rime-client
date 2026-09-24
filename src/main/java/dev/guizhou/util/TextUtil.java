@@ -3,6 +3,8 @@ package dev.guizhou.util;
 import dev.cattyn.catformat.CatFormat;
 import dev.cattyn.catformat.fabric.FabricCatFormat;
 import dev.guizhou.GuizhouWare;
+import dev.guizhou.features.commands.ui.ChatPalette;
+import dev.guizhou.util.render.ShadcnDraw;
 import net.minecraft.network.chat.MutableComponent;
 
 public final class TextUtil {
@@ -14,7 +16,8 @@ public final class TextUtil {
 
     public static void init() {
         if (formatter != null) throw new IllegalStateException("Formatter is already initialized");
-        formatter = new FabricCatFormat(true);
+        // CatFormat resolves names first-match, so vanilla colours are left out and re-registered on the palette.
+        formatter = new FabricCatFormat(false);
         initColors();
     }
 
@@ -30,6 +33,8 @@ public final class TextUtil {
     }
 
     private static void initColors() {
+        ChatPalette.LEGACY.forEach((name, rgb) -> formatter.add(name, rgb.intValue()));
         formatter.add("global", () -> GuizhouWare.colorManager.getAsInt("ui"));
+        formatter.add("accent", () -> ShadcnDraw.accent() & 0xFFFFFF);
     }
 }

@@ -15,6 +15,8 @@ final class ShadcnTextField {
     private float scroll;
     boolean focused;
     float x, y, w, h;
+    /** Extra left inset, e.g. room for a leading icon. */
+    float padLeft;
     private final Consumer<String> changed;
 
     ShadcnTextField(String initial, Consumer<String> changed) {
@@ -23,27 +25,28 @@ final class ShadcnTextField {
     String value() { return value; }
     void bounds(float x, float y, float w, float h) { this.x=x; this.y=y; this.w=w; this.h=h; }
     void draw(GuiGraphics g, String placeholder) {
-        round(g,x,y,w,h,5,focused ? MUTED : BORDER);
-        round(g,x+1,y+1,w-2,h-2,4,BG);
+        round(g,x,y,w,h,8,SURFACE);
+        outline(g,x,y,w,h,8,1,focused ? accent() : BORDER);
+        float left=x+10+padLeft;
         float caret = width(value.substring(0,cursor),10);
-        scroll = Math.max(0,Math.min(scroll,Math.max(0,width(value,10)-w+16)));
-        if (focused) scroll = Math.max(Math.max(0,caret-w+17), Math.min(scroll,caret));
-        g.enableScissor((int)x+5,(int)y+1,(int)(x+w-5),(int)(y+h-1));
-        float tx=x+7-scroll, ty=y+(h-10)/2;
+        scroll = Math.max(0,Math.min(scroll,Math.max(0,width(value,10)-(x+w-left)+10)));
+        if (focused) scroll = Math.max(Math.max(0,caret-(x+w-left)+11), Math.min(scroll,caret));
+        g.enableScissor((int)left-2,(int)y+1,(int)(x+w-6),(int)(y+h-1));
+        float tx=left-scroll, ty=y+(h-10)/2;
         if (focused && anchor!=cursor) {
             float a=width(value.substring(0,Math.min(cursor,anchor)),10);
             float b=width(value.substring(0,Math.max(cursor,anchor)),10);
-            g.fill((int)(tx+a),(int)ty-1,(int)(tx+b),(int)ty+12,0xFF414141);
+            g.fill((int)(tx+a),(int)ty-1,(int)(tx+b),(int)ty+12,alpha(accent(),.35f));
         }
-        text(g,value.isEmpty() && !focused ? placeholder : value,tx,ty,10,value.isEmpty()?MUTED:TEXT);
+        text(g,value.isEmpty() && !focused ? placeholder : value,tx,ty,10,value.isEmpty()?SUBTLE:TEXT);
         if (focused && (System.currentTimeMillis()/500)%2==0)
-            g.fill((int)(tx+caret),(int)ty,(int)(tx+caret)+1,(int)ty+11,TEXT);
+            g.fill((int)(tx+caret),(int)ty,(int)(tx+caret)+1,(int)ty+11,accent());
         g.disableScissor();
     }
     boolean click(double mx,double my,boolean shift) {
         focused=contains(mx,my,x,y,w,h);
         if (!focused) return false;
-        float target=(float)mx-x-7+scroll;
+        float target=(float)mx-x-10-padLeft+scroll;
         cursor=value.length();
         for(int p=0;p<value.length();) {
             int next=value.offsetByCodePoints(p,1);

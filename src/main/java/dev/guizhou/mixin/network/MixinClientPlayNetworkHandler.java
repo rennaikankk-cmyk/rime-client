@@ -8,6 +8,8 @@ import dev.guizhou.features.modules.player.NoRotateModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundExplodePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
@@ -63,20 +65,39 @@ public class MixinClientPlayNetworkHandler {
         }
     }
 
+    // HEAD runs once on Netty before ensureRunningOnSameThread re-dispatches the packet; the
+    // world may only be read on the client-thread pass.
     @Inject(method = "handleSetEntityMotion", at = @At("HEAD"), cancellable = true)
     private void cancelKnockback(ClientboundSetEntityMotionPacket packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return;
+        if (!mc.isSameThread() || mc.player == null) return;
+        if (packet.getId() != mc.player.getId()) return;
         VelocityModule velocity = GuizhouWare.moduleManager.getModuleByClass(VelocityModule.class);
-        if (velocity != null && velocity.shouldCancelKnockback() && packet.getId() == mc.player.getId()) {
+        if (velocity != null && velocity.shouldCancelKnockback()) {
             ci.cancel();
         }
+    }
+
+    /**
+     * The server re-sends the held stack after a silent swap-back; replacing an identical stack
+     * only replays the re-equip animation. Anything else (another slot, a count or component
+     * change) must apply or the client desyncs.
+     */
+    @Inject(method = "handleContainerSetSlot", at = @At("HEAD"), cancellable = true)
+    private void silentSwapFix(ClientboundContainerSetSlotPacket packet, CallbackInfo ci) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!mc.isSameThread() || mc.player == null) return;
+        if (packet.getContainerId() != 0 || packet.getSlot() - 36 != mc.player.getInventory().getSelectedSlot()) return;
+        ItemStack packetStack = packet.getItem();
+        ItemStack handStack = mc.player.getMainHandItem();
+        if (packetStack.isEmpty() || handStack.isEmpty()) return;
+        if (ItemStack.matches(packetStack, handStack)) ci.cancel();
     }
 
     @Inject(method = "handleExplosion", at = @At("HEAD"))
     private void saveExplosionVelocity(ClientboundExplodePacket packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return;
+        if (!mc.isSameThread() || mc.player == null) return;
         VelocityModule velocity = GuizhouWare.moduleManager.getModuleByClass(VelocityModule.class);
         if (velocity != null && velocity.isEnabled() && velocity.explosions.getValue() && velocity.phaseConditionMet()) {
             velocity$preExplosionVel = mc.player.getDeltaMovement();

@@ -10,6 +10,10 @@ import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.inventory.SwapMode;
 import net.minecraft.core.registries.BuiltInRegistries;
+import dev.guizhou.event.impl.network.DisconnectEvent;
+import net.minecraft.network.protocol.game.ClientboundLoginPacket;
+import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
+import net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -68,8 +72,8 @@ public class SwapManager extends Feature {
     /** Highest priority refused budget this tick — becomes next tick's {@link #reserved}. */
     private int starved = Integer.MIN_VALUE;
 
-    /** Last slot the server was told we hold, tracked off the outgoing packet. */
-    private int serverSlot = -1;
+    /** Last slot the server was told we hold (outgoing packets) or set itself (incoming). */
+    private volatile int serverSlot = -1;
 
     public void init() {
         EVENT_BUS.register(this, "SwapManager");
@@ -369,6 +373,22 @@ public class SwapManager extends Feature {
         if (event.getPacket() instanceof ServerboundSetCarriedItemPacket packet) {
             serverSlot = packet.getSlot();
         }
+    }
+
+    /** The server can move the selection itself (respawn, plugins); that is its view from now on. */
+    @Subscribe
+    private void onPacketReceive(PacketEvent.Receive event) {
+        if (event.getPacket() instanceof ClientboundSetHeldSlotPacket packet) {
+            serverSlot = packet.slot();
+        } else if (event.getPacket() instanceof ClientboundLoginPacket
+                || event.getPacket() instanceof ClientboundRespawnPacket) {
+            serverSlot = -1;
+        }
+    }
+
+    @Subscribe
+    private void onDisconnect(DisconnectEvent event) {
+        serverSlot = -1;
     }
 
     /** The slot the server believes we hold, falling back to the client's selection. */

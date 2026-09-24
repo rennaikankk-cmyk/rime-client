@@ -84,13 +84,19 @@ public class MixinEntity {
 
     @Inject(method = "push(Lnet/minecraft/world/entity/Entity;)V", at = @At("HEAD"), cancellable = true)
     private void cancelEntityPush(Entity other, CallbackInfo ci) {
-        VelocityModule velocity = GuizhouWare.moduleManager.getModuleByClass(VelocityModule.class);
-        if (velocity == null || !velocity.isEnabled() || !velocity.entityPush.getValue() || !velocity.phaseConditionMet()) return;
         LocalPlayer localPlayer = Minecraft.getInstance().player;
         if (localPlayer == null) return;
         Object self = this;
-        if (self == localPlayer || other == localPlayer) {
-            ci.cancel();
-        }
+        // Cheap identity test first: the collision query below must not run for every mob pair.
+        if (self != localPlayer && other != localPlayer) return;
+        VelocityModule velocity = GuizhouWare.moduleManager.getModuleByClass(VelocityModule.class);
+        if (velocity == null || !velocity.isEnabled() || !velocity.entityPush.getValue() || !velocity.phaseConditionMet()) return;
+        ci.cancel();
+    }
+
+    @Inject(method = "turn", at = @At("HEAD"), cancellable = true)
+    private void guizhouware$freecamTurn(double yaw, double pitch, CallbackInfo ci) {
+        if ((Object) this != Minecraft.getInstance().player) return;
+        if (dev.guizhou.features.modules.render.FreecamModule.consumeTurn(yaw, pitch)) ci.cancel();
     }
 }

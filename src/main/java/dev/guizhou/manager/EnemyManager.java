@@ -26,7 +26,9 @@ public class EnemyManager implements Jsonable {
     }
 
     public void addEnemy(String name) {
+        enemies.removeIf(s -> s.equalsIgnoreCase(name));
         this.enemies.add(name);
+        GuizhouWare.configManager.markDirty();
 
         GuizhouWare.friendManager.removeFriend(name);
     }
@@ -56,8 +58,12 @@ public class EnemyManager implements Jsonable {
 
     @Override
     public void fromJson(JsonElement element) {
+        if (element == null || !element.isJsonObject() || !element.getAsJsonObject().has("enemies")) return;
+        // Replace, and drop case-insensitive duplicates left behind by older merging loads.
+        enemies.clear();
         for (JsonElement e : element.getAsJsonObject().get("enemies").getAsJsonArray()) {
-            enemies.add(e.getAsString());
+            String name = e.getAsString();
+            if (!isEnemy(name)) enemies.add(name);
         }
     }
 

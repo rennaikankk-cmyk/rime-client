@@ -96,6 +96,27 @@ public class MixinClientPlayerEntity {
         self.input.moveVector = new Vec2(leftImpulse, forwardImpulse).normalized();
     }
 
+    /** Declared after the move fix so it sees (and may replace) the final keys of this tick. */
+    @Inject(
+        method = "aiStep",
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/ClientInput;tick()V", shift = At.Shift.AFTER)
+    )
+    private void guizhouware$inputOverrides(CallbackInfo ci) {
+        LocalPlayer self = (LocalPlayer) (Object) this;
+        Input keys = self.input.keyPresses;
+        Input replaced;
+        if (dev.guizhou.features.modules.render.FreecamModule.captureInput(keys)) {
+            replaced = Input.EMPTY;
+        } else {
+            replaced = dev.guizhou.features.modules.combat.SurroundModule.centerInput(keys);
+        }
+        if (replaced == keys) return;
+        self.input.keyPresses = replaced;
+        float leftImpulse = replaced.left() == replaced.right() ? 0f : (replaced.left() ? 1f : -1f);
+        float forwardImpulse = replaced.forward() == replaced.backward() ? 0f : (replaced.forward() ? 1f : -1f);
+        self.input.moveVector = new Vec2(leftImpulse, forwardImpulse).normalized();
+    }
+
     @Inject(method = "moveTowardsClosestSpace", at = @At("HEAD"), cancellable = true)
     private void cancelBlockPush(double x, double z, CallbackInfo ci) {
         VelocityModule velocity = GuizhouWare.moduleManager.getModuleByClass(VelocityModule.class);

@@ -6,7 +6,9 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import com.mojang.brigadier.LiteralMessage;
 import dev.guizhou.GuizhouWare;
+import dev.guizhou.features.commands.ui.FuzzyMatch;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -18,10 +20,10 @@ public class FriendArgumentType implements ArgumentType<String> {
 
     @Override
     public <S> CompletableFuture<Suggestions> listSuggestions(CommandContext<S> context, SuggestionsBuilder builder) {
-        String input = builder.getRemainingLowerCase();
+        String input = builder.getRemaining();
         for (String name : GuizhouWare.friendManager.getFriends()) {
-            if (input.isEmpty() || name.toLowerCase().contains(input)) {
-                builder.suggest(name);
+            if (FuzzyMatch.matches(input, name)) {
+                builder.suggest(name, new LiteralMessage("好友"));
             }
         }
         return builder.buildFuture();

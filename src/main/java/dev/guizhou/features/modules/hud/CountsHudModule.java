@@ -2,20 +2,23 @@ package dev.guizhou.features.modules.hud;
 
 import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.features.modules.client.HudModule;
+import dev.guizhou.util.render.HudDraw;
 import dev.guizhou.util.render.ShadcnDraw;
+import dev.guizhou.util.render.font.HudFonts;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+/** Consumable column beside the hotbar: icon, right-aligned count, danger when empty. */
 public class CountsHudModule extends HudModule {
-    private static final float ICON = 14f;
+    private static final float ICON = 12f;
     private static final int HOTBAR_HALF = 91;
     private static final int HUNGER_TOP_OFFSET = 39;
     private static final int BUBBLE_HEIGHT = 10;
-    private static final float PAD = 4f;
-    private static final float ROW = 16f;
+    private static final float PAD = 5f, ROW = 15f, COUNT = 9.5f;
 
     private static final Item[] ITEMS = {
             Items.END_CRYSTAL,
@@ -23,6 +26,13 @@ public class CountsHudModule extends HudModule {
             Items.ENDER_PEARL,
             Items.EXPERIENCE_BOTTLE,
     };
+    private static final ItemStack[] ICONS = new ItemStack[ITEMS.length];
+    static {
+        for (int i = 0; i < ITEMS.length; i++) ICONS[i] = new ItemStack(ITEMS[i]);
+    }
+
+    private final int[] counts = new int[ITEMS.length], shown = new int[ITEMS.length];
+    private final String[] labels = new String[ITEMS.length];
 
     public CountsHudModule() {
         super("Counts");
@@ -30,12 +40,18 @@ public class CountsHudModule extends HudModule {
 
     @Override
     public void render(Render2DEvent event) {
-        float textW = 0f;
-        for (Item item : ITEMS) {
-            textW = Math.max(textW, ShadcnDraw.width("999", 11f));
+        GuiGraphics g = event.getContext();
+        countAll();
+        float textW = ShadcnDraw.width("999", COUNT, HudFonts.BOLD);
+        for (int i = 0; i < ITEMS.length; i++) {
+            if (labels[i] == null || shown[i] != counts[i]) {
+                shown[i] = counts[i];
+                labels[i] = Integer.toString(counts[i]);
+            }
+            textW = Math.max(textW, ShadcnDraw.width(labels[i], COUNT, HudFonts.BOLD));
         }
-        float cardW = PAD * 2 + ICON + 5f + textW;
-        float cardH = PAD * 2 + ITEMS.length * ROW;
+        float cardW = PAD * 2 + ICON + 6f + textW;
+        float cardH = PAD * 2 + ITEMS.length * ROW - 3f;
 
         int defX = screenWidth() / 2 + HOTBAR_HALF + 4;
         int defY = screenHeight() - HUNGER_TOP_OFFSET - 1 - (int) cardH;
@@ -43,32 +59,33 @@ public class CountsHudModule extends HudModule {
         int[] o = origin(defX, defY, (int) cardW, (int) cardH);
         int ox = o[0], oy = o[1];
 
-        ShadcnDraw.panel(event.getContext(), ox, oy, cardW, cardH, 6f);
+        HudDraw.card(g, ox, oy, cardW, cardH, HudDraw.RADIUS);
         float scale = ICON / 16f;
         for (int i = 0; i < ITEMS.length; i++) {
-            int count = countItem(ITEMS[i]);
-            float ry = oy + PAD + i * ROW;
-            ItemStack stack = new ItemStack(ITEMS[i], Math.max(count, 1));
-            var pose = event.getContext().pose();
+            float ry = oy + PAD + i * ROW - 1f;
+            if (i > 0) HudDraw.rule(g, ox + PAD, ry - 1.5f, cardW - PAD * 2);
+            var pose = g.pose();
             pose.pushMatrix();
+            pose.translate(ox + PAD, ry + (ROW - 3f - ICON) / 2f + 1f);
             pose.scale(scale, scale);
-            event.getContext().renderItem(stack,
-                    Math.round((ox + PAD) / scale), Math.round(ry / scale));
+            g.renderItem(ICONS[i], 0, 0);
             pose.popMatrix();
-            ShadcnDraw.text(event.getContext(), String.valueOf(count),
-                    ox + PAD + ICON + 5f, ry + 2f, 11f, count > 0 ? ShadcnDraw.TEXT : 0xFFFF5555);
+            int tone = counts[i] > 0 ? ShadcnDraw.TEXT : ShadcnDraw.DANGER;
+            HudDraw.textMidRight(g, labels[i], ox + cardW - PAD, ry + (ROW - 3f) / 2f + 1f, COUNT, HudFonts.BOLD, tone);
         }
         bounds(ox, oy, (int) cardW, (int) cardH);
     }
 
-    private int countItem(Item item) {
-        int total = 0;
+    private void countAll() {
+        java.util.Arrays.fill(counts, 0);
         Inventory inv = mc.player.getInventory();
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            ItemStack s = inv.getItem(i);
-            if (s.is(item)) total += s.getCount();
+        for (int s = 0; s < inv.getContainerSize(); s++) {
+            ItemStack stack = inv.getItem(s);
+            if (stack.isEmpty()) continue;
+            for (int i = 0; i < ITEMS.length; i++) {
+                if (stack.is(ITEMS[i])) { counts[i] += stack.getCount(); break; }
+            }
         }
-        return total;
     }
 
     private boolean showingBubbles() {

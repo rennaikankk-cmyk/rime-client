@@ -155,7 +155,7 @@ public class AutoTrapModule extends Module {
 
     @Subscribe(priority = 1)
     private void onTick(TickEvent event) {
-        if (nullCheck() || mc.screen != null) return;
+        if (nullCheck() || !dev.guizhou.util.player.ScreenGate.allowsWorldUpkeep()) return;
 
         boostingTicks.entrySet().removeIf(e -> {
             int next = e.getValue() - 1;

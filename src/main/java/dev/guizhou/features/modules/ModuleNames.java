@@ -13,12 +13,26 @@ public final class ModuleNames {
             "GuangxiMine", "PacketMine",
             "AutoAnchor", "AnchorAura",
             "GuangxiElytraChase", "AerialCombat",
-            "GuangxiElytra", "ElytraFlight");
+            "GuangxiElytra", "ElytraFlight",
+            "InterfaceFeedback", "界面反馈");
+
+    /** Chinese labels for the utility modules (Map.of above caps at ten pairs). */
+    private static final Map<String, String> UTILITY_NAMES = Map.ofEntries(
+            Map.entry("AutoReconnect", "自动重连"),
+            Map.entry("HoleESP", "安全洞显示"),
+            Map.entry("HoleFill", "自动堵洞"),
+            Map.entry("Trajectories", "轨迹预测"),
+            Map.entry("Freecam", "自由相机"),
+            Map.entry("Waypoints", "路径点"),
+            Map.entry("VisualRange", "视距警报"),
+            Map.entry("AutoArmor", "自动穿甲"),
+            Map.entry("AutoEat", "自动进食"),
+            Map.entry("MiddleClickFriend", "中键好友"));
 
     private ModuleNames() {}
 
     public static String displayName(String stableId) {
-        return NAMES.getOrDefault(stableId, stableId);
+        return NAMES.getOrDefault(stableId, UTILITY_NAMES.getOrDefault(stableId, stableId));
     }
 
     public static String migrateDisplayName(String stableId, String saved) {

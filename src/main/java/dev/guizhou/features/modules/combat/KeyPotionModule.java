@@ -24,8 +24,13 @@ public class KeyPotionModule extends Module {
         super("KeyPotion", "Throws a splash potion on keybind press.", Category.PLAYER);
     }
 
-    @Subscribe
+    @Override
     public void onEnable() {
+        // Enabled from the main menu (GUI or config) there is no player; stay a one-shot toggle.
+        if (nullCheck() || mc.gameMode == null || mc.getConnection() == null) {
+            disable();
+            return;
+        }
         if (onGround.getValue() && !mc.player.onGround()) return;
 
         Result potion = InventoryUtil.find(Items.SPLASH_POTION, FULL_SCOPE);

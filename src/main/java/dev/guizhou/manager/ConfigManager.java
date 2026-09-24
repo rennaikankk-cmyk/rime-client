@@ -22,7 +22,7 @@ import java.util.List;
 
 public class ConfigManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("ConfigManager");
-    private static final Path OYVEY_PATH = FabricLoader.getInstance().getGameDir().resolve("guizhouware");
+    private static final Path CONFIG_ROOT = FabricLoader.getInstance().getGameDir().resolve("guizhouware");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private final List<Jsonable> jsonables = new LinkedList<>();
@@ -35,29 +35,112 @@ public class ConfigManager {
         mkdirs();
         for (Jsonable jsonable : jsonables) {
             try {
-                JsonElement read = ConfigFiles.read(OYVEY_PATH.resolve(jsonable.getFileName()));
+                JsonElement read = ConfigFiles.read(CONFIG_ROOT.resolve(jsonable.getFileName()));
                 if (read != null) jsonable.fromJson(read);
             } catch (Throwable e) {
                 LOGGER.error("Failed to load", e);
             }
         }
+        // Snapshot after every part loaded: later parts (modules) can adjust earlier ones.
+        for (Jsonable jsonable : jsonables) rememberLoaded(jsonable);
+        dirtySince = 0;
     }
 
     public void save() {
         mkdirs();
+        long generation = generations.incrementAndGet();
         for (Jsonable jsonable : jsonables) {
             try {
                 JsonElement json = jsonable.toJson();
-                ConfigFiles.write(OYVEY_PATH.resolve(jsonable.getFileName()), GSON.toJson(json));
+                String text = GSON.toJson(json);
+                synchronized (writeLock) {
+                    ConfigFiles.write(CONFIG_ROOT.resolve(jsonable.getFileName()), text);
+                    written.put(jsonable.getFileName(), text);
+                    writtenGeneration = Math.max(writtenGeneration, generation);
+                }
             } catch (Throwable e) {
                 LOGGER.error("Failed to write to file", e);
             }
         }
     }
 
+    // ---------------------------------------------------------- autosave
+
+    private static final long AUTOSAVE_DEBOUNCE_MS = 5_000L;
+    private static final long AUTOSAVE_INTERVAL_MS = 60_000L;
+    private final Object writeLock = new Object();
+    private final java.util.Map<String, String> written = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ExecutorService writer = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "GuizhouWare-ConfigWriter");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final java.util.concurrent.atomic.AtomicLong generations = new java.util.concurrent.atomic.AtomicLong();
+    /** Newest snapshot on disk; guarded by writeLock so a queued autosave never overwrites a newer save(). */
+    private long writtenGeneration;
+    private volatile long dirtySince;
+    private long lastSnapshot = System.currentTimeMillis();
+
+    /** Any setting, bind or toggle change; the next {@link #autosaveTick()} after the debounce writes it. */
+    public void markDirty() {
+        if (dirtySince == 0) dirtySince = System.currentTimeMillis();
+    }
+
+    /**
+     * Client thread only. Serializes on this thread (modules are not thread-safe), then writes the
+     * files whose text changed on a background thread with the same atomic replace as {@link #save()}.
+     * The periodic pass also catches changes that post no event (friends, enemies, kits, waypoints).
+     */
+    public void autosaveTick() {
+        long now = System.currentTimeMillis();
+        boolean debounced = dirtySince != 0 && now - dirtySince >= AUTOSAVE_DEBOUNCE_MS;
+        if (!debounced && now - lastSnapshot < AUTOSAVE_INTERVAL_MS) return;
+        dirtySince = 0;
+        lastSnapshot = now;
+        java.util.Map<String, String> changed = new java.util.LinkedHashMap<>();
+        for (Jsonable jsonable : jsonables) {
+            try {
+                String text = GSON.toJson(jsonable.toJson());
+                if (!text.equals(written.get(jsonable.getFileName()))) changed.put(jsonable.getFileName(), text);
+            } catch (Throwable e) {
+                LOGGER.error("Failed to serialize {} for autosave", jsonable.getFileName(), e);
+            }
+        }
+        if (changed.isEmpty()) return;
+        long generation = generations.incrementAndGet();
+        writer.execute(() -> {
+            try {
+                mkdirs();
+            } catch (Throwable e) {
+                LOGGER.error("Autosave could not create the config directory", e);
+                return;
+            }
+            for (var entry : changed.entrySet()) {
+                try {
+                    synchronized (writeLock) {
+                        if (generation < writtenGeneration) return;
+                        ConfigFiles.write(CONFIG_ROOT.resolve(entry.getKey()), entry.getValue());
+                        written.put(entry.getKey(), entry.getValue());
+                        writtenGeneration = generation;
+                    }
+                } catch (Throwable e) {
+                    LOGGER.error("Autosave failed for {}", entry.getKey(), e);
+                }
+            }
+        });
+    }
+
+    /** Remembers what load() read so the first autosave only writes files that really changed. */
+    private void rememberLoaded(Jsonable jsonable) {
+        try {
+            written.put(jsonable.getFileName(), GSON.toJson(jsonable.toJson()));
+        } catch (Throwable ignored) {
+        }
+    }
+
     // ---------------------------------------------------------- named presets
 
-    private static final Path CONFIGS_DIR = OYVEY_PATH.resolve("configs");
+    private static final Path CONFIGS_DIR = CONFIG_ROOT.resolve("configs");
     private static final java.util.regex.Pattern NAME_PATTERN =
             java.util.regex.Pattern.compile("[A-Za-z0-9_-]+");
 
@@ -128,8 +211,8 @@ public class ConfigManager {
     }
 
     private void mkdirs() {
-        if (!OYVEY_PATH.toFile().exists()) {
-            boolean success = OYVEY_PATH.toFile().mkdirs();
+        if (!CONFIG_ROOT.toFile().exists()) {
+            boolean success = CONFIG_ROOT.toFile().mkdirs();
             if (!success) {
                 throw new RuntimeException("Failed to create needed directories!");
             }

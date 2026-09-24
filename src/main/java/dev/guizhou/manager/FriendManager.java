@@ -19,6 +19,11 @@ public class FriendManager implements Jsonable {
     public static final long PERMANENT = -1L;
 
     private final Map<String, Long> friends = new LinkedHashMap<>();
+    /**
+     * Whisper "added as a friend" to the player. Off by default: it floods chat on strict
+     * servers and tells the other player you run a client. Batch adds never whisper.
+     */
+    private boolean whisperOnAdd = false;
 
     public void init() {
         GuizhouWare.configManager.addConfig(this);
@@ -38,6 +43,10 @@ public class FriendManager implements Jsonable {
     }
 
     public void addFriend(String name, long expiry) {
+        addFriend(name, expiry, whisperOnAdd);
+    }
+
+    public void addFriend(String name, long expiry, boolean whisper) {
 
         boolean alreadyFriend = friends.keySet().stream().anyMatch(friend -> friend.equalsIgnoreCase(name));
 
@@ -46,9 +55,19 @@ public class FriendManager implements Jsonable {
 
         GuizhouWare.enemyManager.removeEnemy(name);
 
-        if (!alreadyFriend) {
+        if (!alreadyFriend && whisper) {
             whisperFriendAdded(name);
         }
+        GuizhouWare.configManager.markDirty();
+    }
+
+    public boolean isWhisperOnAdd() {
+        return whisperOnAdd;
+    }
+
+    public void setWhisperOnAdd(boolean whisperOnAdd) {
+        this.whisperOnAdd = whisperOnAdd;
+        GuizhouWare.configManager.markDirty();
     }
 
     private void whisperFriendAdded(String name) {
@@ -60,10 +79,12 @@ public class FriendManager implements Jsonable {
 
     public void removeFriend(String name) {
         friends.keySet().removeIf(s -> s.equalsIgnoreCase(name));
+        GuizhouWare.configManager.markDirty();
     }
 
     public void clearFriends() {
         friends.clear();
+        GuizhouWare.configManager.markDirty();
     }
 
     public long getExpiry(String name) {
@@ -97,19 +118,29 @@ public class FriendManager implements Jsonable {
             array.add(element);
         }
         object.add("friends", array);
+        object.addProperty("whisperOnAdd", whisperOnAdd);
         return object;
     }
 
+    /** Loading a file or preset replaces the list; merging made preset switches accumulate friends. */
     @Override
     public void fromJson(JsonElement element) {
-        for (JsonElement e : element.getAsJsonObject().get("friends").getAsJsonArray()) {
+        if (element == null || !element.isJsonObject()) return;
+        JsonObject root = element.getAsJsonObject();
+        if (root.has("whisperOnAdd")) whisperOnAdd = root.get("whisperOnAdd").getAsBoolean();
+        if (!root.has("friends") || !root.get("friends").isJsonArray()) return;
+        friends.clear();
+        for (JsonElement e : root.get("friends").getAsJsonArray()) {
             if (e.isJsonObject()) {
                 JsonObject obj = e.getAsJsonObject();
                 long expiry = obj.has("expiry") ? obj.get("expiry").getAsLong() : PERMANENT;
-                friends.put(obj.get("name").getAsString(), expiry);
+                String name = obj.get("name").getAsString();
+                friends.keySet().removeIf(friend -> friend.equalsIgnoreCase(name));
+                friends.put(name, expiry);
             } else {
-
-                friends.put(e.getAsString(), PERMANENT);
+                String name = e.getAsString();
+                friends.keySet().removeIf(friend -> friend.equalsIgnoreCase(name));
+                friends.put(name, PERMANENT);
             }
         }
         purgeExpired();

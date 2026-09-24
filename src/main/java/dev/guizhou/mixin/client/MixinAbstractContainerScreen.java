@@ -1,6 +1,7 @@
 package dev.guizhou.mixin.client;
 
 import dev.guizhou.features.modules.render.ShulkerPreviewModule;
+import dev.guizhou.util.render.HudDraw;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -38,6 +39,17 @@ public class MixinAbstractContainerScreen<T extends AbstractContainerMenu> {
 
     @Shadow
     protected int leftPos;
+
+    @Shadow
+    protected int topPos;
+
+    @Shadow
+    protected int imageWidth;
+
+    @Inject(method = "renderContents", at = @At("HEAD"))
+    private void onDecorateContainer(GuiGraphics graphics, int mouseX, int mouseY, float partial, CallbackInfo ci) {
+        HudDraw.containerAccent(graphics, leftPos, topPos, imageWidth);
+    }
 
     @Inject(method = "renderTooltip", at = @At("HEAD"), cancellable = true)
     private void onRenderShulkerPreview(GuiGraphics graphics, int mouseX, int mouseY, CallbackInfo ci) {

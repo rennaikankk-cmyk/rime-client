@@ -3,6 +3,8 @@ package dev.guizhou.features.commands;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.guizhou.features.commands.argument.ColorArgumentType;
+import dev.guizhou.features.commands.ui.CommandCategory;
+import dev.guizhou.features.commands.ui.CommandHelp;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.ModuleNames;
 import dev.guizhou.features.settings.Setting;
@@ -23,7 +25,8 @@ public class ModuleCommand extends Command {
 
     public ModuleCommand(Module module) {
         super(ModuleNames.commandAliases(module.getName()));
-        setDescription("Command line configuration implementation for \"" + module.getName() + "\"");
+        setDescription("配置模块「" + module.getDisplayName() + "」的设置");
+        category(CommandCategory.MODULE_SETTINGS);
         this.module = module;
     }
 
@@ -49,23 +52,18 @@ public class ModuleCommand extends Command {
 
     private void registerColorArgument(LiteralArgumentBuilder<CommandManager> builder,
                                        Setting<Color> setting) {
-        builder.then(literal(setting.getName().toLowerCase())
+        builder.then(literal(key(setting))
                 .then(argument("value", ColorArgumentType.color())
                         .executes((ctx) -> {
                             setting.setValue(getColor(ctx, "value"));
-                            Color value = setting.getValue();
-                            return success("Set %s.%s to RGB(%s, %s, %s)",
-                                    module.getName(),
-                                    setting.getName(),
-                                    value.getRed(),
-                                    value.getGreen(),
-                                    value.getBlue());
+                            return settingChanged(module.getDisplayName(), setting.getName(),
+                                    CommandHelp.formatValue(setting.getValue()));
                         })));
     }
 
     private void registerStringArgument(LiteralArgumentBuilder<CommandManager> builder,
                                         Setting<String> setting) {
-        builder.then(literal(setting.getName().toLowerCase())
+        builder.then(literal(key(setting))
                 .then(argument("value", greedyString())
                         .executes((ctx) -> {
                             setting.setValue(getString(ctx, "value"));
@@ -77,7 +75,7 @@ public class ModuleCommand extends Command {
     private void registerEnumArgument(LiteralArgumentBuilder<CommandManager> builder,
                                       Setting<Enum<?>> setting) {
         Class<Enum<?>> type = (Class<Enum<?>>) setting.getDefaultValue().getClass();
-        builder.then(literal(setting.getName().toLowerCase())
+        builder.then(literal(key(setting))
                 .then(argument("value", _enum(type))
                         .executes((ctx) -> {
                             setting.setValue(getEnum(ctx, "value"));
@@ -89,7 +87,7 @@ public class ModuleCommand extends Command {
     private <T extends Number> void registerNumberArgument(LiteralArgumentBuilder<CommandManager> builder,
                                                            Setting<T> setting) {
         Class<T> type = (Class<T>) setting.getDefaultValue().getClass();
-        builder.then(literal(setting.getName().toLowerCase())
+        builder.then(literal(key(setting))
                 .then(argument("value", number(type, minMax(setting.getMin(), setting.getMax())))
                         .executes((ctx) -> {
                             setting.setValue(get(type, ctx, "value"));
@@ -99,16 +97,27 @@ public class ModuleCommand extends Command {
 
     private void registerBooleanArgument(LiteralArgumentBuilder<CommandManager> builder,
                                          Setting<Boolean> setting) {
-        builder.then(literal(setting.getName().toLowerCase())
+        builder.then(literal(key(setting))
                 .then(argument("value", BoolArgumentType.bool())
                         .executes((ctx) -> {
-                            setting.setValue(getBool(ctx, "value"));
+                            boolean value = getBool(ctx, "value");
+                            if (setting == module.enabled) {
+                                // Toggling must run the lifecycle (listener registration, onEnable/onDisable).
+                                module.setEnabledByUser(value);
+                            } else {
+                                setting.setValue(value);
+                            }
                             return settingChangeReturn(setting);
                         })));
     }
 
+    /** Brigadier literals cannot contain spaces; "Module Toggle" is typed as "moduletoggle". */
+    private static String key(Setting<?> setting) {
+        return CommandHelp.settingLiteral(setting);
+    }
+
     private int settingChangeReturn(final Setting<?> setting) {
-        return success("Set %s.%s to %s", module.getName(), setting.getName(), setting.getValue());
+        return settingChanged(module.getDisplayName(), setting.getName(), CommandHelp.formatValue(setting.getValue()));
     }
 
     @Override
