@@ -136,7 +136,7 @@ public final class ChatFeed {
         int accent = accent();
         int second = ChatPalette.mix(accent, ChatPalette.ACCENT_2, 0.7f);
         MutableComponent tip = Component.empty()
-                .append(text("GuizhouWare", accent).withStyle(style -> style.withBold(true)))
+                .append(text("Rime", accent).withStyle(style -> style.withBold(true)))
                 .append(text("\n客户端消息 · 点击查看命令列表", ChatPalette.MUTED));
         return Component.empty()
                 .append(Component.literal("G").withStyle(style -> style.withColor(accent).withBold(true)))
@@ -146,7 +146,7 @@ public final class ChatFeed {
     }
 
     public static String prefix() {
-        return GuizhouWare.commandManager == null ? "." : GuizhouWare.commandManager.getCommandPrefix();
+        return GuizhouWare.commandManager == null ? "rime" : GuizhouWare.commandManager.getCommandPrefix();
     }
 
     public static int accent() {
@@ -211,8 +211,8 @@ public final class ChatFeed {
 
     private static GuiMessageTag tag(ChatTone tone) {
         MutableComponent label = Component.empty()
-                .append(text("GuizhouWare", accent()))
+                .append(text("Rime", accent()))
                 .append(text(" · " + tone.label(), ChatPalette.MUTED));
-        return new GuiMessageTag(toneColor(tone), null, label, "GuizhouWare");
+        return new GuiMessageTag(toneColor(tone), null, label, "Rime");
     }
 }

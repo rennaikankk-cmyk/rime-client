@@ -21,7 +21,8 @@ public final class CommandRunner {
     private CommandRunner() {}
 
     public static void run(CommandManager manager, String message) {
-        String prefix = manager.getCommandPrefix();
+        String prefix = manager.matchedPrefix(message);
+        if (prefix == null) prefix = manager.getCommandPrefix();
         String input = message.substring(Math.min(message.length(), prefix.length())).trim();
         if (input.isEmpty()) {
             ChatFeed.send(ChatTone.MUTED, Component.empty()

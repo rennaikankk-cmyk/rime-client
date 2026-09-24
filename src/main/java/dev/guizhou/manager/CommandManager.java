@@ -25,7 +25,9 @@ public class CommandManager extends Feature implements Jsonable {
     private final Map<String, Command> commandAliasMap = new LinkedHashMap<>();
     private final List<Command> commandList = new LinkedList<>();
 
-    private String commandPrefix = ".";
+    private String commandPrefix = "rime";
+    /** Older chats still type these; help and the GUI only show {@link #commandPrefix}. */
+    private static final String[] LEGACY_PREFIXES = {".", "gzw", "guizhouware"};
     private boolean funnyVisible = false;
 
     public CommandManager() {
@@ -77,6 +79,16 @@ public class CommandManager extends Feature implements Jsonable {
 
     public String getCommandPrefix() {
         return commandPrefix;
+    }
+
+    /** Prefix that actually matched this chat line, including a hidden legacy alias. */
+    public String matchedPrefix(String message) {
+        if (message != null && message.startsWith(commandPrefix)) return commandPrefix;
+        if (message == null) return commandPrefix;
+        for (String legacy : LEGACY_PREFIXES) {
+            if (!legacy.equals(commandPrefix) && message.startsWith(legacy)) return legacy;
+        }
+        return null;
     }
 
     public boolean isFunnyVisible() {

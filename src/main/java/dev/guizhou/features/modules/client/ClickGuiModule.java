@@ -15,7 +15,7 @@ import java.awt.*;
 public class ClickGuiModule extends Module {
     private static ClickGuiModule INSTANCE;
 
-    public Setting<String>  prefix           = str("Prefix", ".");
+    public Setting<String>  prefix           = str("Prefix", "rime");
     public Setting<Style>   style            = mode("Style", Style.PURPLE);
     public Setting<Boolean> blurBackground   = bool("BlurBackground", true);
     public Setting<Boolean> descriptions     = bool("Descriptions", true);

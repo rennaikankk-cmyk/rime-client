@@ -165,11 +165,16 @@ final class ModernStyle extends ShellStyle {
         return smooth() ? anim.to(key, target, speed) : target;
     }
 
+    private final double[] localPoint = new double[2];
+    private List<Module> frameModules = List.of();
+
     /** Screen pixels to window-local units, undoing the entrance transform. */
     private double[] local(double sx, double sy) {
         double mx = sx / scale, my = sy / scale;
         float cx = x + w / 2, cy = y + h / 2;
-        return new double[]{cx + (mx - cx) / openScale, cy + (my - cy - openShift) / openScale};
+        localPoint[0] = cx + (mx - cx) / openScale;
+        localPoint[1] = cy + (my - cy - openShift) / openScale;
+        return localPoint;
     }
 
     // ------------------------------------------------------------ frame
@@ -177,6 +182,10 @@ final class ModernStyle extends ShellStyle {
     @Override
     void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
         layout();
+        frameModules = GuizhouWare.moduleManager.stream().filter(m -> !m.hidden)
+                .filter(m -> m.getCategory() != Module.Category.HUD)
+                .filter(m -> m.getCategory() != Module.Category.FUNNY || GuizhouWare.commandManager.isFunnyVisible())
+                .toList();
         hits.clear();
         modalFrom = -1;
         hoverTarget = null;
@@ -236,7 +245,7 @@ final class ModernStyle extends ShellStyle {
         shadow(g, sx, sy, 32, 32, 10, 8, alpha(accent(), .5f));
         roundGradient(g, sx, sy, 32, 32, 10, accent(), ACCENT_2);
         textCentered(g, "G", sx + 16, sy + 8.5f, 15, HudFonts.BOLD, 0xFF0B0C10);
-        text(g, "GuizhouWare", sx + 43, sy + 4, 13.5f, HudFonts.SEMI, TEXT);
+        text(g, "Rime", sx + 43, sy + 4, 13.5f, HudFonts.SEMI, TEXT);
         text(g, "v" + BuildConfig.VERSION, sx + 43, sy + 20, 8, MUTED);
 
         List<Module.Category> cats = GuizhouWare.moduleManager.getCategories().stream()
@@ -934,14 +943,13 @@ final class ModernStyle extends ShellStyle {
     }
 
     private List<Module> allModules() {
-        return GuizhouWare.moduleManager.stream().filter(m -> !m.hidden)
-                .filter(m -> m.getCategory() != Module.Category.HUD)
-                .filter(m -> m.getCategory() != Module.Category.FUNNY || GuizhouWare.commandManager.isFunnyVisible())
-                .toList();
+        return frameModules;
     }
 
     private List<Module> modulesIn(Module.Category c) {
-        return allModules().stream().filter(m -> m.getCategory() == c).toList();
+        List<Module> found = new ArrayList<>();
+        for (Module module : frameModules) if (module.getCategory() == c) found.add(module);
+        return found;
     }
 
     private List<Module> visibleModules() {

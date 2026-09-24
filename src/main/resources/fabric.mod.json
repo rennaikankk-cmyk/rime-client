@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "guizhouware",
   "version": "${version}",
-  "name": "GuizhouWare",
-  "description": "GuizhouWare — 贵州客户端. Fork of Homovore (AGPL-3.0) by Leonetic & widerthaneurasia, with AutoCrystal enhancements ported from AlienV4.",
+  "name": "Rime",
+  "description": "Rime 1.0 for Minecraft. Fork of Homovore (AGPL-3.0) by Leonetic & widerthaneurasia, with AutoCrystal enhancements ported from AlienV4.",
   "authors": [
     "renna"
   ],

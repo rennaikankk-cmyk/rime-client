@@ -79,6 +79,7 @@ public class FontRenderer implements Closeable {
 
         synchronized (glyphPages) {
           try {
+            for (ObjectList<DrawEntry> page : glyphPages.values()) page.clear();
             text.accept((index, style, codePoint) -> {
                 int rgb;
                 if (style.getColor() != null) {
@@ -128,7 +129,9 @@ public class FontRenderer implements Closeable {
             }
 
             } finally { pose.popMatrix(); }
-          } finally { glyphPages.clear(); }
+          } finally {
+            for (ObjectList<DrawEntry> page : glyphPages.values()) page.clear();
+          }
         }
     }
 

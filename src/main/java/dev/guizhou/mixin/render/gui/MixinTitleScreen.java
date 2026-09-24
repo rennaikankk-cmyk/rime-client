@@ -179,7 +179,7 @@ public abstract class MixinTitleScreen extends Screen {
             }
             guizhouware$button(g, b, mx, my, s);
         }
-        text(g, "GuizhouWare " + BuildConfig.VERSION + " · mc1.21.11", 6, height - 10, 6f, 0x80FFFFFF);
+        text(g, "Rime " + BuildConfig.VERSION + " · mc1.21.11", 6, height - 10, 6f, 0x80FFFFFF);
         ci.cancel();
     }
 

@@ -32,7 +32,7 @@ public final class CommandPresentationTest {
         expect("{green} %s {reset} is already on your friends list.", ChatTone.SUCCESS, ChatTone.SUCCESS,
                 "{green} %s {reset} is already on your friends list.");
         expect("{global} %s", ChatTone.INFO, ChatTone.INFO, "{global} %s");
-        expect("§c[GuizhouWare] 授权校验未通过", ChatTone.INFO, ChatTone.ERROR, "[GuizhouWare] 授权校验未通过");
+        expect("§c[Rime] 授权校验未通过", ChatTone.INFO, ChatTone.ERROR, "[Rime] 授权校验未通过");
         expect("§cA §7B", ChatTone.INFO, ChatTone.INFO, "§cA §7B");
         expect("plain text", ChatTone.WARN, ChatTone.WARN, "plain text");
         expect(null, ChatTone.INFO, ChatTone.INFO, "");

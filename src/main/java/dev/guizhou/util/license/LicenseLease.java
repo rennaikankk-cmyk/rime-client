@@ -24,6 +24,8 @@ public final class LicenseLease {
     private boolean hasLease;
     private long startedNanos;
     private long observedNanos;
+    private long activeLeaseNanos;
+    private long freshLeaseNanos;
 
     public LicenseLease(boolean development) {
         this(development, DEFAULT_LEASE_NANOS, System::nanoTime);
@@ -40,8 +42,17 @@ public final class LicenseLease {
     }
 
     /** Caller validates the response; this policy cannot determine whether a signed reply was replayed. */
-    public synchronized void verifiedSuccess() {
+    public synchronized void verifiedSuccess() { verifiedSuccess(leaseNanos, leaseNanos); }
+
+    /** A server grant may shorten, but never increase, the local allowance. */
+    public synchronized void verifiedSuccess(long freshNanos, long totalNanos) {
         if (development) return;
+        if (freshNanos <= 0 || totalNanos < freshNanos || totalNanos > DEFAULT_LEASE_NANOS) {
+            denyInternal("invalid_lease");
+            return;
+        }
+        activeLeaseNanos = Math.min(leaseNanos, totalNanos);
+        freshLeaseNanos = Math.min(activeLeaseNanos, freshNanos);
         final long now;
         try { now = clock.getAsLong(); }
         catch (RuntimeException failure) { denyInternal("clock_error"); return; }
@@ -87,10 +98,11 @@ public final class LicenseLease {
         // extends a lease; the next verified success is required before authorization can recover.
         if (now - observedNanos < 0 || now - startedNanos < 0) {
             denyInternal("clock_regression");
-        } else if (now - startedNanos >= leaseNanos) {
+        } else if (now - startedNanos >= activeLeaseNanos) {
             denyInternal("lease_expired");
         } else {
             observedNanos = now;
+            if (now - startedNanos >= freshLeaseNanos) state = State.GRACE;
         }
     }
 

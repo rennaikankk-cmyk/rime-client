@@ -16,7 +16,7 @@ import net.minecraft.client.gui.GuiGraphics;
  */
 public final class BootSplash {
     private static final int BG = ShadcnDraw.BG;
-    private static final String WORDMARK = "GuizhouWare";
+    private static final String WORDMARK = "Rime";
 
     private static volatile boolean failed;
     private static boolean startupCuePlayed;

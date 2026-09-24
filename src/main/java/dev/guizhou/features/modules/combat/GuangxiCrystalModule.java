@@ -1768,6 +1768,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         }
         boolean sent = placeCrystalShared(target.base, trustBase, target.faceEntity(), options);
         if (sent) {
+            lastReactorPlaceTick = mc.player.tickCount;
             diagPlaceSent++;
             recordPlace(air);
             // The spawn for this placement takes the next sequential entity id.

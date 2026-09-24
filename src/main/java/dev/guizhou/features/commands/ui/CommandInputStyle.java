@@ -32,8 +32,7 @@ public final class CommandInputStyle {
 
     public static boolean isClientCommand(String input) {
         if (input == null || GuizhouWare.commandManager == null) return false;
-        String prefix = GuizhouWare.commandManager.getCommandPrefix();
-        return !prefix.isEmpty() && input.startsWith(prefix);
+        return GuizhouWare.commandManager.matchedPrefix(input) != null;
     }
 
     // ------------------------------------------------------------ input colouring

@@ -14,8 +14,23 @@ public final class LicenseLeaseTest {
     private static int checks;
 
     public static void main(String[] args) throws Exception {
-        initialAndRecovery(); expiryBoundaries(); denialCannotRevive(); clocks(); development(); concurrentObservations();
+        signedWindowLimits(); initialAndRecovery(); expiryBoundaries(); denialCannotRevive(); clocks(); development(); concurrentObservations();
         System.out.println("LicenseLeaseTest passed: " + checks + " checks");
+    }
+
+    private static void signedWindowLimits() {
+        AtomicLong time = new AtomicLong();
+        var lease = new LicenseLease(false, 100, time::get);
+        lease.verifiedSuccess(20, 80); time.set(19);
+        check(lease.authorized() && lease.snapshot().state() == LicenseLease.State.OK, "Fresh signed grant");
+        time.set(20); check(lease.authorized() && lease.snapshot().state() == LicenseLease.State.GRACE, "Freshness deadline enters existing grace");
+        time.set(79); lease.networkFailure(); check(lease.authorized(), "Transient outage preserves bounded allowance");
+        time.set(80); check(!lease.authorized(), "Signed expiry is enforced earlier than local default");
+        lease.verifiedSuccess(30, 1000); time.set(180); check(!lease.authorized(), "Remote grant cannot increase local allowance");
+        lease.verifiedSuccess(0, 100); check(!lease.authorized(), "Invalid fresh grant cannot authorize");
+        lease.verifiedSuccess(101, 100); check(!lease.authorized(), "Invalid ordering cannot authorize");
+        lease.verifiedSuccess(1, LicenseLease.DEFAULT_LEASE_NANOS + 1); check(!lease.authorized(), "Unbounded grant rejected");
+        lease.verifiedSuccess(20,80); lease.deny("banned"); lease.networkFailure(); check(!lease.authorized(), "Network failure cannot restore a denied signed grant");
     }
 
     private static void initialAndRecovery() {

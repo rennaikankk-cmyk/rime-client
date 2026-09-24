@@ -26,7 +26,7 @@ public class GuizhouWareGui extends Screen {
     private ShellStyle current;
 
     public GuizhouWareGui() {
-        super(Component.literal("GuizhouWare"));
+        super(Component.literal("Rime"));
         instance = this;
     }
 
@@ -93,9 +93,15 @@ public class GuizhouWareGui extends Screen {
         current = null;
     }
 
-    /** Blurs the world behind panel styles, honouring the vanilla blur option. */
+    /** Blurs the world behind panel styles. The fullscreen capture is reused for a few frames. */
+    private int blurCapturedAt = Integer.MIN_VALUE;
+
     void blurWorld(GuiGraphics g) {
-        renderBlurredBackground(g);
+        int now = minecraft != null && minecraft.level != null ? (int) minecraft.level.getGameTime() : 0;
+        if (blurCapturedAt == Integer.MIN_VALUE || now - blurCapturedAt >= 8 || now < blurCapturedAt) {
+            renderBlurredBackground(g);
+            blurCapturedAt = now;
+        }
     }
 
     private boolean shown;
@@ -109,6 +115,7 @@ public class GuizhouWareGui extends Screen {
         detour = null;
         modern.clearBack();
         current = null;
+        blurCapturedAt = Integer.MIN_VALUE;
         active();
     }
 
