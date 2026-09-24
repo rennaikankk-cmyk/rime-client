@@ -80,7 +80,7 @@ public class EventManager extends Feature {
     @Subscribe
     public void onChatSent(ChatEvent event) {
         String message = event.getMessage();
-        if (!message.startsWith(GuizhouWare.commandManager.getCommandPrefix())) {
+        if (GuizhouWare.commandManager.matchedPrefix(message) == null) {
             return;
         }
         event.cancel();

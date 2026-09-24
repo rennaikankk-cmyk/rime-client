@@ -15,7 +15,7 @@ import java.awt.*;
 public class ClickGuiModule extends Module {
     private static ClickGuiModule INSTANCE;
 
-    public Setting<String>  prefix           = str("Prefix", ".");
+    public Setting<String>  prefix           = str("Prefix", "rime");
     public Setting<Theme>   theme            = mode("Theme", Theme.GUIZHOUWARE);
     public Setting<Color>   customColor      = color("Custom Color", 114, 168, 216, 220);
     public Setting<Boolean> smooth           = bool("Smooth", true);

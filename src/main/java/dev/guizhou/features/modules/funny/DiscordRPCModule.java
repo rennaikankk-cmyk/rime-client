@@ -37,7 +37,7 @@ public class DiscordRPCModule extends Module {
     public void onEnable() {
         DiscordIPC.start(APP_ID, null);
         rpc.setStart(System.currentTimeMillis() / 1000L);
-        rpc.setLargeImage("icon", "GuizhouWare Client");
+        rpc.setLargeImage("icon", "Rime");
         ticks = 0;
     }
 

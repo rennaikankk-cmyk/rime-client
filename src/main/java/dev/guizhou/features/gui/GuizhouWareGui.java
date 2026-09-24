@@ -44,7 +44,7 @@ public class GuizhouWareGui extends Screen {
         boolean at(double mx,double my) { return contains(mx,my,x,y,w,h); }
     }
 
-    public GuizhouWareGui() { super(Component.literal("GuizhouWare")); instance=this; }
+    public GuizhouWareGui() { super(Component.literal("Rime")); instance=this; }
     public static GuizhouWareGui getInstance() { if(instance==null) instance=new GuizhouWareGui(); return instance; }
     public static GuizhouWareGui getClickGui() { return getInstance(); }
     public static float getScale() { return instance==null?1:instance.scale; }
@@ -125,7 +125,7 @@ public class GuizhouWareGui extends Screen {
         g.fill((int)(listX+listW),(int)y+42,(int)(listX+listW+1),(int)(y+h-32),BORDER);
         g.fill((int)x+1,(int)y+42,(int)(x+w-1),(int)y+43,BORDER);
         round(g,x+14,y+13,18,18,5,TEXT);text(g,"G",x+18,y+17,10,700,BG);
-        text(g,"GuizhouWare",x+41,y+17,12,600,TEXT);
+        text(g,"Rime",x+41,y+17,12,600,TEXT);
         text(g,"控制中心",x+150,y+18,10,MUTED);
         button(g,"关闭  ×",x+w-67,y+11,55,22,mx,my,false,this::onClose);
         float cy=y+60;

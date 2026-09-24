@@ -64,7 +64,7 @@ public abstract class MixinTitleScreen extends Screen {
         panel(g,px,py,pw,guizhouware$panelHeight,10*s);
         round(g,px+1,py+1,pw-2,3*s,2*s,0x5072A8D8);
         round(g,px+16*s,py+18*s,27*s,27*s,7*s,ACCENT);text(g,"G",px+23*s,py+25*s,14*s,700,BG);
-        text(g,"GuizhouWare",px+53*s,py+18*s,21*s,600,TEXT);
+        text(g,"Rime",px+53*s,py+18*s,21*s,600,TEXT);
         text(g,"MINECRAFT 1.21.1",px+54*s,py+43*s,8*s,MUTED);
         for(var child:children())if(child instanceof AbstractWidget b && b.visible) {
             String label=b.getMessage().getString();
@@ -84,7 +84,7 @@ public abstract class MixinTitleScreen extends Screen {
                 if(reason!=null)g.renderComponentTooltip(net.minecraft.client.Minecraft.getInstance().font, java.util.List.of(reason), mx, my);
             }
         }
-        text(g,"GuizhouWare "+BuildConfig.VERSION,8,height-13,8,MUTED);
+        text(g,"Rime "+BuildConfig.VERSION,8,height-13,8,MUTED);
         ci.cancel();
     }
     @Inject(method="mouseClicked",at=@At("HEAD"),cancellable=true)

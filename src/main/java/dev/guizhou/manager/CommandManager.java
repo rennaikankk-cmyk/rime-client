@@ -25,7 +25,8 @@ public class CommandManager extends Feature implements Jsonable {
     private final Map<String, Command> commandAliasMap = new LinkedHashMap<>();
     private final List<Command> commandList = new LinkedList<>();
 
-    private String commandPrefix = ".";
+    private String commandPrefix = "rime";
+    private static final String[] LEGACY_PREFIXES = {".", "gzw", "guizhouware"};
     private boolean funnyVisible = false;
 
     public CommandManager() {
@@ -55,10 +56,21 @@ public class CommandManager extends Feature implements Jsonable {
         GuizhouWare.configManager.addConfig(this);
     }
 
+    public String matchedPrefix(String message) {
+        if (message != null && message.startsWith(commandPrefix)) return commandPrefix;
+        if (message == null) return commandPrefix;
+        for (String legacy : LEGACY_PREFIXES) {
+            if (!legacy.equals(commandPrefix) && message.startsWith(legacy)) return legacy;
+        }
+        return null;
+    }
+
     public void onChatSent(String message) {
+        String prefix = matchedPrefix(message);
+        if (prefix == null) prefix = commandPrefix;
         try {
             int result = dispatcher.execute(message.substring(
-                    commandPrefix.length()).trim(), this);
+                    prefix.length()).trim(), this);
             if (result == SINGLE_SUCCESS) {
                 Command.sendMessage("{green} Command executed successfully");
             } else if (result == SINGLE_FAILURE) {
