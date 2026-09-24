@@ -10,7 +10,7 @@ import java.util.function.Function;
 /** One running input and one replaceable pending input; no unbounded combat backlog. */
 public final class CombatPlanningTask<I, O> {
     private static final ThreadPoolExecutor WORKER = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(1), task -> {
+            new ArrayBlockingQueue<>(8), task -> {
                 Thread thread = new Thread(task, "gzw-combat-planner");
                 thread.setDaemon(true); thread.setPriority(Thread.NORM_PRIORITY - 1); return thread;
             }, new ThreadPoolExecutor.AbortPolicy());

@@ -16,6 +16,7 @@ import dev.guizhou.util.combat.CrystalAttackWindow;
 import dev.guizhou.util.combat.CrystalSelectionPolicy;
 import dev.guizhou.util.combat.CrystalRetryTracker;
 import dev.guizhou.util.combat.ExplosionDamageModel;
+import dev.guizhou.util.combat.OffthreadRank;
 import dev.guizhou.util.combat.CombatSnapshotService;
 import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.MathUtil;
@@ -346,6 +347,7 @@ public class GuangxiCrystalModule extends Module {
     private final ExposureContext exposureCtx = new ExposureContext();
 
     private final ArrayList<PlaceCandidate> candidates = new ArrayList<>();
+    private final OffthreadRank placeRank = new OffthreadRank();
 
     private final Set<Integer> deadIds = ConcurrentHashMap.newKeySet();
 
@@ -416,6 +418,8 @@ public class GuangxiCrystalModule extends Module {
         selfCache = null;
         entitySnapshot = List.of();
         entitySnapshotTick = -1;
+        reachEyeTick = Integer.MIN_VALUE;
+        miningSnapshotTick = Integer.MIN_VALUE;
         selfDamageCache.clear();
         targetDamageCache.clear();
         cachedChunk = null;
@@ -743,9 +747,7 @@ public class GuangxiCrystalModule extends Module {
         crystal.setId(pkt.getId());
 
         AABB bb = crystal.getBoundingBox();
-        Vec3 reachEye = bestReachEye(bb);
-        if (sqDistToBox(reachEye, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ)
-                > breakRangeSq()) { instaGates[5]++; return; }
+        if (bestReachSq(bb) > breakRangeSq()) { instaGates[5]++; return; }
 
         acceptPendingRotation();
         if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) { instaGates[7]++; return; }
@@ -977,6 +979,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
         BlockPos playerPos = mc.player.blockPosition();
 
+        ensureMiningSnapshot();
         int topLayerY    = targetFeetY - 1;
         int bottomLayerY = playerPos.getY() - r;
 
@@ -1011,8 +1014,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     Vec3 crystalCenter = new Vec3(crystalPos.getX() + 0.5, crystalPos.getY(), crystalPos.getZ() + 0.5);
                     double cMinX = crystalCenter.x - 1, cMinZ = crystalCenter.z - 1;
                     double cMaxX = crystalCenter.x + 1, cMaxY = crystalCenter.y + 2, cMaxZ = crystalCenter.z + 1;
-                    Vec3 breakEye = bestReachEye(new AABB(cMinX, crystalCenter.y, cMinZ, cMaxX, cMaxY, cMaxZ));
-                    if (sqDistToBox(breakEye, cMinX, crystalCenter.y, cMinZ, cMaxX, cMaxY, cMaxZ) > breakRangeSq()) continue;
+                    if (bestReachSq(cMinX, crystalCenter.y, cMinZ, cMaxX, cMaxY, cMaxZ) > breakRangeSq()) continue;
 
                     if (!anyTargetWithin(potentialTargets, crystalCenter, 144.0)) continue;
 
@@ -1098,14 +1100,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         double maxSelf = maxSelfDamage.getValue();
         double breakRangeSq = breakRangeSq();
 
-        AABB searchArea = mc.player.getBoundingBox().inflate(breakRangeValue() + 2);
-        for (Entity e : mc.level.getEntities(null, searchArea)) {
+        for (Entity e : snapshotEntities()) {
             if (!(e instanceof EndCrystal crystal)) continue;
             if (!crystalAttackEligible(crystal)) continue;
 
-            AABB bb = crystal.getBoundingBox();
-            Vec3 reachEye = bestReachEye(bb);
-            if (sqDistToBox(reachEye, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ) > breakRangeSq) continue;
+            if (bestReachSq(crystal.getBoundingBox()) > breakRangeSq) continue;
             if (!canPlanCrystalAttack(crystal)) continue;
 
             Vec3 cp = crystal.position();
@@ -1258,8 +1257,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     if (sqDistToBox(eyePos, bx, ay, bz, bx + 1, ay + 1, bz + 1) > placeRangeSq) { scanPlaceR++; continue; }
 
                     double cx = bx + 0.5, cy = by + 1.0, cz = bz + 0.5;
-                    Vec3 breakEye = bestReachEye(new AABB(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1));
-                    if (sqDistToBox(breakEye, cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq) { scanBreakR++; continue; }
+                    if (bestReachSq(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq) { scanBreakR++; continue; }
 
                     Vec3 crystalCenter = new Vec3(cx, cy, cz);
 
@@ -1286,6 +1284,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         }
 
         candidates.sort((a, b) -> Float.compare(b.bound, a.bound));
+        promoteRankedCandidate();
 
         BlockPos locked = null;
         if (lastPlaceAir != null) {
@@ -1293,8 +1292,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             boolean pending = lockTs != 0L && now - lockTs < pendingWindowMs();
             if (pending || hasLiveCrystalAt(lastPlaceAir)) {
                 double cx = lastPlaceAir.getX() + 0.5, cy = lastPlaceAir.getY(), cz = lastPlaceAir.getZ() + 0.5;
-                Vec3 lockEye = bestReachEye(new AABB(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1));
-                if (sqDistToBox(lockEye, cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) <= breakRangeSq) {
+                if (bestReachSq(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) <= breakRangeSq) {
                     locked = lastPlaceAir;
                 } else {
                     lastPlaceAir = null;
@@ -1386,6 +1384,26 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         return best;
     }
 
+    /** Last tick's copied bounds are ranked off-thread. A stale cell is only moved forward; exact checks still run. */
+    private void promoteRankedCandidate() {
+        if (candidates.isEmpty()) return;
+        long hint = placeRank.poll(1L);
+        if (hint != Long.MIN_VALUE) {
+            for (int i = 1; i < candidates.size(); i++) {
+                if (candidates.get(i).airPos.asLong() != hint) continue;
+                candidates.add(0, candidates.remove(i));
+                break;
+            }
+        }
+        float[] scores = new float[candidates.size()];
+        long[] cells = new long[candidates.size()];
+        for (int i = 0; i < candidates.size(); i++) {
+            scores[i] = candidates.get(i).bound;
+            cells[i] = candidates.get(i).airPos.asLong();
+        }
+        placeRank.submit(1L, scores, cells);
+    }
+
     /** Position-level place-decision diagnostics, printed when PacketLog is on (1 in 10 decisions). */
     private void logPlacePick(PlaceTarget best, String topReject, float topRejectBound,
                               int scanAir, int scanPlaceR, int scanBreakR, int scanLowBound,
@@ -1453,11 +1471,22 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     private final Set<BlockPos> miningCheck = new HashSet<>();
 
-    private boolean isBeingMinedNow(BlockPos pos) {
-        GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
-        if (mine == null || !mine.isEnabled()) return false;
+    private int miningSnapshotTick = Integer.MIN_VALUE;
+
+    /** One mining snapshot per tick; base-place used to rebuild it for every candidate. */
+    private void ensureMiningSnapshot() {
+        int tick = mc.player.tickCount;
+        if (miningSnapshotTick == tick) return;
+        miningSnapshotTick = tick;
         miningCheck.clear();
+        if (!detectMining.getValue()) return;
+        GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
+        if (mine == null || !mine.isEnabled()) return;
         mine.collectMiningPositions(miningCheck, 0.0);
+    }
+
+    private boolean isBeingMinedNow(BlockPos pos) {
+        ensureMiningSnapshot();
         return miningCheck.contains(pos);
     }
 
@@ -1506,8 +1535,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     if (sqDistToBox(eyePos, bx, ay, bz, bx + 1, ay + 1, bz + 1) > placeRangeSq) continue;
 
                     double cx = bx + 0.5, cy = by + 1.0, cz = bz + 0.5;
-                    Vec3 breakEye = bestReachEye(new AABB(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1));
-                    if (sqDistToBox(breakEye, cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq) continue;
+                    if (bestReachSq(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq) continue;
 
                     Vec3 crystalCenter = new Vec3(cx, cy, cz);
 
@@ -1538,14 +1566,12 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
         EndCrystal best = null;
         double bestDist = Double.MAX_VALUE;
-        AABB searchArea = mc.player.getBoundingBox().inflate(breakRangeValue() + 2);
-        for (Entity e : mc.level.getEntities(null, searchArea)) {
+        for (Entity e : snapshotEntities()) {
             if (!(e instanceof EndCrystal crystal)) continue;
             if (!crystalAttackEligible(crystal)) continue;
 
             AABB bb = crystal.getBoundingBox();
-            Vec3 reachEye = bestReachEye(bb);
-            if (sqDistToBox(reachEye, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ) > breakRangeSq) continue;
+            if (bestReachSq(bb) > breakRangeSq) continue;
             if (!canPlanCrystalAttack(crystal)) continue;
 
             Vec3 cp = crystal.position();
@@ -1702,6 +1728,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     private boolean doPlace(PlaceTarget target, boolean trustBase) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        AutoTotemModule.holdForCombat(Items.END_CRYSTAL);
         boolean holdingCrystal = mc.player.getMainHandItem().is(Items.END_CRYSTAL)
                 || mc.player.getOffhandItem().is(Items.END_CRYSTAL);
         if (autoSwap.getValue() == AutoSwapMode.NONE) {
@@ -1853,8 +1880,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (sqDistToBox(eye, bx, by, bz, bx + 1, by + 1, bz + 1) > placeRangeSq()) return false;
 
         double cx = bx + 0.5, cy = by, cz = bz + 0.5;
-        if (sqDistToBox(bestReachEye(new AABB(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1)),
-                cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq()) return false;
+        if (bestReachSq(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq()) return false;
 
         Vec3 crystalCenter = new Vec3(cx, cy, cz);
         float playerHealth = selfNow().health();
@@ -2225,31 +2251,73 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         return section.getBlockState(pos.getX() & 15, pos.getY() & 15, pos.getZ() & 15);
     }
 
-    private Vec3 bestReachEye(AABB box) {
+    private int reachEyeTick = Integer.MIN_VALUE;
+    private double reachX0, reachY0, reachZ0;
+    private double reachX1, reachY1, reachZ1;
+    private double reachX2, reachY2, reachZ2;
+    private double reachX3, reachY3, reachZ3;
+
+    /** Eye poses are stable for a tick; the place scan used to rebuild them per block. */
+    private void ensureReachEyes() {
+        int tick = mc.player.tickCount;
+        if (tick == reachEyeTick) return;
+        reachEyeTick = tick;
         Vec3 base = mc.player.getEyePosition(1.0f);
+        Vec3 pos = mc.player.position();
         float scale = (float) mc.player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
         double standing = 1.62 * scale;
         double sneaking = 1.27 * scale;
-        double swimming = 0.4  * scale;
-
-        Vec3 pos = mc.player.position();
-        double[] heights;
-        Pose pose = mc.player.getPose();
-        switch (pose) {
+        double swimming = 0.4 * scale;
+        double h1, h2, h3;
+        switch (mc.player.getPose()) {
             case FALL_FLYING:
             case SPIN_ATTACK:
-            case SWIMMING:    heights = new double[]{swimming, standing, sneaking}; break;
-            case CROUCHING:   heights = new double[]{sneaking, standing, swimming}; break;
-            default:          heights = new double[]{standing, sneaking, swimming};
+            case SWIMMING:
+                h1 = swimming; h2 = standing; h3 = sneaking; break;
+            case CROUCHING:
+                h1 = sneaking; h2 = standing; h3 = swimming; break;
+            default:
+                h1 = standing; h2 = sneaking; h3 = swimming; break;
         }
+        reachX0 = base.x; reachY0 = base.y; reachZ0 = base.z;
+        reachX1 = pos.x; reachY1 = pos.y + h1; reachZ1 = pos.z;
+        reachX2 = pos.x; reachY2 = pos.y + h2; reachZ2 = pos.z;
+        reachX3 = pos.x; reachY3 = pos.y + h3; reachZ3 = pos.z;
+    }
 
-        Vec3 bestEye = base;
-        double bestSq = sqDistToBox(base, box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ);
-        for (double h : heights) {
-            Vec3 e = new Vec3(pos.x, pos.y + h, pos.z);
-            double sq = sqDistToBox(e, box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ);
-            if (sq < bestSq) { bestSq = sq; bestEye = e; }
-        }
-        return bestEye;
+    private double bestReachSq(AABB box) {
+        return bestReachSq(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ);
+    }
+
+    private double bestReachSq(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
+        ensureReachEyes();
+        double best = sqDistRaw(reachX0, reachY0, reachZ0, minX, minY, minZ, maxX, maxY, maxZ);
+        best = Math.min(best, sqDistRaw(reachX1, reachY1, reachZ1, minX, minY, minZ, maxX, maxY, maxZ));
+        best = Math.min(best, sqDistRaw(reachX2, reachY2, reachZ2, minX, minY, minZ, maxX, maxY, maxZ));
+        return Math.min(best, sqDistRaw(reachX3, reachY3, reachZ3, minX, minY, minZ, maxX, maxY, maxZ));
+    }
+
+    private static double sqDistRaw(double x, double y, double z,
+                                    double minX, double minY, double minZ,
+                                    double maxX, double maxY, double maxZ) {
+        double dx = x < minX ? minX - x : (x > maxX ? x - maxX : 0);
+        double dy = y < minY ? minY - y : (y > maxY ? y - maxY : 0);
+        double dz = z < minZ ? minZ - z : (z > maxZ ? z - maxZ : 0);
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    private Vec3 bestReachEye(AABB box) {
+        ensureReachEyes();
+        double minX = box.minX, minY = box.minY, minZ = box.minZ;
+        double maxX = box.maxX, maxY = box.maxY, maxZ = box.maxZ;
+        double bestX = reachX0, bestY = reachY0, bestZ = reachZ0;
+        double bestSq = sqDistRaw(bestX, bestY, bestZ, minX, minY, minZ, maxX, maxY, maxZ);
+        double sq = sqDistRaw(reachX1, reachY1, reachZ1, minX, minY, minZ, maxX, maxY, maxZ);
+        if (sq < bestSq) { bestSq = sq; bestX = reachX1; bestY = reachY1; bestZ = reachZ1; }
+        sq = sqDistRaw(reachX2, reachY2, reachZ2, minX, minY, minZ, maxX, maxY, maxZ);
+        if (sq < bestSq) { bestSq = sq; bestX = reachX2; bestY = reachY2; bestZ = reachZ2; }
+        sq = sqDistRaw(reachX3, reachY3, reachZ3, minX, minY, minZ, maxX, maxY, maxZ);
+        if (sq < bestSq) { bestX = reachX3; bestY = reachY3; bestZ = reachZ3; }
+        return new Vec3(bestX, bestY, bestZ);
     }
 }

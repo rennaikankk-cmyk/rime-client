@@ -406,6 +406,7 @@ public class AutoAnchorModule extends Module {
             if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
                     "AutoAnchor", 62, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
         }
+        if (action == AnchorSequence.Action.PLACE) AutoTotemModule.holdForCombat(Items.RESPAWN_ANCHOR);
         if (action == AnchorSequence.Action.DETONATE)
             return detonate(hit, mc.level.getBlockState(pos).getValue(RespawnAnchorBlock.CHARGE));
         Result item = itemFor(action);
@@ -626,8 +627,11 @@ public class AutoAnchorModule extends Module {
                 for (int z = -r; z <= r; z++) {
                     if (xxyy + z * z > rr) continue;
                     cursor.set(playerPos.getX() + x, playerPos.getY() + y, playerPos.getZ() + z);
-                    Vec3 center = Vec3.atCenterOf(cursor);
-                    if (eye.distanceToSqr(center) > rangeSq) continue;
+                    double cx = cursor.getX() + 0.5, cy = cursor.getY() + 0.5, cz = cursor.getZ() + 0.5;
+                    double ex = eye.x - cx, ey = eye.y - cy, ez = eye.z - cz;
+                    if (ex * ex + ey * ey + ez * ez > rangeSq) continue;
+                    if (!nearAnyTarget(targets, cx, cy, cz)) continue;
+                    Vec3 center = new Vec3(cx, cy, cz);
 
                     if (miningBlocked(cursor)) continue;
                     BlockState state = mc.level.getBlockState(cursor);
@@ -680,6 +684,13 @@ public class AutoAnchorModule extends Module {
             out.add(AnchorDamageUtil.Target.of(living, assumeBestArmor.getValue()));
         }
         return out;
+    }
+
+    private static boolean nearAnyTarget(List<AnchorDamageUtil.Target> targets, double x, double y, double z) {
+        for (int i = 0, n = targets.size(); i < n; i++) {
+            if (targets.get(i).pos().distanceToSqr(x, y, z) <= AnchorDamageUtil.DIAMETER * AnchorDamageUtil.DIAMETER) return true;
+        }
+        return false;
     }
 
     private float score(List<AnchorDamageUtil.Target> targets, Vec3 center, BlockPos pos) {

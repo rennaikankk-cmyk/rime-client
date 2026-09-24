@@ -7,8 +7,8 @@ import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.features.settings.Setting;
-import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.DamageUtil;
+import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PacketSendUtil;
 import java.util.function.BooleanSupplier;
 import dev.guizhou.util.inventory.InventoryUtil;
@@ -131,6 +131,7 @@ public class GuangxiTPModule extends Module {
     public void onEnable() {
         placeTimer.reset();
         breakTimer.reset();
+        baseTimer.reset();
     }
 
     @Override
@@ -141,6 +142,10 @@ public class GuangxiTPModule extends Module {
     @Subscribe
     private void onPreTick(PreTickEvent event) {
         dbgFlush();
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
+            return;
+        }
         if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (tpsSync.getValue() && GuizhouWare.tpsCounterService.isRubberbandRecent()) return;
 
@@ -168,7 +173,11 @@ public class GuangxiTPModule extends Module {
                     // so the base already exists when the crystal use arrives.
                     BaseOpportunity opp = findBaseOpportunity(target);
                     if (opp == null) dOppNull++;
-                    else if (!tpBasePlaceChain(opp)) dObsFail++;
+                    else if (tpBasePlaceChain(opp)) {
+                        placeTimer.reset();
+                        renderPos = opp.base().above();
+                        renderStartMs = System.currentTimeMillis();
+                    } else dObsFail++;
                 }
             }
         }
@@ -186,8 +195,8 @@ public class GuangxiTPModule extends Module {
         double rangeSq = tpRange.getValue() * tpRange.getValue();
         Player best = null;
         double bestD = Double.MAX_VALUE;
-        for (Entity e : mc.level.getEntities(mc.player, mc.player.getBoundingBox().inflate(tpRange.getValue()))) {
-            if (!(e instanceof Player p) || p.isDeadOrDying()) continue;
+        for (Player p : mc.level.players()) {
+            if (p == mc.player || p.isDeadOrDying()) continue;
             if (targets != null && !targets.isValidPlayerTarget(p)) continue;
             double d = mc.player.distanceToSqr(p);
             if (d > rangeSq) continue;
@@ -211,7 +220,9 @@ public class GuangxiTPModule extends Module {
 
                     BlockPos airPos = cursor.above();
                     if (!mc.level.getBlockState(airPos).isAir()) continue;
-                    if (crystalCellBlocked(airPos)) { dEntRej++; continue; }
+                    if (legacy112.getValue() && !mc.level.getBlockState(airPos.above()).isAir()) continue;
+                    // 1.12 places through players. Newer servers reject any entity in the cell.
+                    if (cellBlocked(airPos)) { dEntRej++; continue; }
 
                     Vec3 center = new Vec3(airPos.getX() + 0.5, airPos.getY(), airPos.getZ() + 0.5);
                     float dmg = estimateDamage(target, center);
@@ -228,8 +239,15 @@ public class GuangxiTPModule extends Module {
         return best;
     }
 
-    private boolean crystalCellBlocked(BlockPos pos) {
-        return !mc.level.getEntities(null, new AABB(pos).expandTowards(0, 1, 0)).isEmpty();
+    private boolean cellBlocked(BlockPos pos) {
+        AABB box = legacy112.getValue() ? new AABB(pos) : new AABB(pos).expandTowards(0, 1, 0);
+        for (Entity e : mc.level.getEntities(null, box)) {
+            if (e instanceof ItemEntity || !e.isAlive()) continue;
+            if (legacy112.getValue()) {
+                if (e instanceof EndCrystal) return true;
+            } else return true;
+        }
+        return false;
     }
 
     private EndCrystal findCrystalNear(Player target) {
@@ -264,7 +282,10 @@ public class GuangxiTPModule extends Module {
                     cursor.set(feet.getX() + dx, feet.getY() + dy, feet.getZ() + dz);
                     BlockState baseState = mc.level.getBlockState(cursor);
                     if (!baseState.isAir() && !baseState.canBeReplaced()) continue;
-                    if (!mc.level.getBlockState(cursor.above()).isAir() || crystalCellBlocked(cursor.above())) continue;
+                    BlockPos air = cursor.above();
+                    if (!mc.level.getBlockState(air).isAir()) continue;
+                    if (legacy112.getValue() && !mc.level.getBlockState(air.above()).isAir()) continue;
+                    if (cellBlocked(air)) continue;
 
                     // clickable neighbor: click its face that points back into our base cell
                     BlockPos neighbor = null;
@@ -295,6 +316,7 @@ public class GuangxiTPModule extends Module {
 
     /** Obsidian desync place, then the crystal on top in the same tick (server packet order). */
     private boolean tpBasePlaceChain(BaseOpportunity opp) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (!InventoryUtil.find(Items.OBSIDIAN, InventoryUtil.HOTBAR_SCOPE).found()) return false;
         if (!InventoryUtil.find(Items.END_CRYSTAL, InventoryUtil.HOTBAR_SCOPE).found()) return false;
 
@@ -305,14 +327,16 @@ public class GuangxiTPModule extends Module {
         BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(n, opp.clickFace(), eye, 6.0, 6.0, false);
         if (hit == null || !mc.level.getBlockState(base).canBeReplaced()
                 || !dev.guizhou.util.PlaceUtil.noEntityCollision(base)) return false;
+        float[] look = lookAt(fake, hit.getLocation());
         boolean[] sent = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(Items.OBSIDIAN, InventoryUtil.HOTBAR_SCOPE,
                 SwapMode.SILENT, SwapPriority.PLACEMENT, () -> sent[0] =
-                        sandwich(fake, () -> GuizhouWare.placementManager.sendUseItemOnDirect(
+                        sandwich(fake, look[0], look[1], () -> GuizhouWare.placementManager.sendUseItemOnDirect(
                                 hit, InteractionHand.MAIN_HAND, eye, 6.0, 6.0)));
         if (!swapped) dSwapFail++;
         if (!swapped || !sent[0]) return false;
         dSent++;
+        baseTimer.reset();
         // Optimistic packet ordering is retained, but a cancelled base packet cannot advance it.
         return tpPlace(base, true);
     }
@@ -328,16 +352,17 @@ public class GuangxiTPModule extends Module {
         if (!InventoryUtil.find(Items.END_CRYSTAL, InventoryUtil.HOTBAR_SCOPE).found()) return false;
         BlockState state = mc.level.getBlockState(base);
         if (!pendingBase && !state.is(Blocks.OBSIDIAN) && !state.is(Blocks.BEDROCK)) return false;
-        if (!mc.level.getBlockState(base.above()).isAir() || crystalCellBlocked(base.above())) return false;
+        if (!mc.level.getBlockState(base.above()).isAir() || cellBlocked(base.above())) return false;
         Vec3 fake = fakeFeet(base);
         Vec3 eye = fake.add(0, mc.player.getEyeHeight(), 0);
         BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(base, Direction.UP,
                 eye, 6.0, 6.0, pendingBase);
         if (hit == null) return false;
+        float[] look = lookAt(fake, hit.getLocation());
         boolean[] submitted = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, InventoryUtil.HOTBAR_SCOPE, SwapMode.SILENT,
                 SwapPriority.CRYSTAL, () -> submitted[0] =
-                        sandwich(fake, () -> GuizhouWare.placementManager.sendUseItemOnDirect(
+                        sandwich(fake, look[0], look[1], () -> GuizhouWare.placementManager.sendUseItemOnDirect(
                                 hit, InteractionHand.MAIN_HAND, eye, 6.0, 6.0)));
         if (!swapped) dSwapFail++;
         if (swapped && submitted[0]) dSent++;
@@ -345,37 +370,36 @@ public class GuangxiTPModule extends Module {
     }
 
     private boolean tpBreak(EndCrystal crystal) {
-        // Fake stand ~2.2 above the crystal: inside the 3-block attack reach.
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (mc.getConnection() == null || !crystal.isAlive()) return false;
+        // Fake stand ~2.2 above the crystal: inside the 3-block attack reach, looking at it.
         Vec3 cp = crystal.position();
         Vec3 fake = new Vec3(cp.x, cp.y + 2.2, cp.z);
-
-        if (rotate.getValue()) {
-            GuizhouWare.rotationManager.submit(new RotationRequest(
-                    "GuangxiTP_break", 40,
-                    GuizhouWare.rotationManager.getServerYaw(),
-                    GuizhouWare.rotationManager.getServerPitch(),
-                    RotationRequest.Mode.SILENT));
-        }
-
-        boolean sent = sandwich(fake, () -> PacketSendUtil.send(
+        float[] look = lookAt(fake, cp);
+        boolean sent = sandwich(fake, look[0], look[1], () -> PacketSendUtil.send(
                 ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown())));
         if (sent) dBreakSent++;
         return sent;
     }
 
-    /** Restore the real position even when an interaction throws or is cancelled. */
-    private boolean sandwich(Vec3 fake, BooleanSupplier action) {
-        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
-        if (legacy112.getValue()) return action.getAsBoolean();
-        return dev.guizhou.util.InteractionTransaction.run(() -> sendDesyncMove(fake), action, this::sendRealMove);
+    private float[] lookAt(Vec3 from, Vec3 to) {
+        if (!rotate.getValue()) {
+            return new float[]{GuizhouWare.rotationManager.getServerYaw(), GuizhouWare.rotationManager.getServerPitch()};
+        }
+        return MathUtil.calcAngle(from, to);
     }
 
-    private boolean sendDesyncMove(Vec3 pos) {
+    /** Restore the real position even when an interaction throws or is cancelled. */
+    private boolean sandwich(Vec3 fake, float yaw, float pitch, BooleanSupplier action) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (legacy112.getValue()) return action.getAsBoolean();
+        return dev.guizhou.util.InteractionTransaction.run(
+                () -> sendDesyncMove(fake, yaw, pitch), action, this::sendRealMove);
+    }
+
+    private boolean sendDesyncMove(Vec3 pos, float yaw, float pitch) {
         return PacketSendUtil.send(new ServerboundMovePlayerPacket.PosRot(
-                pos.x, pos.y, pos.z,
-                GuizhouWare.rotationManager.getServerYaw(),
-                GuizhouWare.rotationManager.getServerPitch(),
-                false, false));
+                pos.x, pos.y, pos.z, yaw, pitch, false, false));
     }
 
     private void sendRealMove() {

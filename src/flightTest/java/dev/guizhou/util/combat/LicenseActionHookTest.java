@@ -17,6 +17,7 @@ public final class LicenseActionHookTest {
     private static final String CRYSTAL = BASE + "combat/GuangxiCrystalModule";
     private static final String MINE = BASE + "world/GuangxiMineModule";
     private static final String AUTO = BASE + "combat/AutoMineModule";
+    private static final String SWORD = BASE + "combat/AutoSwordModule";
     private static final String HEARTBEAT = "dev/guizhou/manager/HeartbeatManager";
     private static int checks;
 
@@ -25,6 +26,7 @@ public final class LicenseActionHookTest {
         miningActionsAndCleanup();
         autoMineCallbacks();
         anchorCallbacks();
+        swordAttack();
         System.out.println("LicenseActionHookTest passed: " + checks + " authorization/action/cleanup checks");
     }
 
@@ -36,6 +38,15 @@ public final class LicenseActionHookTest {
         guarded(anchor, "runCycle", null, "perform", "selectCandidate", "repeatCandidate");
         guarded(anchor, "sendUseItemOn", null, "sendUseItemOnDirect");
         check(!method(anchor, "onDisable", null).hasAuthorization(), "Anchor listener cleanup survives revocation");
+    }
+
+    private static void swordAttack() throws IOException {
+        guarded(SWORD, "onPreTick", null, "tryAttack");
+        guarded(SWORD, "tryAttack", null, "withSwap");
+        guarded(SWORD, "lambda$tryAttack$", null, "strike");
+        guarded(SWORD, "strike", null, "attack");
+        guarded(BASE + "combat/KillAuraModule", "onPreTick", null, "selectTargets", "tryAttack");
+        check(!method(SWORD, "onDisable", null).hasAuthorization(), "Disabling AutoSword must stay able to drop its target");
     }
 
     private static void crystalActions() throws IOException {

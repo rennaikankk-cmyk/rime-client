@@ -36,8 +36,10 @@ import net.minecraft.world.item.TridentItem;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraft.world.level.ClipContext;
 
 public class AutoSwordModule extends Module {
 
@@ -58,6 +60,10 @@ public class AutoSwordModule extends Module {
 
     private Entity currentTarget = null;
     private float attackCooldownTicks = 0f;
+    private int targetTick = Integer.MIN_VALUE;
+    private int weaponTick = Integer.MIN_VALUE;
+    private int weaponTargetId = Integer.MIN_VALUE;
+    private int cachedWeapon = -1;
 
     public AutoSwordModule() {
         super("AutoSword", "Automatically attacks nearby players with the best weapon.", Category.COMBAT);
@@ -67,10 +73,17 @@ public class AutoSwordModule extends Module {
     public void onDisable() {
         currentTarget = null;
         attackCooldownTicks = 0f;
+        targetTick = Integer.MIN_VALUE;
+        weaponTick = Integer.MIN_VALUE;
     }
 
     @Subscribe
     private void onPreTick(PreTickEvent event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
+            currentTarget = null;
+            return;
+        }
         if (nullCheck() || mc.player.isDeadOrDying()) return;
 
         float tps;
@@ -84,6 +97,9 @@ public class AutoSwordModule extends Module {
 
         attackCooldownTicks -= (tps / 20f);
         if (attackCooldownTicks < 0f) attackCooldownTicks = 0f;
+
+        KillAuraModule killAura = GuizhouWare.moduleManager.getModuleByClass(KillAuraModule.class);
+        if (killAura != null && killAura.isEnabled()) return;
 
         if (GuangxiElytraChaseModule.isWeaponControlActive()) {
             currentTarget = null;
@@ -99,50 +115,82 @@ public class AutoSwordModule extends Module {
         }
 
         currentTarget = findTarget();
-        if (currentTarget == null) return;
+        if (currentTarget == null || attackCooldownTicks > 0f) return;
+        tryAttack(currentTarget, true);
+    }
 
-        if (attackCooldownTicks > 0f) return;
+    /**
+     * Shared attack used by AutoSword and KillAura. Silent main-hand swap only,
+     * so CombatSync can keep the offhand.
+     */
+    public boolean tryAttack(Entity target, boolean rotate) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (target == null || !target.isAlive() || target.isRemoved() || attackCooldownTicks > 0f) return false;
+        if (nullCheck() || mc.player.isDeadOrDying() || mc.gameMode == null || mc.getConnection() == null) return false;
 
-        int weaponSlot = getWeapon(currentTarget);
-        if (weaponSlot == -1) return;
-
+        int weaponSlot = getWeapon(target);
+        if (weaponSlot == -1 || !canUseWeapon(weaponSlot)) return false;
+        ItemStack weaponStack = mc.player.getInventory().getItem(weaponSlot);
         Vec3 eyePos = mc.player.getEyePosition(1.0f);
-        Vec3 closestPoint = getClosestPointToEye(eyePos, currentTarget.getBoundingBox());
-        float[] angles = MathUtil.calcAngle(eyePos, closestPoint);
+        float[] angles = MathUtil.calcAngle(eyePos, getClosestPointToEye(eyePos, target.getBoundingBox()));
+        if (!canHit(target, angles[0], angles[1])) return false;
+        if (rotate) {
+            GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                    "AutoSword", 6, angles[0], angles[1], RotationRequest.Mode.SILENT));
+        }
+        if (!canHit(target, GuizhouWare.rotationManager.getServerYaw(),
+                GuizhouWare.rotationManager.getServerPitch())) return false;
 
-        GuizhouWare.rotationManager.submit(new RotationRequest(
-            "AutoSword", 6, angles[0], angles[1], RotationRequest.Mode.SILENT
-        ));
-
+        boolean doCrit = shouldCrit(weaponStack);
         float serverYaw = GuizhouWare.rotationManager.getServerYaw();
         float serverPitch = GuizhouWare.rotationManager.getServerPitch();
-        if (!currentTarget.getBoundingBox().contains(eyePos)) {
-            Vec3 lookVec = getLookVector(serverYaw, serverPitch);
-            Vec3 reachEnd = eyePos.add(lookVec.scale(RANGE));
-            if (currentTarget.getBoundingBox().clip(eyePos, reachEnd).isEmpty()) return;
-        }
-
-        ItemStack weaponStack = mc.player.getInventory().getItem(weaponSlot);
-        boolean doCrit = shouldCrit(weaponStack);
-
-        if (!canUseWeapon(weaponSlot)) return;
-
         Result weapon = new Result(weaponSlot, weaponStack, ResultType.HOTBAR);
+        boolean[] struck = {false};
         boolean swung = GuizhouWare.swapManager.withSwap(weapon, SwapMode.SILENT, SwapPriority.WEAPON, () -> {
-            if (doCrit) {
+            if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
+            if (doCrit && mc.getConnection() != null) {
                 double x = mc.player.getX(), y = mc.player.getY(), z = mc.player.getZ();
                 boolean hc = mc.player.horizontalCollision;
-                mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(x, y,          z, serverYaw, serverPitch, mc.player.onGround(), hc));
-                mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(x, y + 0.0625, z, serverYaw, serverPitch, false,                 hc));
-                mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(x, y + 0.045,  z, serverYaw, serverPitch, false,                 hc));
+                mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(x, y, z, serverYaw, serverPitch, mc.player.onGround(), hc));
+                mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(x, y + 0.0625, z, serverYaw, serverPitch, false, hc));
+                mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(x, y + 0.045, z, serverYaw, serverPitch, false, hc));
             }
-
-            mc.gameMode.attack(mc.player, currentTarget);
-            if (swing.getValue()) mc.player.swing(InteractionHand.MAIN_HAND);
+            struck[0] = strike(target);
         });
-        if (!swung) return;
-
+        if (!swung || !struck[0]) return false;
+        float tps = switch (tpsMode.getValue()) {
+            case LATEST -> GuizhouWare.tpsCounterService.getLatestTPS();
+            case AVERAGE -> GuizhouWare.tpsCounterService.getAverageTPS();
+            default -> 20f;
+        };
+        if (!Float.isFinite(tps) || tps < 1f) tps = 1f;
         attackCooldownTicks = getBaseCooldownTicks(weaponStack, tps) * delay.getValue().floatValue();
+        currentTarget = target;
+        return true;
+    }
+
+    public boolean coolingDown() { return attackCooldownTicks > 0f; }
+
+    /** Final attack entry. A denied licence must not send the swing or the hit. */
+    private boolean strike(Entity target) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (mc.gameMode == null || target == null || !target.isAlive() || target.isRemoved()) return false;
+        mc.gameMode.attack(mc.player, target);
+        if (swing.getValue()) mc.player.swing(InteractionHand.MAIN_HAND);
+        return true;
+    }
+
+    private boolean canHit(Entity target, float yaw, float pitch) {
+        AABB box = target.getBoundingBox();
+        Vec3 eye = mc.player.getEyePosition(1.0f);
+        if (box.contains(eye)) return true;
+        Vec3 end = eye.add(getLookVector(yaw, pitch).scale(RANGE));
+        var hit = box.clip(eye, end);
+        if (hit.isEmpty()) return false;
+        var block = mc.level.clip(new ClipContext(eye, hit.get(),
+                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
+        return block.getType() == HitResult.Type.MISS
+                || eye.distanceToSqr(block.getLocation()) + 1.0E-6 >= eye.distanceToSqr(hit.get());
     }
 
     @Override
@@ -228,25 +276,52 @@ public class AutoSwordModule extends Module {
         return shape.bounds().move(pos).intersects(box);
     }
 
+    public enum TargetSort { DISTANCE, CROSSHAIR, HEALTH }
+
+    private final java.util.ArrayList<Entity> targetCache = new java.util.ArrayList<>();
+    private TargetSort cachedSort = TargetSort.DISTANCE;
+    private int cachedLimit = 1;
+
     private Entity findTarget() {
+        java.util.List<Entity> found = selectTargets(TargetSort.DISTANCE, 1);
+        return found.isEmpty() ? null : found.get(0);
+    }
+
+    public java.util.List<Entity> selectTargets(TargetSort sort, int limit) {
+        int tick = mc.player.tickCount;
+        int capped = Math.max(1, limit);
+        if (tick == targetTick && sort == cachedSort && capped == cachedLimit) return java.util.List.copyOf(targetCache);
+        targetTick = tick;
+        cachedSort = sort;
+        cachedLimit = capped;
+        targetCache.clear();
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
-        if (targets == null) return null;
-
-        Vec3 eyePos = mc.player.getEyePosition(1.0f);
-        Entity best = null;
-        double bestDist = Double.MAX_VALUE;
-
-        for (Entity entity : mc.level.getEntities(null, mc.player.getBoundingBox().inflate(RANGE + 1))) {
-            if (!targets.isValidTarget(entity)) continue;
-
-            double dist = eyePos.distanceTo(clampToBox(eyePos, entity.getBoundingBox()));
-            if (dist > RANGE) continue;
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = entity;
-            }
+        if (targets == null || mc.player == null) {
+            currentTarget = null;
+            return java.util.List.of();
         }
-        return best;
+        Vec3 eye = mc.player.getEyePosition(1.0f);
+        double rangeSq = RANGE * RANGE;
+        for (Entity entity : mc.level.getEntities(null, mc.player.getBoundingBox().inflate(RANGE + 1))) {
+            if (!targets.isValidTarget(entity) || !entity.isAlive()) continue;
+            if (sqDistToBox(eye, entity.getBoundingBox()) > rangeSq) continue;
+            targetCache.add(entity);
+        }
+        targetCache.sort(switch (sort) {
+            case HEALTH -> java.util.Comparator.comparingDouble(entity -> entity instanceof LivingEntity living
+                    ? living.getHealth() + living.getAbsorptionAmount() : Double.MAX_VALUE);
+            case CROSSHAIR -> java.util.Comparator.comparingDouble(entity -> {
+                float[] need = MathUtil.calcAngle(eye, getClosestPointToEye(eye, entity.getBoundingBox()));
+                double dyaw = MathUtil.wrapDegrees(need[0] - mc.player.getYRot());
+                double dpitch = need[1] - mc.player.getXRot();
+                return dyaw * dyaw + dpitch * dpitch;
+            });
+            case DISTANCE -> java.util.Comparator.comparingDouble(entity -> sqDistToBox(eye, entity.getBoundingBox()));
+        });
+        if (targetCache.size() > capped) targetCache.subList(capped, targetCache.size()).clear();
+        currentTarget = targetCache.isEmpty() ? null : targetCache.get(0);
+        weaponTick = Integer.MIN_VALUE;
+        return java.util.List.copyOf(targetCache);
     }
 
     private float getBaseCooldownTicks(ItemStack stack, float tps) {
@@ -261,6 +336,16 @@ public class AutoSwordModule extends Module {
     }
 
     private int getWeapon(Entity target) {
+        int tick = mc.player.tickCount;
+        int id = target == null ? -1 : target.getId();
+        if (tick == weaponTick && id == weaponTargetId) return cachedWeapon;
+        weaponTick = tick;
+        weaponTargetId = id;
+        cachedWeapon = selectWeapon(target);
+        return cachedWeapon;
+    }
+
+    private int selectWeapon(Entity target) {
         int bestSlot = -1;
         double bestDamage = -1.0;
         boolean smash = target != null && MaceItem.canSmashAttack(mc.player);
@@ -301,6 +386,8 @@ public class AutoSwordModule extends Module {
             attackDamage += EnchantmentUtil.getLevel(Enchantments.SHARPNESS, held) * 1.25f;
             attackDamage += EnchantmentUtil.getLevel(Enchantments.SMITE, held) * 2.5f;
             attackDamage += EnchantmentUtil.getLevel(Enchantments.BANE_OF_ARTHROPODS, held) * 2.5f;
+
+            if (isAxe && target instanceof Player player && player.isBlocking()) attackDamage += 8f;
 
             if (attackDamage > bestDamage) {
                 bestDamage = attackDamage;
@@ -349,12 +436,11 @@ public class AutoSwordModule extends Module {
         return new Vec3(x, y, z);
     }
 
-    private Vec3 clampToBox(Vec3 point, AABB box) {
-        return new Vec3(
-            Mth.clamp(point.x, box.minX, box.maxX),
-            Mth.clamp(point.y, box.minY, box.maxY),
-            Mth.clamp(point.z, box.minZ, box.maxZ)
-        );
+    private static double sqDistToBox(Vec3 point, AABB box) {
+        double dx = point.x < box.minX ? box.minX - point.x : (point.x > box.maxX ? point.x - box.maxX : 0);
+        double dy = point.y < box.minY ? box.minY - point.y : (point.y > box.maxY ? point.y - box.maxY : 0);
+        double dz = point.z < box.minZ ? box.minZ - point.z : (point.z > box.maxZ ? point.z - box.maxZ : 0);
+        return dx * dx + dy * dy + dz * dz;
     }
 
     private Vec3 getLookVector(float yaw, float pitch) {

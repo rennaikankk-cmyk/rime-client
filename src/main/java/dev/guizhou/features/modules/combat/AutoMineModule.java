@@ -90,6 +90,11 @@ public class AutoMineModule extends Module {
     private GlassStage glassStage = GlassStage.Idle;
     private int glassStageAge;
     private final List<CityBlock> debugScores = new ArrayList<>();
+    private final List<BlockPos> feetCells = new ArrayList<>();
+    private int feetCacheTick = Integer.MIN_VALUE;
+    private int feetCacheId = Integer.MIN_VALUE;
+    private boolean singleFootCell;
+    private boolean feetOnBedrock;
     private volatile long lifecycleGeneration;
     private net.minecraft.client.multiplayer.ClientLevel sessionLevel;
     private net.minecraft.client.player.LocalPlayer sessionPlayer;
@@ -574,6 +579,7 @@ public class AutoMineModule extends Module {
         if (rebreak == null || !blockPos.equals(rebreak)) return false;
 
         if (inBedrock) {
+            ensureFeetCache();
             boolean isSelfTrapBlock = false;
             for (Direction dir : HORIZONTAL) {
                 if (targetPlayer.blockPosition().above().relative(dir).equals(blockPos)) {
@@ -582,7 +588,7 @@ public class AutoMineModule extends Module {
                 }
             }
             boolean canFacePlace = mc.level.getBlockState(targetPlayer.blockPosition().above()).isAir();
-            return BlockPos.betweenClosedStream(targetFeetBox()).count() == 1
+            return singleFootCell
                     && (blockPos.equals(targetPlayer.blockPosition().above(2))
                             || (isSelfTrapBlock && canFacePlace));
         } else {
@@ -759,7 +765,8 @@ public class AutoMineModule extends Module {
             score += 10;
         }
 
-        if (BlockPos.betweenClosedStream(targetFeetBox()).count() == 1) {
+        ensureFeetCache();
+        if (singleFootCell) {
             boolean canMineFaceBlock = !mc.level.getBlockState(targetPlayer.blockPosition().above()).is(Blocks.BEDROCK);
             if (canMineFaceBlock) {
                 if (blockPos.equals(targetPlayer.blockPosition().above())) {
@@ -831,17 +838,34 @@ public class AutoMineModule extends Module {
         return new AABB(bb.minX, feetY, bb.minZ, bb.maxX, feetY + 0.1, bb.maxZ);
     }
 
+    private void ensureFeetCache() {
+        if (targetPlayer == null || mc.player == null) return;
+        int tick = mc.player.tickCount;
+        int id = targetPlayer.getId();
+        if (tick == feetCacheTick && id == feetCacheId) return;
+        feetCacheTick = tick;
+        feetCacheId = id;
+        feetCells.clear();
+        feetOnBedrock = false;
+        int n = 0;
+        for (BlockPos raw : iterate(targetFeetBox())) {
+            BlockPos cell = raw.immutable();
+            feetCells.add(cell);
+            n++;
+            if (mc.level.getBlockState(cell).is(Blocks.BEDROCK)) feetOnBedrock = true;
+        }
+        singleFootCell = n == 1;
+    }
+
     private boolean inBedrockCase() {
-        return BlockPos.betweenClosedStream(targetFeetBox())
-                .anyMatch(bp -> mc.level.getBlockState(bp).is(Blocks.BEDROCK));
+        ensureFeetCache();
+        return feetOnBedrock;
     }
 
     private boolean isBlockInFeet(BlockPos blockPos) {
-        AABB feetBox = targetFeetBox();
-        for (BlockPos pos : BlockPos.betweenClosed(
-                Mth.floor(feetBox.minX), Mth.floor(feetBox.minY), Mth.floor(feetBox.minZ),
-                Mth.floor(feetBox.maxX), Mth.floor(feetBox.maxY), Mth.floor(feetBox.maxZ))) {
-            if (blockPos.equals(pos)) return true;
+        ensureFeetCache();
+        for (int i = 0, n = feetCells.size(); i < n; i++) {
+            if (blockPos.equals(feetCells.get(i))) return true;
         }
         return false;
     }

@@ -412,8 +412,8 @@ public class GuangxiBedModule extends Module {
         AnchorDamageUtil.Target self = AnchorDamageUtil.Target.of(mc.player);
         boolean canPlace = hasBed();
         BedSpot best = null;
-        for (Entity e : mc.level.getEntities(mc.player, mc.player.getBoundingBox().inflate(range))) {
-            if (!(e instanceof Player target) || target.isDeadOrDying()) continue;
+        for (Player target : mc.level.players()) {
+            if (target == mc.player || target.isDeadOrDying()) continue;
             if (targets != null && !targets.isValidPlayerTarget(target)) continue;
             if (mc.player.distanceToSqr(target) > range * range) continue;
             AnchorDamageUtil.Target damageTarget = AnchorDamageUtil.Target.of(target, assumeBestArmor.getValue());
@@ -492,10 +492,11 @@ public class GuangxiBedModule extends Module {
                 interactionEye(), interactionRange(), interactionRange(), false);
         if (placeHit == null) return false;
         if (!prepareAction(placeHit, true)) return false;
+        AutoTotemModule.holdForCombat(AutoTotemModule.BED);
         boolean mainBed = mc.player.getMainHandItem().is(ItemTags.BEDS);
         boolean offBed = mc.player.getOffhandItem().is(ItemTags.BEDS);
         if (mainBed || offBed) {
-            boolean sent = sendAtSpot(placeHit, offBed && !mainBed ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND);
+            boolean sent = sendAtSpot(placeHit, offBed && !mainBed ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND, true);
             if (sent) noteRender();
             return sent;
         }
@@ -504,7 +505,7 @@ public class GuangxiBedModule extends Module {
         if (!result.found()) return false;
         boolean[] sent = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(result, bedSwapMode(), SwapPriority.CRYSTAL,
-                () -> sent[0] = sendAtSpot(placeHit, result.hand()));
+                () -> sent[0] = sendAtSpot(placeHit, result.hand(), true));
         if (swapped && sent[0]) noteRender();
         return swapped && sent[0];
     }
@@ -514,7 +515,7 @@ public class GuangxiBedModule extends Module {
                 interactionEye(), interactionRange(), interactionRange(), false);
         if (hit == null) return false;
         if (!prepareAction(hit, false)) return false;
-        boolean sent = sendAtSpot(hit, InteractionHand.MAIN_HAND);
+        boolean sent = sendAtSpot(hit, InteractionHand.MAIN_HAND, false);
         if (sent) noteRender();
         return sent;
     }
@@ -538,13 +539,15 @@ public class GuangxiBedModule extends Module {
 
     private double interactionRange() { return tpMode.getValue() ? 6.0 : bedRange.getValue(); }
 
-    private boolean sendAtSpot(BlockHitResult hit, InteractionHand hand) {
+    private boolean sendAtSpot(BlockHitResult hit, InteractionHand hand, boolean placing) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         java.util.function.BooleanSupplier action = () -> GuizhouWare.placementManager.sendUseItemOnDirect(
                 hit, hand, interactionEye(), interactionRange(), interactionRange());
-        return tpMode.getValue() ? dev.guizhou.util.InteractionTransaction.run(
-                () -> sendFakeMove(interactionFeet(), desiredYaw), action, this::sendRealMove)
-                : action.getAsBoolean();
+        if (!tpMode.getValue()) return action.getAsBoolean();
+        float[] look = MathUtil.calcAngle(interactionFeet(), hit.getLocation());
+        return dev.guizhou.util.InteractionTransaction.run(
+                () -> sendFakeMove(interactionFeet(), placing ? desiredYaw : look[0], look[1]),
+                action, this::sendRealMove);
     }
 
     private void noteRender() {
@@ -553,11 +556,9 @@ public class GuangxiBedModule extends Module {
         renderStartMs = System.currentTimeMillis();
     }
 
-    private boolean sendFakeMove(Vec3 pos, float yaw) {
+    private boolean sendFakeMove(Vec3 pos, float yaw, float pitch) {
         return PacketSendUtil.send(new ServerboundMovePlayerPacket.PosRot(
-                pos.x, pos.y, pos.z, yaw,
-                GuizhouWare.rotationManager.getServerPitch(),
-                false, false));
+                pos.x, pos.y, pos.z, yaw, pitch, false, false));
     }
 
     private void sendRealMove() {

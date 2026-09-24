@@ -75,6 +75,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new SwordGapModule());
         register(new AutoLogModule());
         register(new AutoSwordModule());
+        register(new KillAuraModule());
         register(new GuangxiCrystalModule());
         register(new AutoAnchorModule());
         register(new AutoMineModule());
