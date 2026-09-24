@@ -141,6 +141,7 @@ public class ModuleManager implements Jsonable, Util {
     }
 
     public void register(Module module) {
+        dev.guizhou.features.settings.SettingText.fill(module);
         getModules().add(module);
         fastRegistry.put(module.getClass(), module);
         String prefix = "module." + module.getName();

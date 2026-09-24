@@ -19,6 +19,7 @@ public class Setting<T> {
     private boolean hasRestriction;
     private Predicate<T> visibility;
     private String description;
+    private String hoverLine;
     private Feature feature;
     private String page = "General";
 
@@ -229,6 +230,20 @@ public class Setting<T> {
 
     public String getDescription() {
         return Objects.requireNonNullElse(this.description, "");
+    }
+
+    public Setting<T> described(String text) {
+        this.description = text == null ? "" : text;
+        this.hoverLine = null;
+        return this;
+    }
+
+    public String hoverHint() {
+        if (hoverLine == null) {
+            String d = getDescription();
+            hoverLine = d.isEmpty() ? name + " · 右键恢复默认" : name + " · " + d + " · 右键恢复默认";
+        }
+        return hoverLine;
     }
 
     public boolean isNumberSetting() {

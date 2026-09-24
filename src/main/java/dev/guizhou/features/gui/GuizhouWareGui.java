@@ -88,13 +88,19 @@ public class GuizhouWareGui extends Screen {
         bodyTop=y+100; bodyBottom=y+h-32;
         search.bounds(listX+12,y+55,listW-24,28);
     }
+    private String moduleKey;
+    private List<Module> moduleCache;
     private List<Module> modules() {
+        String key=category.name()+"\0"+query;
+        if(moduleCache!=null && key.equals(moduleKey)) return moduleCache;
+        moduleKey=key;
         String q=query.toLowerCase(Locale.ROOT).trim();
-        return GuizhouWare.moduleManager.stream().filter(m->!m.hidden)
+        moduleCache=GuizhouWare.moduleManager.stream().filter(m->!m.hidden)
                 .filter(m->m.getCategory()!=Module.Category.HUD)
                 .filter(m->m.getCategory()!=Module.Category.FUNNY || GuizhouWare.commandManager.isFunnyVisible())
                 .filter(m->q.isEmpty()?m.getCategory()==category:(m.getName()+" "+m.getDisplayName()+" "+m.getDescription()).toLowerCase(Locale.ROOT).contains(q))
                 .sorted(Comparator.comparing(Module::getName)).toList();
+        return moduleCache;
     }
     private void select(Module m) {selected=m;page="General";settingScroll=tabScroll=0;dropdown=binding=null;}
     private void hit(float x,float y,float w,float h,IntConsumer action) {hits.add(new Hit(x,y,w,h,action));}
@@ -207,7 +213,7 @@ public class GuizhouWareGui extends Screen {
     private float rowHeight(Setting<?> s) {return s.isNumberSetting() && s.hasRestriction()?57:43;}
     private void drawSetting(GuiGraphics g,Setting<?> s,float sx,float sy,float sw,float sh,double mx,double my,float top,float bottom) {
         Object v=s.getValue();boolean hover=contains(mx,my,sx,sy,sw,sh) && my>=top && my<bottom;
-        if(hover)hint=s.getName()+(s.getDescription().isBlank()?"":" · "+s.getDescription());
+        if(hover)hint=s.hoverHint();
         g.fill((int)sx,(int)(sy+sh-1),(int)(sx+sw),(int)(sy+sh),0xFF252525);
         String label=s.getName();
         if(selected instanceof HudClientModule && label.startsWith(page+" "))label=label.substring(page.length()+1);
