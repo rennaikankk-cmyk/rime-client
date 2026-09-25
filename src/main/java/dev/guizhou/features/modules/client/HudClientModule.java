@@ -8,6 +8,7 @@ import dev.guizhou.features.modules.hud.CoordinatesHudModule;
 import dev.guizhou.features.modules.hud.CountsHudModule;
 import dev.guizhou.features.modules.hud.NotifierHudModule;
 import dev.guizhou.features.modules.hud.PingHudModule;
+import dev.guizhou.features.modules.hud.PlayersHudModule;
 import dev.guizhou.features.modules.hud.RadarHudModule;
 import dev.guizhou.features.modules.hud.SpeedHudModule;
 import dev.guizhou.features.modules.hud.TargetHudModule;
@@ -68,6 +69,7 @@ public class HudClientModule extends Module {
         pingShowTps = bool("Ping 显示 TPS", true).setPage("Ping");
         pingShowFps = bool("Ping 显示 FPS", true).setPage("Ping");
         register(new RadarHudModule(), true);
+        register(new PlayersHudModule(), true);
         register(new ActiveModulesHudModule(), true);
         activeModulesPosition = mode("ActiveModules Position", HudPosition.CENTER_RIGHT).setPage("Elements");
         activeModulesSort = mode("ActiveModules 排序", ActiveModulesHudModule.Sort.ADDED).setPage("ActiveModules");

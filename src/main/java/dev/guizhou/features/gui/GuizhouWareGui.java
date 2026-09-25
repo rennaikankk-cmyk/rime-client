@@ -11,9 +11,8 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 /**
- * ClickGUI screen. The layout comes from ClickGuiModule.Style: two classic
- * panel presets and the modern card browser. Every style writes through the
- * normal Setting path, so events and persistence are identical.
+ * ClickGUI screen. Glass columns and the compact category list share PanelStyle.
+ * The modern card browser is only the config and HUD detour.
  */
 public class GuizhouWareGui extends Screen {
     private static GuizhouWareGui instance;

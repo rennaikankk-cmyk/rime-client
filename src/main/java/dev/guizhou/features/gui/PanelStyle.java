@@ -46,7 +46,7 @@ final class PanelStyle extends ShellStyle {
                         boolean descriptionPanel, boolean icons, boolean glassHeader, float radius, int dim) {}
 
     /** Hachimi-style glass: translucent panels, tinted header strip, category icons, enabled left bar. */
-    private static final Look HACHIMI_LOOK = new Look(104, 17, 15, 8.5f, 0xFF8B9AF5, 0x6E10131E, 0x500B0E17, 0x00000000,
+    private static final Look HACHIMI_LOOK = new Look(110, 18, 16, 9.5f, 0xFF8B7CFF, 0x6E10131E, 0x500B0E17, 0x00000000,
             0x14FFFFFF, false, true, 0xFFEAF0FF, 0xFF8E93A6, true, true, true, true, 5f, 0x66000000);
 
     private static final String DESCRIPTION = "DESCRIPTION";
@@ -84,6 +84,7 @@ final class PanelStyle extends ShellStyle {
     private ShadcnTextField editor, search;
     private float editX, editY, editW, editH;
     private String query = "", hint = "";
+    private Module.Category listOpen = Module.Category.COMBAT;
     private Module hovered, tooltipModule;
     private Object hoverTarget;
     private long hoverSince;
@@ -149,7 +150,7 @@ final class PanelStyle extends ShellStyle {
         ClickGuiModule gui = ClickGuiModule.getInstance();
         double requested = gui == null ? 1 : gui.menuScale.getValue() / 100;
         requested = Double.isFinite(requested) ? Math.clamp(requested, .6, 1.5) : 1;
-        float needed = 16 + panels.size() * (look.width + 4);
+        float needed = list() ? panelWidth() + 24 : 16 + panels.size() * (look.width + 4);
         float fit = Math.min(1, width / Math.max(1f, needed));
         scale = (float) Math.max(.35, requested * fit);
         vw = width / scale;
@@ -195,6 +196,36 @@ final class PanelStyle extends ShellStyle {
             if (eq > 0) map.put(entry.substring(0, eq), entry.substring(eq + 1));
         }
         return map;
+    }
+
+    private boolean list() {
+        ClickGuiModule gui = ClickGuiModule.getInstance();
+        return gui != null && gui.frame.getValue() == ClickGuiModule.Frame.LIST;
+    }
+
+    private float panelWidth() { return list() ? 118 : look.width; }
+
+    private void toggleFrame() {
+        ClickGuiModule gui = ClickGuiModule.getInstance();
+        if (gui == null) return;
+        gui.frame.setValue(list() ? ClickGuiModule.Frame.GLASS : ClickGuiModule.Frame.LIST);
+    }
+
+    private void layoutList() {
+        float y = 28;
+        for (Panel p : panels) {
+            if (p.category == null) { p.y = -400; p.collapsed = true; continue; }
+            p.x = 8;
+            p.y = y;
+            p.collapsed = p.category != listOpen;
+            float content = 0;
+            if (!p.collapsed) {
+                for (Module m : modules(p.category))
+                    content += look.row + (expanded.contains(m) ? expandedHeight(m) : 0);
+            }
+            float maxBody = Math.max(look.row * 3, vh - (y + look.header) - 16);
+            y += look.header + (p.collapsed ? 0 : Math.min(content, maxBody)) + 1;
+        }
     }
 
     private void closePopovers() {
@@ -248,6 +279,7 @@ final class PanelStyle extends ShellStyle {
         pose.translate(0, (1 - open) * -6);
         my += (1 - open) * 6;
 
+        if (list()) layoutList();
         drawToolbar(g, mx, my);
         for (Panel p : panels) drawPanel(g, p, mx, my);
         if (!look.descriptionPanel) drawTooltip(g, mx, my);
@@ -282,6 +314,8 @@ final class PanelStyle extends ShellStyle {
         toolButton(g, Icon.FOLDER, bx, sy, "配置管理", mx, my, screen::openConfigs);
         bx -= 19;
         toolButton(g, Icon.EXTERNAL, bx, sy, "云参数", mx, my, screen::openCloudConfigs);
+        bx -= 19;
+        toolButton(g, Icon.LIST, bx, sy, list() ? "切换为玻璃面板" : "切换为分类列", mx, my, this::toggleFrame);
     }
 
     private void drawSearchField(GuiGraphics g, float sx, float sy, float sw, float sh) {
@@ -344,10 +378,11 @@ final class PanelStyle extends ShellStyle {
     }
 
     private void drawPanel(GuiGraphics g, Panel p, double mx, double my) {
+        if (list() && (p.category == null || p.y < 0)) return;
         boolean description = p.category == null;
         List<Module> mods = description ? List.of() : modules(p.category);
         if (!description && !query.isBlank() && mods.isEmpty()) return;
-        float x = p.x, y = p.y, W = look.width, H = look.header, r = look.radius;
+        float x = p.x, y = p.y, W = panelWidth(), H = look.header, r = list() ? 2f : look.radius;
         int accent = accent(p.category);
 
         float content;
@@ -356,7 +391,7 @@ final class PanelStyle extends ShellStyle {
             content = 0;
             for (Module m : mods) content += look.row + anim.to("exp:" + m.getName(), expanded.contains(m) ? expandedHeight(m) : 0, 16);
         }
-        float open = anim.to("panel:" + p.key, p.collapsed ? 0 : 1, 14);
+        float open = list() ? (p.collapsed ? 0 : 1) : anim.to("panel:" + p.key, p.collapsed ? 0 : 1, 14);
         float maxBody = Math.max(look.row * 3, vh - (y + H) - 16);
         float body = Math.min(content, maxBody) * open;
         p.bodyHeight = body;
@@ -364,17 +399,19 @@ final class PanelStyle extends ShellStyle {
         p.scrollTarget = Math.clamp(p.scrollTarget, 0, maxScroll);
         p.scroll = anim.to("scroll:" + p.key, p.scrollTarget, 18);
 
-        int headerColor = look.glassHeader ? mix(accent, look.body, .70f) : accent;
+        boolean selected = list() && !p.collapsed;
+        int headerColor = list() ? (selected ? accent : 0xF014151C) : (look.glassHeader ? mix(accent, look.body, .70f) : accent);
         if (look.fillEnabled) shadow(g, x, y, W, H + body, r, 6, 0x90000000);
-        if (body > .5f) {
-            round(g, x, y, W, H + body + (look.border ? 0 : 1), r, look.body);
-            if (look.body2 != 0)
-                g.fill((int) (x + 1), (int) (y + H + body * .45f), (int) (x + W - 1), (int) (y + H + body), look.body2);
+        if (body > .5f) round(g, x, y, W, H + body, r, list() ? 0xF0101118 : look.body);
+        else if (list()) round(g, x, y, W, H, r, headerColor);
+        if (!list()) {
+            round(g, x, y, W, H, r, headerColor);
+            if (body > .5f && r > 0) round(g, x, y + H - r, W, r, 0, headerColor);
+            if (body > .5f && look.glassHeader) round(g, x + 1, y + H - 1, W - 2, 1, 0, alpha(accent, .45f));
+            if (look.border) outline(g, x, y, W, H + body, r, 0.5f, alpha(0xFFFFFFFF, .22f));
+        } else if (selected) {
+            round(g, x, y, W, H, r, accent);
         }
-        round(g, x, y, W, H, r, headerColor);
-        if (body > .5f && r > 0) g.fill((int) x, (int) (y + H - r), (int) (x + W), (int) (y + H), headerColor);
-        if (body > .5f && look.glassHeader) g.fill((int) x, (int) (y + H - 1), (int) (x + W), (int) (y + H), alpha(accent, .55f));
-        if (look.border) outline(g, x, y, W, H + body, r, 1, accent);
 
         String title = description ? "描述" : categoryName(p.category);
         float titleX = x + 5;
@@ -389,6 +426,10 @@ final class PanelStyle extends ShellStyle {
             textRight(g, count, x + W - 5, y + (H - 7) / 2 + .5f, 7, HudFonts.REGULAR, 0xC0FFFFFF);
         }
         hit(x, y, W, H, b -> {
+            if (list()) {
+                if (b == 0 && p.category != null) { UiSounds.click(); listOpen = p.category; }
+                return;
+            }
             if (b == 0) {
                 grabbed = p;
                 grabDX = (float) (mx - p.x);
@@ -451,11 +492,8 @@ final class PanelStyle extends ShellStyle {
             if (onP > .01f) g.fill((int) x + 1, (int) ry, (int) (x + 1 + (W - 2) * onP), (int) (ry + rh),
                     alpha(mix(accent, 0xFFFFFFFF, hover ? .08f : 0), .88f));
         } else if (look.barEnabled) {
-            if (hover) g.fill((int) x + 1, (int) ry, (int) (x + W - 1), (int) (ry + rh), look.rowHover);
-            if (onP > .01f) {
-                float inset = rh * (1 - Math.min(1, onP)) / 2;
-                g.fill((int) x + 1, (int) (ry + inset), (int) x + 3, (int) (ry + rh - inset), accent);
-            }
+            if (hover) round(g, x + 1, ry, W - 2, rh, 0, look.rowHover);
+            if (onP > .01f) roundGradient(g, x + 1, ry, (W - 2) * Math.min(1, onP), rh, 0, alpha(accent, .42f), alpha(accent, 0f));
         } else if (hover) {
             g.fill((int) x + 1, (int) ry, (int) (x + W - 1), (int) (ry + rh), look.rowHover);
         }
@@ -488,8 +526,8 @@ final class PanelStyle extends ShellStyle {
                               float top, float bottom, int accent) {
         float rh = look.row;
         int bg = look.fillEnabled ? 0xC00B0A10 : 0x60000000;
-        g.fill((int) x + 1, (int) sy, (int) (x + W - 1), (int) (sy + expandedHeight(m)), bg);
-        g.fill((int) x + 1, (int) sy, (int) x + 2, (int) (sy + expandedHeight(m) - 2), alpha(accent, .9f));
+        round(g, x + 1, sy, W - 2, expandedHeight(m), 0, bg);
+        round(g, x + 1, sy, 1.5f, Math.max(0, expandedHeight(m) - 2), 0, alpha(accent, .9f));
         float ry = sy + 1;
         for (Setting<?> s : settingsOf(m)) {
             if (ry + rh > top && ry < bottom) drawSetting(g, m, s, x + 3, ry, W - 5, rh, mx, my, top, bottom, accent);
@@ -741,7 +779,7 @@ final class PanelStyle extends ShellStyle {
         if (picker.active() || editor != null) return true;
         for (int i = panels.size() - 1; i >= 0; i--) {
             Panel p = panels.get(i);
-            if (contains(mx, my, p.x, p.y, look.width, look.header + p.bodyHeight)) {
+            if (contains(mx, my, p.x, p.y, panelWidth(), look.header + p.bodyHeight)) {
                 p.scrollTarget -= (float) (vertical * look.row * 2);
                 return true;
             }

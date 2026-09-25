@@ -44,6 +44,7 @@ public class HudEditorScreen extends Screen {
     private static final Map<String, String> LABELS = Map.ofEntries(
             Map.entry("Totems", "图腾"), Map.entry("Armor", "护甲"), Map.entry("Counts", "物资"),
             Map.entry("Coordinates", "坐标"), Map.entry("Ping", "网络"), Map.entry("Radar", "附近玩家"),
+            Map.entry("Players", "玩家表"),
             Map.entry("ActiveModules", "模块列表"), Map.entry("Notifier", "通知"), Map.entry("Speed", "速度"),
             Map.entry("TargetHud", "空战 HUD"), Map.entry("Diagnostics", "诊断"));
 

@@ -5,6 +5,7 @@ import dev.guizhou.event.impl.ClientEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.commands.Command;
 import dev.guizhou.features.gui.GuizhouWareGui;
+import dev.guizhou.features.gui.Labeled;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Bind;
 import dev.guizhou.features.settings.Setting;
@@ -23,6 +24,7 @@ public class ClickGuiModule extends Module {
     public Setting<String>  menuNotice       = str("MenuNotice", "");
     public Setting<String>  menuWatermark    = str("MenuWatermark", "");
     public Setting<Theme>   theme            = mode("Theme", Theme.GUIZHOUWARE);
+    public Setting<Frame>   frame            = mode("菜单样式", Frame.GLASS);
     public Setting<Color>   customColor      = color("Custom Color", 114, 168, 216, 220);
     public Setting<Boolean> smooth           = bool("Smooth", true);
     public Setting<Double> menuScale = num("菜单大小 (%)", 100.0, 60.0, 150.0);
@@ -162,6 +164,17 @@ public class ClickGuiModule extends Module {
 
     public enum Theme {
         GUIZHOUWARE, COLORS, CUSTOM, RAINBOW
+    }
+
+    /** Glass columns, or one tight category stack with the open row filled. */
+    public enum Frame implements Labeled {
+        GLASS("玻璃"), LIST("分类列");
+
+        private final String label;
+
+        Frame(String label) { this.label = label; }
+
+        @Override public String label() { return label; }
     }
 
 }

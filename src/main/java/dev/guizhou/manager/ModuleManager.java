@@ -84,6 +84,8 @@ public class ModuleManager implements Jsonable, Util {
         register(new VelocityModule());
         register(new SprintModule());
         register(new NoSlowModule());
+        register(new dev.guizhou.features.modules.movement.NoJumpDelayModule());
+        register(new dev.guizhou.features.modules.movement.EntityControlModule());
         register(new dev.guizhou.features.modules.movement.NoFallModule());
         register(new AntiHungerModule());
         register(new GuangxiElytraModule());

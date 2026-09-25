@@ -28,6 +28,8 @@
     "entity.MixinEntity",
     "entity.MixinSlimeBlock",
     "entity.MixinEntityRenderer",
+    "entity.MixinAbstractHorse",
+    "entity.MixinLivingEntityJump",
     "entity.MixinLivingEntityTravel",
     "entity.MixinLocalPlayerRotation",
     "input.MixinKeyboard",
