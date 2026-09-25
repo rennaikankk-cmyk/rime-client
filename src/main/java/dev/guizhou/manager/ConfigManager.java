@@ -3,6 +3,8 @@ package dev.guizhou.manager;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import dev.guizhou.features.Feature;
 import dev.guizhou.features.settings.Bind;
 import dev.guizhou.features.settings.EnumConverter;
@@ -143,6 +145,82 @@ public class ConfigManager {
     private static final Path CONFIGS_DIR = CONFIG_ROOT.resolve("configs");
     private static final java.util.regex.Pattern NAME_PATTERN =
             java.util.regex.Pattern.compile("[A-Za-z0-9_-]+");
+    private static final int MAX_BUNDLE_CHARS = 512 * 1024;
+
+    /** Stable portable format. Public presets carry only module settings. */
+    public String exportBundle(String name, boolean publicPreset) throws java.io.IOException {
+        if (name != null && !NAME_PATTERN.matcher(name).matches()) throw new java.io.IOException("Invalid preset name");
+        Path directory = name == null ? null : CONFIGS_DIR.resolve(name);
+        if (directory != null && !Files.isDirectory(directory)) throw new java.io.IOException("Preset does not exist");
+        JsonObject files = new JsonObject();
+        for (Jsonable jsonable : jsonables) {
+            if (publicPreset && !"modules.json".equals(jsonable.getFileName())) continue;
+            JsonElement value = directory == null ? jsonable.toJson()
+                    : ConfigFiles.read(directory.resolve(jsonable.getFileName()));
+            if (value != null) files.add(jsonable.getFileName(), value);
+        }
+        JsonObject bundle = new JsonObject();
+        bundle.addProperty("format", "gzw-config-v1");
+        bundle.add("files", files);
+        String encoded = GSON.toJson(bundle);
+        if (encoded.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BUNDLE_CHARS)
+            throw new java.io.IOException("Preset exceeds 512 KiB");
+        return encoded;
+    }
+
+    public boolean importBundle(String name, String encoded, boolean publicPreset) {
+        if (!NAME_PATTERN.matcher(name).matches()) return false;
+        try {
+            JsonObject files = parseBundle(encoded, publicPreset);
+            Path directory = CONFIGS_DIR.resolve(name);
+            Files.createDirectories(directory);
+            for (Jsonable jsonable : jsonables) {
+                if (!files.has(jsonable.getFileName()))
+                    Files.deleteIfExists(directory.resolve(jsonable.getFileName()));
+            }
+            for (var entry : files.entrySet()) {
+                ConfigFiles.write(directory.resolve(entry.getKey()), GSON.toJson(entry.getValue()));
+            }
+            invalidateNamed();
+            return true;
+        } catch (Exception failure) {
+            LOGGER.error("Failed to import config '{}'", name, failure);
+            return false;
+        }
+    }
+
+    public boolean applyBundle(String encoded, boolean publicPreset) {
+        try {
+            JsonObject files = parseBundle(encoded, publicPreset);
+            for (Jsonable jsonable : jsonables) {
+                if (files.has(jsonable.getFileName())) jsonable.fromJson(files.get(jsonable.getFileName()));
+            }
+            return true;
+        } catch (Exception failure) {
+            LOGGER.error("Failed to apply config bundle", failure);
+            return false;
+        }
+    }
+
+    private JsonObject parseBundle(String encoded, boolean publicPreset) throws java.io.IOException {
+        if (encoded == null || encoded.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BUNDLE_CHARS)
+            throw new java.io.IOException("Preset exceeds 512 KiB");
+        JsonObject bundle;
+        try { bundle = JsonParser.parseString(encoded).getAsJsonObject(); }
+        catch (RuntimeException invalid) { throw new java.io.IOException("Invalid JSON preset", invalid); }
+        if (!bundle.has("format") || !"gzw-config-v1".equals(bundle.get("format").getAsString())
+                || !bundle.has("files") || !bundle.get("files").isJsonObject())
+            throw new java.io.IOException("Unsupported preset format");
+        JsonObject files = bundle.getAsJsonObject("files");
+        if (files.entrySet().isEmpty()) throw new java.io.IOException("Empty preset");
+        for (var entry : files.entrySet()) {
+            if (jsonables.stream().noneMatch(j -> j.getFileName().equals(entry.getKey()))
+                    || publicPreset && !"modules.json".equals(entry.getKey())
+                    || !entry.getValue().isJsonObject())
+                throw new java.io.IOException("Unsupported preset file: " + entry.getKey());
+        }
+        return files;
+    }
 
     /** Saves every registered config file into {@code configs/<name>/}. */
     public boolean saveNamed(String name) {

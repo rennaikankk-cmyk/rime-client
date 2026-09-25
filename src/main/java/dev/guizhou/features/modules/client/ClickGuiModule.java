@@ -18,6 +18,8 @@ public class ClickGuiModule extends Module {
     public Setting<String>  prefix           = str("Prefix", "rime");
     public Setting<Boolean> blurBackground   = bool("BlurBackground", true);
     public Setting<Boolean> descriptions     = bool("Descriptions", true);
+    /** Forces 1.12 packet gates (dual view, legacy firework/input, crystal/TP 1.12) even if Via did not detect them. */
+    public Setting<Boolean> protocol112      = bool("1.12协议", false);
     public Setting<String>  menuNotice       = str("MenuNotice", "");
     public Setting<String>  menuWatermark    = str("MenuWatermark", "");
     public Setting<Theme>   theme            = mode("Theme", Theme.GUIZHOUWARE);
@@ -148,7 +150,8 @@ public class ClickGuiModule extends Module {
 
     @Override
     public void onTick() {
-        if (!(mc.screen instanceof GuizhouWareGui) && !(mc.screen instanceof dev.guizhou.features.gui.HudEditorScreen)) {
+        if (!(mc.screen instanceof GuizhouWareGui) && !(mc.screen instanceof dev.guizhou.features.gui.HudEditorScreen)
+                && !(mc.screen instanceof dev.guizhou.features.gui.CloudConfigsScreen)) {
             this.disable();
         }
     }

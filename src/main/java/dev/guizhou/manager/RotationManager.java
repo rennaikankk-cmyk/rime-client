@@ -280,9 +280,10 @@ public class RotationManager {
         float f = (float) ((Math.random() * 2.0 - 1.0) * 0.001f);
         targetPitch = Mth.clamp(targetPitch + f, -90.0f, 90.0f);
 
+        boolean horizontalCollision = !dev.guizhou.util.elytra.DualViewSupport.forceLegacyProtocol();
         ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.PosRot(
                 mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                targetYaw, targetPitch, mc.player.onGround(), true
+                targetYaw, targetPitch, mc.player.onGround(), horizontalCollision
         );
         boolean sent = dev.guizhou.util.PacketSendUtil.send(packet);
         if (sent) {

@@ -693,6 +693,7 @@ final class ModernStyle extends ShellStyle {
         List<String> names = GuizhouWare.configManager == null ? List.of() : GuizhouWare.configManager.listNamed();
         float ly = gy + 82, lh = y + h - FOOTER - 6 - ly;
         text(g, "已保存的配置 · " + names.size(), gx + 2, ly, 9, HudFonts.SEMI, SUBTLE);
+        button(g, "云参数", Icon.EXTERNAL, gx + gw - 108, ly - 4, 108, 20, mx, my, false, 0, screen::openCloudConfigs);
         ly += 18;
         lh -= 18;
         float rowH = 54;

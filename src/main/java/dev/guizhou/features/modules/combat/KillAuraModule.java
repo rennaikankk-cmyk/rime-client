@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * Multi-target melee attacks on top of AutoSword. AutoSword stays registered and
  * still attacks on its own when this module is off. While this module is on it is
- * the only one that swings, using AutoSword's range, weapon swap and hit check.
+ * the only one that swings, using AutoSword's range, weapon swap, hit check and TP path.
  */
 public class KillAuraModule extends Module {
 

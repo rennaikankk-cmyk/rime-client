@@ -22,8 +22,15 @@ public final class DualViewSupport {
 
     private DualViewSupport() {}
 
+    /** ClickGUI 「1.12协议」. Default off; auto-detection stays in charge until it is on. */
+    public static boolean forceLegacyProtocol() {
+        dev.guizhou.features.modules.client.ClickGuiModule gui =
+                dev.guizhou.features.modules.client.ClickGuiModule.getInstance();
+        return gui != null && Boolean.TRUE.equals(gui.protocol112.getValue());
+    }
+
     public static boolean isDupRotSupported() {
-        return status() == Status.SUPPORTED;
+        return forceLegacyProtocol() || status() == Status.SUPPORTED;
     }
 
     /** Resolved once per connection; cheap on every later call. */

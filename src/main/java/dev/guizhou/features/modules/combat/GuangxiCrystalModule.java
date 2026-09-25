@@ -148,9 +148,13 @@ public class GuangxiCrystalModule extends Module {
 
     private final Setting<Boolean> legacy112        = bool("1.12", false).setPage("General");
 
+    private boolean useLegacy112() {
+        return legacy112.getValue() || dev.guizhou.util.elytra.DualViewSupport.forceLegacyProtocol();
+    }
+
     private final Setting<Boolean> antiChinese   = bool("AntiChinese", false).setPage("AntiChinese");
 
-    private final Setting<Double>  antiChineseRange = num("Range", 5.0, 1.0, 5.14).setPage("AntiChinese");
+    private final Setting<Double>  antiChineseRange = num("Range", 5.0, 1.0, 6.0).setPage("AntiChinese");
 
     private final Setting<Double>  antiChineseEnemyRange = num("EnemyRange", 8.0, 1.0, 30.0).setPage("AntiChinese");
     private final Setting<Boolean> basePlace          = bool("BasePlace", true).setPage("BasePlace");
@@ -749,8 +753,10 @@ public class GuangxiCrystalModule extends Module {
         AABB bb = crystal.getBoundingBox();
         if (bestReachSq(bb) > breakRangeSq()) { instaGates[5]++; return; }
 
-        acceptPendingRotation();
-        if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) { instaGates[7]++; return; }
+        if (rotate.getValue()) {
+            acceptPendingRotation();
+            if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) { instaGates[7]++; return; }
+        }
         ensureSelfCache();
         updateSeeThrough();
         float playerHealth = selfNow().health();
@@ -1001,11 +1007,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
                     var crystalState = mc.level.getBlockState(crystalPos);
                     if (!crystalState.isAir() && !crystalState.canBeReplaced()) continue;
-                    if (legacy112.getValue() && !mc.level.getBlockState(crystalPos.above()).isAir()) continue;
+                    if (useLegacy112() && !mc.level.getBlockState(crystalPos.above()).isAir()) continue;
                     if (isBlocked(crystalPos)) continue;
 
                     if (playerCenter.distanceToSqr(basePos.getX() + 0.5, basePos.getY() + 0.5, basePos.getZ() + 0.5) > rangeSq) continue;
-                    if (!PlaceUtil.canPlace(basePos)) continue;
+                    if (!PlaceUtil.canPlace(basePos, range)) continue;
                     if (detectMining.getValue() && isBeingMinedNow(basePos)) continue;
 
                     if (sqDistToBox(eye, crystalPos.getX(), crystalPos.getY(), crystalPos.getZ(),
@@ -1072,10 +1078,35 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         SwapMode mode = autoSwap.getValue() == AutoSwapMode.INVENTORY
                 ? SwapMode.ALTSILENT : SwapMode.SILENT;
         try {
-            return GuizhouWare.placementManager.placeDirect(target.base, null, Items.OBSIDIAN, mode, scope);
+            if (rotate.getValue()) {
+                BlockHitResult aim = GuizhouWare.placementManager.preparePlaceHit(target.base, null, true,
+                        placeRangeValue(), placeRangeValue());
+                if (aim != null) {
+                    float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), aim.getLocation());
+                    if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                            "AutoCrystal_base", 60, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
+                }
+            }
+            return placeBaseShared(target.base, mc.player.getEyePosition(), mode, scope);
         } finally {
             ownSwapPackets.set(0);
         }
+    }
+
+    /** Obsidian/bedrock base placement. Does not turn the head; callers place either way. */
+    public boolean placeBaseShared(BlockPos base, Vec3 eye) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        EnumSet<ResultType> scope = autoSwap.getValue() == AutoSwapMode.INVENTORY
+                ? InventoryUtil.FULL_SCOPE : InventoryUtil.HOTBAR_SCOPE;
+        SwapMode mode = autoSwap.getValue() == AutoSwapMode.INVENTORY
+                ? SwapMode.ALTSILENT : SwapMode.SILENT;
+        return placeBaseShared(base, eye, mode, scope);
+    }
+
+    private boolean placeBaseShared(BlockPos base, Vec3 eye, SwapMode mode, EnumSet<ResultType> scope) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        return GuizhouWare.placementManager.placeDirect(base, null, Items.OBSIDIAN, mode, scope,
+                placeRangeValue(), eye);
     }
 
     private LivingEntity findClosestBaseTarget(List<TargetCache> targets) {
@@ -1134,9 +1165,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             GuizhouWare.rotationManager.submit(new RotationRequest(
                 "AutoCrystal_break", 60, angles[0], angles[1], RotationRequest.Mode.SILENT
             ));
+            acceptPendingRotation();
+            if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) return false;
         }
-        acceptPendingRotation();
-        if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) return false;
         return sendCrystalAttack(crystal, false);
     }
 
@@ -1153,13 +1184,10 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private boolean canPlanCrystalAttack(EndCrystal crystal) {
-        if (rotate.getValue()) {
-            Vec3 eye = mc.player.getEyePosition(1.0F);
-            float[] angles = MathUtil.calcAngle(eye, getClosestPointToEye(eye, crystal.getBoundingBox()));
-            return canBreakCrystal(crystal, angles[0], angles[1]);
-        }
-        acceptPendingRotation();
-        return sentRotationKnown && canBreakCrystal(crystal, sentYaw, sentPitch);
+        if (!rotate.getValue()) return true;
+        Vec3 eye = mc.player.getEyePosition(1.0F);
+        float[] angles = MathUtil.calcAngle(eye, getClosestPointToEye(eye, crystal.getBoundingBox()));
+        return canBreakCrystal(crystal, angles[0], angles[1]);
     }
 
     private float breakDamage(List<TargetCache> potentialTargets, Vec3 center, boolean optimistic) {
@@ -1252,7 +1280,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     cursor.set(bx, ay, bz);
                     var airState = mc.level.getBlockState(cursor);
                     if (!airState.isAir() && !airState.is(Blocks.FIRE)) { scanAir++; continue; } // FIRE is clearable now
-                    if (legacy112.getValue() && !mc.level.getBlockState(cursor.set(bx, ay + 1, bz)).isAir()) { scanAir++; continue; }
+                    if (useLegacy112() && !mc.level.getBlockState(cursor.set(bx, ay + 1, bz)).isAir()) { scanAir++; continue; }
 
                     if (sqDistToBox(eyePos, bx, ay, bz, bx + 1, ay + 1, bz + 1) > placeRangeSq) { scanPlaceR++; continue; }
 
@@ -1530,7 +1558,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     cursor.set(bx, ay, bz);
                     var airState = mc.level.getBlockState(cursor);
                     if (!airState.isAir() && !airState.is(Blocks.FIRE)) continue;
-                    if (legacy112.getValue() && !mc.level.getBlockState(cursor.set(bx, ay + 1, bz)).isAir()) continue;
+                    if (useLegacy112() && !mc.level.getBlockState(cursor.set(bx, ay + 1, bz)).isAir()) continue;
 
                     if (sqDistToBox(eyePos, bx, ay, bz, bx + 1, ay + 1, bz + 1) > placeRangeSq) continue;
 
@@ -1766,7 +1794,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
                     "AutoCrystal_place", 60, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
         }
-        boolean sent = placeCrystalShared(target.base, trustBase, target.faceEntity(), options);
+        boolean sent = placeCrystalShared(target.base, trustBase, target.faceEntity(), options, null);
         if (sent) {
             lastReactorPlaceTick = mc.player.tickCount;
             diagPlaceSent++;
@@ -1784,16 +1812,24 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
      * {@code faceEntity} is an explicit non-vanilla entity-overlap compatibility exception.
      */
     public boolean placeCrystalShared(BlockPos base, boolean trustBase) {
-        return placeCrystalShared(base, trustBase, null);
+        return placeCrystalShared(base, trustBase, (LivingEntity) null);
     }
 
     public boolean placeCrystalShared(BlockPos base, boolean trustBase, LivingEntity faceEntity) {
         return placeCrystalShared(base, trustBase, faceEntity,
-                dev.guizhou.manager.PlacementManager.CrystalOptions.DEFAULT);
+                dev.guizhou.manager.PlacementManager.CrystalOptions.DEFAULT, null);
+    }
+
+    /** Same placement path, from a caller-supplied eye (GuangxiTP desync). */
+    public boolean placeCrystalShared(BlockPos base, boolean trustBase, Vec3 eye) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        var options = new dev.guizhou.manager.PlacementManager.CrystalOptions(
+                placeRangeValue(), wallPlace.getValue() ? wallRange.getValue() : 0.0, sneakPlace.getValue());
+        return placeCrystalShared(base, trustBase, null, options, eye);
     }
 
     private boolean placeCrystalShared(BlockPos base, boolean trustBase, LivingEntity faceEntity,
-                                       dev.guizhou.manager.PlacementManager.CrystalOptions options) {
+                                       dev.guizhou.manager.PlacementManager.CrystalOptions options, Vec3 eye) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (weaponControlBusy()) return false;
         boolean mainCrystal = mc.player.getMainHandItem().is(Items.END_CRYSTAL);
@@ -1801,7 +1837,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (mainCrystal || offCrystal) {
             return GuizhouWare.placementManager.placeCrystalDirect(base, trustBase,
                     offCrystal && !mainCrystal ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND,
-                    faceEntity, options);
+                    faceEntity, options, eye);
         }
         return switch (autoSwap.getValue()) {
             case NONE -> false;
@@ -1809,7 +1845,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 ownSwapPackets.set(2); // swap + swap-back must not trigger the break switch-pause
                 try {
                     yield GuizhouWare.placementManager.placeCrystal(base, trustBase,
-                            SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, faceEntity, options);
+                            SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, faceEntity, options, eye);
                 } finally {
                     ownSwapPackets.set(0);
                 }
@@ -1818,7 +1854,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 ownSwapPackets.set(2);
                 try {
                     yield GuizhouWare.placementManager.placeCrystal(base, trustBase,
-                            SwapMode.ALTSILENT, InventoryUtil.FULL_SCOPE, faceEntity, options);
+                            SwapMode.ALTSILENT, InventoryUtil.FULL_SCOPE, faceEntity, options, eye);
                 } finally {
                     ownSwapPackets.set(0);
                 }
@@ -1874,7 +1910,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         BlockPos base = airPos.below();
         BlockState baseState = mc.level.getBlockState(base);
         if (!baseState.is(Blocks.OBSIDIAN) && !baseState.is(Blocks.BEDROCK)) return false;
-        if (legacy112.getValue() && !mc.level.getBlockState(airPos.above()).isAir()) return false;
+        if (useLegacy112() && !mc.level.getBlockState(airPos.above()).isAir()) return false;
 
         int bx = airPos.getX(), by = airPos.getY(), bz = airPos.getZ();
         Vec3 eye = mc.player.getEyePosition(1.0f);

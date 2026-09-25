@@ -42,6 +42,7 @@ public final class SettingText {
                     Map.entry("Prefix", "聊天命令的默认前缀。旧前缀仍能输入。"),
                     Map.entry("BlurBackground", "保留的开关。打开界面时不再抓整屏做模糊，世界只压暗。"),
                     Map.entry("Descriptions", "是否显示模块说明。设置项说明仍会写在设置行上。"),
+                    Map.entry("1.12协议", "强制使用 1.12 的旧位置/旋转包、双视角和已有 1.12 放置逻辑。默认关闭，现代服和 Grim 仍走自动检测。"),
                     Map.entry("MenuNotice", "标题画面卡片底部的一句提示。留空则显示欢迎回来。"),
                     Map.entry("MenuWatermark", "标题画面中央的浅色大字。留空则不画。"),
                     Map.entry("Theme", "面板和模块名字使用的配色。"),
@@ -163,7 +164,11 @@ public final class SettingText {
                     Map.entry("Range", "自动剑会考虑的最远目标。"),
                     Map.entry("Rotate", "攻击前把朝向转到目标。"),
                     Map.entry("Players", "只打玩家。"),
-                    Map.entry("Delay", "两次挥剑之间的等待。")
+                    Map.entry("Delay", "两次挥剑之间的等待。"),
+                    Map.entry("TP", "打不到时先瞬移到目标旁边，出手后再回到原位。默认关闭。"),
+                    Map.entry("TPRange", "瞬移寻找目标的最远距离。"),
+                    Map.entry("TPStep", "每一跳瞬移的最大步长。"),
+                    Map.entry("StopOnSetback", "服务器拉回后暂停瞬移。")
             )),
             Map.entry("KillAuraModule", Map.ofEntries(
                     Map.entry("Targets", "冷却好时这一拍最多换几个目标，范围是 1 到 3。"),

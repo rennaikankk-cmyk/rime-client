@@ -79,8 +79,8 @@ public class GuangxiElytraModule extends Module {
     private final Setting<Mode> flightProfile = mode("Mode", Mode.Grim);
     private final Setting<Boolean> gzBoost = bool("GZBoost", false);
     private final Setting<BoostMode> gzBoostMode = mode("GZBoostMode", BoostMode.Aggressive);
-    private final Setting<Double> horizontalSpeed = num("SpeedBps", 40.0, 1.0, 300.0);
-    private final Setting<Double> climbSpeed = num("ClimbBps", 40.0, 1.0, 300.0);
+    private final Setting<Double> horizontalSpeed = num("SpeedBps", 40.0, 1.0, 2000.0);
+    private final Setting<Double> climbSpeed = num("ClimbBps", 40.0, 1.0, 2000.0);
     private final Setting<Boolean> adaptiveSlowdown = bool("AdaptiveSlowdown", false);
     private boolean activeAdaptiveSlowdown;
     private Mode activeProfile;
@@ -623,6 +623,9 @@ public class GuangxiElytraModule extends Module {
             } else {
                 idleHover();
             }
+            if (flightProfile.getValue() == Mode.NoAC && !fv.isBraking()) {
+                pendingMotion = Vec3.ZERO;
+            }
             lastLook = mc.player.getLookAngle();
             return;
         }
@@ -692,7 +695,8 @@ public class GuangxiElytraModule extends Module {
         if (!Double.isFinite(applied.x) || !Double.isFinite(applied.y) || !Double.isFinite(applied.z)) {
             applied = vanillaVelocity;
         }
-        if ((terrainGuard.getValue() || safeLanding.getValue()) && !applied.equals(vanillaVelocity)
+        if (flightProfile.getValue() != Mode.NoAC
+                && (terrainGuard.getValue() || safeLanding.getValue()) && !applied.equals(vanillaVelocity)
                 && (!clearRelativePath(Vec3.ZERO, applied)
                 || !FlightTerrainSafety.trajectoryClear(applied, actualLook,
                 mc.player.getAttributeValue(Attributes.GRAVITY),
@@ -757,6 +761,7 @@ public class GuangxiElytraModule extends Module {
     private void warnDualViewOnce() {
         if (dualViewWarned || !coupledCruise.getValue() || !cruiseDualLook.getValue()
                 || mc.player == null || mc.getConnection() == null) return;
+        if (DualViewSupport.forceLegacyProtocol()) return;
         DualViewSupport.Status status = DualViewSupport.status();
         if (status == DualViewSupport.Status.SUPPORTED || status == DualViewSupport.Status.OFFLINE) return;
         dualViewWarned = true;
@@ -802,9 +807,11 @@ public class GuangxiElytraModule extends Module {
     }
 
     private void sendRotationPacket(float yaw, float pitch) {
+        boolean horizontalCollision = DualViewSupport.forceLegacyProtocol()
+                ? false : mc.player.horizontalCollision;
         mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
                 mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                yaw, pitch, mc.player.onGround(), mc.player.horizontalCollision));
+                yaw, pitch, mc.player.onGround(), horizontalCollision));
     }
 
     private void resetCruise() {

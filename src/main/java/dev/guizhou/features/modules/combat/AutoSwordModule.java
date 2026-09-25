@@ -2,11 +2,15 @@ package dev.guizhou.features.modules.combat;
 
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
+import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.RotationRequest;
+import dev.guizhou.util.PacketSendUtil;
+import dev.guizhou.util.combat.AuraPath;
+import dev.guizhou.util.combat.AuraTeleport;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
@@ -20,6 +24,8 @@ import dev.guizhou.util.render.RenderUtil;
 import dev.guizhou.util.player.EatUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.EntityTypeTags;
@@ -43,6 +49,11 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.world.level.ClipContext;
 
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Consumer;
+
 public class AutoSwordModule extends Module {
 
     public enum TpsMode { NONE, LATEST, AVERAGE }
@@ -63,6 +74,10 @@ public class AutoSwordModule extends Module {
     private final Setting<Integer> targets = num("Targets", 1, 1, 3);
     private final Setting<Boolean> rotate = bool("Rotate", true);
     private final Setting<Boolean> swordGap = bool("SwordGap", false);
+    private final Setting<Boolean> tp = bool("TP", false).setPage("TP");
+    private final Setting<Double> tpRange = num("TPRange", 12.0, 4.0, 32.0).setPage("TP").setVisibility(v -> tp.getValue());
+    private final Setting<Double> tpStep = num("TPStep", 3.0, 1.0, 5.0).setPage("TP").setVisibility(v -> tp.getValue());
+    private final Setting<Boolean> stopOnSetback = bool("StopOnSetback", true).setPage("TP").setVisibility(v -> tp.getValue());
 
     private Entity currentTarget = null;
     private float attackCooldownTicks = 0f;
@@ -72,6 +87,12 @@ public class AutoSwordModule extends Module {
     private int cachedWeapon = -1;
     private boolean gapLatched;
     private final Object gapOwner = new Object();
+    private final Map<UUID, Integer> pathRetry = new java.util.HashMap<>();
+    private final Consumer<Packet<?>> submissions = this::onSubmitted;
+    private int lastTeleportTick = Integer.MIN_VALUE;
+    private boolean tpBlocked;
+    private Vec3 submittedPosition, pendingReturn;
+    private Object sessionPlayer, sessionLevel, sessionConnection;
 
     public AutoSwordModule() {
         super("AutoSword", "Attacks nearby targets and can swap to a gapple while you hold use.", Category.COMBAT);
@@ -105,12 +126,29 @@ public class AutoSwordModule extends Module {
     }
 
     @Override
+    public void onEnable() {
+        tpBlocked = false;
+        pendingReturn = null;
+        submittedPosition = null;
+        pathRetry.clear();
+        lastTeleportTick = Integer.MIN_VALUE;
+        sessionPlayer = sessionLevel = sessionConnection = null;
+        PacketSendUtil.addSubmissionListener(submissions);
+    }
+
+    @Override
     public void onDisable() {
+        restorePosition();
+        pendingReturn = null;
+        tpBlocked = false;
+        pathRetry.clear();
+        PacketSendUtil.removeSubmissionListener(submissions);
         currentTarget = null;
         attackCooldownTicks = 0f;
         targetTick = Integer.MIN_VALUE;
         weaponTick = Integer.MIN_VALUE;
         releaseSwordGap();
+        if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("AutoSword");
     }
 
     @Subscribe
@@ -118,9 +156,12 @@ public class AutoSwordModule extends Module {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
             dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
             currentTarget = null;
+            pendingReturn = null;
             return;
         }
         if (nullCheck() || mc.player.isDeadOrDying()) return;
+        ensureSession();
+        if (!restorePosition()) return;
 
         float tps;
         switch (tpsMode.getValue()) {
@@ -163,23 +204,40 @@ public class AutoSwordModule extends Module {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (target == null || !target.isAlive() || target.isRemoved() || attackCooldownTicks > 0f) return false;
         if (nullCheck() || mc.player.isDeadOrDying() || mc.gameMode == null || mc.getConnection() == null) return false;
+        ensureSession();
+        if (!restorePosition()) return false;
 
         int weaponSlot = getWeapon(target);
         if (weaponSlot == -1 || !canUseWeapon(weaponSlot)) return false;
         ItemStack weaponStack = mc.player.getInventory().getItem(weaponSlot);
+        Vec3 origin = mc.player.position();
         Vec3 eyePos = mc.player.getEyePosition(1.0f);
         float[] angles = MathUtil.calcAngle(eyePos, getClosestPointToEye(eyePos, target.getBoundingBox()));
-        if (!canHit(target, angles[0], angles[1])) return false;
+        boolean inReach = canHit(target, angles[0], angles[1]);
+        boolean distant = !inReach && tp.getValue() && !tpBlocked;
+        final List<Vec3> path = distant ? teleportPath(target) : List.of();
+        if (distant) {
+            if (path.isEmpty()) {
+                pathRetry.put(target.getUUID(), mc.player.tickCount + 10);
+                return false;
+            }
+            eyePos = path.getLast().add(0, mc.player.getEyeHeight(), 0);
+            Vec3 aim = aimPoint(target, eyePos);
+            if (aim == null) return false;
+            angles = MathUtil.calcAngle(eyePos, aim);
+        } else if (!inReach) {
+            return false;
+        }
         if (rotate) {
             GuizhouWare.rotationManager.trySubmit(new RotationRequest(
                     "AutoSword", 6, angles[0], angles[1], RotationRequest.Mode.SILENT));
         }
-        if (!canHit(target, GuizhouWare.rotationManager.getServerYaw(),
-                GuizhouWare.rotationManager.getServerPitch())) return false;
-
-        boolean doCrit = shouldCrit(weaponStack);
         float serverYaw = GuizhouWare.rotationManager.getServerYaw();
         float serverPitch = GuizhouWare.rotationManager.getServerPitch();
+        if (!canHit(target, eyePos, serverYaw, serverPitch)) return false;
+
+        boolean doCrit = shouldCrit(weaponStack) && !distant;
+        Vec3 strikeEye = eyePos;
         Result weapon = new Result(weaponSlot, weaponStack, ResultType.HOTBAR);
         boolean[] struck = {false};
         boolean swung = GuizhouWare.swapManager.withSwap(weapon, SwapMode.SILENT, SwapPriority.WEAPON, () -> {
@@ -191,7 +249,19 @@ public class AutoSwordModule extends Module {
                 mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(x, y + 0.0625, z, serverYaw, serverPitch, false, hc));
                 mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(x, y + 0.045, z, serverYaw, serverPitch, false, hc));
             }
-            struck[0] = strike(target);
+            if (!distant) struck[0] = strike(target);
+            else {
+                pendingReturn = origin;
+                AuraTeleport.Result result = AuraTeleport.roundTrip(origin, path,
+                        point -> sendTeleport(point, serverYaw, serverPitch),
+                        () -> {
+                            if (!attackFrom(target, strikeEye, serverYaw, serverPitch)) return false;
+                            struck[0] = strike(target);
+                            return struck[0];
+                        },
+                        point -> moveTo(point, serverYaw, serverPitch));
+                if (result.restored()) pendingReturn = null;
+            }
         });
         if (!swung || !struck[0]) return false;
         float tps = switch (tpsMode.getValue()) {
@@ -217,8 +287,11 @@ public class AutoSwordModule extends Module {
     }
 
     private boolean canHit(Entity target, float yaw, float pitch) {
+        return canHit(target, mc.player.getEyePosition(1.0f), yaw, pitch);
+    }
+
+    private boolean canHit(Entity target, Vec3 eye, float yaw, float pitch) {
         AABB box = target.getBoundingBox();
-        Vec3 eye = mc.player.getEyePosition(1.0f);
         if (box.contains(eye)) return true;
         Vec3 end = eye.add(getLookVector(yaw, pitch).scale(RANGE));
         var hit = box.clip(eye, end);
@@ -317,19 +390,26 @@ public class AutoSwordModule extends Module {
     private final java.util.ArrayList<Entity> targetCache = new java.util.ArrayList<>();
     private TargetSort cachedSort = TargetSort.DISTANCE;
     private int cachedLimit = 1;
+    private boolean cachedAllowTp;
 
     private Entity findTarget() {
-        java.util.List<Entity> found = selectTargets(TargetSort.DISTANCE, 1);
+        java.util.List<Entity> found = collectTargets(TargetSort.DISTANCE, 1, false);
         return found.isEmpty() ? null : found.get(0);
     }
 
     public java.util.List<Entity> selectTargets(TargetSort sort, int limit) {
+        return collectTargets(sort, limit, tp.getValue() && !tpBlocked);
+    }
+
+    private java.util.List<Entity> collectTargets(TargetSort sort, int limit, boolean allowTp) {
         int tick = mc.player.tickCount;
         int capped = Math.max(1, limit);
-        if (tick == targetTick && sort == cachedSort && capped == cachedLimit) return java.util.List.copyOf(targetCache);
+        if (tick == targetTick && sort == cachedSort && capped == cachedLimit && allowTp == cachedAllowTp)
+            return java.util.List.copyOf(targetCache);
         targetTick = tick;
         cachedSort = sort;
         cachedLimit = capped;
+        cachedAllowTp = allowTp;
         targetCache.clear();
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
         if (targets == null || mc.player == null) {
@@ -337,9 +417,11 @@ public class AutoSwordModule extends Module {
             return java.util.List.of();
         }
         Vec3 eye = mc.player.getEyePosition(1.0f);
-        double rangeSq = RANGE * RANGE;
-        for (Entity entity : mc.level.getEntities(null, mc.player.getBoundingBox().inflate(RANGE + 1))) {
+        double search = allowTp ? Math.max(RANGE, tpRange.getValue()) : RANGE;
+        double rangeSq = search * search;
+        for (Entity entity : mc.level.getEntities(null, mc.player.getBoundingBox().inflate(search + 1))) {
             if (!targets.isValidTarget(entity) || !entity.isAlive()) continue;
+            if (allowTp && pathRetry.getOrDefault(entity.getUUID(), 0) > tick) continue;
             if (sqDistToBox(eye, entity.getBoundingBox()) > rangeSq) continue;
             targetCache.add(entity);
         }
@@ -486,4 +568,123 @@ public class AutoSwordModule extends Module {
         float i = (float) Math.sin(-pitch * 0.017453292F);
         return new Vec3(g * h, i, f * h);
     }
+
+    @Subscribe
+    private void onReceive(PacketEvent.Receive event) {
+        if (!(event.getPacket() instanceof ClientboundPlayerPositionPacket)) return;
+        Object connection = mc.getConnection();
+        mc.execute(() -> {
+            if (!isEnabled() || nullCheck() || connection != mc.getConnection() || !sameSession()
+                    || (long) mc.player.tickCount - lastTeleportTick > 40) return;
+            tpBlocked = stopOnSetback.getValue();
+            pendingReturn = null;
+            currentTarget = null;
+            if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("AutoSword");
+        });
+    }
+
+    @Override
+    public String getDisplayInfo() {
+        return tpBlocked ? "TP paused" : null;
+    }
+
+    private void onSubmitted(Packet<?> packet) {
+        if (!mc.isSameThread() || nullCheck() || !sameSession()) return;
+        if (packet instanceof ServerboundMovePlayerPacket move && move.hasPosition()) {
+            submittedPosition = new Vec3(move.getX(mc.player.getX()), move.getY(mc.player.getY()), move.getZ(mc.player.getZ()));
+        }
+    }
+
+    private void ensureSession() {
+        if (nullCheck() || sameSession()) return;
+        pendingReturn = null;
+        tpBlocked = false;
+        pathRetry.clear();
+        sessionPlayer = mc.player;
+        sessionLevel = mc.level;
+        sessionConnection = mc.getConnection();
+        submittedPosition = mc.player.position();
+    }
+
+    private boolean sameSession() {
+        return mc.player == sessionPlayer && mc.level == sessionLevel && mc.getConnection() == sessionConnection;
+    }
+
+    private boolean attackFrom(Entity target, Vec3 eye, float yaw, float pitch) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (pendingReturn != null && (submittedPosition == null
+                || submittedPosition.add(0, mc.player.getEyeHeight(), 0).distanceToSqr(eye) > 1e-8)) return false;
+        return canHit(target, eye, yaw, pitch);
+    }
+
+    private List<Vec3> teleportPath(Entity target) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return List.of();
+        if (!tp.getValue() || tpBlocked || mc.player.isPassenger() || mc.player.isFallFlying()) return List.of();
+        Vec3 origin = mc.player.position();
+        Vec3 away = origin.subtract(target.position()).multiply(1, 0, 1).normalize();
+        if (away.lengthSqr() < 0.01) away = new Vec3(1, 0, 0);
+        Vec3 goal = target.position().add(away.scale(Math.min(2, RANGE * 0.65)));
+        if (aimPoint(target, goal.add(0, mc.player.getEyeHeight(), 0)) == null) return List.of();
+        return AuraPath.find(point(origin), point(goal), tpStep.getValue(), tpRange.getValue(), 384,
+                (from, to) -> clearSegment(vec(from), vec(to))).stream().map(AutoSwordModule::vec).toList();
+    }
+
+    private Vec3 aimPoint(Entity target, Vec3 eye) {
+        AABB box = target.getBoundingBox();
+        Vec3 closest = getClosestPointToEye(eye, box);
+        Vec3 center = box.getCenter();
+        for (Vec3 point : List.of(closest, center, new Vec3(center.x, box.maxY - 0.1, center.z), new Vec3(center.x, box.minY + 0.1, center.z))) {
+            if (eye.distanceTo(point) > RANGE) continue;
+            HitResult block = mc.level.clip(new ClipContext(eye, point, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
+            if (block.getType() == HitResult.Type.MISS
+                    || eye.distanceToSqr(block.getLocation()) + 1.0E-6 >= eye.distanceToSqr(point)) return point;
+        }
+        return null;
+    }
+
+    private boolean clearSegment(Vec3 from, Vec3 to) {
+        AABB swept = mc.player.getBoundingBox().move(from.subtract(mc.player.position())).expandTowards(to.subtract(from)).deflate(1e-5);
+        if (mc.level.isOutsideBuildHeight(Mth.floor(swept.minY))
+                || mc.level.isOutsideBuildHeight(Mth.floor(swept.maxY - 1.0E-7))
+                || !mc.level.getWorldBorder().isWithinBounds(swept)) return false;
+        for (int x = Mth.floor(swept.minX) >> 4; x <= Mth.floor(swept.maxX) >> 4; x++)
+            for (int z = Mth.floor(swept.minZ) >> 4; z <= Mth.floor(swept.maxZ) >> 4; z++)
+                if (!mc.level.hasChunk(x, z)) return false;
+        return mc.level.noCollision(mc.player, swept);
+    }
+
+    private boolean sendTeleport(Vec3 point, float yaw, float pitch) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (nullCheck() || !sameSession() || !tp.getValue() || tpBlocked || submittedPosition == null
+                || !clearSegment(submittedPosition, point)) return false;
+        lastTeleportTick = mc.player.tickCount;
+        return moveTo(point, yaw, pitch);
+    }
+
+    private boolean moveTo(Vec3 point, float yaw, float pitch) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (nullCheck() || !sameSession()) return false;
+        boolean sent = PacketSendUtil.send(new ServerboundMovePlayerPacket.PosRot(
+                point.x, point.y, point.z, yaw, pitch, false, false));
+        if (sent && GuizhouWare.rotationManager != null) {
+            GuizhouWare.rotationManager.setServerYaw(yaw);
+            GuizhouWare.rotationManager.setServerPitch(pitch);
+        }
+        return sent && submittedPosition != null && submittedPosition.distanceToSqr(point) < 1e-10;
+    }
+
+    private boolean restorePosition() {
+        if (pendingReturn == null) return true;
+        if (!sameSession() || nullCheck()) {
+            pendingReturn = null;
+            return true;
+        }
+        if (!moveTo(pendingReturn, GuizhouWare.rotationManager.getServerYaw(), GuizhouWare.rotationManager.getServerPitch()))
+            return false;
+        pendingReturn = null;
+        return true;
+    }
+
+    private static AuraPath.Point point(Vec3 v) { return new AuraPath.Point(v.x, v.y, v.z); }
+    private static Vec3 vec(AuraPath.Point p) { return new Vec3(p.x(), p.y(), p.z()); }
 }

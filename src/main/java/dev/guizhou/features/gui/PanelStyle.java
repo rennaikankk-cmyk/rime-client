@@ -280,6 +280,8 @@ final class PanelStyle extends ShellStyle {
         });
         bx -= 19;
         toolButton(g, Icon.FOLDER, bx, sy, "配置管理", mx, my, screen::openConfigs);
+        bx -= 19;
+        toolButton(g, Icon.EXTERNAL, bx, sy, "云参数", mx, my, screen::openCloudConfigs);
     }
 
     private void drawSearchField(GuiGraphics g, float sx, float sy, float sw, float sh) {

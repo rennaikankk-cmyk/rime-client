@@ -53,6 +53,12 @@ public class GuizhouWareGui extends Screen {
         modern.openConfigs(this::leaveDetour);
     }
 
+    /** Opens the signed cloud preset browser. The licence gate stays in CloudConfigClient. */
+    public void openCloudConfigs() {
+        save();
+        minecraft.setScreen(new CloudConfigsScreen(this));
+    }
+
     public boolean capturesMovementKeys() {
         return style().capturesMovementKeys();
     }
