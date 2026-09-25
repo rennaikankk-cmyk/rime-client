@@ -15,6 +15,8 @@ final class ShadcnTextField {
     private float scroll;
     boolean focused;
     float x, y, w, h;
+    /** Extra left inset, e.g. room for a leading icon. */
+    float padLeft;
     private final Consumer<String> changed;
 
     ShadcnTextField(String initial, Consumer<String> changed) {
@@ -29,7 +31,7 @@ final class ShadcnTextField {
         scroll = Math.max(0,Math.min(scroll,Math.max(0,width(value,10)-w+16)));
         if (focused) scroll = Math.max(Math.max(0,caret-w+17), Math.min(scroll,caret));
         dev.guizhou.util.render.ScissorUtil.enableTransformed(g,(int)x+5,(int)y+1,(int)(x+w-5),(int)(y+h-1));
-        float tx=x+7-scroll, ty=y+(h-10)/2;
+        float tx=x+7+padLeft-scroll, ty=y+(h-10)/2;
         if (focused && anchor!=cursor) {
             float a=width(value.substring(0,Math.min(cursor,anchor)),10);
             float b=width(value.substring(0,Math.max(cursor,anchor)),10);

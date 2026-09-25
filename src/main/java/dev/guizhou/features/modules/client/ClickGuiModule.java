@@ -20,6 +20,11 @@ public class ClickGuiModule extends Module {
     public Setting<Color>   customColor      = color("Custom Color", 114, 168, 216, 220);
     public Setting<Boolean> smooth           = bool("Smooth", true);
     public Setting<Double> menuScale = num("菜单大小 (%)", 100.0, 60.0, 150.0);
+    public Setting<String>  menuNotice       = str("MenuNotice", "");
+    public Setting<String>  menuWatermark    = str("MenuWatermark", "");
+    public Setting<Boolean> descriptions     = bool("Descriptions", true);
+    /** Panel positions and collapse flags: PRESET.CATEGORY=x,y,collapsed;... */
+    public Setting<String>  panelLayout      = str("PanelLayout", "");
     public Setting<Integer> rainbowHue       = num("Delay", 240, 0, 600);
     public Setting<Float>   rainbowBrightness = num("Brightness", 200.0f, 1.0f, 255.0f);
     public Setting<Float>   rainbowSaturation = num("Saturation", 140.0f, 1.0f, 255.0f);
