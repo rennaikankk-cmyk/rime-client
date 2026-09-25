@@ -185,6 +185,7 @@ public class GuangxiElytraModule extends Module {
 
     // passive diagnostics, written on the game thread and read by TelemetryManager; never affect flight
     private volatile double lastRequestedBpt;
+    private boolean rocketSentThisTick;
     private volatile double lastAppliedBpt;
     private volatile int lastAppliedTick = Integer.MIN_VALUE;
     private volatile int lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
@@ -417,6 +418,20 @@ public class GuangxiElytraModule extends Module {
 
     public double grimBudget() { return flightProfile.getValue() == Mode.Grim && adaptiveSlowdown.getValue() ? adaptation.budget() : 1.0; }
 
+    /** True only after a firework was used on this tick. Armor return waits for the next window. */
+    public boolean rocketSentThisTick() { return rocketSentThisTick; }
+
+    /** Already gliding with a firework due. The armor cycle may open the rocket window before the chestplate returns. */
+    public boolean holdChestplateForBoost() {
+        if (mc.player == null || !mc.player.isFallFlying() || mc.player.isUsingItem()) return false;
+        if (motionMode.getValue() != MotionMode.FIREWORKS) return false;
+        if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()
+                || dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive()) return false;
+        if (!usableElytra(mc.player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST))) return false;
+        if (!canUseRocket() || ticksSinceRocket < refireTicks || hasUsefulBoost()) return false;
+        return dev.guizhou.util.inventory.InventoryUtil.find(GuangxiElytraModule::safeRocket, FULL_SCOPE).found();
+    }
+
     private void resetFlightState() {
         motionSample.reset();
         externalImpulsePending.set(false);
@@ -482,6 +497,7 @@ public class GuangxiElytraModule extends Module {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
         // Observation lifetime: a rocket-gate result is only valid for the tick that produced it.
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
+        rocketSentThisTick = false;
         synchronizeProfile();
         resyncDualViewRotation();
         clearFlightRotation();
@@ -790,7 +806,7 @@ public class GuangxiElytraModule extends Module {
                         Math.toDegrees(-Math.asin(cruise.boxLook().y)));
             }
             dev.guizhou.features.commands.Command.sendMessage(String.format(java.util.Locale.ROOT,
-                    "[耦合巡航] %s | 应用速度 %.2f b/t | 垂直 %.2f b/t%s", phase, applied.length(), applied.y, limit));
+                    "[GZBoost] %s | 应用速度 %.2f b/t | 垂直 %.2f b/t%s", phase, applied.length(), applied.y, limit));
         }
         return applied;
     }
@@ -1594,6 +1610,7 @@ public class GuangxiElytraModule extends Module {
                 });
         if (swapped && used[0]) {
             ticksSinceRocket = 0;
+            rocketSentThisTick = true;
             refireTicks = nextRefire;
             boostScanTick = Integer.MIN_VALUE;
             lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;

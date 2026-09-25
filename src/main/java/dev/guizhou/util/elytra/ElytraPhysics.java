@@ -112,6 +112,27 @@ public final class ElytraPhysics {
     }
 
     /**
+     * Existing firework boost is faster on a diagonal than on a pure vertical or flat
+     * request that corner-fill later stretches. Keep an already-diagonal heading.
+     * A pure axis uses {@link #bestPullupSpeed} or {@link #bestDownForwardSpeed}
+     * and borrows horizontal direction from {@code hint} only when the request has none.
+     */
+    public static Vec3 diagonalGzBoost(Vec3 travel, Vec3 hint) {
+        if (!isFinite(travel) || travel.lengthSqr() < 1.0E-9) return isFinite(travel) ? travel : Vec3.ZERO;
+        double horizontal = travel.horizontalDistance();
+        double absY = Math.abs(travel.y);
+        boolean alreadyDiagonal = horizontal > 1.0E-4 && absY > 1.0E-4
+                && absY < horizontal * 4.0 && horizontal < absY * 6.0;
+        if (alreadyDiagonal) return travel;
+        Vec3 flat = horizontal > 1.0E-4 ? new Vec3(travel.x, 0.0, travel.z)
+                : hint != null && isFinite(hint) ? new Vec3(hint.x, 0.0, hint.z) : Vec3.ZERO;
+        if (flat.horizontalDistanceSqr() < 1.0E-8) return travel;
+        Vec3 shaped = travel.y < 0.0 ? bestDownForwardSpeed(flat) : bestPullupSpeed(flat);
+        if (!isFinite(shaped) || shaped.lengthSqr() < 1.0E-9) return travel;
+        return shaped.normalize().scale(travel.length());
+    }
+
+    /**
      * Project the request onto the local glide/firework envelope. Preserve its
      * direction when a nonnegative ray intersects the box; otherwise project
      * each component. Small requests may expand to available envelope headroom.

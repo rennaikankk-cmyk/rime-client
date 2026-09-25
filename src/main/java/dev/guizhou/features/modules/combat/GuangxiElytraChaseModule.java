@@ -25,6 +25,7 @@ import dev.guizhou.util.elytra.AerialDuelPredictor;
 import dev.guizhou.util.elytra.AsyncFlightRoute;
 import dev.guizhou.util.elytra.CombatHitWindow;
 import dev.guizhou.util.elytra.ElytraWeaponController;
+import dev.guizhou.util.elytra.EntityAim;
 import dev.guizhou.util.elytra.ElytraPhysics;
 import dev.guizhou.util.elytra.FlightVelocity;
 import dev.guizhou.util.elytra.FlightRoutePlanner;
@@ -59,6 +60,8 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.Items;
@@ -1485,6 +1488,9 @@ public class GuangxiElytraChaseModule extends Module {
         void inject(FlightVelocity fv) {
             if (heading.lengthSqr() > 1.0E-9) {
                 Vec3 v = heading;
+                if (state == PULL_UP || state == WAIT_ATTACK) {
+                    v = ElytraPhysics.diagonalGzBoost(v, mc.player.getDeltaMovement());
+                }
                 double len = v.length();
                 // Rescaling can make the measured flight faster than the base setting.
                 // Do not cap target-matching terminal motion back to that base speed.
@@ -1694,6 +1700,13 @@ public class GuangxiElytraChaseModule extends Module {
         @Override
         void inject(FlightVelocity fv) {
             super.inject(fv);
+            if (!preciseApproach && fv.value().lengthSqr() > 1.0E-9) {
+                Vec3 current = fv.value();
+                Vec3 diagonal = ElytraPhysics.diagonalGzBoost(current, mc.player.getDeltaMovement());
+                if (diagonal.dot(current) > 0.0 && diagonal.lengthSqr() > 1.0E-9) {
+                    fv.set(diagonal.normalize().scale(current.length()));
+                }
+            }
             if (preciseApproach) fv.requestPrecision();
             // A spear pass needs its intercept direction; filling independent envelope
             // axes can turn a shallow disengagement into a climb over the target.
@@ -2002,7 +2015,27 @@ public class GuangxiElytraChaseModule extends Module {
                 .getType() == HitResult.Type.MISS;
     }
 
+    private EntityAim.Kind aimKind() {
+        if (target instanceof Player) return EntityAim.Kind.PLAYER;
+        if (target instanceof Slime) return EntityAim.Kind.SLIME;
+        return EntityAim.Kind.MOB;
+    }
+
+    private EntityAim.Choice aimChoice() {
+        EntityAim.Kind kind = aimKind();
+        boolean ground = targetGrounded || target.onGround();
+        boolean airborne = !ground && (target instanceof LivingEntity living && living.isFallFlying() || !target.onGround());
+        return EntityAim.choose(kind, ground, airborne, target instanceof ArmorStand,
+                mc.player.getDeltaMovement().length(), targetHistory.velocity(), targetHistory.previousVelocity(),
+                targetHistory.hasTwoVelocities(), Vec3.ZERO);
+    }
+
     private Vec3 predictedTarget() {
+        EntityAim.Choice choice = aimChoice();
+        if (choice.pattern() == EntityAim.Pattern.BOX) return observedTargetBox().getCenter();
+        if (choice.pattern() != EntityAim.Pattern.USE_EXISTING) {
+            return observedTargetBox().getCenter().add(choice.offset());
+        }
         if (duelPrediction != null && predictionPhase == planningPhaseToken()) {
             return target.position().add(duelPrediction.interceptOffset());
         }
