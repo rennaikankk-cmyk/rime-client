@@ -132,12 +132,15 @@ public final class PacketActionHookTest {
     }
 
     private static void swordGapLatchOwnership() throws IOException {
-        String module = "dev/guizhou/features/modules/combat/SwordGapModule";
+        String module = "dev/guizhou/features/modules/combat/AutoSwordModule";
         int[] calls = {0};
         try (InputStream input = PacketActionHookTest.class.getClassLoader().getResourceAsStream(module + ".class")) {
             check(input != null, "Missing compiled SwordGap");
             new ClassReader(input).accept(new ClassVisitor(Opcodes.ASM9) {
                 @Override public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                    if (!name.equals("tickSwordGap") && !name.equals("releaseSwordGap")) {
+                        return new MethodVisitor(Opcodes.ASM9) {};
+                    }
                     return new MethodVisitor(Opcodes.ASM9) {
                         @Override public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean itf) {
                             if (!owner.equals("dev/guizhou/manager/SwapManager")

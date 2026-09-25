@@ -46,7 +46,7 @@ public final class LicenseActionHookTest {
         guarded(SWORD, "tryAttack", null, "withSwap");
         guarded(SWORD, "lambda$tryAttack$", null, "strike");
         guarded(SWORD, "strike", null, "attack");
-        guarded(BASE + "combat/KillAuraModule", "onPreTick", null, "selectTargets", "tryAttack");
+        guarded(BASE + "combat/AutoSwordModule", "tickSwordGap", null, "latch");
         check(!method(SWORD, "onDisable", null).hasAuthorization(), "Disabling AutoSword must stay able to drop its target");
     }
 

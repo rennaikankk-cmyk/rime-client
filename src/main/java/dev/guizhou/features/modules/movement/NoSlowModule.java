@@ -6,6 +6,7 @@ import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.HeartbeatManager;
+import dev.guizhou.mixin.client.ClientLevelAccessor;
 import dev.guizhou.util.PacketSendUtil;
 import dev.guizhou.util.movement.NoSlowSpoofSession;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -13,7 +14,10 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.world.InteractionHand;
@@ -27,11 +31,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
 public class NoSlowModule extends Module {
-    public enum EatMode { SlotResend, Client }
+    public enum EatMode { SlotResend, Grim, Client }
 
     public final Setting<Boolean> crawl = bool("Crawl", true);
     public final Setting<Boolean> eat = bool("Eat", true);
-    public final Setting<EatMode> eatMode = mode("EatMode", EatMode.SlotResend);
+    public final Setting<EatMode> eatMode = mode("EatMode", EatMode.Grim);
     public final Setting<Boolean> items = bool("Items", false);
     public final Setting<Boolean> shields = bool("Shields", false);
     public final Setting<Boolean> sneak = bool("Sneak", false);
@@ -81,7 +85,7 @@ public class NoSlowModule extends Module {
     @Subscribe
     private void onPacketSend(PacketEvent.Send event) {
         if (!isEnabled() || !HeartbeatManager.authorized() || !mc.isSameThread() || nullCheck()
-                || mc.getConnection() == null || corrected.get()) return;
+                || mc.getConnection() == null || corrected.get() || forwardingMovement) return;
 
         if (event.getPacket() instanceof ServerboundUseItemPacket use) {
             // Pearls, rockets, shields and offhand use must never arm the eat packet sequence.
@@ -99,8 +103,22 @@ public class NoSlowModule extends Module {
             return;
         }
 
-        if (!(event.getPacket() instanceof ServerboundMovePlayerPacket move) || !validateSession()
-                || !isConsumingMainHandItem() || !serverHoldsSelectedSlot()) return;
+        if (!(event.getPacket() instanceof ServerboundMovePlayerPacket move)) return;
+        if (eatMode.getValue() == EatMode.Grim && isConsumingMainHandItem() && eat.getValue()) {
+            var handler = mc.getConnection();
+            float yaw = GuizhouWare.rotationManager == null ? mc.player.getYRot() : GuizhouWare.rotationManager.getServerYaw();
+            float pitch = GuizhouWare.rotationManager == null ? mc.player.getXRot() : GuizhouWare.rotationManager.getServerPitch();
+            forwardingMovement = true;
+            try (var predict = ((ClientLevelAccessor) mc.level).guizhouware$getBlockStatePredictionHandler().startPredicting()) {
+                handler.send(new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM,
+                        BlockPos.ZERO, Direction.DOWN));
+                handler.send(move);
+                handler.send(new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, predict.currentSequence(), yaw, pitch));
+            } finally { forwardingMovement = false; }
+            event.cancel();
+            return;
+        }
+        if (!validateSession() || !isConsumingMainHandItem() || !serverHoldsSelectedSlot()) return;
 
         if (!forwardingMovement && move.hasPosition() && !move.hasRotation()) {
             // Preserve packet-owned coordinates/flags and the last sent rotation. Flight/teleport
@@ -180,9 +198,10 @@ public class NoSlowModule extends Module {
                 || mc.player == null || !mc.player.isUsingItem()) return false;
         ItemStack used = mc.player.getUseItem();
         if (isConsumable(used)) {
-            return module.eat.getValue() && (module.eatMode.getValue() == EatMode.Client
-                    || module.slotResendEnabled() && module.validSession()
-                            && module.isConsumingMainHandItem() && module.serverHoldsSelectedSlot());
+            if (!module.eat.getValue()) return false;
+            if (module.eatMode.getValue() == EatMode.Client || module.eatMode.getValue() == EatMode.Grim) return true;
+            return module.slotResendEnabled() && module.validSession()
+                    && module.isConsumingMainHandItem() && module.serverHoldsSelectedSlot();
         }
         return used.getUseAnimation() == ItemUseAnimation.BLOCK
                 ? module.shields.getValue() : module.items.getValue();

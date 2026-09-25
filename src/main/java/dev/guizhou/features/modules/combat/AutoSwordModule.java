@@ -7,6 +7,7 @@ import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.RotationRequest;
+import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.inventory.SwapMode;
@@ -31,6 +32,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.MaceItem;
 import net.minecraft.world.item.TridentItem;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
@@ -57,6 +59,10 @@ public class AutoSwordModule extends Module {
             .setVisibility(v -> criticals.getValue());
     private final Setting<Boolean> strict = bool("Strict", true)
             .setVisibility(v -> criticals.getValue());
+    private final Setting<TargetSort> sort = mode("Sort", TargetSort.DISTANCE);
+    private final Setting<Integer> targets = num("Targets", 1, 1, 3);
+    private final Setting<Boolean> rotate = bool("Rotate", true);
+    private final Setting<Boolean> swordGap = bool("SwordGap", false);
 
     private Entity currentTarget = null;
     private float attackCooldownTicks = 0f;
@@ -64,9 +70,38 @@ public class AutoSwordModule extends Module {
     private int weaponTick = Integer.MIN_VALUE;
     private int weaponTargetId = Integer.MIN_VALUE;
     private int cachedWeapon = -1;
+    private boolean gapLatched;
+    private final Object gapOwner = new Object();
 
     public AutoSwordModule() {
-        super("AutoSword", "Automatically attacks nearby players with the best weapon.", Category.COMBAT);
+        super("AutoSword", "Attacks nearby targets and can swap to a gapple while you hold use.", Category.COMBAT);
+    }
+
+    /** Hold use on a sword to latch an enchanted golden apple, then return when you release. */
+    private void tickSwordGap() {
+        if (!swordGap.getValue() || nullCheck()) {
+            releaseSwordGap();
+            return;
+        }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            releaseSwordGap();
+            return;
+        }
+        if (gapLatched && !GuizhouWare.swapManager.isLatched(gapOwner)) gapLatched = false;
+        boolean useHeld = mc.options.keyUse.isDown();
+        if (useHeld && !gapLatched) {
+            if (!mc.player.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS)) return;
+            Result apple = InventoryUtil.find(Items.ENCHANTED_GOLDEN_APPLE, java.util.EnumSet.of(ResultType.HOTBAR));
+            if (apple.found() && GuizhouWare.swapManager.latch(gapOwner, apple)) gapLatched = true;
+        } else if (!useHeld && gapLatched) {
+            releaseSwordGap();
+        }
+    }
+
+    private void releaseSwordGap() {
+        if (!gapLatched) return;
+        GuizhouWare.swapManager.release(gapOwner);
+        gapLatched = false;
     }
 
     @Override
@@ -75,6 +110,7 @@ public class AutoSwordModule extends Module {
         attackCooldownTicks = 0f;
         targetTick = Integer.MIN_VALUE;
         weaponTick = Integer.MIN_VALUE;
+        releaseSwordGap();
     }
 
     @Subscribe
@@ -97,9 +133,7 @@ public class AutoSwordModule extends Module {
 
         attackCooldownTicks -= (tps / 20f);
         if (attackCooldownTicks < 0f) attackCooldownTicks = 0f;
-
-        KillAuraModule killAura = GuizhouWare.moduleManager.getModuleByClass(KillAuraModule.class);
-        if (killAura != null && killAura.isEnabled()) return;
+        tickSwordGap();
 
         if (GuangxiElytraChaseModule.isWeaponControlActive()) {
             currentTarget = null;
@@ -114,9 +148,11 @@ public class AutoSwordModule extends Module {
             }
         }
 
-        currentTarget = findTarget();
-        if (currentTarget == null || attackCooldownTicks > 0f) return;
-        tryAttack(currentTarget, true);
+        java.util.List<Entity> found = selectTargets(sort.getValue(), targets.getValue());
+        for (int i = 0; i < found.size(); i++) {
+            if (attackCooldownTicks > 0f) return;
+            if (tryAttack(found.get(i), rotate.getValue())) return;
+        }
     }
 
     /**
