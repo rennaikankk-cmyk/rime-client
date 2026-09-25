@@ -16,7 +16,6 @@ public class ClickGuiModule extends Module {
     private static ClickGuiModule INSTANCE;
 
     public Setting<String>  prefix           = str("Prefix", "rime");
-    public Setting<Style>   style            = mode("Style", Style.PURPLE);
     public Setting<Boolean> blurBackground   = bool("BlurBackground", true);
     public Setting<Boolean> descriptions     = bool("Descriptions", true);
     public Setting<String>  menuNotice       = str("MenuNotice", "");
@@ -162,11 +161,4 @@ public class ClickGuiModule extends Module {
         GUIZHOUWARE, COLORS, CUSTOM, RAINBOW
     }
 
-    /** ClickGUI layout. PURPLE and BLUE are classic multi-column panels; MODERN is the card browser. */
-    public enum Style implements dev.guizhou.features.gui.Labeled {
-        PURPLE("紫色面板"), BLUE("蓝框面板"), MODERN("现代");
-        private final String label;
-        Style(String label) { this.label = label; }
-        @Override public String label() { return label; }
-    }
 }

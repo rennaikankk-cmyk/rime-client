@@ -38,17 +38,16 @@ import static org.lwjgl.glfw.GLFW.*;
  * implementation: a purple filled look and a dense blue framed look.
  */
 final class PanelStyle extends ShellStyle {
-    enum Preset { PURPLE, BLUE }
+    enum Preset { HACHIMI }
 
     /** Visual parameters of one preset; accent may be overridden by the ClickGui theme. */
-    private record Look(float width, float header, float row, float text, int accent, int body, int rowOff, int rowHover,
-                        boolean fillEnabled, int onText, int offText, boolean border, boolean descriptionPanel,
-                        float radius, int dim) {}
+    private record Look(float width, float header, float row, float text, int accent, int body, int body2, int rowOff,
+                        int rowHover, boolean fillEnabled, boolean barEnabled, int onText, int offText, boolean border,
+                        boolean descriptionPanel, boolean icons, boolean glassHeader, float radius, int dim) {}
 
-    private static final Look PURPLE_LOOK = new Look(106, 16, 14, 8.5f, 0xFF8A3FFC, 0xB80C0B12, 0xB0191822, 0xD0272536,
-            true, 0xFFFFFFFF, 0xFFD9D6E4, false, true, 3.5f, 0x70000000);
-    private static final Look BLUE_LOOK = new Look(96, 14, 12, 8f, 0xFF4F7BFF, 0xE80A0B11, 0x00000000, 0x1CFFFFFF,
-            false, 0xFFFF4D6D, 0xFFF1F1F4, true, false, 1.5f, 0x60000000);
+    /** Hachimi-style glass: translucent panels, tinted header strip, category icons, enabled left bar. */
+    private static final Look HACHIMI_LOOK = new Look(104, 17, 15, 8.5f, 0xFF8B9AF5, 0x6E10131E, 0x500B0E17, 0x00000000,
+            0x14FFFFFF, false, true, 0xFFEAF0FF, 0xFF8E93A6, true, true, true, true, 5f, 0x66000000);
 
     private static final String DESCRIPTION = "DESCRIPTION";
 
@@ -95,7 +94,7 @@ final class PanelStyle extends ShellStyle {
     PanelStyle(GuizhouWareGui screen, Preset preset) {
         super(screen);
         this.preset = preset;
-        this.look = preset == Preset.PURPLE ? PURPLE_LOOK : BLUE_LOOK;
+        this.look = HACHIMI_LOOK;
     }
 
     // ------------------------------------------------------------ lifecycle & layout
@@ -281,18 +280,6 @@ final class PanelStyle extends ShellStyle {
         });
         bx -= 19;
         toolButton(g, Icon.FOLDER, bx, sy, "配置管理", mx, my, screen::openConfigs);
-        bx -= 19;
-        toolButton(g, Icon.GRID, bx, sy, "切换样式：" + nextStyle().label(), mx, my, () -> {
-            ClickGuiModule gui = ClickGuiModule.getInstance();
-            if (gui != null) gui.style.setValue(nextStyle());
-        });
-    }
-
-    private ClickGuiModule.Style nextStyle() {
-        return switch (preset) {
-            case PURPLE -> ClickGuiModule.Style.BLUE;
-            case BLUE -> ClickGuiModule.Style.MODERN;
-        };
     }
 
     private void drawSearchField(GuiGraphics g, float sx, float sy, float sw, float sh) {
@@ -375,14 +362,26 @@ final class PanelStyle extends ShellStyle {
         p.scrollTarget = Math.clamp(p.scrollTarget, 0, maxScroll);
         p.scroll = anim.to("scroll:" + p.key, p.scrollTarget, 18);
 
+        int headerColor = look.glassHeader ? mix(accent, look.body, .70f) : accent;
         if (look.fillEnabled) shadow(g, x, y, W, H + body, r, 6, 0x90000000);
-        if (body > .5f) round(g, x, y, W, H + body + (look.border ? 0 : 1), r, look.body);
-        round(g, x, y, W, H, r, accent);
-        if (body > .5f && r > 0) g.fill((int) x, (int) (y + H - r), (int) (x + W), (int) (y + H), accent);
+        if (body > .5f) {
+            round(g, x, y, W, H + body + (look.border ? 0 : 1), r, look.body);
+            if (look.body2 != 0)
+                g.fill((int) (x + 1), (int) (y + H + body * .45f), (int) (x + W - 1), (int) (y + H + body), look.body2);
+        }
+        round(g, x, y, W, H, r, headerColor);
+        if (body > .5f && r > 0) g.fill((int) x, (int) (y + H - r), (int) (x + W), (int) (y + H), headerColor);
+        if (body > .5f && look.glassHeader) g.fill((int) x, (int) (y + H - 1), (int) (x + W), (int) (y + H), alpha(accent, .55f));
         if (look.border) outline(g, x, y, W, H + body, r, 1, accent);
 
         String title = description ? "描述" : categoryName(p.category);
-        text(g, title, x + 5, y + (H - look.text) / 2 + .5f, look.text + .5f, HudFonts.SEMI, 0xFFFFFFFF);
+        float titleX = x + 5;
+        if (look.icons && !description) {
+            Icon ci = p.category == Module.Category.FUNNY ? Icon.FUN : Icon.valueOf(p.category.name());
+            icon(g, ci, x + 4, y + (H - 8) / 2, 8, 0xFFE8ECFF);
+            titleX = x + 14;
+        }
+        text(g, title, titleX, y + (H - look.text) / 2 + .5f, look.text + .5f, HudFonts.SEMI, 0xFFFFFFFF);
         if (!description) {
             String count = mods.stream().filter(Module::isEnabled).count() + "/" + mods.size();
             textRight(g, count, x + W - 5, y + (H - 7) / 2 + .5f, 7, HudFonts.REGULAR, 0xC0FFFFFF);
@@ -449,6 +448,12 @@ final class PanelStyle extends ShellStyle {
             g.fill((int) x + 1, (int) ry, (int) (x + W - 1), (int) (ry + rh), hover ? look.rowHover : look.rowOff);
             if (onP > .01f) g.fill((int) x + 1, (int) ry, (int) (x + 1 + (W - 2) * onP), (int) (ry + rh),
                     alpha(mix(accent, 0xFFFFFFFF, hover ? .08f : 0), .88f));
+        } else if (look.barEnabled) {
+            if (hover) g.fill((int) x + 1, (int) ry, (int) (x + W - 1), (int) (ry + rh), look.rowHover);
+            if (onP > .01f) {
+                float inset = rh * (1 - Math.min(1, onP)) / 2;
+                g.fill((int) x + 1, (int) (ry + inset), (int) x + 3, (int) (ry + rh - inset), accent);
+            }
         } else if (hover) {
             g.fill((int) x + 1, (int) ry, (int) (x + W - 1), (int) (ry + rh), look.rowHover);
         }

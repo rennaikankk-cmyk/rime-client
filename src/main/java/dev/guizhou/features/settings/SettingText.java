@@ -40,7 +40,6 @@ public final class SettingText {
     private static final Map<String, Map<String, String>> TABLES = Map.ofEntries(
             Map.entry("ClickGuiModule", Map.ofEntries(
                     Map.entry("Prefix", "聊天命令的默认前缀。旧前缀仍能输入。"),
-                    Map.entry("Style", "界面样式：紫色面板、蓝框面板或现代卡片。"),
                     Map.entry("BlurBackground", "保留的开关。打开界面时不再抓整屏做模糊，世界只压暗。"),
                     Map.entry("Descriptions", "是否显示模块说明。设置项说明仍会写在设置行上。"),
                     Map.entry("MenuNotice", "标题画面卡片底部的一句提示。留空则显示欢迎回来。"),

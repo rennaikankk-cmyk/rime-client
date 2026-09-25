@@ -18,8 +18,7 @@ import net.minecraft.network.chat.Component;
 public class GuizhouWareGui extends Screen {
     private static GuizhouWareGui instance;
 
-    private final PanelStyle purple = new PanelStyle(this, PanelStyle.Preset.PURPLE);
-    private final PanelStyle blue = new PanelStyle(this, PanelStyle.Preset.BLUE);
+    private final PanelStyle hachimi = new PanelStyle(this, PanelStyle.Preset.HACHIMI);
     private final ModernStyle modern = new ModernStyle(this);
     /** A style entered for one task (configs, HUD appearance) without changing the saved choice. */
     private ShellStyle detour;
@@ -40,9 +39,7 @@ public class GuizhouWareGui extends Screen {
     public static float getScale() { return instance == null ? 1 : instance.style().scale(); }
 
     public void reload() {
-        purple.reload();
-        blue.reload();
-        modern.reload();
+        hachimi.reload();
     }
 
     public void openHudAppearance(HudClientModule hud, String element) {
@@ -63,12 +60,7 @@ public class GuizhouWareGui extends Screen {
     private ShellStyle style() {
         if (detour != null) return detour;
         ClickGuiModule gui = ClickGuiModule.getInstance();
-        ClickGuiModule.Style chosen = gui == null ? ClickGuiModule.Style.PURPLE : gui.style.getValue();
-        return switch (chosen) {
-            case PURPLE -> purple;
-            case BLUE -> blue;
-            case MODERN -> modern;
-        };
+        return hachimi;
     }
 
     /** Syncs the viewport and initialises a style the first frame it becomes active. */
@@ -160,8 +152,6 @@ public class GuizhouWareGui extends Screen {
     @Override
     public void removed() {
         shown = false;
-        purple.removed();
-        blue.removed();
         modern.removed();
         detour = null;
         save();
