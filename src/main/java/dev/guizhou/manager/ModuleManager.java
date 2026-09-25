@@ -19,6 +19,8 @@ import dev.guizhou.features.modules.funny.MoFuckerModule;
 import dev.guizhou.features.modules.movement.SprintModule;
 import dev.guizhou.features.modules.movement.VelocityModule;
 import dev.guizhou.features.modules.movement.NoSlowModule;
+import dev.guizhou.features.modules.movement.NoJumpDelayModule;
+import dev.guizhou.features.modules.movement.EntityControlModule;
 import dev.guizhou.features.modules.movement.GuangxiElytraModule;
 import dev.guizhou.features.modules.world.AutoPortalModule;
 import dev.guizhou.features.modules.world.FastPortalModule;
@@ -82,6 +84,8 @@ public class ModuleManager implements Jsonable, Util {
         register(new VelocityModule());
         register(new SprintModule());
         register(new NoSlowModule());
+        register(new NoJumpDelayModule());
+        register(new EntityControlModule());
         register(new dev.guizhou.features.modules.movement.NoFallModule());
         register(new AntiHungerModule());
         register(new GuangxiElytraModule());

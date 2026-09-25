@@ -116,6 +116,8 @@ public final class SettingText {
                     Map.entry("PulseColor", "脉冲圈的颜色。"),
                     Map.entry("PulseSpeed", "脉冲圈扩散的速度。"),
                     Map.entry("PulseExpand", "脉冲圈向外扩多大。"),
+                    Map.entry("DamageText", "在放置方框上写出这次算出的伤害。"),
+                    Map.entry("DamageColor", "伤害数字的颜色。"),
                     Map.entry("RangePreset", "放置和爆炸距离用哪一套预设。"),
                     Map.entry("PlaceRange", "最远放水晶的距离。"),
                     Map.entry("BreakRange", "最远炸水晶的距离。"),
@@ -136,7 +138,8 @@ public final class SettingText {
             Map.entry("GuangxiPistonModule", Map.ofEntries(
                     Map.entry("AirPlace", "打开后才允许没有支撑面的空中放置。默认先找真实方块。"),
                     Map.entry("Delay", "活塞、红石和水晶各步之间的等待。"),
-                    Map.entry("Range", "活塞水晶的最远作用距离。")
+                    Map.entry("Range", "活塞水晶的最远作用距离。"),
+                    Map.entry("InventorySwap", "快捷栏没有活塞、红石、黑曜石或水晶时，从背包静默换过来。")
             )),
             Map.entry("AutoAnchorModule", Map.ofEntries(
                     Map.entry("Place", "允许放置重生锚。"),

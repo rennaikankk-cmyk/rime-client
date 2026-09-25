@@ -19,6 +19,8 @@ import dev.guizhou.util.combat.PistonPowerSequence;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.ClipContext;
@@ -27,6 +29,8 @@ import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.ResultType;
+import dev.guizhou.util.inventory.SwapMode;
+import dev.guizhou.util.inventory.SwapMode;
 import dev.guizhou.util.render.RenderUtil;
 import dev.guizhou.util.render.placement.*;
 import dev.guizhou.util.player.EatUtil;
@@ -68,6 +72,7 @@ public class GuangxiPistonModule extends Module {
     private final Setting<Integer> delay        = num("Delay",       10, 0, 20).setPage("General");
     private final Setting<Boolean> autoBase     = bool("AutoBase",   true).setPage("General");
     private final Setting<Boolean> reuseRedstone = bool("ReuseRedstone", true).setPage("General");
+    private final Setting<Boolean> inventorySwap = bool("InventorySwap", true).setPage("General");
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
     private final dev.guizhou.manager.RotationOptions rotationOptions = new dev.guizhou.manager.RotationOptions(this, rotate);
 
@@ -301,11 +306,13 @@ public class GuangxiPistonModule extends Module {
                         enterStage(setup.keepPower() ? Stage.PISTON : Stage.POWER);
                         continue;
                     }
+                    if (mc.level.getBlockState(setup.crystal()).is(Blocks.FIRE)) {
+                        clearFire(setup.crystal());
+                        return;
+                    }
                     if (canSubmit() && aimInteraction(GuizhouWare.placementManager.prepareInteractionHit(setup.base(), null,
                             mc.player.getEyePosition(), placeReach.getValue(), 0.0, false), null)
-                            && GuizhouWare.placementManager.placeCrystal(setup.base(), false,
-                            dev.guizhou.util.inventory.SwapMode.SILENT, InventoryUtil.HOTBAR_SCOPE, null,
-                            new dev.guizhou.manager.PlacementManager.CrystalOptions(placeReach.getValue(), 0.0, false))) submitted(setup.crystal());
+                            && placePistonCrystal(setup.base())) submitted(setup.crystal());
                     return;
                 }
                 case PISTON -> {
@@ -385,8 +392,8 @@ public class GuangxiPistonModule extends Module {
         if (!aimInteraction(hit, facing)) return false;
         var prepared = hit;
         boolean[] sent = {false};
-        boolean swapped = GuizhouWare.swapManager.withSwap(item, InventoryUtil.HOTBAR_SCOPE,
-                dev.guizhou.util.inventory.SwapMode.SILENT, dev.guizhou.util.inventory.SwapPriority.PLACEMENT,
+        boolean swapped = GuizhouWare.swapManager.withSwap(item, itemScope(),
+                swapMode(), dev.guizhou.util.inventory.SwapPriority.PLACEMENT,
                 () -> {
                     if (PlaceUtil.canPlace(pos, placeReach.getValue())) sent[0] = manager.sendUseItemOnDirect(prepared,
                             InteractionHand.MAIN_HAND, mc.player.getEyePosition(), placeReach.getValue(), 0.0);
@@ -557,7 +564,8 @@ public class GuangxiPistonModule extends Module {
     }
 
     private boolean crystalCellOpen(BlockPos cell, BlockPos piston, Direction dir) {
-        if (!mc.level.getBlockState(cell).isAir()) return false;
+        BlockState cellState = mc.level.getBlockState(cell);
+        if (!cellState.isAir() && !cellState.is(Blocks.FIRE)) return false;
         BlockPos head = piston.relative(dir.getOpposite());
         if (head.equals(cell)) return true;
         BlockState state = mc.level.getBlockState(head);
@@ -573,7 +581,7 @@ public class GuangxiPistonModule extends Module {
 
     private boolean canAutoBase(BlockPos base) {
         return autoBase.getValue()
-                && hotbarSlotOf(Items.OBSIDIAN) >= 0
+                && itemSlot(Items.OBSIDIAN) >= 0
                 && PlaceUtil.canPlace(base, placeReach.getValue());
     }
 
@@ -586,7 +594,7 @@ public class GuangxiPistonModule extends Module {
                 && pistonState.hasProperty(BlockStateProperties.FACING)
                 && pistonState.getValue(BlockStateProperties.FACING) == dir.getOpposite();
         if (!existingPiston && (!PlaceUtil.canPlace(pistonPos, placeReach.getValue()) || pistonSlot() < 0)) return null;
-        if (crystalAt(crystalPos) == null && hotbarSlotOf(Items.END_CRYSTAL) < 0) return null;
+        if (crystalAt(crystalPos) == null && !hasCrystalSupply()) return null;
 
         double rangeSq = range * range;
         if (eye.distanceToSqr(Vec3.atCenterOf(pistonPos)) > rangeSq) return null;
@@ -613,7 +621,7 @@ public class GuangxiPistonModule extends Module {
         }
         var plan = PistonPowerSequence.plan(keepPower, reuseRedstone.getValue(), existingPiston, gap, canRecycle);
         if (plan == PistonPowerSequence.Plan.REJECT) return null;
-        if (!keepPower && (hotbarSlotOf(Items.REDSTONE_BLOCK) < 0 || mc.level.hasNeighborSignal(pistonPos)
+        if (!keepPower && (itemSlot(Items.REDSTONE_BLOCK) < 0 || mc.level.hasNeighborSignal(pistonPos)
                 || existingPiston && pistonState.getValue(BlockStateProperties.EXTENDED))) return null;
         if (keepPower && !PistonPowerSequence.clearForPiston(crystalPos, pistonPos)) return null;
 
@@ -790,13 +798,50 @@ public class GuangxiPistonModule extends Module {
     }
 
     private int pistonSlot() {
-        int s = hotbarSlotOf(Items.PISTON);
-        return s >= 0 ? s : hotbarSlotOf(Items.STICKY_PISTON);
+        int s = itemSlot(Items.PISTON);
+        return s >= 0 ? s : itemSlot(Items.STICKY_PISTON);
     }
 
-    private int hotbarSlotOf(Item item) {
-        var r = InventoryUtil.find(item, java.util.EnumSet.of(ResultType.HOTBAR));
+    private SwapMode swapMode() {
+        return inventorySwap.getValue() ? SwapMode.ALTSILENT : SwapMode.SILENT;
+    }
+
+    private java.util.EnumSet<ResultType> itemScope() {
+        return inventorySwap.getValue() ? InventoryUtil.FULL_SCOPE : InventoryUtil.HOTBAR_SCOPE;
+    }
+
+    private int itemSlot(Item item) {
+        var r = InventoryUtil.find(item, itemScope());
         return (r.found() && r.type() != ResultType.OFFHAND) ? r.slot() : -1;
+    }
+
+    private boolean hasCrystalSupply() {
+        return mc.player.getMainHandItem().is(Items.END_CRYSTAL)
+                || mc.player.getOffhandItem().is(Items.END_CRYSTAL)
+                || itemSlot(Items.END_CRYSTAL) >= 0;
+    }
+
+    private boolean placePistonCrystal(BlockPos base) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        var options = new dev.guizhou.manager.PlacementManager.CrystalOptions(
+                placeReach.getValue(), 0.0, false);
+        boolean main = mc.player.getMainHandItem().is(Items.END_CRYSTAL);
+        boolean off = mc.player.getOffhandItem().is(Items.END_CRYSTAL);
+        if (main || off) {
+            return GuizhouWare.placementManager.placeCrystalDirect(base, false,
+                    off && !main ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND, null, options);
+        }
+        return GuizhouWare.placementManager.placeCrystal(base, false,
+                swapMode(), itemScope(), null, options);
+    }
+
+    /** Fire in the crystal cell is broken with the same instant dig CrystalAura uses, then placed next tick. */
+    private void clearFire(BlockPos cell) {
+        if (mc.getConnection() == null || !mc.level.getBlockState(cell).is(Blocks.FIRE)) return;
+        mc.getConnection().send(new ServerboundPlayerActionPacket(
+                ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, cell, Direction.DOWN));
+        mc.getConnection().send(new ServerboundPlayerActionPacket(
+                ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, cell, Direction.DOWN));
     }
 
     private void showVisualSetup() {

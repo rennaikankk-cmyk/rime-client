@@ -3,6 +3,7 @@ package dev.guizhou.features.modules.combat;
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.impl.network.PacketEvent;
+import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
@@ -21,6 +22,7 @@ import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.PredictUtil;
+import dev.guizhou.util.render.MatrixCapture;
 import dev.guizhou.util.render.RenderUtil;
 import dev.guizhou.util.render.placement.*;
 import dev.guizhou.util.inventory.InventoryUtil;
@@ -82,6 +84,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -178,6 +181,14 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<Color>   pulseColor    = color("PulseColor", 130, 80, 255, 150).setPage("Render");
     private final Setting<Double>  pulseSpeed    = num("PulseSpeed", 2.0, 0.2, 6.0).setPage("Render");
     private final Setting<Double>  pulseExpand   = num("PulseExpand", 0.35, 0.0, 1.0).setPage("Render");
+    private final Setting<Boolean> damageText   = bool("DamageText", true).setPage("Render")
+            .setVisibility(v -> renderMode.getValue() != RenderMode.NONE);
+    private final Setting<Color>   damageColor  = color("DamageColor", 255, 255, 255, 255).setPage("Render")
+            .setVisibility(v -> renderMode.getValue() != RenderMode.NONE && damageText.getValue());
+
+    private BlockPos damageAnchor;
+    private long damageShownAt;
+    private float damageShown;
 
     private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, true);
     private final PlacementVisuals visuals = new PlacementVisuals("水晶");
@@ -429,6 +440,8 @@ public class GuangxiCrystalModule extends Module {
         candidates.clear();
         explodeTimes.clear();
         visuals.clear();
+        damageAnchor = null;
+        damageShown = 0f;
         resetDiag();
     }
 
@@ -461,6 +474,63 @@ public class GuangxiCrystalModule extends Module {
         visuals.render(event, visualOptions, sideColor.getValue(), lineColor.getValue(), lineWidth.getValue(),
                 renderTime.getValue() * .05, style, smoothing, gradientHeight.getValue(),
                 pulseColor.getValue(), pulseSpeed.getValue(), pulseExpand.getValue());
+    }
+
+    @Override
+    public void onRender2D(Render2DEvent event) {
+        if (nullCheck() || !damageText.getValue() || renderMode.getValue() == RenderMode.NONE
+                || damageAnchor == null || damageShown <= 0f) return;
+        if (System.currentTimeMillis() - damageShownAt > renderTime.getValue() * 50L) return;
+        drawDamageNumber(event.getContext(),
+                damageAnchor.getX() + 0.5, damageAnchor.getY() + 0.5, damageAnchor.getZ() + 0.5,
+                String.format(Locale.US, "%.2f", damageShown), damageColor.getValue().getRGB());
+    }
+
+    /** Billboard number at the base-block center: vanilla font, 0.025 block per pixel, dark offset shadow. */
+    private void drawDamageNumber(net.minecraft.client.gui.GuiGraphics graphics,
+                                  double x, double y, double z, String text, int color) {
+        float[] screen = MatrixCapture.worldToScreen(x, y, z);
+        if (screen == null) return;
+        float scale = damagePixelScale(x, y, z);
+        if (!(scale > 0f)) return;
+
+        int half = mc.font.width(text) / 2;
+        var pose = graphics.pose();
+        pose.pushPose();
+        pose.translate(screen[0], screen[1], 0);
+        pose.scale(scale, scale, 1f);
+        graphics.drawString(mc.font, text, -half + 1, 1, 0xFF202020, false);
+        graphics.drawString(mc.font, text, -half, 0, color, false);
+        pose.popPose();
+    }
+
+    private static float damagePixelScale(double x, double y, double z) {
+        var camera = mc.gameRenderer.getMainCamera();
+        float yaw = (float) Math.toRadians(camera.getYRot());
+        float pitch = (float) Math.toRadians(camera.getXRot());
+        double forwardX = -Math.sin(yaw) * Math.cos(pitch);
+        double forwardZ = Math.cos(yaw) * Math.cos(pitch);
+        double rightX = -forwardZ;
+        double rightZ = forwardX;
+        double len = Math.hypot(rightX, rightZ);
+        if (len < 1.0e-4) {
+            rightX = 1.0;
+            rightZ = 0.0;
+        } else {
+            rightX /= len;
+            rightZ /= len;
+        }
+        float[] origin = MatrixCapture.worldToScreen(x, y, z);
+        float[] stepped = MatrixCapture.worldToScreen(x + rightX * 0.025, y, z + rightZ * 0.025);
+        if (origin == null || stepped == null) return 0f;
+        return (float) Math.hypot(stepped[0] - origin[0], stepped[1] - origin[1]);
+    }
+
+    private void markDamage(BlockPos airPos) {
+        if (renderMode.getValue() == RenderMode.NONE) return;
+        damageAnchor = airPos.below();
+        damageShownAt = System.currentTimeMillis();
+        damageShown = lastBestDamage;
     }
 
     @Subscribe
@@ -1754,7 +1824,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     private void recordPlace(BlockPos airPos) {
         crystalPlaces.put(airPos.asLong(), System.currentTimeMillis());
-
+        markDamage(airPos);
         lastPlaceAir = airPos;
     }
 

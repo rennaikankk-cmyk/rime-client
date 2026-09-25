@@ -9,6 +9,7 @@ import dev.guizhou.features.modules.hud.CountsHudModule;
 import dev.guizhou.features.modules.hud.NotifierHudModule;
 import dev.guizhou.features.modules.hud.PingHudModule;
 import dev.guizhou.features.modules.hud.RadarHudModule;
+import dev.guizhou.features.modules.hud.PlayersHudModule;
 import dev.guizhou.features.modules.hud.SpeedHudModule;
 import dev.guizhou.features.modules.hud.TargetHudModule;
 import dev.guizhou.features.modules.hud.TotemsHudModule;
@@ -61,6 +62,7 @@ public class HudClientModule extends Module {
         coordinatesPosition = mode("Coordinates Position", HudPosition.BOTTOM_RIGHT).setPage("Elements");
         register(new PingHudModule(), true);
         register(new RadarHudModule(), true);
+        register(new PlayersHudModule(), true);
         register(new ActiveModulesHudModule(), true);
         activeModulesPosition = mode("ActiveModules Position", HudPosition.CENTER_RIGHT).setPage("Elements");
         register(new NotifierHudModule(), true);
