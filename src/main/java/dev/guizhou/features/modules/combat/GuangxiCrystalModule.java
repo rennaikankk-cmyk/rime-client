@@ -1165,9 +1165,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             GuizhouWare.rotationManager.submit(new RotationRequest(
                 "AutoCrystal_break", 60, angles[0], angles[1], RotationRequest.Mode.SILENT
             ));
-            acceptPendingRotation();
-            if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) return false;
         }
+        acceptPendingRotation();
+        if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) return false;
         return sendCrystalAttack(crystal, false);
     }
 
