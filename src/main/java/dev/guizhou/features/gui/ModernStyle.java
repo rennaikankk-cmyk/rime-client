@@ -21,6 +21,7 @@ import org.joml.Vector2f;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -167,6 +168,10 @@ final class ModernStyle extends ShellStyle {
 
     private final double[] localPoint = new double[2];
     private List<Module> frameModules;
+    /** Built once per frame. Toggles land on the next frame, so the open GUI does not re-filter. */
+    private List<Module> visibleFrame;
+    private EnumMap<Module.Category, List<Module>> categoryFrame;
+    private Set<String> favoriteFrame;
 
     /** Screen pixels to window-local units, undoing the entrance transform. */
     private double[] local(double sx, double sy) {
@@ -188,6 +193,9 @@ final class ModernStyle extends ShellStyle {
                     .filter(m -> m.getCategory() != Module.Category.FUNNY || GuizhouWare.commandManager.isFunnyVisible())
                     .toList();
         }
+        visibleFrame = null;
+        categoryFrame = null;
+        favoriteFrame = null;
         hits.clear();
         modalFrom = -1;
         hoverTarget = null;
@@ -949,26 +957,35 @@ final class ModernStyle extends ShellStyle {
     }
 
     private List<Module> modulesIn(Module.Category c) {
-        List<Module> found = new ArrayList<>();
+        if (categoryFrame == null) categoryFrame = new EnumMap<>(Module.Category.class);
+        List<Module> found = categoryFrame.get(c);
+        if (found != null) return found;
+        found = new ArrayList<>();
         for (Module module : frameModules) if (module.getCategory() == c) found.add(module);
+        categoryFrame.put(c, found);
         return found;
     }
 
     private List<Module> visibleModules() {
+        if (visibleFrame != null) return visibleFrame;
         String q = query.toLowerCase(Locale.ROOT).trim();
         Set<String> favs = favorites();
-        return allModules().stream()
+        visibleFrame = allModules().stream()
                 .filter(m -> view == View.FAVORITES ? favs.contains(m.getName()) : !q.isEmpty() || m.getCategory() == category)
                 .filter(m -> q.isEmpty() || (m.getName() + " " + m.getDisplayName() + " " + m.getDescription()).toLowerCase(Locale.ROOT).contains(q))
                 .filter(m -> filter == Filter.ALL || (filter == Filter.ON) == m.isEnabled())
                 .sorted(Comparator.comparing(Module::getName)).toList();
+        return visibleFrame;
     }
 
     private Set<String> favorites() {
+        if (favoriteFrame != null) return favoriteFrame;
         ClickGuiModule gui = ClickGuiModule.getInstance();
         Set<String> set = new LinkedHashSet<>();
-        if (gui == null) return set;
-        for (String part : gui.favorites.getValue().split(",")) if (!part.isBlank()) set.add(part.trim());
+        if (gui != null) {
+            for (String part : gui.favorites.getValue().split(",")) if (!part.isBlank()) set.add(part.trim());
+        }
+        favoriteFrame = set;
         return set;
     }
 
@@ -985,7 +1002,7 @@ final class ModernStyle extends ShellStyle {
     }
 
     private String settingLabel(Module owner, Setting<?> s) {
-        String label = s.getName();
+        String label = "CoupledCruise".equals(s.getName()) ? "GZBoost" : s.getName();
         if (owner instanceof HudClientModule && label.startsWith(page + " ")) label = label.substring(page.length() + 1);
         return label;
     }

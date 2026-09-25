@@ -100,21 +100,21 @@ public class GuangxiElytraModule extends Module {
     private final Setting<Boolean> legacyVerticalBoost = bool("LegacyVerticalBoost", false).setPage("Rescale");
 
     // Single-look cruise uses its own envelope; combat keeps its existing controller.
-    private final Setting<Boolean> coupledCruise = bool("CoupledCruise", false).setPage("CoupledCruise");
-    private final Setting<Double> cruisePitch = num("CruisePitch", 15.0, -89.5, 89.5).setPage("CoupledCruise");
-    private final Setting<Double> cruiseClimbPitch = num("CruiseClimbPitch", -45.0, -89.5, 0.0).setPage("CoupledCruise");
-    private final Setting<Double> cruiseDescentPitch = num("CruiseDescentPitch", 30.0, 0.0, 89.5).setPage("CoupledCruise");
-    private final Setting<Boolean> cruiseSmartClimb = bool("CruiseSmartClimb", true).setPage("CoupledCruise");
-    private final Setting<Double> cruiseDescentFloor = num("CruiseDescentFloor", -1.7, -20.0, 0.0).setPage("CoupledCruise");
-    private final Setting<Boolean> cruisePorpoise = bool("CruisePorpoise", false).setPage("CoupledCruise");
-    private final Setting<Double> cruiseHeightWindow = num("CruiseHeightWindow", 60.0, 1.0, 256.0).setPage("CoupledCruise");
-    private final Setting<Double> cruiseSpeedCap = num("CruiseSpeedCap", 15.0, 0.05, 15.0).setPage("CoupledCruise");
-    private final Setting<Double> cruiseBoxCap = num("CruiseBoxCap", 1.7, 0.01, 5.0).setPage("CoupledCruise");
-    private final Setting<Double> cruiseInset = num("CruiseInset", 0.002, 0.0, 0.1).setPage("CoupledCruise");
-    private final Setting<Boolean> cruiseDualLook = bool("CruiseDualLook", true).setPage("CoupledCruise");
-    private final Setting<Double> cruiseDualClimbAngle = num("CruiseDualClimbAngle", 0.0, 0.0, 89.5).setPage("CoupledCruise");
-    private final Setting<Double> cruiseDualDiveAngle = num("CruiseDualDiveAngle", 0.0, 0.0, 30.0).setPage("CoupledCruise");
-    private final Setting<Boolean> cruiseSpeedLog = bool("CruiseSpeedLog", false).setPage("CoupledCruise");
+    private final Setting<Boolean> coupledCruise = bool("CoupledCruise", false).setPage("GZBoost");
+    private final Setting<Double> cruisePitch = num("CruisePitch", 15.0, -89.5, 89.5).setPage("GZBoost");
+    private final Setting<Double> cruiseClimbPitch = num("CruiseClimbPitch", -45.0, -89.5, 0.0).setPage("GZBoost");
+    private final Setting<Double> cruiseDescentPitch = num("CruiseDescentPitch", 30.0, 0.0, 89.5).setPage("GZBoost");
+    private final Setting<Boolean> cruiseSmartClimb = bool("CruiseSmartClimb", true).setPage("GZBoost");
+    private final Setting<Double> cruiseDescentFloor = num("CruiseDescentFloor", -1.7, -20.0, 0.0).setPage("GZBoost");
+    private final Setting<Boolean> cruisePorpoise = bool("CruisePorpoise", false).setPage("GZBoost");
+    private final Setting<Double> cruiseHeightWindow = num("CruiseHeightWindow", 60.0, 1.0, 256.0).setPage("GZBoost");
+    private final Setting<Double> cruiseSpeedCap = num("CruiseSpeedCap", 15.0, 0.05, 15.0).setPage("GZBoost");
+    private final Setting<Double> cruiseBoxCap = num("CruiseBoxCap", 1.7, 0.01, 5.0).setPage("GZBoost");
+    private final Setting<Double> cruiseInset = num("CruiseInset", 0.002, 0.0, 0.1).setPage("GZBoost");
+    private final Setting<Boolean> cruiseDualLook = bool("CruiseDualLook", true).setPage("GZBoost");
+    private final Setting<Double> cruiseDualClimbAngle = num("CruiseDualClimbAngle", 0.0, 0.0, 89.5).setPage("GZBoost");
+    private final Setting<Double> cruiseDualDiveAngle = num("CruiseDualDiveAngle", 0.0, 0.0, 30.0).setPage("GZBoost");
+    private final Setting<Boolean> cruiseSpeedLog = bool("CruiseSpeedLog", false).setPage("GZBoost");
 
     // ---- Fireworks ----
     private final Setting<Integer> minBoostTicks = num("MinBoostTicks", 3, 0, 20).setPage("Fireworks");
@@ -180,6 +180,7 @@ public class GuangxiElytraModule extends Module {
 
     // passive diagnostics, written on the game thread and read by TelemetryManager; never affect flight
     private volatile double lastRequestedBpt;
+    private boolean rocketSentThisTick;
     private volatile double lastAppliedBpt;
     private volatile int lastAppliedTick = Integer.MIN_VALUE;
     private volatile int lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
@@ -418,6 +419,7 @@ public class GuangxiElytraModule extends Module {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
         // Observation lifetime: a rocket-gate result is only valid for the tick that produced it.
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
+        rocketSentThisTick = false;
         resyncDualViewRotation();
         clearFlightRotation();
         checkFlightSession();
@@ -671,7 +673,7 @@ public class GuangxiElytraModule extends Module {
                         Math.toDegrees(-Math.asin(cruise.boxLook().y)));
             }
             dev.guizhou.features.commands.Command.sendMessage(String.format(java.util.Locale.ROOT,
-                    "[耦合巡航] %s | 应用速度 %.2f b/t | 垂直 %.2f b/t%s", phase, applied.length(), applied.y, limit));
+                    "[GZBoost] %s | 应用速度 %.2f b/t | 垂直 %.2f b/t%s", phase, applied.length(), applied.y, limit));
         }
         return applied;
     }
@@ -713,7 +715,7 @@ public class GuangxiElytraModule extends Module {
         DualViewSupport.Status status = DualViewSupport.status();
         if (status == DualViewSupport.Status.SUPPORTED || status == DualViewSupport.Status.OFFLINE) return;
         dualViewWarned = true;
-        dev.guizhou.features.commands.Command.sendMessage("[耦合巡航] 双视角不可用（"
+        dev.guizhou.features.commands.Command.sendMessage("[GZBoost] 双视角不可用（"
                 + DualViewSupport.describe(status)
                 + "）。请安装 ViaFabricPlus 并通过 Via 连接 1.20.7 及以下版本服务器；已自动回退单视角。");
     }
@@ -1353,6 +1355,26 @@ public class GuangxiElytraModule extends Module {
     // ---------------------------------------------------------------
 
     /** Let automatic spear use release the hand for one pending rocket refresh. */
+    /** True only after tryRocket consumed a firework on this tick. Armor return waits for the next window. */
+    public boolean rocketSentThisTick() {
+        return rocketSentThisTick;
+    }
+
+    /**
+     * Already gliding on elytra and a firework is due. The armor cycle may open its
+     * rocket window before swapping back to chestplate. A held item (charged spear)
+     * makes the firework yield.
+     */
+    public boolean holdChestplateForBoost() {
+        if (mc.player == null || !mc.player.isFallFlying() || mc.player.isUsingItem()) return false;
+        if (motionMode.getValue() != MotionMode.FIREWORKS) return false;
+        if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()
+                || dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive()) return false;
+        if (!usableElytra(mc.player.getItemBySlot(EquipmentSlot.CHEST))) return false;
+        if (!canUseRocket() || ticksSinceRocket < refireTicks || hasUsefulBoost()) return false;
+        return InventoryUtil.find(GuangxiElytraModule::safeRocket, FULL_SCOPE).found();
+    }
+
     public boolean needsSpearBoostRefresh() {
         if (!canUseRocket() || !mc.player.isFallFlying()
                 || motionMode.getValue() != MotionMode.FIREWORKS || ticksSinceRocket < refireTicks
@@ -1425,6 +1447,7 @@ public class GuangxiElytraModule extends Module {
             ticksSinceRocket = 0;
             refireTicks = nextRefire;
             boostScanTick = Integer.MIN_VALUE;
+            rocketSentThisTick = true;
             lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
         }
     }

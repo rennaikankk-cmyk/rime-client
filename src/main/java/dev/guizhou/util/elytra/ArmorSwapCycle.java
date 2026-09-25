@@ -15,6 +15,8 @@ public final class ArmorSwapCycle {
     private boolean recovering;
     private boolean returnArmor;
     private boolean restartedThisWindow;
+    private boolean deferArmorReturn;
+    private boolean boostHeldThisWindow;
 
     public boolean active() {
         return access != null;
@@ -32,19 +34,33 @@ public final class ArmorSwapCycle {
         recovering = false;
         returnArmor = false;
         restartedThisWindow = false;
+        deferArmorReturn = false;
+        boostHeldThisWindow = false;
         return true;
     }
 
     public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide) {
+        beforeMovement(requested, inventorySafe, canGlide, false);
+    }
+
+    /**
+     * {@code boostOnWornGlide} opens the rocket window when this tick already
+     * started on elytra and a glide, so the firework can launch before chestplate.
+     * A wings swap performed inside this call is not that window.
+     */
+    public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide, boolean boostOnWornGlide) {
         returnArmor = false;
         restartedThisWindow = false;
+        deferArmorReturn = false;
+        boostHeldThisWindow = false;
         if (!validate()) return;
         if (!requested || !inventorySafe || !canGlide) recovering = true;
         if (recovering) {
             recover(inventorySafe);
             return;
         }
-        if (!access.wearingWings()) {
+        boolean enteredOnWings = access.wearingWings();
+        if (!enteredOnWings) {
             // The movement window must observe the owned wings even while an earlier
             // glide flag is still running; a window click never toggles the glide flag.
             if (!swapTo(true)) return;
@@ -57,12 +73,26 @@ public final class ArmorSwapCycle {
                 return;
             }
             restartedThisWindow = true;
+        } else if (boostOnWornGlide && enteredOnWings) {
+            restartedThisWindow = true;
+            deferArmorReturn = true;
         }
         returnArmor = access.gliding();
     }
 
     public void afterMovement(boolean requested, boolean inventorySafe, boolean canGlide) {
+        afterMovement(requested, inventorySafe, canGlide, false);
+    }
+
+    /** {@code rocketSent} keeps wings on for this window so the chest swap does not eat the firework. */
+    public void afterMovement(boolean requested, boolean inventorySafe, boolean canGlide, boolean rocketSent) {
+        if (deferArmorReturn && rocketSent) boostHeldThisWindow = true;
+        deferArmorReturn = false;
         restartedThisWindow = false;
+        if (boostHeldThisWindow) {
+            returnArmor = false;
+            return;
+        }
         if (!validate()) return;
         if (!requested || !inventorySafe || !canGlide) recovering = true;
         if (recovering) {
@@ -89,6 +119,8 @@ public final class ArmorSwapCycle {
         recovering = false;
         returnArmor = false;
         restartedThisWindow = false;
+        deferArmorReturn = false;
+        boostHeldThisWindow = false;
     }
 
     private boolean validate() {

@@ -184,6 +184,7 @@ def clientRegressionTests = [
         flightRecoveryPlanTest: 'dev.guizhou.util.elytra.FlightRecoveryPlanTest',
         parallelFlightIntegrationTest: 'dev.guizhou.util.elytra.ParallelFlightIntegrationTest',
         maceDiveStateTest: 'dev.guizhou.util.elytra.MaceDiveStateTest',
+        entityAimTest: 'dev.guizhou.util.elytra.EntityAimTest',
         macePassTrackerTest: 'dev.guizhou.util.elytra.MacePassTrackerTest',
         maceDamageScoreTest: 'dev.guizhou.util.combat.MaceDamageScoreTest',
         armorSwapCycleTest: 'dev.guizhou.util.elytra.ArmorSwapCycleTest',

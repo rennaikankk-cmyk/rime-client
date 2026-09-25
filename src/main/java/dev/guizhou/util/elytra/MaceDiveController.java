@@ -114,7 +114,7 @@ public final class MaceDiveController {
                 || !(player.getMainHandItem().getItem() instanceof MaceItem)
                 || player.onGround() || player.isInWater() || player.isInLava() || player.isPassenger()
                 || player.getAbilities().flying;
-        state.observe(player.tickCount, player.isFallFlying(), mustRecover);
+        state.observe(player.tickCount, player.isFallFlying(), mustRecover, player.fallDistance, 1.5);
         if (state.phase() != MaceDiveState.Phase.RECOVERING || !safeInventory()
                 || !recoverySlotAvailable(InventoryUtil.selected(), armorSlot)) return;
         if (lastRecoveryAttempt == player.tickCount) return;

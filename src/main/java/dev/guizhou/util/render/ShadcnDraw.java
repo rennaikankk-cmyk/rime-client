@@ -2,15 +2,15 @@ package dev.guizhou.util.render;
 
 import dev.guizhou.features.modules.client.ClickGuiModule;
 import dev.guizhou.util.render.font.HudFonts;
-import net.minecraft.client.Minecraft;
+import dev.guizhou.util.render.state.RoundMeshState;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
+import org.joml.Matrix3x2f;
 
 /**
- * Native GUI primitives shared by the shell screens and the HUD. Rounded shapes
- * rasterize per physical pixel with coverage-blended edges, so corners stay
- * smooth at every GUI scale. No web runtime, no shaders.
+ * Native GUI primitives shared by the shell screens and the HUD. A rounded
+ * rectangle is one mesh: three body quads and four corner fans. No web runtime.
  */
 public final class ShadcnDraw {
     // Graphite + iris palette. The low RGB bits are HudAppearance lookup keys; keep them unique.
@@ -75,99 +75,165 @@ public final class ShadcnDraw {
         outline(g, x, y, w, h, radius, 1, BORDER);
     }
 
-    /** Soft drop shadow built from a few expanding low-alpha layers. */
+    /**
+     * One mesh. Two rings fade from clear to the shadow colour. Not five full rounded fills.
+     * A filled panel is 3 body quads + 4×4 corner quads (19). This shadow is 40 quads.
+     */
     public static void shadow(GuiGraphics g, float x, float y, float w, float h, float radius, float spread, int color) {
-        int layers = 5;
-        for (int i = layers; i >= 1; i--) {
-            float grow = spread * i / layers;
-            round(g, x - grow, y - grow * 0.6f + spread * 0.35f, w + grow * 2, h + grow * 2, radius + grow,
-                    alpha(color, 0.9f / (layers + 1)));
-        }
+        color = HudAppearance.color(color);
+        if (w <= 0 || h <= 0 || spread <= 0 || (color >>> 24) == 0) return;
+        Mesh mesh = new Mesh();
+        float shift = spread * 0.35f;
+        ring(mesh, x - spread, y - spread * 0.65f + shift, w + spread * 2, h + spread * 2, radius + spread,
+                x - spread * 0.45f, y - spread * 0.28f + shift * 0.5f, w + spread * 0.9f, h + spread * 0.9f, radius + spread * 0.45f,
+                0, alpha(color, 0.22f));
+        ring(mesh, x - spread * 0.45f, y - spread * 0.28f + shift * 0.5f, w + spread * 0.9f, h + spread * 0.9f, radius + spread * 0.45f,
+                x, y, w, h, radius, alpha(color, 0.22f), alpha(color, 0.62f));
+        mesh.submit(g);
     }
 
     private static void shape(GuiGraphics g, float x, float y, float w, float h, float radius, float ring,
                               int left, int right, boolean hollow) {
-        var pose = g.pose();
-        float k = deviceScale(g);
-        pose.pushMatrix();
-        try {
-            pose.scale(1f / k, 1f / k);
-            float X = x * k, Y = y * k, W = w * k, H = h * k;
-            float R = Math.max(0, Math.min(radius * k, Math.min(W, H) / 2f));
-            float T = hollow ? Math.max(k * 0.75f, ring * k) : 0;
-            int top = (int) Math.floor(Y), bottom = (int) Math.ceil(Y + H);
-            for (int row = top; row < bottom; row++) {
-                float cov = Math.min(Y + H, row + 1) - Math.max(Y, row);
-                if (cov <= 0) continue;
-                float cy = row + 0.5f;
-                if (!span(X, Y, W, H, R, cy, OUTER)) continue;
-                if (!hollow || !span(X + T, Y + T, W - 2 * T, H - 2 * T, Math.max(0, R - T), cy, INNER)) {
-                    spanFill(g, OUTER[0], OUTER[1], row, cov, left, right, X, W);
-                } else {
-                    spanFill(g, OUTER[0], INNER[0], row, cov, left, right, X, W);
-                    spanFill(g, INNER[1], OUTER[1], row, cov, left, right, X, W);
-                }
-            }
-        } finally {
-            pose.popMatrix();
-        }
+        submitShape(g, x, y, w, h, radius, ring, left, right, hollow);
     }
 
-    // Render-thread scratch spans; shape() never nests.
-    private static final float[] OUTER = new float[2], INNER = new float[2];
-
-    /** Horizontal extent of a rounded rectangle at scanline centre cy; false outside it. */
-    private static boolean span(float x, float y, float w, float h, float r, float cy, float[] out) {
-        if (w <= 0 || h <= 0 || cy < y || cy > y + h) return false;
-        float inset = 0;
-        if (r > 0) {
-            float dy = cy < y + r ? y + r - cy : cy > y + h - r ? cy - (y + h - r) : 0;
-            if (dy > r) return false;
-            inset = r - (float) Math.sqrt(Math.max(0, r * r - dy * dy));
+    /** One mesh in the current GUI pose. Corners use four quads each. */
+    static void submitShape(GuiGraphics g, float x, float y, float w, float h, float radius, float ring,
+                            int left, int right, boolean hollow) {
+        if (w <= 0 || h <= 0 || ((left >>> 24) == 0 && (right >>> 24) == 0)) return;
+        float r = Math.max(0, Math.min(radius, Math.min(w, h) / 2f));
+        Mesh mesh = new Mesh();
+        if (!hollow || ring <= 0) {
+            fill(mesh, x, y, w, h, r, left, right);
+        } else {
+            float t = Math.min(ring, Math.min(w, h) / 2f);
+            if (t >= Math.min(w, h) / 2f - 0.01f) fill(mesh, x, y, w, h, r, left, right);
+            else ring(mesh, x, y, w, h, r, x + t, y + t, w - 2 * t, h - 2 * t, Math.max(0, r - t), left, right);
         }
-        out[0] = x + inset;
-        out[1] = x + w - inset;
-        return true;
+        mesh.submit(g);
     }
 
-    private static void spanFill(GuiGraphics g, float a, float b, int row, float coverage, int left, int right, float x0, float w0) {
-        if (b <= a) return;
-        boolean gradient = left != right;
-        int ia = (int) Math.ceil(a), ib = (int) Math.floor(b);
-        if (ia > ib) {
-            // Whole span inside one physical pixel.
-            int px = (int) Math.floor(a);
-            g.fill(px, row, px + 1, row + 1, fade(colorAt(left, right, px, x0, w0, gradient), coverage * (b - a)));
+    private static final int CORNER = 4;
+    private static final float PI = (float) Math.PI;
+
+    private static void fill(Mesh mesh, float x, float y, float w, float h, float r, int left, int right) {
+        if (r <= 0.5f) {
+            mesh.quad(x, y, x, y + h, x + w, y + h, x + w, y, left, right, x, w);
             return;
         }
-        if (ib > ia) {
-            if (gradient) {
-                int cl = fade(colorAt(left, right, ia, x0, w0, true), coverage);
-                int cr = fade(colorAt(left, right, ib, x0, w0, true), coverage);
-                RenderUtil.gradient(g, ia, row, ib, row + 1, cl, cl, cr, cr);
-            } else {
-                g.fill(ia, row, ib, row + 1, fade(left, coverage));
-            }
+        float y0 = y + r, y1 = y + h - r;
+        if (y1 > y0) mesh.quad(x, y0, x, y1, x + w, y1, x + w, y0, left, right, x, w);
+        float x0 = x + r, x1 = x + w - r;
+        if (x1 > x0) {
+            mesh.quad(x0, y, x0, y0, x1, y0, x1, y, left, right, x, w);
+            mesh.quad(x0, y1, x0, y + h, x1, y + h, x1, y1, left, right, x, w);
         }
-        if (a < ia) g.fill(ia - 1, row, ia, row + 1, fade(colorAt(left, right, ia - 1, x0, w0, gradient), coverage * (ia - a)));
-        if (b > ib) g.fill(ib, row, ib + 1, row + 1, fade(colorAt(left, right, ib, x0, w0, gradient), coverage * (b - ib)));
+        corner(mesh, x + r, y + r, r, PI, PI * 1.5f, left, right, x, w);
+        corner(mesh, x + w - r, y + r, r, -PI / 2f, 0, left, right, x, w);
+        corner(mesh, x + w - r, y + h - r, r, 0, PI / 2f, left, right, x, w);
+        corner(mesh, x + r, y + h - r, r, PI / 2f, PI, left, right, x, w);
     }
 
-    private static int colorAt(int left, int right, float px, float x0, float w0, boolean gradient) {
-        return gradient ? mix(left, right, (px - x0) / Math.max(1, w0)) : left;
+    private static void ring(Mesh mesh, float x, float y, float w, float h, float r,
+                             float ix, float iy, float iw, float ih, float ir, int outer, int inner) {
+        if (iw <= 0 || ih <= 0) {
+            fill(mesh, x, y, w, h, r, outer, inner);
+            return;
+        }
+        float x1 = x + w, y1 = y + h, ix1 = ix + iw, iy1 = iy + ih;
+        mesh.solid(x + r, y, x1 - r, y, ix1 - ir, iy, ix + ir, iy, outer, inner);
+        mesh.solid(x + r, y1, ix + ir, iy1, ix1 - ir, iy1, x1 - r, y1, outer, inner);
+        mesh.solid(x, y + r, ix, iy + ir, ix, iy1 - ir, x, y1 - r, outer, inner);
+        mesh.solid(x1, y + r, x1, y1 - r, ix1, iy1 - ir, ix1, iy + ir, outer, inner);
+        cornerRing(mesh, x + r, y + r, r, ix + ir, iy + ir, ir, PI, PI * 1.5f, outer, inner);
+        cornerRing(mesh, x1 - r, y + r, r, ix1 - ir, iy + ir, ir, -PI / 2f, 0, outer, inner);
+        cornerRing(mesh, x1 - r, y1 - r, r, ix1 - ir, iy1 - ir, ir, 0, PI / 2f, outer, inner);
+        cornerRing(mesh, x + r, y1 - r, r, ix + ir, iy1 - ir, ir, PI / 2f, PI, outer, inner);
     }
 
-    private static int fade(int color, float coverage) {
-        return alpha(color, coverage);
+    private static void corner(Mesh mesh, float cx, float cy, float radius, float a0, float a1, int left, int right, float x0, float w) {
+        float px = cx + (float) Math.cos(a0) * radius, py = cy + (float) Math.sin(a0) * radius;
+        for (int i = 1; i <= CORNER; i++) {
+            float a = a0 + (a1 - a0) * i / CORNER;
+            float nx = cx + (float) Math.cos(a) * radius, ny = cy + (float) Math.sin(a) * radius;
+            mesh.quad(cx, cy, px, py, nx, ny, cx, cy, left, right, x0, w);
+            px = nx;
+            py = ny;
+        }
     }
 
-    /** Physical pixels per current GUI unit, including any screen-level pose scale. */
-    private static float deviceScale(GuiGraphics g) {
-        var m = g.pose();
-        float poseScale = (float) Math.sqrt(m.m00() * m.m00() + m.m01() * m.m01());
-        double gui = Minecraft.getInstance().getWindow() == null ? 1 : Minecraft.getInstance().getWindow().getGuiScale();
-        float k = (float) (poseScale * gui);
-        return Float.isFinite(k) && k > 0.25f ? Math.min(k, 8f) : 1f;
+    private static void cornerRing(Mesh mesh, float cx, float cy, float radius, float icx, float icy, float ir,
+                                   float a0, float a1, int outer, int inner) {
+        float ox = cx + (float) Math.cos(a0) * radius, oy = cy + (float) Math.sin(a0) * radius;
+        float ix = icx + (float) Math.cos(a0) * ir, iy = icy + (float) Math.sin(a0) * ir;
+        for (int i = 1; i <= CORNER; i++) {
+            float a = a0 + (a1 - a0) * i / CORNER;
+            float nox = cx + (float) Math.cos(a) * radius, noy = cy + (float) Math.sin(a) * radius;
+            float nix = icx + (float) Math.cos(a) * ir, niy = icy + (float) Math.sin(a) * ir;
+            mesh.solid(ox, oy, ix, iy, nix, niy, nox, noy, outer, inner);
+            ox = nox;
+            oy = noy;
+            ix = nix;
+            iy = niy;
+        }
+    }
+
+    /** Render-thread builder. {@link #submit} copies into a state the GUI draws later. */
+    private static final class Mesh {
+        private float[] xy = new float[128];
+        private int[] color = new int[64];
+        private int n;
+        private float minX = Float.POSITIVE_INFINITY, minY = Float.POSITIVE_INFINITY;
+        private float maxX = Float.NEGATIVE_INFINITY, maxY = Float.NEGATIVE_INFINITY;
+
+        void quad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3,
+                  int left, int right, float origin, float width) {
+            add(x0, y0, at(left, right, x0, origin, width));
+            add(x1, y1, at(left, right, x1, origin, width));
+            add(x2, y2, at(left, right, x2, origin, width));
+            add(x3, y3, at(left, right, x3, origin, width));
+        }
+
+        void solid(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3, int c0, int c1) {
+            add(x0, y0, c0);
+            add(x1, y1, c1);
+            add(x2, y2, c1);
+            add(x3, y3, c0);
+        }
+
+        private static int at(int left, int right, float px, float origin, float width) {
+            if (left == right) return left;
+            return mix(left, right, Math.clamp((px - origin) / Math.max(0.001f, width), 0f, 1f));
+        }
+
+        private void add(float x, float y, int c) {
+            if (n + 1 > color.length) {
+                float[] nxy = new float[xy.length * 2];
+                int[] nc = new int[color.length * 2];
+                System.arraycopy(xy, 0, nxy, 0, n * 2);
+                System.arraycopy(color, 0, nc, 0, n);
+                xy = nxy;
+                color = nc;
+            }
+            xy[n * 2] = x;
+            xy[n * 2 + 1] = y;
+            color[n++] = c;
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+        }
+
+        void submit(GuiGraphics g) {
+            if (n == 0 || (n & 3) != 0) return;
+            float[] copy = new float[n * 2];
+            int[] colors = new int[n];
+            System.arraycopy(xy, 0, copy, 0, copy.length);
+            System.arraycopy(color, 0, colors, 0, n);
+            g.guiRenderState.submitGuiElement(new RoundMeshState(
+                    RenderPipelines.GUI, new Matrix3x2f(g.pose()), copy, colors,
+                    minX, minY, maxX, maxY, g.scissorStack.peek()));
+        }
     }
 
     // ------------------------------------------------------------ icons

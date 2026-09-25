@@ -7,8 +7,8 @@ import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.MathUtil;
+import dev.guizhou.util.elytra.SpearCombat;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -36,8 +36,6 @@ public class GuangxiSpearTPModule extends Module {
 
     public static final String ID = "GuangxiSpearTP";
     private static final int ROTATION_PRIORITY = 6;
-    private static final int MIN_CHARGE_TICKS = 8;
-
     private final Setting<Double> range = num("Range", 50.0, 8.0, 90.0);
     private final Setting<Double> maxTp = num("MaxTp", 100.0, 16.0, 300.0);
     private final Setting<Double> stepSize = num("StepSize", 10.0, 2.0, 50.0);
@@ -121,9 +119,7 @@ public class GuangxiSpearTPModule extends Module {
         // rotation bookkeeping + the stab itself, inside the freeze window
         GuizhouWare.rotationManager.submit(new RotationRequest(
                 ID, ROTATION_PRIORITY, yaw, pitch, RotationRequest.Mode.SILENT));
-        mc.gameMode.attack(mc.player, target);
-        mc.player.swing(InteractionHand.MAIN_HAND);
-
+        // Kinetic damage is the server ray while the spear stays in use, not a melee attack().
         freezeTicks = serverDelay.getValue() + 1;
         // self-disable once the burst is out; the freeze listener below keeps
         // running because the module stays registered until disable() — so
@@ -155,8 +151,7 @@ public class GuangxiSpearTPModule extends Module {
     }
 
     private boolean chargedSpearReady() {
-        return GuangxiElytraChaseModule.isUsingSpear(mc.player)
-                && mc.player.getTicksUsingItem() >= MIN_CHARGE_TICKS;
+        return SpearCombat.isReady(mc.player);
     }
 
     private Player findTarget() {
@@ -203,7 +198,8 @@ public class GuangxiSpearTPModule extends Module {
             laterals[i * 2] = -i;
         }
 
-        for (double d = range.getValue(); d > distToTarget; d -= 2.0) {
+        double reach = Math.min(range.getValue(), maxTp.getValue());
+        for (double d = reach; d >= 2.0; d -= 2.0) {
             for (double lat : laterals) {
                 Vec3 candidate = origin.add(away.scale(d)).add(flat.scale(lat));
                 if (candidate.subtract(origin).horizontalDistanceSqr() > maxTpSq) continue;

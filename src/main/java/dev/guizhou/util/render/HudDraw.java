@@ -1,15 +1,14 @@
 package dev.guizhou.util.render;
 
 import dev.guizhou.util.render.font.HudFonts;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 
 /**
  * HUD panel language on top of {@link ShadcnDraw}. Short-corner framed boards,
- * text first; colour is for status only. Rounded shapes rasterize their corner
- * rows per physical pixel. Colours go through {@link HudAppearance} exactly once.
+ * text first; colour is for status only. Rounded shapes share the one-mesh painter.
+ * Colours go through {@link HudAppearance} exactly once.
  */
 public final class HudDraw {
     /** Translucent panel body; low RGB bits are the HudAppearance background key. */
@@ -185,89 +184,11 @@ public final class HudDraw {
 
     private static void roundRaw(GuiGraphics g, float x, float y, float w, float h, float r, int color) {
         if (w <= 0 || h <= 0 || (color >>> 24) == 0) return;
-        shape(g, x, y, w, h, r, 0, color, false);
+        ShadcnDraw.submitShape(g, x, y, w, h, r, 0, color, color, false);
     }
-
-    // Render-thread scratch spans; shape() never nests.
-    private static final float[] OUTER = new float[2], INNER = new float[2];
 
     private static void shape(GuiGraphics g, float x, float y, float w, float h, float radius, float ring,
                               int color, boolean hollow) {
-        var pose = g.pose();
-        float k = deviceScale(g);
-        pose.pushMatrix();
-        try {
-            pose.scale(1f / k, 1f / k);
-            float X = x * k, Y = y * k, W = w * k, H = h * k;
-            float R = Math.max(0, Math.min(radius * k, Math.min(W, H) / 2f));
-            float T = hollow ? Math.min(Math.max(k * 0.75f, ring * k), Math.min(W, H) / 2f) : 0;
-            float edge = hollow ? Math.max(R, T) : R;
-            int top = (int) Math.floor(Y), bottom = (int) Math.ceil(Y + H);
-            int bandTop = (int) Math.ceil(Y + edge), bandBottom = (int) Math.floor(Y + H - edge);
-            if (bandBottom <= bandTop) { bandTop = bottom; bandBottom = bottom; }
-            for (int row = top; row < bottom; row++) {
-                if (row == bandTop) {
-                    if (hollow) {
-                        band(g, X, X + T, bandTop, bandBottom, color);
-                        band(g, X + W - T, X + W, bandTop, bandBottom, color);
-                    } else {
-                        band(g, X, X + W, bandTop, bandBottom, color);
-                    }
-                    row = bandBottom - 1;
-                    continue;
-                }
-                float cov = Math.min(Y + H, row + 1) - Math.max(Y, row);
-                if (cov <= 0) continue;
-                float cy = row + 0.5f;
-                if (!span(X, Y, W, H, R, cy, OUTER)) continue;
-                if (!hollow || !span(X + T, Y + T, W - 2 * T, H - 2 * T, Math.max(0, R - T), cy, INNER)) {
-                    band(g, OUTER[0], OUTER[1], row, row + 1, fadeCov(color, cov));
-                } else {
-                    band(g, OUTER[0], INNER[0], row, row + 1, fadeCov(color, cov));
-                    band(g, INNER[1], OUTER[1], row, row + 1, fadeCov(color, cov));
-                }
-            }
-        } finally {
-            pose.popMatrix();
-        }
-    }
-
-    private static boolean span(float x, float y, float w, float h, float r, float cy, float[] out) {
-        if (w <= 0 || h <= 0 || cy < y || cy > y + h) return false;
-        float inset = 0;
-        if (r > 0) {
-            float dy = cy < y + r ? y + r - cy : cy > y + h - r ? cy - (y + h - r) : 0;
-            if (dy > r) return false;
-            inset = r - (float) Math.sqrt(Math.max(0, r * r - dy * dy));
-        }
-        out[0] = x + inset;
-        out[1] = x + w - inset;
-        return true;
-    }
-
-    /** Horizontal extent [a,b) over integer rows [y0,y1) with fractional-edge coverage. */
-    private static void band(GuiGraphics g, float a, float b, int y0, int y1, int color) {
-        if (b <= a || y1 <= y0) return;
-        int ia = (int) Math.ceil(a), ib = (int) Math.floor(b);
-        if (ia > ib) {
-            int px = (int) Math.floor(a);
-            g.fill(px, y0, px + 1, y1, fadeCov(color, b - a));
-            return;
-        }
-        if (ib > ia) g.fill(ia, y0, ib, y1, color);
-        if (a < ia) g.fill(ia - 1, y0, ia, y1, fadeCov(color, ia - a));
-        if (b > ib) g.fill(ib, y0, ib + 1, y1, fadeCov(color, b - ib));
-    }
-
-    private static int fadeCov(int color, float coverage) {
-        return ShadcnDraw.alpha(color, coverage);
-    }
-
-    private static float deviceScale(GuiGraphics g) {
-        var m = g.pose();
-        float poseScale = (float) Math.sqrt(m.m00() * m.m00() + m.m01() * m.m01());
-        double gui = Minecraft.getInstance().getWindow() == null ? 1 : Minecraft.getInstance().getWindow().getGuiScale();
-        float k = (float) (poseScale * gui);
-        return Float.isFinite(k) && k > 0.25f ? Math.min(k, 8f) : 1f;
+        ShadcnDraw.submitShape(g, x, y, w, h, radius, ring, color, color, hollow);
     }
 }

@@ -813,7 +813,7 @@ final class PanelStyle extends ShellStyle {
     }
 
     private String settingLabel(Module owner, Setting<?> s) {
-        String label = s.getName();
+        String label = "CoupledCruise".equals(s.getName()) ? "GZBoost" : s.getName();
         if (owner instanceof HudClientModule) {
             String page = s.getPage();
             if (label.startsWith(page + " ")) label = label.substring(page.length() + 1);

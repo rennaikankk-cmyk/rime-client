@@ -52,6 +52,13 @@ public final class MaceDiveStateTest {
         state.begin(10);
         state.observe(40, false, false);
         check(state.phase() == MaceDiveState.Phase.RECOVERING, "A skipped tick cannot start a stale fall");
+        state.reset();
+        state.begin(10);
+        state.observe(11, false, false, 0.2, 1.5);
+        state.observe(23, false, false, 0.4, 1.5);
+        check(state.phase() == MaceDiveState.Phase.DIVING, "Short fall distance may continue past the 12-tick cap");
+        state.observe(52, false, false, 0.4, 1.5);
+        check(state.phase() == MaceDiveState.Phase.RECOVERING, "An extended fall still ends");
     }
 
     private static void recoveryLifecycle() {

@@ -11,6 +11,7 @@ public final class ArmorSwapCycleTest {
         earlyReturnAndTailAreIdempotent();
         delayedServerClearKeepsWingsOnEveryMove();
         rocketWaitsForRestartWindow();
+        wornGlideBoostPrecedesChestplate();
         ownershipLostDuringDelayedClearAbandons();
         explicitDiveHandoverDuringDelayedClear();
         interruptionBetweenMovementHooks();
@@ -138,6 +139,24 @@ public final class ArmorSwapCycleTest {
         player.canStart = false;
         cycle.beforeMovement(true, true, true);
         check(!cycle.rocketWindowOpen(), "Rejected glide restart must not permit a rocket");
+    }
+
+    private static void wornGlideBoostPrecedesChestplate() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        cycle.beforeMovement(true, true, true, true);
+        check(cycle.rocketWindowOpen(), "An existing elytra glide opens the boost window");
+        check(player.events.isEmpty(), "Already-worn wings do not swap before the firework");
+        cycle.afterMovement(true, true, true, true);
+        check(player.chest == player.wings, "A sent firework keeps the elytra through the return");
+        check(player.events.isEmpty(), "Chestplate waits until the firework tick is over");
+        cycle.afterMovement(true, true, true, true);
+        check(player.chest == player.wings, "The tail listener must not swap chestplate after a firework");
+        player.newTick(true);
+        cycle.beforeMovement(true, true, true, false);
+        player.move();
+        cycle.afterMovement(true, true, true, false);
+        check(player.chest == player.armor, "The next window can return the chestplate");
     }
 
     private static void ownershipLostDuringDelayedClearAbandons() {

@@ -94,8 +94,8 @@ public class GuizhouWareGui extends Screen {
     }
 
     /**
-     * Draws the vanilla blurred world. The capture is still once per frame because the
-     * blur texture is produced and drawn by the same Screen call; skipping it removes the image.
+     * Not used by the open ClickGUI. Vanilla {@code renderBlurredBackground} copies the
+     * framebuffer every call; the panels dim with one fill instead of a per-frame readback.
      */
     void blurWorld(GuiGraphics g) {
         renderBlurredBackground(g);

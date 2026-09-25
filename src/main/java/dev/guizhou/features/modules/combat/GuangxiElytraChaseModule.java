@@ -17,6 +17,7 @@ import dev.guizhou.util.elytra.AerialIntercept;
 import dev.guizhou.util.elytra.AerialDuelPredictor;
 import dev.guizhou.util.elytra.AsyncFlightRoute;
 import dev.guizhou.util.elytra.CombatHitWindow;
+import dev.guizhou.util.elytra.EntityAim;
 import dev.guizhou.util.elytra.ElytraWeaponController;
 import dev.guizhou.util.elytra.ElytraPhysics;
 import dev.guizhou.util.elytra.FlightVelocity;
@@ -50,6 +51,8 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.Items;
@@ -140,6 +143,7 @@ public class GuangxiElytraChaseModule extends Module {
     private final FlightPlanningTask<DuelRequest, AerialDuelPredictor.Output> duelPlanner =
             new FlightPlanningTask<>(request -> AerialDuelPredictor.predict(request.input()));
     private AerialDuelPredictor.Output duelPrediction;
+    private DuelRequest acceptedDuel;
     private FlightPlanningTask.Completed<DuelRequest, AerialDuelPredictor.Output> lastCountedPrediction;
     private long predictionPhase;
     private boolean planningEnabled;
@@ -430,6 +434,7 @@ public class GuangxiElytraChaseModule extends Module {
     private void invalidatePlanning() {
         duelPlanner.invalidate();
         duelPrediction = null;
+        acceptedDuel = null;
         lastCountedPrediction = null;
         parallelRoute.reset();
         routeContext = null;
@@ -446,6 +451,7 @@ public class GuangxiElytraChaseModule extends Module {
 
     private void updateDuelPlanning() {
         duelPrediction = null;
+        acceptedDuel = null;
         boolean enabled = parallelPlanningEnabled();
         if (planningEnabled != enabled) {
             invalidatePlanning();
@@ -482,6 +488,7 @@ public class GuangxiElytraChaseModule extends Module {
                     && input.targetVelocity().distanceToSqr(velocity) <= 0.36
                     && input.targetLook().dot(target.getLookAngle()) >= 0.85) {
                 duelPrediction = done.output();
+                acceptedDuel = request;
                 predictionPhase = phase;
                 countPrediction(done, true);
             } else {
@@ -491,7 +498,8 @@ public class GuangxiElytraChaseModule extends Module {
         var input = new AerialDuelPredictor.Input(mc.player.position(), mc.player.getDeltaMovement(),
                 mc.player.getBbWidth(), mc.player.getBbHeight(), target.position(), velocity,
                 target.getEyePosition(), target.getLookAngle(), reach, weapon, target.onGround(),
-                ((LivingEntity) target).isFallFlying(), attackActive, latencyTicks, consistent, List.of(), null, motion);
+                ((LivingEntity) target).isFallFlying(), attackActive, latencyTicks, consistent, List.of(), null, motion,
+                copiedTargetKind(), copiedMotionTag(), copiedStrafeOffset());
         duelPlanner.submit(new DuelRequest(session, phase, motion.revision(), mc.player.tickCount, target.getId(),
                 mc.player.getPose(), wings, mc.player.isFallFlying(), input));
     }
@@ -809,7 +817,7 @@ if (nullCheck() || mc.player == null) {
         if (mc.player == null || mc.level == null || !(e instanceof LivingEntity living)
                 || e == mc.player || e.level() != mc.level || e.isRemoved() || !e.isAlive()
                 || living.isDeadOrDying() || e.isSpectator()) return false;
-        if (playerOnly.getValue() && !(e instanceof Player)) return false;
+        if (!allowsNonPlayers() && !(e instanceof Player)) return false;
         double radius = range.getValue();
         double distance = mc.player.distanceToSqr(e);
         if (!Double.isFinite(distance) || distance > radius * radius) return false;
@@ -821,8 +829,9 @@ if (nullCheck() || mc.player == null) {
         Entity best = null;
         double bestDist = range.getValue() * (double) range.getValue();
         double r = range.getValue();
-        Iterable<? extends Entity> candidates = playerOnly.getValue() ? mc.level.players()
-                : mc.level.getEntities(mc.player, mc.player.getBoundingBox().inflate(r), this::isValid);
+        Iterable<? extends Entity> candidates = allowsNonPlayers()
+                ? mc.level.getEntities(mc.player, mc.player.getBoundingBox().inflate(r), this::isValid)
+                : mc.level.players();
         for (Entity e : candidates) {
             if (!isValid(e)) continue;
             double d = mc.player.distanceToSqr(e);
@@ -832,6 +841,51 @@ if (nullCheck() || mc.player == null) {
             }
         }
         return best;
+    }
+
+    /** TargetsModule hostiles, neutrals, passives, and armor stands override a player-only chase filter. */
+    private boolean allowsNonPlayers() {
+        if (!playerOnly.getValue()) return true;
+        if (targetRules == null) targetRules = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
+        return targetRules != null && (targetRules.hostiles.getValue() || targetRules.neutrals.getValue()
+                || targetRules.passives.getValue() || targetRules.armorStands.getValue());
+    }
+
+    private EntityAim.Kind aimKind() {
+        if (target instanceof Player) return EntityAim.Kind.PLAYER;
+        if (target instanceof Slime) return EntityAim.Kind.SLIME;
+        return EntityAim.Kind.MOB;
+    }
+
+    private AerialDuelPredictor.TargetKind copiedTargetKind() {
+        return switch (aimKind()) {
+            case SLIME -> AerialDuelPredictor.TargetKind.SLIME;
+            case MOB -> AerialDuelPredictor.TargetKind.MOB;
+            case PLAYER -> AerialDuelPredictor.TargetKind.PLAYER;
+        };
+    }
+
+    private EntityAim.Choice aimChoice() {
+        EntityAim.Kind kind = aimKind();
+        boolean ground = targetGrounded || target.onGround();
+        boolean airborne = !ground && (target instanceof LivingEntity living && living.isFallFlying() || !target.onGround());
+        return EntityAim.choose(kind, ground, airborne, target instanceof ArmorStand,
+                mc.player.getDeltaMovement().length(), targetHistory.velocity(), targetHistory.previousVelocity(),
+                targetHistory.hasTwoVelocities(), Vec3.ZERO);
+    }
+
+    private AerialDuelPredictor.MotionTag copiedMotionTag() {
+        if (aimKind() == EntityAim.Kind.SLIME) return AerialDuelPredictor.MotionTag.STRAIGHT;
+        return switch (aimChoice().motion()) {
+            case AIR_STRAFE -> AerialDuelPredictor.MotionTag.AIR_STRAFE;
+            case GROUND_STRAFE -> AerialDuelPredictor.MotionTag.GROUND_STRAFE;
+            case STRAIGHT -> AerialDuelPredictor.MotionTag.STRAIGHT;
+        };
+    }
+
+    private Vec3 copiedStrafeOffset() {
+        EntityAim.Choice choice = aimChoice();
+        return choice.motion() == EntityAim.Motion.STRAIGHT ? Vec3.ZERO : choice.offset();
     }
 
     /** Classify consecutive measured velocities, clearing stale landing/teleport samples. */
@@ -992,7 +1046,7 @@ if (nullCheck() || mc.player == null) {
         @Override
         void tick() {
             if (wasDiving && !maceDive.isActive()) {
-                naturalFallTicks = 12;
+                naturalFallTicks = mc.player.fallDistance < maceMinFallDistance.getValue() ? 0 : 12;
                 wasDiving = false;
                 if (state != WAIT_ATTACK) state = PULL_UP;
             }
@@ -1025,8 +1079,9 @@ if (nullCheck() || mc.player == null) {
         }
 
         boolean fallingWindow() {
+            int fallCap = mc.player != null && mc.player.fallDistance < maceMinFallDistance.getValue() ? 40 : 12;
             return mc.player != null && (state == FOLLOW || state == WAIT_ATTACK)
-                    && naturalFallTicks < 12 && !mc.player.isFallFlying() && !mc.player.onGround()
+                    && naturalFallTicks < fallCap && !mc.player.isFallFlying() && !mc.player.onGround()
                     && !mc.player.isInWater() && !mc.player.isInLava() && !mc.player.isPassenger()
                     && mc.player.getDeltaMovement().y < -0.05;
         }
@@ -1127,6 +1182,22 @@ if (nullCheck() || mc.player == null) {
         }
 
         private MaceApproach.Plan climbPlan() {
+            if (aimKind() == EntityAim.Kind.SLIME || aimChoice().pattern() != EntityAim.Pattern.USE_EXISTING
+                    && aimKind() != EntityAim.Kind.PLAYER) {
+                Vec3 at = aimKind() == EntityAim.Kind.SLIME ? observedTargetBox().getCenter() : predictedTarget();
+                double height = MaceApproach.chargeHeight(maceHeight.getValue(), maceMinFallDistance.getValue());
+                return new MaceApproach.Plan(new Vec3(at.x, target.getY() + height, at.z), height, 0.0, true);
+            }
+            if (aimKind() == EntityAim.Kind.PLAYER && aimChoice().pattern() != EntityAim.Pattern.USE_EXISTING) {
+                Vec3 at = predictedTarget();
+                double height = MaceApproach.chargeHeight(maceHeight.getValue(), maceMinFallDistance.getValue());
+                return new MaceApproach.Plan(new Vec3(at.x, target.getY() + height, at.z), height, 0.0, true);
+            }
+            if (aimKind() != EntityAim.Kind.PLAYER) {
+                Vec3 center = observedTargetBox().getCenter();
+                double height = MaceApproach.chargeHeight(maceHeight.getValue(), maceMinFallDistance.getValue());
+                return new MaceApproach.Plan(new Vec3(center.x, target.getY() + height, center.z), height, 0.0, true);
+            }
             if (!maceAdaptive.getValue()) {
                 Vec3 lead = predictedTarget();
                 double height = MaceApproach.chargeHeight(maceHeight.getValue(), maceMinFallDistance.getValue());
@@ -1153,6 +1224,14 @@ if (nullCheck() || mc.player == null) {
         }
 
         private MaceApproach.Plan strikePlan() {
+            if (aimKind() == EntityAim.Kind.SLIME
+                    || aimKind() != EntityAim.Kind.PLAYER && aimChoice().pattern() == EntityAim.Pattern.USE_EXISTING) {
+                Vec3 aim = EntityAim.facingPoint(mc.player.getEyePosition(), observedTargetBox());
+                return new MaceApproach.Plan(aim, 0.0, 0.0, true);
+            }
+            if (aimChoice().pattern() != EntityAim.Pattern.USE_EXISTING) {
+                return new MaceApproach.Plan(predictedTarget(), 0.0, 0.0, true);
+            }
             if (!maceAdaptive.getValue()) {
                 Vec3 aim = observedTargetBox().getCenter().add(predictedTarget().subtract(target.position()));
                 return new MaceApproach.Plan(aim, 0.0, 0.0, true);
@@ -1299,6 +1378,9 @@ if (nullCheck() || mc.player == null) {
                 if (maceCustomPullUpAngle.getValue() > 0.1 && state == PULL_UP && !catchingUp) {
                     v = MaceApproach.pullUpIntent(v, maceCustomPullUpAngle.getValue());
                 }
+                if (state == PULL_UP || state == WAIT_ATTACK) {
+                    v = ElytraPhysics.diagonalGzBoost(v, mc.player.getDeltaMovement());
+                }
                 double len = v.length();
                 // Rescaling can make the measured flight faster than the base setting.
                 // Do not cap target-matching terminal motion back to that base speed.
@@ -1335,7 +1417,9 @@ if (nullCheck() || mc.player == null) {
         }
 
         Vec3 targetPos() {
-            Vec3 base = predictedTarget().add(targetPacketOffset());
+            boolean straightPlayer = aimKind() == EntityAim.Kind.PLAYER
+                    && aimChoice().pattern() == EntityAim.Pattern.USE_EXISTING;
+            Vec3 base = straightPlayer ? predictedTarget().add(targetPacketOffset()) : predictedTarget();
             return targetGrounded
                     ? new Vec3(base.x, target.getEyeY(), base.z)
                     : target.getBoundingBox().getCenter().add(base.subtract(target.position()));
@@ -1355,8 +1439,9 @@ if (nullCheck() || mc.player == null) {
                     SpearCombat.maxRange(mc.player, mc.player.getMainHandItem())
                             + mc.player.getDeltaMovement().length()
                             * (SpearCombat.chargeTicks(mc.player.getMainHandItem()) + latencyTicks + 2));
-            boolean charge = !boostRefresh && (weapons.isHoldingUse()
-                    || mc.player.distanceToSqr(target) <= chargeDistance * chargeDistance);
+            boolean ownedCharge = weapons.isHoldingUse() || isUsingSpear(mc.player);
+            boolean charge = ownedCharge || !boostRefresh
+                    && mc.player.distanceToSqr(target) <= chargeDistance * chargeDistance;
             boolean armed = prepareWeapon(true, charge);
             makingChargeRoom = false;
             preciseApproach = false;
@@ -1383,7 +1468,7 @@ if (nullCheck() || mc.player == null) {
                 if (nextState == PULL_OVER) heading = escapeHeading(targetPos());
             }
             state = nextState;
-            if (state != PULL_OVER && !makingChargeRoom && isUsingSpear(mc.player)
+            if (state != PULL_OVER && !makingChargeRoom && SpearCombat.isReady(mc.player)
                     && (!targetGrounded || spearAttackEye().y <= targetPos().y + 2.5)
                     && spearAttackEye().distanceTo(target.getBoundingBox().getCenter())
                     <= SpearCombat.maxRange(mc.player, mc.player.getUseItem())
@@ -1484,6 +1569,13 @@ if (nullCheck() || mc.player == null) {
         @Override
         void inject(FlightVelocity fv) {
             super.inject(fv);
+            if (!preciseApproach && fv.value().lengthSqr() > 1.0E-9) {
+                Vec3 current = fv.value();
+                Vec3 diagonal = ElytraPhysics.diagonalGzBoost(current, mc.player.getDeltaMovement());
+                if (diagonal.dot(current) > 0.0 && diagonal.lengthSqr() > 1.0E-9) {
+                    fv.set(diagonal.normalize().scale(current.length()));
+                }
+            }
             if (preciseApproach) fv.requestPrecision();
             // A spear pass needs its intercept direction; filling independent envelope
             // axes can turn a shallow disengagement into a climb over the target.
@@ -1697,9 +1789,7 @@ if (nullCheck() || mc.player == null) {
                 || box.distanceToSqr(eye) > reach * reach
                 || !mc.player.hasLineOfSight(entity)) return false;
         if (!willUseMaceAttack() && mc.player.getAttackStrengthScale(0.5F) <= 0.95F) return false;
-        Vec3 aim = new Vec3(Math.clamp(eye.x, box.minX, box.maxX),
-                Math.clamp(eye.y, box.minY, box.maxY), Math.clamp(eye.z, box.minZ, box.maxZ))
-                .lerp(box.getCenter(), 0.05);
+        Vec3 aim = EntityAim.facingPoint(eye, box);
         float[] angles = MathUtil.calcAngle(eye, aim);
         var rotation = GuizhouWare.rotationManager;
         rotation.submit(new RotationRequest("ElytraChase_attack", 70, angles[0], angles[1],
@@ -1730,8 +1820,35 @@ if (nullCheck() || mc.player == null) {
     }
 
     private Vec3 predictedTarget() {
-        if (duelPrediction != null && predictionPhase == planningPhaseToken()) {
-            return target.position().add(duelPrediction.interceptOffset());
+        EntityAim.Kind kind = aimKind();
+        if (kind == EntityAim.Kind.SLIME) {
+            Vec3 box = observedTargetBox().getCenter();
+            boolean stable = MaceApproach.stable(targetHistory.velocity(), targetHistory.previousVelocity(),
+                    targetHistory.hasTwoVelocities());
+            return box.add(EntityAim.lead(kind, targetHistory.velocity(), stable));
+        }
+        EntityAim.Choice choice = aimChoice();
+        if (choice.pattern() == EntityAim.Pattern.BOX) return observedTargetBox().getCenter();
+        if (choice.pattern() == EntityAim.Pattern.AIR_STRAFE
+                || choice.pattern() == EntityAim.Pattern.GROUND_STRAFE
+                || choice.pattern() == EntityAim.Pattern.GROUND_LEAD) {
+            return observedTargetBox().getCenter().add(choice.offset());
+        }
+        if (kind != EntityAim.Kind.PLAYER) {
+            Vec3 box = observedTargetBox().getCenter();
+            boolean stable = MaceApproach.stable(targetHistory.velocity(), targetHistory.previousVelocity(),
+                    targetHistory.hasTwoVelocities());
+            return box.add(EntityAim.lead(kind, targetHistory.velocity(), stable));
+        }
+        if (duelPrediction != null && acceptedDuel != null && predictionPhase == planningPhaseToken()
+                && acceptedDuel.session() == session && acceptedDuel.targetId() == target.getId()) {
+            int age = mc.player.tickCount - acceptedDuel.tick();
+            Vec3 full = duelPrediction.interceptOffset();
+            if (age >= 0 && age <= 2 && full != null && Double.isFinite(full.lengthSqr())) {
+                Vec3 elapsed = acceptedDuel.input().targetVelocity().scale(age);
+                Vec3 remaining = full.subtract(elapsed);
+                if (remaining.dot(full) > 0.0) return target.position().add(remaining);
+            }
         }
         TargetMotionTracker.Snapshot motion = targetHistory.snapshot(target.getDeltaMovement());
         double lead = AerialIntercept.leadTicks(target.position().subtract(mc.player.position()),
@@ -1750,11 +1867,15 @@ if (nullCheck() || mc.player == null) {
     private void aimSpear() {
         // The packet offset alone is the best calibrated predictor of the server-side
         // query position (median 2.37 blocks); adding the velocity lead measured worse.
-        Vec3 aim = target.getBoundingBox().getCenter().add(targetPacketOffset());
+        Vec3 aim = aimKind() == EntityAim.Kind.PLAYER
+                ? target.getBoundingBox().getCenter().add(targetPacketOffset())
+                : EntityAim.facingPoint(spearAttackEye(), observedTargetBox());
         var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
         Vec3 attackEye = SpearCombat.attackEye(mc.player, flight != null && flight.isArmorSwapActive());
         float[] angles = MathUtil.calcAngle(attackEye, aim);
-        if (SpearCombat.isReady(mc.player)) {
+        boolean straightAir = aimKind() == EntityAim.Kind.PLAYER && !targetGrounded
+                && aimChoice().pattern() == EntityAim.Pattern.USE_EXISTING;
+        if (straightAir && SpearCombat.isReady(mc.player)) {
             // Kinetic damage is a per-tick server ray query along the sent look; the
             // residual prediction error exceeds the target box at spear range, so sweep
             // the yaw across the uncertainty cone instead of parking on a ghost point.

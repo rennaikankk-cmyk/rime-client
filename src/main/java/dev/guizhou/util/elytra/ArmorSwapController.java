@@ -81,7 +81,7 @@ public final class ArmorSwapController {
         if (!cycle.active() && requested && canGlide() && safeInventory() && player.isFallFlying()) {
             acquire();
         }
-        cycle.beforeMovement(requested, safeInventory(), canGlide());
+        cycle.beforeMovement(requested, safeInventory(), canGlide(), flight.holdChestplateForBoost());
         finishMonitoring();
     }
 
@@ -89,7 +89,7 @@ public final class ArmorSwapController {
     private void onTick(TickEvent event) {
         // Chase runs after preparation and can take ownership of the same pair for a mace dive.
         if (GuangxiElytraChaseModule.isMaceDiveActive()) cycle.abandon();
-        else cycle.afterMovement(flight.wantsArmorSwap(), safeInventory(), canGlide());
+        else cycle.afterMovement(flight.wantsArmorSwap(), safeInventory(), canGlide(), flight.rocketSentThisTick());
         finishMonitoring();
     }
 
@@ -101,7 +101,7 @@ public final class ArmorSwapController {
         if (event.getStage() != Stage.POST || !cycle.active()
                 || GuangxiElytraChaseModule.isMaceDiveActive()
                 || !flight.wantsArmorSwap() || !safeInventory() || !canGlide()) return;
-        cycle.afterMovement(true, true, true);
+        cycle.afterMovement(true, true, true, flight.rocketSentThisTick());
         finishMonitoring();
     }
 
