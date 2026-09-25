@@ -93,4 +93,10 @@ public class MixinEntity {
             ci.cancel();
         }
     }
+
+    @Inject(method = "turn", at = @At("HEAD"), cancellable = true)
+    private void guizhouware$freecamTurn(double yaw, double pitch, CallbackInfo ci) {
+        if ((Object) this != Minecraft.getInstance().player) return;
+        if (dev.guizhou.features.modules.render.FreecamModule.consumeTurn(yaw, pitch)) ci.cancel();
+    }
 }

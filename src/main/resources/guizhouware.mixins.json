@@ -40,6 +40,7 @@
     "network.MixinClientPlayNetworkHandler",
     "network.MixinMultiPlayerGameMode",
     "network.MovePlayerPacketAccessor",
+    "render.MixinCamera",
     "render.CompositeStateAccessor",
     "render.MixinBlockRenderDispatcher",
     "render.MixinChestRenderer",

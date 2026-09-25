@@ -139,8 +139,16 @@ public final class UiSounds {
     }
 
     private static float volume(int channel) {
-        // 1.21.1 has no InterfaceFeedbackModule; UI cues stay at the default volume.
-        return DEFAULT_VOLUME;
+        dev.guizhou.features.modules.client.InterfaceFeedbackModule settings =
+                dev.guizhou.features.modules.client.InterfaceFeedbackModule.get();
+        if (settings == null) return DEFAULT_VOLUME;
+        if (!settings.isEnabled()) return 0f;
+        boolean on = switch (channel) {
+            case MODULE -> settings.moduleToggleSounds.getValue();
+            case BOOT -> settings.startupSound.getValue();
+            default -> settings.interfaceSounds.getValue();
+        };
+        return on ? Math.clamp(settings.volume.getValue() / 100f, 0f, 1f) : 0f;
     }
 
     private static SoundEvent event(String path) {

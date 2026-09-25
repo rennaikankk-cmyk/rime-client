@@ -23,6 +23,10 @@ import java.util.concurrent.TimeUnit;
 
 public class AutoLogModule extends Module {
 
+    /** AutoReconnect treats a disconnect within this window of an AutoLog as intentional. */
+    public static final long INTENTIONAL_WINDOW_MS = 10_000L;
+    private static volatile long lastIntentionalDisconnectMs;
+
     private final Setting<Boolean> logOnHealth = bool("LogOnHealth", true);
     private final Setting<Integer> healthThreshold = num("HealthThreshold", 6, 1, 36);
     private final Setting<Boolean> logOnTotems = bool("LogOnTotems", true);
@@ -34,7 +38,8 @@ public class AutoLogModule extends Module {
     private List<String> nearbyPlayerNames = new ArrayList<>();
 
     public AutoLogModule() {
-        super("AutoLog", "Automatically disconnects based on health or totem count.", Category.COMBAT);
+        super("AutoLog", "Automatically disconnects based on health or totem count. AutoReconnect never "
+                + "reconnects after an AutoLog disconnect.", Category.COMBAT);
         healthThreshold.setVisibility(v -> logOnHealth.getValue());
         totemThreshold.setVisibility(v -> logOnTotems.getValue());
     }
@@ -169,21 +174,39 @@ public class AutoLogModule extends Module {
         return mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.SURVIVAL;
     }
 
+    /** True for a short window after this client disconnected on purpose (AutoLog, VisualRange). */
+    public static boolean recentlyLoggedOut() {
+        long at = lastIntentionalDisconnectMs;
+        return at != 0 && System.currentTimeMillis() - at <= INTENTIONAL_WINDOW_MS;
+    }
+
     private void disconnect() {
+        logOut("AutoLog Disconnect");
+        disable();
+    }
+
+    /**
+     * Intentional disconnect shared with VisualRange. Client thread only; marks the disconnect
+     * so AutoReconnect stays away from the server that just threatened us.
+     */
+    public static void logOut(String title) {
+        if (!mc.isSameThread()) {
+            mc.execute(() -> logOut(title));
+            return;
+        }
+        lastIntentionalDisconnectMs = System.currentTimeMillis();
+        AutoLogModule module = GuizhouWare.moduleManager.getModuleByClass(AutoLogModule.class);
         if (!nullCheck() && mc.getConnection() != null) {
             BlockPos pos = mc.player.blockPosition();
-            List<String> nearby = new ArrayList<>(nearbyPlayerNames);
-
-            StringBuilder msg = new StringBuilder("AutoLog Disconnect");
-            msg.append("\nTotems: ").append(cachedTotems);
+            List<String> nearby = module == null ? List.of() : module.nearbyPlayerNames;
+            StringBuilder msg = new StringBuilder(title);
+            msg.append("\nTotems: ").append(module == null ? 0 : module.cachedTotems);
             msg.append("\nCoords: ").append(pos.getX()).append(", ").append(pos.getY()).append(", ").append(pos.getZ());
             msg.append(nearby.isEmpty() ? "\nNearby: none" : "\nNearby: " + String.join(", ", nearby));
-
             mc.getConnection().getConnection().disconnect(Component.literal(msg.toString()));
-        } else {
-            closeChannel();
+        } else if (module != null) {
+            module.closeChannel();
         }
-        disable();
     }
 
     @Override

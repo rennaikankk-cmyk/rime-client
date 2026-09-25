@@ -21,7 +21,10 @@ public final class LicenseActionHookTest {
     private static int checks;
 
     public static void main(String[] args) throws IOException {
-        guarded(BASE + "combat/AutoSwordModule", "onPreTick", null, "findTarget", "tryAction", "withSwap");
+        guarded(BASE + "combat/AutoSwordModule", "onPreTick", null, "findTarget", "engage");
+        guarded(BASE + "combat/AutoSwordModule", "engage", null, "tryAction", "withSwap");
+        guarded(BASE + "combat/AutoSwordModule", "tryAttack", null, "engage");
+        guarded(BASE + "combat/KillAuraModule", "onPreTick", null, "selectTargets", "tryAttack");
         guarded(BASE + "combat/AutoSwordModule", "attack", null, "send");
         guarded(BASE + "combat/AutoSwordModule", "sendTeleport", null, "moveTo");
         check(!method(BASE + "combat/AutoSwordModule", "moveTo", null).hasAuthorization(), "TP return survives revocation");
@@ -64,6 +67,15 @@ public final class LicenseActionHookTest {
                 "Sprint helper must respect revocation");
         guarded(BASE + "player/FastuseModule", "onTick", null, "matches");
         guarded(BASE + "combat/SwordGapModule", "onTick", null, "latch");
+        guarded(BASE + "combat/HoleFillModule", "onTick", null, "fill");
+        guarded(BASE + "combat/HoleFillModule", "fill", null, "placeBatch");
+        check(!method(BASE + "combat/HoleFillModule", "onDisable", null).hasAuthorization(), "HoleFill cleanup survives revocation");
+        guarded(BASE + "player/AutoArmorModule", "onTick", null, "equip");
+        guarded(BASE + "player/AutoArmorModule", "equip", null, "click");
+        guarded(BASE + "player/AutoEatModule", "onPreTick", null, "startMeal");
+        guarded(BASE + "player/AutoEatModule", "startMeal", null, "latch", "useItem");
+        guarded(BASE + "player/AutoEatModule", "shouldKeepEating", null, "ownsMeal");
+        guarded(BASE + "client/AutoReconnectModule", "reconnect", null, "startConnecting");
         Code freeze = guarded(BASE + "combat/GuangxiSpearTPModule", "onPacketSend", null, "cancel");
         check(freeze.calls("disable").stream().anyMatch(call -> freeze.reachable(call, false, null)),
                 "Revocation must end the spear freeze and permit vanilla movement packets");

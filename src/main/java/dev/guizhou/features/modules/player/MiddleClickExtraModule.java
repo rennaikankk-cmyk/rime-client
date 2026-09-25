@@ -28,6 +28,7 @@ public class MiddleClickExtraModule extends Module {
     @Subscribe
     private void onMouse(MouseInputEvent event) {
         if (nullCheck() || mc.screen != null) return;
+        if (MiddleClickFriendModule.consumesClick()) return;
         if (event.getButton() != GLFW.GLFW_MOUSE_BUTTON_MIDDLE) return;
         if (event.getAction() != GLFW.GLFW_PRESS) return;
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }

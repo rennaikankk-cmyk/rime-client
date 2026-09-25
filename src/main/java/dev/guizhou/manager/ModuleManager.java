@@ -68,6 +68,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new HudClientModule());
         register(new ClickGuiModule());
         register(new NotificationsModule());
+        register(new dev.guizhou.features.modules.client.InterfaceFeedbackModule());
         register(new dev.guizhou.features.modules.client.GuangxiProbeModule());
         register(new TargetsModule());
         register(new AutoTrapModule());
@@ -75,6 +76,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new SwordGapModule());
         register(new AutoLogModule());
         register(new AutoSwordModule());
+        register(new KillAuraModule());
         register(new GuangxiCrystalModule());
         register(new AutoAnchorModule());
         register(new AutoMineModule());
@@ -130,6 +132,16 @@ public class ModuleManager implements Jsonable, Util {
         register(new ReplenishModule());
         register(new InstantRekitModule());
         register(new NoRotateModule());
+        register(new dev.guizhou.features.modules.client.AutoReconnectModule());
+        register(new dev.guizhou.features.modules.client.VisualRangeModule());
+        register(new dev.guizhou.features.modules.render.HoleESPModule());
+        register(new HoleFillModule());
+        register(new dev.guizhou.features.modules.render.TrajectoriesModule());
+        register(new dev.guizhou.features.modules.render.FreecamModule());
+        register(new dev.guizhou.features.modules.render.WaypointsModule());
+        register(new AutoArmorModule());
+        register(new AutoEatModule());
+        register(new MiddleClickFriendModule());
 
         LOGGER.info("Registered {} modules", modules.size());
 

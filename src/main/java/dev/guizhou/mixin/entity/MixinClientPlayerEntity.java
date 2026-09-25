@@ -96,6 +96,16 @@ public class MixinClientPlayerEntity {
 
     }
 
+    /** After move-fix so freecam keeps the keys and the player receives none. */
+    @Inject(
+        method = "aiStep",
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/Input;tick(ZF)V", shift = At.Shift.AFTER)
+    )
+    private void guizhouware$freecamInput(CallbackInfo ci) {
+        LocalPlayer self = (LocalPlayer) (Object) this;
+        dev.guizhou.features.modules.render.FreecamModule.captureInput(self.input);
+    }
+
     @Inject(method = "moveTowardsClosestSpace", at = @At("HEAD"), cancellable = true)
     private void cancelBlockPush(double x, double z, CallbackInfo ci) {
         VelocityModule velocity = GuizhouWare.moduleManager.getModuleByClass(VelocityModule.class);

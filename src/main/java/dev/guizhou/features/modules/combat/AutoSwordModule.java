@@ -81,7 +81,8 @@ public class AutoSwordModule extends Module {
     private final Map<UUID,Integer> pathRetry = new HashMap<>();
     private long hitSequence;
     private int desiredSlot = -1, changedAt, submittedSlot = -1, recoverSlot = -1;
-    private int sendingTarget = -1, lastTeleportTick = Integer.MIN_VALUE;
+    private int sendingTarget = -1, lastTeleportTick = Integer.MIN_VALUE, servicedTick = Integer.MIN_VALUE;
+    private boolean servicedOk;
     private boolean attackSubmitted, tpBlocked;
     private Vec3 submittedPosition, pendingReturn;
     private Object sessionPlayer, sessionLevel, sessionConnection;
@@ -153,65 +154,99 @@ public class AutoSwordModule extends Module {
     }
     @Subscribe private void onPreTick(PreTickEvent event) {
         if (!HeartbeatManager.authorized()) { resetState(); return; }
-        if (nullCheck() || mc.player.isDeadOrDying() || mc.getConnection() == null || mc.gameMode == null) { resetState(); return; }
+        if (!serviceTick()) return;
+        KillAuraModule killAura = GuizhouWare.moduleManager.getModuleByClass(KillAuraModule.class);
+        if (killAura != null && killAura.isEnabled()) return;
+        engage(findTarget(tp.getValue() && !tpBlocked), rotate.getValue());
+    }
+
+    /** Clock, session and position recovery. Idempotent within one player tick. */
+    public boolean serviceTick() {
+        if (!nullCheck() && servicedTick == mc.player.tickCount && sameSession()) return servicedOk;
+        servicedOk = false;
+        if (!HeartbeatManager.authorized()) { resetState(); return false; }
+        if (nullCheck() || mc.player.isDeadOrDying() || mc.getConnection() == null || mc.gameMode == null) { resetState(); return false; }
         session();
+        servicedTick = mc.player.tickCount;
         clock.tick(mc.player.tickCount, switch (tpsMode.getValue()) {
             case LATEST -> GuizhouWare.tpsCounterService.getLatestTPS();
             case AVERAGE -> GuizhouWare.tpsCounterService.getAverageTPS();
             default -> 20;
         });
-        if (!restorePosition()) return;
+        if (!restorePosition()) return false;
         if (recoverSlot >= 0) {
-            if (!ensureSlot(recoverSlot)) return;
+            if (!ensureSlot(recoverSlot)) return false;
             recoverSlot = -1;
         }
         if (weaponMode.getValue() != WeaponMode.SWAP || swapAction.getValue() != SwapAction.SWAPBACK) releaseWeapon();
-        if (paused() || GuizhouWare.tpsCounterService.isRubberbandRecent()) { clearTarget(); return; }
-        Entity next = findTarget(tp.getValue() && !tpBlocked);
+        if (paused() || GuizhouWare.tpsCounterService.isRubberbandRecent()) { clearTarget(); return false; }
+        servicedOk = true;
+        return true;
+    }
+
+    public boolean coolingDown() {
+        return nullCheck() || !ready(mc.player.getMainHandItem());
+    }
+
+    /** Shared attack used by KillAura. AutoSword's own tick does not also swing while KillAura is on. */
+    public boolean tryAttack(Entity target, boolean doRotate) {
+        if (!HeartbeatManager.authorized()) return false;
+        return engage(target, doRotate) == Engage.HIT;
+    }
+
+    private enum Engage { SKIP, STOP, HIT }
+
+    private Engage engage(Entity next, boolean doRotate) {
+        if (!HeartbeatManager.authorized()) return Engage.STOP;
         if (next != currentTarget) { changedAt = mc.player.tickCount; desiredSlot = -1; }
         currentTarget = next;
-        if (next == null) { clearTarget(); return; }
+        if (next == null) { clearTarget(); return Engage.STOP; }
         int slot = getWeapon(next);
-        if (slot < 0) return;
+        if (slot < 0) return Engage.SKIP;
         if (desiredSlot != slot) { desiredSlot = slot; changedAt = mc.player.tickCount; }
         ItemStack stack = mc.player.getInventory().getItem(slot);
-        if (mc.player.tickCount - changedAt < switchDelay.getValue() || !ready(stack) || !critReady()) return;
+        if (mc.player.tickCount - changedAt < switchDelay.getValue() || !ready(stack) || !critReady()) return Engage.STOP;
         GuangxiCrystalModule crystal = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
         if (crystalPriority.getValue() && crystal != null && crystal.isEnabled() && crystal.getLastBestDamage() > 0 && !isMaceAttackReady()) {
             GuizhouWare.rotationManager.cancel("Aura");
             releaseWeapon();
-            return;
+            return Engage.STOP;
         }
         Vec3 origin = mc.player.position();
         boolean distant = !inReach(next, mc.player.getEyePosition());
         List<Vec3> path = distant ? teleportPath(next) : List.of();
         if (distant && path.isEmpty()) {
-            pathRetry.put(next.getUUID(),mc.player.tickCount+10);
+            pathRetry.put(next.getUUID(), mc.player.tickCount + 10);
             clearTarget();
-            return;
+            return Engage.STOP;
         }
         Vec3 actionFeet = distant ? path.getLast() : origin;
-        Vec3 eye = actionFeet.add(0,mc.player.getEyeHeight(),0);
-        Vec3 aim = aimPoint(next,eye);
-        if (aim == null) return;
-        float[] angles = MathUtil.calcAngle(eye,aim);
-        if (rotate.getValue() && !GuizhouWare.rotationManager.tryAction(rotation.request("Aura",6,angles[0],angles[1],RotationRequest.Mode.SILENT))) return;
+        Vec3 eye = actionFeet.add(0, mc.player.getEyeHeight(), 0);
+        Vec3 aim = aimPoint(next, eye);
+        if (aim == null) return Engage.STOP;
+        float[] angles = MathUtil.calcAngle(eye, aim);
+        if (doRotate && !GuizhouWare.rotationManager.tryAction(rotation.request("Aura", 6, angles[0], angles[1], RotationRequest.Mode.SILENT))) return Engage.STOP;
         float yaw = GuizhouWare.rotationManager.getServerYaw(), pitch = GuizhouWare.rotationManager.getServerPitch();
+        boolean[] struck = {false};
         Runnable action = () -> {
             if (!ensureSlot(slot)) return;
-            if (!distant) attack(next,eye,yaw,pitch);
+            if (!distant) struck[0] = attack(next, eye, yaw, pitch, doRotate);
             else {
                 pendingReturn = origin;
-                AuraTeleport.Result result = AuraTeleport.roundTrip(origin,path,
-                        point -> sendTeleport(point,yaw,pitch),
-                        () -> attack(next,eye,yaw,pitch),
-                        point -> moveTo(point,yaw,pitch));
+                AuraTeleport.Result result = AuraTeleport.roundTrip(origin, path,
+                        point -> sendTeleport(point, yaw, pitch),
+                        () -> {
+                            boolean hit = attack(next, eye, yaw, pitch, doRotate);
+                            struck[0] = hit;
+                            return hit;
+                        },
+                        point -> moveTo(point, yaw, pitch));
                 if (result.restored()) pendingReturn = null;
             }
         };
         if (weaponMode.getValue() != WeaponMode.SWAP) action.run();
         else if (swapAction.getValue() == SwapAction.SILENT) {
-            try { GuizhouWare.swapManager.withSwap(new Result(slot,stack,ResultType.HOTBAR),SwapMode.SILENT,SwapPriority.WEAPON,action); }
+            try { GuizhouWare.swapManager.withSwap(new Result(slot, stack, ResultType.HOTBAR), SwapMode.SILENT, SwapPriority.WEAPON, action); }
             finally {
                 if (!nullCheck() && sameSession()) {
                     int restore = mc.player.getInventory().selected;
@@ -221,13 +256,30 @@ public class AutoSwordModule extends Module {
         } else {
             if (swapAction.getValue() == SwapAction.SWAPBACK) {
                 if (GuizhouWare.swapManager.isLatched(this) && GuizhouWare.swapManager.latchedSlot() != slot) releaseWeapon();
-                if (!GuizhouWare.swapManager.latch(this,new Result(slot,stack,ResultType.HOTBAR))) return;
+                if (!GuizhouWare.swapManager.latch(this, new Result(slot, stack, ResultType.HOTBAR))) return Engage.STOP;
             } else {
-                if (GuizhouWare.swapManager.isLatched()) return;
+                if (GuizhouWare.swapManager.isLatched()) return Engage.STOP;
                 InventoryUtil.swap(slot);
             }
             action.run();
         }
+        return struck[0] ? Engage.HIT : Engage.SKIP;
+    }
+
+    public List<Entity> selectTargets(SortPriority order, int limit) {
+        if (nullCheck()) return List.of();
+        Vec3 eye = mc.player.getEyePosition();
+        boolean allowTp = tp.getValue() && !tpBlocked;
+        double search = allowTp ? Math.max(reach(), tpRange.getValue()) : reach();
+        Comparator<Entity> cmp = switch (order) {
+            case DISTANCE -> Comparator.comparingDouble(e -> eye.distanceToSqr(clampToBox(eye, e.getBoundingBox())));
+            case CROSSHAIR -> Comparator.comparingDouble(this::crosshair);
+            case HEALTH -> Comparator.comparingDouble(e -> ((LivingEntity) e).getHealth() + ((LivingEntity) e).getAbsorptionAmount());
+        };
+        return AuraPolicy.candidates(mc.level.getEntities(null, mc.player.getBoundingBox().inflate(search + 1)),
+                e -> eligible(e) && pathRetry.getOrDefault(e.getUUID(), 0) <= mc.player.tickCount
+                        && (inReach(e, eye) || (allowTp && eye.distanceTo(clampToBox(eye, e.getBoundingBox())) <= search)),
+                cmp.thenComparingInt(Entity::getId), limit);
     }
     private void releaseWeapon() {
         boolean owned = GuizhouWare.swapManager.isLatched(this);
@@ -264,7 +316,7 @@ public class AutoSwordModule extends Module {
         if (slot == submittedSlot) return true;
         return PacketSendUtil.send(new ServerboundSetCarriedItemPacket(slot)) && submittedSlot == slot;
     }
-    private boolean attack(Entity target, Vec3 eye, float yaw, float pitch) {
+    private boolean attack(Entity target, Vec3 eye, float yaw, float pitch, boolean doRotate) {
         if (!HeartbeatManager.authorized()) return false;
         if (!sameSession() || paused() || !eligible(target) || !inReach(target,eye)
                 || submittedSlot != desiredSlot || !ready(mc.player.getInventory().getItem(desiredSlot))) return false;
@@ -274,7 +326,7 @@ public class AutoSwordModule extends Module {
         if (pendingReturn != null && (submittedPosition == null || submittedPosition.add(0,mc.player.getEyeHeight(),0).distanceToSqr(eye) > 1e-8)) return false;
         HitResult block = mc.level.clip(new ClipContext(eye,hit,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,mc.player));
         if (block.getType() != HitResult.Type.MISS && eye.distanceTo(hit) > Math.min(reach(),wallsRange.getValue())) return false;
-        if (rotate.getValue() && !GuizhouWare.rotationManager.isSynchronized(yaw,pitch)) return false;
+        if (doRotate && !GuizhouWare.rotationManager.isSynchronized(yaw,pitch)) return false;
         attackSubmitted = false;
         sendingTarget = target.getId();
         try { PacketSendUtil.send(ServerboundInteractPacket.createAttackPacket(target,mc.player.isShiftKeyDown())); }

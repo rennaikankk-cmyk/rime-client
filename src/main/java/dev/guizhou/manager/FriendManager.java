@@ -38,7 +38,10 @@ public class FriendManager implements Jsonable {
     }
 
     public void addFriend(String name, long expiry) {
+        addFriend(name, expiry, true);
+    }
 
+    public void addFriend(String name, long expiry, boolean whisper) {
         boolean alreadyFriend = friends.keySet().stream().anyMatch(friend -> friend.equalsIgnoreCase(name));
 
         friends.keySet().removeIf(friend -> friend.equalsIgnoreCase(name));
@@ -46,7 +49,7 @@ public class FriendManager implements Jsonable {
 
         GuizhouWare.enemyManager.removeEnemy(name);
 
-        if (!alreadyFriend) {
+        if (!alreadyFriend && whisper) {
             whisperFriendAdded(name);
         }
     }
