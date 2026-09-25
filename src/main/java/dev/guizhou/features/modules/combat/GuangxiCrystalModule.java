@@ -3,6 +3,7 @@ package dev.guizhou.features.modules.combat;
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.impl.network.PacketEvent;
+import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
@@ -22,6 +23,7 @@ import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.PredictUtil;
+import dev.guizhou.util.render.MatrixCapture;
 import dev.guizhou.util.render.RenderUtil;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.Result;
@@ -49,6 +51,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
@@ -86,6 +89,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -177,9 +181,14 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<Color>   pulseColor    = color("PulseColor", 130, 80, 255, 150).setPage("Render");
     private final Setting<Double>  pulseSpeed    = num("PulseSpeed", 2.0, 0.2, 6.0).setPage("Render");
     private final Setting<Double>  pulseExpand   = num("PulseExpand", 0.35, 0.0, 1.0).setPage("Render");
+    private final Setting<Boolean> damageText   = bool("DamageText", true).setPage("Render")
+            .setVisibility(v -> renderMode.getValue() != RenderMode.NONE);
+    private final Setting<Color>   damageColor  = color("DamageColor", 255, 255, 255, 255).setPage("Render")
+            .setVisibility(v -> renderMode.getValue() != RenderMode.NONE && damageText.getValue());
 
     private BlockPos renderPos = null;
     private long     renderStartMs = 0L;
+    private float    renderDamage = 0f;
     private AABB     smoothBox = null;
 
     private enum RenderMode { NONE, GRADIENT, GRADIENT_SMOOTH, BOX_SMOOTH, PULSE }
@@ -433,6 +442,7 @@ public class GuangxiCrystalModule extends Module {
         candidates.clear();
         explodeTimes.clear();
         renderPos = null;
+        renderDamage = 0f;
         smoothBox = null;
         resetDiag();
     }
@@ -457,6 +467,7 @@ public class GuangxiCrystalModule extends Module {
         if (renderMode.getValue() == RenderMode.NONE) return;
         renderPos = crystalPos;
         renderStartMs = System.currentTimeMillis();
+        renderDamage = lastBestDamage;
     }
 
     @Override
@@ -467,6 +478,7 @@ public class GuangxiCrystalModule extends Module {
         long life = renderTime.getValue() * 50L;
         if (elapsed > life) {
             renderPos = null;
+            renderDamage = 0f;
             smoothBox = null;
             return;
         }
@@ -478,6 +490,57 @@ public class GuangxiCrystalModule extends Module {
             case PULSE           -> drawPulse(event, elapsed, life);
             default -> { }
         }
+    }
+
+    @Override
+    public void onRender2D(Render2DEvent event) {
+        if (nullCheck() || !damageText.getValue() || renderMode.getValue() == RenderMode.NONE
+                || renderPos == null || renderDamage <= 0f) return;
+        long life = renderTime.getValue() * 50L;
+        if (System.currentTimeMillis() - renderStartMs > life) return;
+
+        BlockPos base = renderPos.below();
+        drawDamageNumber(event.getContext(), base.getX() + 0.5, base.getY() + 0.5, base.getZ() + 0.5,
+                String.format(Locale.US, "%.2f", renderDamage), damageColor.getValue().getRGB());
+    }
+
+    /** Billboard number at the place-block center: vanilla font, 0.025 block per pixel, dark offset shadow. */
+    private void drawDamageNumber(GuiGraphics graphics, double x, double y, double z, String text, int color) {
+        float[] screen = MatrixCapture.worldToScreen(x, y, z);
+        if (screen == null) return;
+        float scale = damagePixelScale(x, y, z);
+        if (!(scale > 0f)) return;
+
+        int half = mc.font.width(text) / 2;
+        var pose = graphics.pose();
+        pose.pushMatrix();
+        pose.translate(screen[0], screen[1]);
+        pose.scale(scale, scale);
+        graphics.drawString(mc.font, text, -half + 1, 1, 0xFF202020, false);
+        graphics.drawString(mc.font, text, -half, 0, color, false);
+        pose.popMatrix();
+    }
+
+    private static float damagePixelScale(double x, double y, double z) {
+        var camera = mc.gameRenderer.getMainCamera();
+        float yaw = (float) Math.toRadians(camera.yRot());
+        float pitch = (float) Math.toRadians(camera.xRot());
+        double forwardX = -Math.sin(yaw) * Math.cos(pitch);
+        double forwardZ = Math.cos(yaw) * Math.cos(pitch);
+        double rightX = -forwardZ;
+        double rightZ = forwardX;
+        double len = Math.hypot(rightX, rightZ);
+        if (len < 1.0e-4) {
+            rightX = 1.0;
+            rightZ = 0.0;
+        } else {
+            rightX /= len;
+            rightZ /= len;
+        }
+        float[] origin = MatrixCapture.worldToScreen(x, y, z);
+        float[] stepped = MatrixCapture.worldToScreen(x + rightX * 0.025, y, z + rightZ * 0.025);
+        if (origin == null || stepped == null) return 0f;
+        return (float) Math.hypot(stepped[0] - origin[0], stepped[1] - origin[1]);
     }
 
     private void updateSmoothBox(AABB target) {
