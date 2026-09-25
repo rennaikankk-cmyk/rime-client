@@ -1,6 +1,7 @@
 package dev.guizhou.mixin.render.gui;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import dev.guizhou.features.gui.MenuLoop;
 import dev.guizhou.features.gui.MenuStorm;
 import dev.guizhou.features.modules.client.ClickGuiModule;
 import dev.guizhou.util.BuildConfig;
@@ -50,6 +51,8 @@ public abstract class MixinTitleScreen extends Screen {
     @Unique private static int guizhouware$backgroundW, guizhouware$backgroundH;
 
     @Unique private float guizhouware$cardX, guizhouware$cardY, guizhouware$cardW, guizhouware$cardH, guizhouware$scale = 1;
+    /** Chosen once per title-screen open: coffee loop or the storm clip. */
+    @Unique private Boolean guizhouware$coffee;
     @Unique private final List<AbstractWidget> guizhouware$corner = new ArrayList<>();
     @Unique private final List<AbstractWidget> guizhouware$seen = new ArrayList<>();
 
@@ -92,6 +95,7 @@ public abstract class MixinTitleScreen extends Screen {
 
     @Inject(method = "init", at = @At("TAIL"))
     private void guizhouware$onInit(CallbackInfo ci) {
+        if (guizhouware$coffee == null) guizhouware$coffee = java.util.concurrent.ThreadLocalRandom.current().nextBoolean();
         guizhouware$loadBackground();
         guizhouware$layout();
     }
@@ -207,7 +211,9 @@ public abstract class MixinTitleScreen extends Screen {
             guizhouware$drawCover(g);
             g.fill(0, 0, width, height, 0x66000000);
         } else {
-            MenuStorm.draw(g, width, height, delta);
+            if (!Boolean.TRUE.equals(guizhouware$coffee) || !MenuLoop.draw(g, width, height)) {
+                MenuStorm.draw(g, width, height, delta);
+            }
         }
         var gui = ClickGuiModule.getInstance();
         String watermark = gui == null ? "" : gui.menuWatermark.getValue().trim();
