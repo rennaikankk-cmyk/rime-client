@@ -44,7 +44,17 @@ public final class LicenseActionHookTest {
     private static void swordAttack() throws IOException {
         guarded(SWORD, "onPreTick", null, "tryAttack");
         guarded(SWORD, "tryAttack", null, "withSwap");
-        guarded(SWORD, "lambda$tryAttack$", null, "strike");
+        int strikeCallbacks = 0;
+        for (Code callback : methods(SWORD, "lambda$tryAttack$")) {
+            if (callback.calls("strike").isEmpty()) continue;
+            strikeCallbacks++;
+            check(callback.hasAuthorization(), "tryAttack strike callback has no authorization check");
+            for (int call : callback.calls("strike")) {
+                check(!callback.reachable(call, false, null), "Denied path reaches tryAttack -> strike");
+                check(callback.reachable(call, true, null), "Authorized path cannot reach tryAttack -> strike");
+            }
+        }
+        check(strikeCallbacks >= 1, "tryAttack callback no longer strikes");
         guarded(SWORD, "strike", null, "attack");
         guarded(BASE + "combat/AutoSwordModule", "tickSwordGap", null, "latch");
         check(!method(SWORD, "onDisable", null).hasAuthorization(), "Disabling AutoSword must stay able to drop its target");
@@ -163,15 +173,23 @@ public final class LicenseActionHookTest {
     }
 
     private static Code method(String owner, String wanted, String descriptor) throws IOException {
+        var found = methods(owner, wanted, descriptor);
+        check(found.size() == 1, "Expected one method: " + owner + "." + wanted + ", got " + found.size());
+        return found.getFirst();
+    }
+
+    private static List<Code> methods(String owner, String wanted) throws IOException {
+        return methods(owner, wanted, null);
+    }
+
+    private static List<Code> methods(String owner, String wanted, String descriptor) throws IOException {
         try (InputStream input = LicenseActionHookTest.class.getClassLoader().getResourceAsStream(owner + ".class")) {
             if (input == null) throw new AssertionError("Missing compiled " + owner);
             ClassNode klass = new ClassNode();
             new ClassReader(input).accept(klass, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-            var found = klass.methods.stream().filter(method -> (wanted.endsWith("$")
+            return klass.methods.stream().filter(method -> (wanted.endsWith("$")
                     ? method.name.startsWith(wanted) : method.name.equals(wanted))
-                    && (descriptor == null || method.desc.contains(descriptor))).toList();
-            check(found.size() == 1, "Expected one method: " + owner + "." + wanted + ", got " + found.size());
-            return new Code(found.getFirst());
+                    && (descriptor == null || method.desc.contains(descriptor))).map(Code::new).toList();
         }
     }
 

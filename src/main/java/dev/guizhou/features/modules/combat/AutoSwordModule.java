@@ -255,6 +255,7 @@ public class AutoSwordModule extends Module {
                 AuraTeleport.Result result = AuraTeleport.roundTrip(origin, path,
                         point -> sendTeleport(point, serverYaw, serverPitch),
                         () -> {
+                            if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
                             if (!attackFrom(target, strikeEye, serverYaw, serverPitch)) return false;
                             struck[0] = strike(target);
                             return struck[0];
