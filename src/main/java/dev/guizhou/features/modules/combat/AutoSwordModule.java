@@ -187,7 +187,7 @@ public class AutoSwordModule extends Module {
     @Subscribe private void onPreTick(PreTickEvent event) {
         if (!HeartbeatManager.authorized()) { resetState(); return; }
         if (!serviceTick()) return;
-        engage(findTarget(tp.getValue() && !tpBlocked), rotate.getValue());
+        tryAttack(findTarget(tp.getValue() && !tpBlocked), rotate.getValue());
         tickSwordGap();
     }
 

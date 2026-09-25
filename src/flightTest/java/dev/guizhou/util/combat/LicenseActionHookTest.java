@@ -21,7 +21,7 @@ public final class LicenseActionHookTest {
     private static int checks;
 
     public static void main(String[] args) throws IOException {
-        guarded(BASE + "combat/AutoSwordModule", "onPreTick", null, "findTarget", "engage");
+        guarded(BASE + "combat/AutoSwordModule", "onPreTick", null, "findTarget", "tryAttack");
         guarded(BASE + "combat/AutoSwordModule", "engage", null, "tryAction", "withSwap");
         guarded(BASE + "combat/AutoSwordModule", "tryAttack", null, "engage");
         guarded(BASE + "combat/AutoSwordModule", "tickSwordGap", null, "latch");
