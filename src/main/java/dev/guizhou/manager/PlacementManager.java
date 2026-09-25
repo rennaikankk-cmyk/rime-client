@@ -255,15 +255,23 @@ public class PlacementManager extends Feature {
 
     public boolean placeDirect(BlockPos pos, @Nullable Direction face, Item item,
                                SwapMode mode, EnumSet<ResultType> scope, double range) {
+        return placeDirect(pos, face, item, mode, scope, range, null);
+    }
+
+    public boolean placeDirect(BlockPos pos, @Nullable Direction face, Item item,
+                               SwapMode mode, EnumSet<ResultType> scope, double range, @Nullable Vec3 eye) {
         if (!mc.isSameThread()) return false;
         ensureSession();
         if (nullCheck() || EatUtil.shouldDefer()) return false;
         if (budget() <= 0 || onCooldown(pos)) return false;
-        if (!PlaceUtil.canPlace(pos, range)) return false;
+        Vec3 aim = eye != null ? eye : mc.player.getEyePosition();
+        if (eye == null) {
+            if (!PlaceUtil.canPlace(pos, range)) return false;
+        } else if (!canPlaceFrom(pos, aim, range)) return false;
 
         boolean[] sent = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(item, scope, mode,
-                SwapPriority.PLACEMENT, () -> sent[0] = sendPlace(pos, face, range));
+                SwapPriority.PLACEMENT, () -> sent[0] = sendPlace(pos, face, range, aim));
         if (!swapped || !sent[0]) return false;
 
         notePlacement(pos);
@@ -276,7 +284,11 @@ public class PlacementManager extends Feature {
     }
 
     private boolean sendPlace(BlockPos pos, @Nullable Direction face, double range) {
-        if (!PlaceUtil.canPlace(pos, range)) return false;
+        return sendPlace(pos, face, range, mc.player.getEyePosition());
+    }
+
+    private boolean sendPlace(BlockPos pos, @Nullable Direction face, double range, Vec3 eye) {
+        if (!canPlaceFrom(pos, eye, range)) return false;
         // Axis blocks need a neighbour on the intended axis; changing just the packet face
         // would redirect placement into a different cell.
         Direction side = face;
@@ -284,8 +296,21 @@ public class PlacementManager extends Feature {
                 && item.getBlock().defaultBlockState().hasProperty(BlockStateProperties.AXIS)) {
             side = Direction.DOWN;
         }
-        BlockHitResult hit = preparePlaceHit(pos, side, true, range, range);
-        return hit != null && send(hit, InteractionHand.MAIN_HAND, mc.player.getEyePosition(), range, range, false);
+        BlockHitResult hit = preparePlaceHit(pos, side, true, range, range, eye);
+        return hit != null && send(hit, InteractionHand.MAIN_HAND, eye, range, range, false);
+    }
+
+    /** Same broad-phase as {@link PlaceUtil#canPlace} but from a caller-supplied eye (TP desync). */
+    private boolean canPlaceFrom(BlockPos pos, Vec3 eye, double range) {
+        if (pos == null || eye == null || mc.player == null || mc.level == null) return false;
+        if (mc.level.isOutsideBuildHeight(pos)) return false;
+        if (!mc.level.getWorldBorder().isWithinBounds(pos)) return false;
+        if (!mc.level.getBlockState(pos).canBeReplaced()) return false;
+        var closest = new Vec3(Math.clamp(eye.x, pos.getX(), pos.getX() + 1.0),
+                Math.clamp(eye.y, pos.getY(), pos.getY() + 1.0), Math.clamp(eye.z, pos.getZ(), pos.getZ() + 1.0));
+        if (!Double.isFinite(range) || range < 0 || closest.distanceToSqr(eye) > range * range) return false;
+        if (mc.player.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(pos))) return false;
+        return PlaceUtil.noEntityCollision(pos);
     }
 
     // ---------------------------------------------------------------- crystals
@@ -310,17 +335,24 @@ public class PlacementManager extends Feature {
 
     public boolean placeCrystal(BlockPos base, boolean trustBase, SwapMode mode, EnumSet<ResultType> scope,
                                 net.minecraft.world.entity.LivingEntity allowOccupant, CrystalOptions options) {
+        return placeCrystal(base, trustBase, mode, scope, allowOccupant, options, null);
+    }
+
+    public boolean placeCrystal(BlockPos base, boolean trustBase, SwapMode mode, EnumSet<ResultType> scope,
+                                net.minecraft.world.entity.LivingEntity allowOccupant, CrystalOptions options,
+                                @Nullable Vec3 eye) {
         if (!mc.isSameThread()) return false;
         ensureSession();
         if (nullCheck() || EatUtil.shouldDefer()) return false;
+        Vec3 aim = eye != null ? eye : mc.player.getEyePosition();
 
-        BlockHitResult hit = crystalHit(base, trustBase, allowOccupant, options);
+        BlockHitResult hit = crystalHit(base, trustBase, allowOccupant, options, aim);
         if (hit == null) return false;
 
         boolean[] sent = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, scope, mode,
                 SwapPriority.CRYSTAL, () -> sent[0] = send(hit, InteractionHand.MAIN_HAND,
-                        mc.player.getEyePosition(), options.range(), options.wallRange(), options.sneak()));
+                        aim, options.range(), options.wallRange(), options.sneak()));
         return swapped && sent[0];
     }
 
@@ -336,19 +368,27 @@ public class PlacementManager extends Feature {
 
     public boolean placeCrystalDirect(BlockPos base, boolean trustBase, InteractionHand hand,
                                       net.minecraft.world.entity.LivingEntity allowOccupant, CrystalOptions options) {
+        return placeCrystalDirect(base, trustBase, hand, allowOccupant, options, null);
+    }
+
+    public boolean placeCrystalDirect(BlockPos base, boolean trustBase, InteractionHand hand,
+                                      net.minecraft.world.entity.LivingEntity allowOccupant, CrystalOptions options,
+                                      @Nullable Vec3 eye) {
         if (!mc.isSameThread()) return false;
         ensureSession();
         if (nullCheck() || EatUtil.shouldDefer()) return false;
+        Vec3 aim = eye != null ? eye : mc.player.getEyePosition();
 
-        BlockHitResult hit = crystalHit(base, trustBase, allowOccupant, options);
+        BlockHitResult hit = crystalHit(base, trustBase, allowOccupant, options, aim);
         if (hit == null) return false;
 
-        return send(hit, hand, mc.player.getEyePosition(), options.range(), options.wallRange(), options.sneak());
+        return send(hit, hand, aim, options.range(), options.wallRange(), options.sneak());
     }
 
     @Nullable
     private BlockHitResult crystalHit(BlockPos base, boolean trustBase,
-                                      net.minecraft.world.entity.LivingEntity allowOccupant, CrystalOptions options) {
+                                      net.minecraft.world.entity.LivingEntity allowOccupant, CrystalOptions options,
+                                      Vec3 eye) {
         if (!trustBase) {
             BlockState baseState = mc.level.getBlockState(base);
             if (!baseState.is(Blocks.OBSIDIAN) && !baseState.is(Blocks.BEDROCK)) return null;
@@ -364,7 +404,7 @@ public class PlacementManager extends Feature {
             return null;
         }
 
-        return prepareInteractionHit(base, null, mc.player.getEyePosition(),
+        return prepareInteractionHit(base, null, eye,
                 options.range(), options.wallRange(), trustBase);
     }
 
@@ -407,10 +447,16 @@ public class PlacementManager extends Feature {
     @Nullable
     public BlockHitResult preparePlaceHit(BlockPos pos, @Nullable Direction side, boolean allowAir,
                                           double range, double wallRange) {
+        return preparePlaceHit(pos, side, allowAir, range, wallRange, null);
+    }
+
+    @Nullable
+    public BlockHitResult preparePlaceHit(BlockPos pos, @Nullable Direction side, boolean allowAir,
+                                          double range, double wallRange, @Nullable Vec3 eye) {
         if (!mc.isSameThread() || nullCheck() || pos == null) return null;
         ensureSession();
-        if (budget() <= 0 || onCooldown(pos) || !PlaceUtil.canPlace(pos, range)) return null;
-        Vec3 eye = mc.player.getEyePosition();
+        Vec3 aim = eye != null ? eye : mc.player.getEyePosition();
+        if (budget() <= 0 || onCooldown(pos) || (eye == null ? !PlaceUtil.canPlace(pos, range) : !canPlaceFrom(pos, aim, range))) return null;
         BlockHitResult best = null;
         boolean bestVisible = false;
         for (Direction candidateSide : Direction.values()) {
@@ -418,18 +464,18 @@ public class PlacementManager extends Feature {
             BlockPos neighbour = pos.relative(candidateSide);
             BlockState state = mc.level.getBlockState(neighbour);
             if (state.canBeReplaced() || !state.getFluidState().isEmpty() || isInteractable(state.getBlock())) continue;
-            BlockHitResult hit = prepareInteractionHit(neighbour, candidateSide.getOpposite(), eye, range, wallRange, false);
+            BlockHitResult hit = prepareInteractionHit(neighbour, candidateSide.getOpposite(), aim, range, wallRange, false);
             if (hit == null) continue;
-            boolean visible = visible(hit, eye);
+            boolean visible = visible(hit, aim);
             if (best == null || visible && !bestVisible || visible == bestVisible
-                    && eye.distanceToSqr(hit.getLocation()) < eye.distanceToSqr(best.getLocation())) {
+                    && aim.distanceToSqr(hit.getLocation()) < aim.distanceToSqr(best.getLocation())) {
                 best = hit;
                 bestVisible = visible;
             }
         }
         if (best != null || !allowAir) return best;
         // Air placement has a distinct target and policy; never reuse an invalid neighbour hit.
-        return prepareInteractionHit(pos, side == null ? null : side.getOpposite(), eye, range, wallRange, true);
+        return prepareInteractionHit(pos, side == null ? null : side.getOpposite(), aim, range, wallRange, true);
     }
 
     /** Select against the real outline; preferredFace preserves bed/piston direction semantics. */

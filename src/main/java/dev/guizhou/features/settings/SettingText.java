@@ -43,6 +43,7 @@ public final class SettingText {
                     Map.entry("Style", "界面样式：紫色面板、蓝框面板或现代卡片。"),
                     Map.entry("BlurBackground", "保留的开关。打开界面时不再抓整屏做模糊，世界只压暗。"),
                     Map.entry("Descriptions", "是否显示模块说明。设置项说明仍会写在设置行上。"),
+                    Map.entry("1.12协议", "强制使用 1.12 的旧位置/旋转包、双视角和已有 1.12 放置逻辑。默认关闭，现代服和 Grim 仍走自动检测。"),
                     Map.entry("MenuNotice", "标题画面卡片底部的一句提示。留空则显示欢迎回来。"),
                     Map.entry("MenuWatermark", "标题画面中央的浅色大字。留空则不画。"),
                     Map.entry("Theme", "面板和模块名字使用的配色。"),

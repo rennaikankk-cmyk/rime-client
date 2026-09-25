@@ -293,6 +293,8 @@ final class PanelStyle extends ShellStyle {
             HudClientModule hud = GuizhouWare.moduleManager.getModuleByClass(HudClientModule.class);
             if (hud != null) { save(); hud.openEditor(screen); }
         });
+        bx -= 19;
+        toolButton(g, Icon.EXTERNAL, bx, sy, "云参数", mx, my, screen::openCloudConfigs);
     }
 
     private void drawSearchField(GuiGraphics g, float sx, float sy, float sw, float sh) {

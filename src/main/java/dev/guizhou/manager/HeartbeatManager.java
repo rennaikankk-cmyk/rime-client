@@ -183,6 +183,20 @@ public class HeartbeatManager extends Feature {
         return LEASE.authorized();
     }
 
+    /** Cloud presets use the existing paid-account capability and pinned server key. */
+    public static String cloudConfigToken() {
+        return authorized() ? token : null;
+    }
+
+    public static String cloudConfigHwid() {
+        return HwidFingerprint.compute();
+    }
+
+    public static PublicKey serverSigningKey() throws Exception {
+        return KeyFactory.getInstance("Ed25519").generatePublic(
+                new X509EncodedKeySpec(java.util.HexFormat.of().parseHex(PUBKEY_HEX)));
+    }
+
     /** One-shot chat notice when the gate first closes. */
     public static void notifyDeniedOnce() {
         Minecraft mc = Minecraft.getInstance();

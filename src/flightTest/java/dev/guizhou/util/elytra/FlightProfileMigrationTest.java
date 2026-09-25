@@ -24,7 +24,7 @@ public final class FlightProfileMigrationTest {
             JsonObject value = FlightProfileMigration.migrate(json("{\"SpeedBps\":"+bad+",\"ClimbBps\":"+bad+"}")).getAsJsonObject();
             for(String key:new String[]{"SpeedBps","ClimbBps"}) {
                 double speed=value.get(key).getAsDouble();
-                check(Double.isFinite(speed)&&speed>=1&&speed<=300,"untrusted speed is finite and bounded");
+                check(Double.isFinite(speed)&&speed>=1&&speed<=2000,"untrusted speed is finite and bounded");
             }
         }
         check(FlightProfileMigration.migrate(null).isJsonObject(),"missing profile is safe");

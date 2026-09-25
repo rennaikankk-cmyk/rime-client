@@ -1,6 +1,7 @@
 package dev.guizhou.mixin.render.gui;
 
-import com.mojang.blaze3d.platform.NativeImage;
+import dev.guizhou.features.gui.MenuBackground;
+import dev.guizhou.features.gui.MenuBackgroundScreen;
 import dev.guizhou.features.gui.MenuLoop;
 import dev.guizhou.features.gui.MenuStorm;
 import dev.guizhou.features.modules.client.ClickGuiModule;
@@ -9,13 +10,12 @@ import dev.guizhou.util.render.font.HudFonts;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.PlainTextButton;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
-import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -24,9 +24,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -45,12 +42,10 @@ import static dev.guizhou.util.render.ShadcnDraw.*;
 public abstract class MixinTitleScreen extends Screen {
     @Shadow private Component getMultiplayerDisabledReason() { throw new AssertionError(); }
 
-    @Unique private static final ResourceLocation GUIZHOUWARE$BACKGROUND = ResourceLocation.fromNamespaceAndPath("guizhouware", "dynamic/menu_background");
     @Unique private static final DateTimeFormatter GUIZHOUWARE$CLOCK = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm", Locale.ROOT);
-    @Unique private static long guizhouware$backgroundStamp = Long.MIN_VALUE;
-    @Unique private static int guizhouware$backgroundW, guizhouware$backgroundH;
 
     @Unique private float guizhouware$cardX, guizhouware$cardY, guizhouware$cardW, guizhouware$cardH, guizhouware$scale = 1;
+    @Unique private Button guizhouware$backgroundButton;
     /** Chosen once per title-screen open: coffee loop or the storm clip. */
     @Unique private Boolean guizhouware$coffee;
     @Unique private final List<AbstractWidget> guizhouware$corner = new ArrayList<>();
@@ -96,7 +91,9 @@ public abstract class MixinTitleScreen extends Screen {
     @Inject(method = "init", at = @At("TAIL"))
     private void guizhouware$onInit(CallbackInfo ci) {
         if (guizhouware$coffee == null) guizhouware$coffee = java.util.concurrent.ThreadLocalRandom.current().nextBoolean();
-        guizhouware$loadBackground();
+        guizhouware$backgroundButton = addRenderableWidget(Button.builder(Component.literal("背景"), b -> {
+            if (minecraft != null) minecraft.setScreen(new MenuBackgroundScreen((Screen) (Object) this));
+        }).bounds(0, 0, 32, 16).build());
         guizhouware$layout();
     }
 
@@ -124,7 +121,7 @@ public abstract class MixinTitleScreen extends Screen {
                 continue;
             }
             String key = guizhouware$key(b);
-            if (guizhouware$iconButton(b, key)) {
+            if (b == guizhouware$backgroundButton || guizhouware$iconButton(b, key)) {
                 guizhouware$corner.add(b);
             } else {
                 primary.add(b);
@@ -169,36 +166,11 @@ public abstract class MixinTitleScreen extends Screen {
         int cornerX = width - 6;
         int size = Math.max(14, Math.round(16 * s));
         for (int i = guizhouware$corner.size() - 1; i >= 0; i--) {
-            cornerX -= size;
-            guizhouware$corner.get(i).setRectangle(size, size, cornerX, 6);
+            AbstractWidget corner = guizhouware$corner.get(i);
+            int w = corner == guizhouware$backgroundButton ? Math.max(size, 32) : size;
+            cornerX -= w;
+            corner.setRectangle(w, size, cornerX, 6);
             cornerX -= 4;
-        }
-    }
-
-    @Unique
-    private void guizhouware$loadBackground() {
-        Minecraft mc = Minecraft.getInstance();
-        Path file = mc.gameDirectory.toPath().resolve("guizhouware").resolve("background.png");
-        long stamp;
-        try {
-            stamp = Files.exists(file) ? Files.getLastModifiedTime(file).toMillis() : 0;
-        } catch (Exception e) {
-            stamp = 0;
-        }
-        if (stamp == guizhouware$backgroundStamp) return;
-        guizhouware$backgroundStamp = stamp;
-        mc.getTextureManager().release(GUIZHOUWARE$BACKGROUND);
-        guizhouware$backgroundW = guizhouware$backgroundH = 0;
-        if (stamp == 0) return;
-        try (InputStream in = Files.newInputStream(file)) {
-            NativeImage image = NativeImage.read(in);
-            guizhouware$backgroundW = image.getWidth();
-            guizhouware$backgroundH = image.getHeight();
-            DynamicTexture texture = new DynamicTexture(image);
-            texture.setFilter(true, false);
-            mc.getTextureManager().register(GUIZHOUWARE$BACKGROUND, texture);
-        } catch (Exception e) {
-            guizhouware$backgroundW = guizhouware$backgroundH = 0;
         }
     }
 
@@ -207,14 +179,15 @@ public abstract class MixinTitleScreen extends Screen {
         guizhouware$layout();
         float s = guizhouware$scale;
         g.fill(0, 0, width, height, 0xFF08080A);
-        if (guizhouware$backgroundW > 0) {
-            guizhouware$drawCover(g);
+        if (MenuBackground.draw(g, width, height)) {
             g.fill(0, 0, width, height, 0x66000000);
         } else {
             if (!Boolean.TRUE.equals(guizhouware$coffee) || !MenuLoop.draw(g, width, height)) {
                 MenuStorm.draw(g, width, height, delta);
             }
         }
+        String banner = MenuBackground.banner();
+        if (banner != null) textCentered(g, banner, width / 2f, 16, 7f, HudFonts.REGULAR, 0xFFF2C14C);
         var gui = ClickGuiModule.getInstance();
         String watermark = gui == null ? "" : gui.menuWatermark.getValue().trim();
         if (!watermark.isEmpty()) {
@@ -257,8 +230,12 @@ public abstract class MixinTitleScreen extends Screen {
         outline(g, x, y, w, h, 0, 1, border);
         int fg = !b.active ? 0x60FFFFFF : hover || focus ? 0xFFFFFFFF : 0xDCFFFFFF;
         if (corner) {
-            float is = Math.min(w, h) * .62f;
-            icon(g, guizhouware$icon(guizhouware$key(b)), x + (w - is) / 2, y + (h - is) / 2, is, fg);
+            if (b == guizhouware$backgroundButton) {
+                textCentered(g, "背景", x + w / 2, y + (h - 7f) / 2f, 7f, HudFonts.REGULAR, fg);
+            } else {
+                float is = Math.min(w, h) * .62f;
+                icon(g, guizhouware$icon(guizhouware$key(b)), x + (w - is) / 2, y + (h - is) / 2, is, fg);
+            }
             if (hover || focus) g.renderComponentTooltip(Minecraft.getInstance().font, List.of(b.getMessage()), mx, my);
         } else {
             float size = 7.5f * s;
@@ -268,20 +245,6 @@ public abstract class MixinTitleScreen extends Screen {
             Component reason = getMultiplayerDisabledReason();
             if (reason != null) g.renderComponentTooltip(Minecraft.getInstance().font, List.of(reason), mx, my);
         }
-    }
-
-    /** Scales the custom background to cover the screen and crops the overflow evenly. */
-    @Unique
-    private void guizhouware$drawCover(GuiGraphics g) {
-        int tw = guizhouware$backgroundW, th = guizhouware$backgroundH;
-        float cover = Math.max(width / (float) tw, height / (float) th);
-        int regionW = Math.round(width / cover), regionH = Math.round(height / cover);
-        int u = (tw - regionW) / 2, v = (th - regionH) / 2;
-        var pose = g.pose();
-        pose.pushPose();
-        pose.scale(cover, cover, 1);
-        g.blit(GUIZHOUWARE$BACKGROUND, 0, 0, u, v, regionW, regionH, tw, th);
-        pose.popPose();
     }
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)

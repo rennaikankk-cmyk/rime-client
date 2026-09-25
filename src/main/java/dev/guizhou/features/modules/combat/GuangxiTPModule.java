@@ -68,6 +68,10 @@ public class GuangxiTPModule extends Module {
      */
     private final Setting<Boolean> legacy112  = bool("1.12", false);
 
+    private boolean useLegacy112() {
+        return legacy112.getValue() || dev.guizhou.util.elytra.DualViewSupport.forceLegacyProtocol();
+    }
+
     private final Setting<Boolean> render      = bool("Render", true).setPage("Render");
     private final Setting<Color>   renderColor = color("Color", 130, 80, 255, 60).setPage("Render");
 
@@ -89,7 +93,7 @@ public class GuangxiTPModule extends Module {
             if (rejects > 0 || dSent > 0 || dBreakSent > 0 || dEntRej > 0 || dDmgRej > 0 || dSelfRej > 0) {
                 GuizhouWare.LOGGER.info(
                         "[TPDiag] legacy={} tps={} rub={} | sent={} brk={} swapFail={} | noTgt={} noBase={} oppNull={} obsFail={} | reject[ent={} dmg={} self={}] tgtD={}",
-                        legacy112.getValue(),
+                        useLegacy112(),
                         String.format("%.1f", GuizhouWare.tpsCounterService.getAverageTPS()),
                         GuizhouWare.tpsCounterService.isRubberbandRecent(),
                         dSent, dBreakSent, dSwapFail,
@@ -302,25 +306,16 @@ public class GuangxiTPModule extends Module {
 
     /** Obsidian desync place, then the crystal on top in the same tick (server packet order). */
     private boolean tpBasePlaceChain(BaseOpportunity opp) {
-        if (!InventoryUtil.find(Items.OBSIDIAN, InventoryUtil.HOTBAR_SCOPE).found()) return false;
-        if (!InventoryUtil.find(Items.END_CRYSTAL, InventoryUtil.HOTBAR_SCOPE).found()) return false;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        GuangxiCrystalModule crystal = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
+        if (crystal == null) return false;
 
         BlockPos base = opp.base();
-        BlockPos n = opp.clickNeighbor();
         Vec3 fake = fakeFeet(base);
         Vec3 eye = fake.add(0, mc.player.getEyeHeight(), 0);
-        BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(n, opp.clickFace(), eye, 6.0, 6.0, false);
-        if (hit == null || !mc.level.getBlockState(base).canBeReplaced()
-                || !dev.guizhou.util.PlaceUtil.noEntityCollision(base)) return false;
-        boolean[] sent = {false};
-        boolean swapped = GuizhouWare.swapManager.withSwap(Items.OBSIDIAN, InventoryUtil.HOTBAR_SCOPE,
-                SwapMode.SILENT, SwapPriority.PLACEMENT, () -> sent[0] =
-                        sandwich(fake, () -> GuizhouWare.placementManager.sendUseItemOnDirect(
-                                hit, InteractionHand.MAIN_HAND, eye, 6.0, 6.0)));
-        if (!swapped) dSwapFail++;
-        if (!swapped || !sent[0]) return false;
+        boolean sent = sandwich(fake, () -> crystal.placeBaseShared(base, eye));
+        if (!sent) return false;
         dSent++;
-        // Optimistic packet ordering is retained, but a cancelled base packet cannot advance it.
         return tpPlace(base, true);
     }
 
@@ -332,23 +327,16 @@ public class GuangxiTPModule extends Module {
 
     private boolean tpPlace(BlockPos base, boolean pendingBase) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
-        if (!InventoryUtil.find(Items.END_CRYSTAL, InventoryUtil.HOTBAR_SCOPE).found()) return false;
+        GuangxiCrystalModule crystal = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
+        if (crystal == null) return false;
         BlockState state = mc.level.getBlockState(base);
         if (!pendingBase && !state.is(Blocks.OBSIDIAN) && !state.is(Blocks.BEDROCK)) return false;
         if (!mc.level.getBlockState(base.above()).isAir() || crystalCellBlocked(base.above())) return false;
         Vec3 fake = fakeFeet(base);
         Vec3 eye = fake.add(0, mc.player.getEyeHeight(), 0);
-        BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(base, Direction.UP,
-                eye, 6.0, 6.0, pendingBase);
-        if (hit == null) return false;
-        boolean[] submitted = {false};
-        boolean swapped = GuizhouWare.swapManager.withSwap(Items.END_CRYSTAL, InventoryUtil.HOTBAR_SCOPE, SwapMode.SILENT,
-                SwapPriority.CRYSTAL, () -> submitted[0] =
-                        sandwich(fake, () -> GuizhouWare.placementManager.sendUseItemOnDirect(
-                                hit, InteractionHand.MAIN_HAND, eye, 6.0, 6.0)));
-        if (!swapped) dSwapFail++;
-        if (swapped && submitted[0]) dSent++;
-        return swapped && submitted[0];
+        boolean sent = sandwich(fake, () -> crystal.placeCrystalShared(base, pendingBase, eye));
+        if (sent) dSent++;
+        return sent;
     }
 
     private boolean tpBreak(EndCrystal crystal) {
@@ -373,7 +361,7 @@ public class GuangxiTPModule extends Module {
     /** Restore the real position even when an interaction throws or is cancelled. */
     private boolean sandwich(Vec3 fake, BooleanSupplier action) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
-        if (legacy112.getValue()) return action.getAsBoolean();
+        if (useLegacy112()) return action.getAsBoolean();
         return dev.guizhou.util.InteractionTransaction.run(() -> sendDesyncMove(fake), action, this::sendRealMove);
     }
 

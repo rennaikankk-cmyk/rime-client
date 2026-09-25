@@ -38,6 +38,12 @@ public class GuizhouWareGui extends Screen {
 
     public void reload() { hachimi.reload(); }
 
+    /** Opens the signed cloud preset browser. The licence gate stays in CloudConfigClient. */
+    public void openCloudConfigs() {
+        save();
+        minecraft.setScreen(new CloudConfigsScreen(this));
+    }
+
     /** Opens the ClickGUI focused on the HUD module so its appearance settings are one step away. */
     public void openHudAppearance(HudClientModule hud, String element) {
         minecraft.setScreen(this);

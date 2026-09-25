@@ -22,11 +22,19 @@ public final class DualViewSupport {
 
     private DualViewSupport() {}
 
+    /** ClickGUI 「1.12协议」. Default off; auto-detection stays in charge until it is on. */
+    public static boolean forceLegacyProtocol() {
+        dev.guizhou.features.modules.client.ClickGuiModule gui =
+                dev.guizhou.features.modules.client.ClickGuiModule.getInstance();
+        return gui != null && Boolean.TRUE.equals(gui.protocol112.getValue());
+    }
+
     public static boolean isDupRotSupported() {
-        return status() == Status.SUPPORTED;
+        return forceLegacyProtocol() || status() == Status.SUPPORTED;
     }
 
     public static boolean usesModernInput() {
+        if (forceLegacyProtocol()) return false;
         Status current = status();
         if (current == Status.NO_VIA) return false; // Minecraft 1.21.1 native input.
         int[] protocol = range(cachedVersionName);
@@ -34,7 +42,8 @@ public final class DualViewSupport {
     }
 
     public static boolean usesLegacyFireworkData() {
-        return status() == Status.SUPPORTED && legacyFireworkFamily(cachedVersionName);
+        return forceLegacyProtocol()
+                || (status() == Status.SUPPORTED && legacyFireworkFamily(cachedVersionName));
     }
 
     public static boolean legacyFireworkFamily(String name) {

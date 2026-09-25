@@ -45,5 +45,5 @@ public final class FlightProfileMigration {
         } catch (RuntimeException e) { return fallback; }
     }
 
-    private static double bounded(double value) { return Math.max(1, Math.min(300, value)); }
+    private static double bounded(double value) { return Math.max(1, Math.min(2000, value)); }
 }

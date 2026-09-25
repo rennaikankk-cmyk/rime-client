@@ -74,7 +74,7 @@ public final class PacketActionHookTest {
     }
 
     private static void placementAcceptance() throws IOException {
-        Code place = method(PLACEMENT, "placeDirect", "EnumSet;D)Z");
+        Code place = method(PLACEMENT, "placeDirect", "Vec3;)Z");
         int swap = place.call("dev/guizhou/manager/SwapManager", "withSwap");
         int mark = place.call(PLACEMENT, "notePlacement");
         place.dominates(swap, mark, "Placement can be recorded without trying its swap");

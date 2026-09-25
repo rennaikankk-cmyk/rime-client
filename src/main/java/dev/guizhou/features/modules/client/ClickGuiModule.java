@@ -23,6 +23,8 @@ public class ClickGuiModule extends Module {
     public Setting<String>  menuNotice       = str("MenuNotice", "");
     public Setting<String>  menuWatermark    = str("MenuWatermark", "");
     public Setting<Boolean> descriptions     = bool("Descriptions", true);
+    /** Forces 1.12 packet gates (dual view, legacy firework/input, crystal/TP 1.12) even if Via did not detect them. */
+    public Setting<Boolean> protocol112      = bool("1.12协议", false);
     /** Panel positions and collapse flags: PRESET.CATEGORY=x,y,collapsed;... */
     public Setting<String>  panelLayout      = str("PanelLayout", "");
     public Setting<Integer> rainbowHue       = num("Delay", 240, 0, 600);
@@ -143,7 +145,8 @@ public class ClickGuiModule extends Module {
 
     @Override
     public void onTick() {
-        if (!(mc.screen instanceof GuizhouWareGui) && !(mc.screen instanceof dev.guizhou.features.gui.HudEditorScreen)) {
+        if (!(mc.screen instanceof GuizhouWareGui) && !(mc.screen instanceof dev.guizhou.features.gui.HudEditorScreen)
+                && !(mc.screen instanceof dev.guizhou.features.gui.CloudConfigsScreen)) {
             this.disable();
         }
     }
