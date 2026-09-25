@@ -71,6 +71,9 @@ public class AutoSwordModule extends Module {
     private final Setting<Boolean> ignoreNamed = bool("IgnoreNamed", false).setPage("Targets");
     private final Setting<Boolean> ignoreTamed = bool("IgnoreTamed", true).setPage("Targets");
     private final Setting<MobAge> mobAge = mode("MobAge", MobAge.BOTH).setPage("Targets");
+    private final Setting<Boolean> swordGap = bool("SwordGap", false);
+    private boolean gapLatched;
+    private final Object gapOwner = new Object();
     private final Setting<Boolean> tp = bool("TP", false).setPage("TP");
     private final Setting<Double> tpRange = num("TPRange", 12.0, 4.0, 32.0).setPage("TP").setVisibility(v -> tp.getValue());
     private final Setting<Double> tpStep = num("TPStep", 3.0, 1.0, 5.0).setPage("TP").setVisibility(v -> tp.getValue());
@@ -89,17 +92,46 @@ public class AutoSwordModule extends Module {
     private final Consumer<Packet<?>> submissions = this::onSubmitted;
 
     public AutoSwordModule() {
-        super("AutoSword", "Aura with weapon selection, multiple targets and optional return teleport.", Category.COMBAT);
+        super("AutoSword", "Attacks nearby targets and can swap to a gapple while you hold use.", Category.COMBAT);
     }
     @Override public void onEnable() {
         resetState();
         PacketSendUtil.addSubmissionListener(submissions);
+    }
+
+    private void tickSwordGap() {
+        if (!swordGap.getValue() || nullCheck()) {
+            releaseSwordGap();
+            return;
+        }
+        if (!HeartbeatManager.authorized()) {
+            releaseSwordGap();
+            return;
+        }
+        if (gapLatched && !GuizhouWare.swapManager.isLatched(gapOwner)) gapLatched = false;
+        boolean useHeld = mc.options.keyUse.isDown();
+        if (useHeld && !gapLatched) {
+            if (!mc.player.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS)) return;
+            dev.guizhou.util.inventory.Result apple = dev.guizhou.util.inventory.InventoryUtil.find(
+                    net.minecraft.world.item.Items.ENCHANTED_GOLDEN_APPLE,
+                    java.util.EnumSet.of(dev.guizhou.util.inventory.ResultType.HOTBAR));
+            if (apple.found() && GuizhouWare.swapManager.latch(gapOwner, apple)) gapLatched = true;
+        } else if (!useHeld && gapLatched) {
+            releaseSwordGap();
+        }
+    }
+
+    private void releaseSwordGap() {
+        if (!gapLatched) return;
+        GuizhouWare.swapManager.release(gapOwner);
+        gapLatched = false;
     }
     @Override public void onDisable() {
         resetState();
         PacketSendUtil.removeSubmissionListener(submissions);
     }
     private void resetState() {
+        releaseSwordGap();
         restorePosition();
         if (!nullCheck() && sameSession() && recoverSlot >= 0) ensureSlot(recoverSlot);
         currentTarget = null;
@@ -155,9 +187,8 @@ public class AutoSwordModule extends Module {
     @Subscribe private void onPreTick(PreTickEvent event) {
         if (!HeartbeatManager.authorized()) { resetState(); return; }
         if (!serviceTick()) return;
-        KillAuraModule killAura = GuizhouWare.moduleManager.getModuleByClass(KillAuraModule.class);
-        if (killAura != null && killAura.isEnabled()) return;
         engage(findTarget(tp.getValue() && !tpBlocked), rotate.getValue());
+        tickSwordGap();
     }
 
     /** Clock, session and position recovery. Idempotent within one player tick. */

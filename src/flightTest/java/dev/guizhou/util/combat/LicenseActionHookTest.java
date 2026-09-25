@@ -24,7 +24,7 @@ public final class LicenseActionHookTest {
         guarded(BASE + "combat/AutoSwordModule", "onPreTick", null, "findTarget", "engage");
         guarded(BASE + "combat/AutoSwordModule", "engage", null, "tryAction", "withSwap");
         guarded(BASE + "combat/AutoSwordModule", "tryAttack", null, "engage");
-        guarded(BASE + "combat/KillAuraModule", "onPreTick", null, "selectTargets", "tryAttack");
+        guarded(BASE + "combat/AutoSwordModule", "tickSwordGap", null, "latch");
         guarded(BASE + "combat/AutoSwordModule", "attack", null, "send");
         guarded(BASE + "combat/AutoSwordModule", "sendTeleport", null, "moveTo");
         check(!method(BASE + "combat/AutoSwordModule", "moveTo", null).hasAuthorization(), "TP return survives revocation");
@@ -66,7 +66,7 @@ public final class LicenseActionHookTest {
         check(method(BASE + "movement/SprintModule", "wantsSprint", null).hasAuthorization(),
                 "Sprint helper must respect revocation");
         guarded(BASE + "player/FastuseModule", "onTick", null, "matches");
-        guarded(BASE + "combat/SwordGapModule", "onTick", null, "latch");
+        guarded(BASE + "combat/AutoSwordModule", "tickSwordGap", null, "latch");
         guarded(BASE + "combat/HoleFillModule", "onTick", null, "fill");
         guarded(BASE + "combat/HoleFillModule", "fill", null, "placeBatch");
         check(!method(BASE + "combat/HoleFillModule", "onDisable", null).hasAuthorization(), "HoleFill cleanup survives revocation");
@@ -88,14 +88,14 @@ public final class LicenseActionHookTest {
         check(!probeCleanup.hasAuthorization(), "Probe abort must remain available after revocation");
         check(probeCleanup.calls("send").stream().anyMatch(call -> probeCleanup.reachable(call, false, null)),
                 "Disabling an outstanding probe must be able to send ABORT");
-        Code sword = method(BASE + "combat/SwordGapModule", "onTick", null);
-        check(sword.calls("releaseLatch").stream().anyMatch(call -> sword.reachable(call, false, null)),
-                "Denied SwordGap can release its held slot");
-        check(!method(BASE + "combat/SwordGapModule", "releaseLatch", null).hasAuthorization(),
+        Code sword = method(BASE + "combat/AutoSwordModule", "tickSwordGap", null);
+        check(sword.calls("releaseSwordGap").stream().anyMatch(call -> sword.reachable(call, false, null)),
+                "Denied Aura can release its held gapple slot");
+        check(!method(BASE + "combat/AutoSwordModule", "releaseSwordGap", null).hasAuthorization(),
                 "Slot restoration never requires a current lease");
         // Cleanup paths must survive revocation.
         for (String[] cleanup : new String[][]{
-                {BASE + "combat/SwordGapModule", "onDisable"},
+                {BASE + "combat/AutoSwordModule", "onDisable"},
                 {BASE + "combat/GuangxiSpearTPModule", "onDisable"},
                 {BASE + "funny/MoFuckerModule", "onEnable"},
                 {BASE + "player/AutoXPModule", "onDisable"},
