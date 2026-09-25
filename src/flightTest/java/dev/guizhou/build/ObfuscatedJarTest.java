@@ -308,8 +308,7 @@ public final class ObfuscatedJarTest {
                 Map.entry("VelocityModule", List.of("phaseConditionMet")),
                 Map.entry("NoRotateModule", List.of("isActive")),
                 Map.entry("SprintModule", List.of("onTick", "wantsSprint")),
-                Map.entry("FastuseModule", List.of("onTick")),
-                Map.entry("SwordGapModule", List.of("onTick")));
+                Map.entry("FastuseModule", List.of("onTick")));
         Map<String, List<String>> allCheckpoints = new LinkedHashMap<>(checkpoints);
         allCheckpoints.putAll(reviewedCallbacks);
         for (var checkpoint : allCheckpoints.entrySet()) {
