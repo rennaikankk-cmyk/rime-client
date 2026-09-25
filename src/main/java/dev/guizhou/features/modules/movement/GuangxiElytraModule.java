@@ -69,69 +69,77 @@ import static dev.guizhou.util.inventory.InventoryUtil.FULL_SCOPE;
  */
 public class GuangxiElytraModule extends Module {
 
+    public enum Mode { Grim, NoAC }
+    public enum BoostMode { Gentle, Aggressive }
     public enum FlightMode { CONTROL, ROTATION }
     public enum MotionMode { VOID, FIREWORKS }
     public enum SetbackMode { SIMULATION, CRASH_PACKETS }
 
-    // ---- General ----
-    private final Setting<FlightMode> flightMode = mode("FlightMode", FlightMode.CONTROL).setPage("General");
-    private final Setting<Boolean> freeLook = bool("FreeLook", true).setPage("General");
-    private final Setting<MotionMode> motionMode = mode("MotionMode", MotionMode.FIREWORKS).setPage("General");
-    private final Setting<Double> speed = num("Speed", 1.0, 0.05, 6.0).setPage("General");
-    private final Setting<Boolean> autoFly = bool("AutoFly", false).setPage("General");
-    private final Setting<Boolean> horizontalNoGravity = bool("HorizontalNoGravity", true).setPage("General");
-    private final Setting<Double> motionLerp = num("MotionLerp", 1.0, 0.0, 1.0).setPage("General");
-    private final Setting<Double> pullupAngle = num("PullupAngle", 0.0, 0.0, 89.0).setPage("General");
-    private final Setting<Double> downwardAngle = num("DownwardAngle", 0.0, 0.0, 89.0).setPage("General");
-    private final Setting<Boolean> takeoff = bool("Takeoff", true).setPage("General");
-    private final Setting<Integer> takeoffTicks = num("TakeoffTicks", 10, 1, 40).setPage("General");
-    private final Setting<Boolean> landAutoClose = bool("LandAutoClose", false).setPage("General");
-    private final Setting<Boolean> safeLanding = bool("SafeLanding", true).setPage("General");
-    private final Setting<Boolean> terrainGuard = bool("TerrainGuard", true).setPage("General");
-    private final Setting<Integer> terrainLookahead = num("TerrainLookahead", 12, 8, 32).setPage("General");
-    private final Setting<Boolean> parallelPlanning = bool("ParallelPlanning", true).setPage("General");
+    private final java.util.Map<String, Setting<?>> policy = new java.util.LinkedHashMap<>();
+    private final Setting<Mode> flightProfile = mode("Mode", Mode.Grim);
+    private final Setting<Boolean> gzBoost = bool("GZBoost", false);
+    private final Setting<BoostMode> gzBoostMode = mode("GZBoostMode", BoostMode.Aggressive);
+    private final Setting<Double> horizontalSpeed = num("SpeedBps", 40.0, 1.0, 300.0);
+    private final Setting<Double> climbSpeed = num("ClimbBps", 40.0, 1.0, 300.0);
+    private final Setting<Boolean> adaptiveSlowdown = bool("AdaptiveSlowdown", false);
+    private boolean activeAdaptiveSlowdown;
+    private Mode activeProfile;
+    private final dev.guizhou.util.elytra.GrimFlightAdaptation adaptation = new dev.guizhou.util.elytra.GrimFlightAdaptation();
 
-    // ---- Rescale (yclimb auto-rescale V2 + corner climb) ----
-    private final Setting<Boolean> autoRescale = bool("AutoRescale", true).setPage("Rescale");
-    private final Setting<Double> rescaleAmount = num("RescaleAmount", 1.0, 0.05, 5.0).setPage("Rescale");
-    private final Setting<Boolean> cornerClimb = bool("CornerClimb", true).setPage("Rescale");
-    private final Setting<Double> yCap = num("YCap", 8.0, 0.0, 20.0).setPage("Rescale");
-    private final Setting<Double> zeroPointThree = num("ZeroPointThree", 0.3, 0.0, 1.0).setPage("Rescale");
-    private final Setting<Boolean> legacyVerticalBoost = bool("LegacyVerticalBoost", false).setPage("Rescale");
+    private final Setting<FlightMode> flightMode = fixed("FlightMode", FlightMode.CONTROL);
+    private final Setting<Boolean> freeLook = bool("FreeLook", true);
+    private final Setting<MotionMode> motionMode = fixed("MotionMode", MotionMode.FIREWORKS);
+    private final Setting<Double> speed = fixed("Speed", 1.0, 0.05, 6.0);
+    private final Setting<Boolean> autoFly = bool("AutoFly", false);
+    private final Setting<Boolean> horizontalNoGravity = fixed("HorizontalNoGravity", true);
+    private final Setting<Double> motionLerp = fixed("MotionLerp", 1.0, 0.0, 1.0);
+    private final Setting<Double> pullupAngle = fixed("PullupAngle", 0.0, 0.0, 89.0);
+    private final Setting<Double> downwardAngle = fixed("DownwardAngle", 0.0, 0.0, 89.0);
+    private final Setting<Boolean> takeoff = fixed("Takeoff", true);
+    private final Setting<Integer> takeoffTicks = fixed("TakeoffTicks", 10, 1, 40);
+    private final Setting<Boolean> landAutoClose = fixed("LandAutoClose", false);
+    private final Setting<Boolean> safeLanding = fixed("SafeLanding", true);
+    private final Setting<Boolean> terrainGuard = bool("TerrainGuard", true);
+    private final Setting<Integer> terrainLookahead = fixed("TerrainLookahead", 12, 8, 32);
+    private final Setting<Boolean> parallelPlanning = fixed("ParallelPlanning", true);
 
-    // Single-look cruise uses its own envelope; combat keeps its existing controller.
-    private final Setting<Boolean> coupledCruise = bool("CoupledCruise", false).setPage("GZBoost");
-    private final Setting<Double> cruisePitch = num("CruisePitch", 15.0, -89.5, 89.5).setPage("GZBoost");
-    private final Setting<Double> cruiseClimbPitch = num("CruiseClimbPitch", -45.0, -89.5, 0.0).setPage("GZBoost");
-    private final Setting<Double> cruiseDescentPitch = num("CruiseDescentPitch", 30.0, 0.0, 89.5).setPage("GZBoost");
-    private final Setting<Boolean> cruiseSmartClimb = bool("CruiseSmartClimb", true).setPage("GZBoost");
-    private final Setting<Double> cruiseDescentFloor = num("CruiseDescentFloor", -1.7, -20.0, 0.0).setPage("GZBoost");
-    private final Setting<Boolean> cruisePorpoise = bool("CruisePorpoise", false).setPage("GZBoost");
-    private final Setting<Double> cruiseHeightWindow = num("CruiseHeightWindow", 60.0, 1.0, 256.0).setPage("GZBoost");
-    private final Setting<Double> cruiseSpeedCap = num("CruiseSpeedCap", 15.0, 0.05, 15.0).setPage("GZBoost");
-    private final Setting<Double> cruiseBoxCap = num("CruiseBoxCap", 1.7, 0.01, 5.0).setPage("GZBoost");
-    private final Setting<Double> cruiseInset = num("CruiseInset", 0.002, 0.0, 0.1).setPage("GZBoost");
-    private final Setting<Boolean> cruiseDualLook = bool("CruiseDualLook", true).setPage("GZBoost");
-    private final Setting<Double> cruiseDualClimbAngle = num("CruiseDualClimbAngle", 0.0, 0.0, 89.5).setPage("GZBoost");
-    private final Setting<Double> cruiseDualDiveAngle = num("CruiseDualDiveAngle", 0.0, 0.0, 30.0).setPage("GZBoost");
-    private final Setting<Boolean> cruiseSpeedLog = bool("CruiseSpeedLog", false).setPage("GZBoost");
+    private final Setting<Boolean> autoRescale = fixed("AutoRescale", true);
+    private final Setting<Double> rescaleAmount = fixed("RescaleAmount", 1.0, 0.05, 5.0);
+    private final Setting<Boolean> cornerClimb = fixed("CornerClimb", true);
+    private final Setting<Double> yCap = fixed("YCap", 8.0, 0.0, 20.0);
+    private final Setting<Double> zeroPointThree = fixed("ZeroPointThree", 0.3, 0.0, 1.0);
+    private final Setting<Boolean> legacyVerticalBoost = fixed("LegacyVerticalBoost", false);
 
-    // ---- Fireworks ----
-    private final Setting<Integer> minBoostTicks = num("MinBoostTicks", 3, 0, 20).setPage("Fireworks");
-    private final Setting<Boolean> velFilter = bool("VelFilter", true).setPage("Fireworks");
-    private final Setting<Boolean> grimBoost = bool("GrimBoost", false).setPage("Fireworks");
-    private final Setting<Double> accMin = num("AccMin", 3.6, 0.5, 20.0).setPage("Fireworks");
-    private final Setting<Double> accMax = num("AccMax", 6.0, 1.0, 30.0).setPage("Fireworks");
-    private final Setting<SetbackMode> setbackMode = mode("Setback", SetbackMode.SIMULATION).setPage("Fireworks");
-    private final Setting<Integer> boostTimeoutTicks = num("BoostTimeoutTicks", 20, 5, 100).setPage("Fireworks");
-    private final Setting<Integer> correctionPauseTicks = num("CorrectionPauseTicks", 10, 1, 60).setPage("Fireworks");
+    private final Setting<Boolean> coupledCruise = fixed("CoupledCruise", false);
+    private final Setting<Double> cruisePitch = fixed("CruisePitch", 15.0, -89.5, 89.5);
+    private final Setting<Double> cruiseClimbPitch = fixed("CruiseClimbPitch", -45.0, -89.5, 0.0);
+    private final Setting<Double> cruiseDescentPitch = fixed("CruiseDescentPitch", 30.0, 0.0, 89.5);
+    private final Setting<Boolean> cruiseSmartClimb = fixed("CruiseSmartClimb", true);
+    private final Setting<Double> cruiseDescentFloor = fixed("CruiseDescentFloor", -1.7, -20.0, 0.0);
+    private final Setting<Boolean> cruisePorpoise = fixed("CruisePorpoise", false);
+    private final Setting<Double> cruiseHeightWindow = fixed("CruiseHeightWindow", 60.0, 1.0, 256.0);
+    private final Setting<Double> cruiseSpeedCap = fixed("CruiseSpeedCap", 15.0, 0.05, 15.0);
+    private final Setting<Double> cruiseBoxCap = fixed("CruiseBoxCap", 1.7, 0.01, 5.0);
+    private final Setting<Double> cruiseInset = fixed("CruiseInset", 0.002, 0.0, 0.1);
+    private final Setting<Boolean> cruiseDualLook = fixed("CruiseDualLook", true);
+    private final Setting<Double> cruiseDualClimbAngle = fixed("CruiseDualClimbAngle", 0.0, 0.0, 89.5);
+    private final Setting<Double> cruiseDualDiveAngle = fixed("CruiseDualDiveAngle", 0.0, 0.0, 30.0);
+    private final Setting<Boolean> cruiseSpeedLog = fixed("CruiseSpeedLog", false);
 
-    // ---- Tricks ----
-    private final Setting<Boolean> flipHover = bool("FlipHover", true).setPage("Tricks");
-    private final Setting<Boolean> autoEquip = bool("AutoEquip", true).setPage("Tricks");
-    private final Setting<Boolean> groundHop = bool("GroundHop", false).setPage("Tricks");
-    private final Setting<Double> hopHeight = num("HopHeight", 3.0, 1.0, 8.0).setPage("Tricks");
-    private final Setting<Double> hopPitch = num("HopPitch", 80.0, 40.0, 89.0).setPage("Tricks");
+    private final Setting<Integer> minBoostTicks = fixed("MinBoostTicks", 3, 0, 20);
+    private final Setting<Boolean> velFilter = fixed("VelFilter", true);
+    private final Setting<Boolean> grimBoost = fixed("GrimBoost", false);
+    private final Setting<Double> accMin = fixed("AccMin", 3.6, 0.5, 20.0);
+    private final Setting<Double> accMax = fixed("AccMax", 6.0, 1.0, 30.0);
+    private final Setting<SetbackMode> setbackMode = fixed("Setback", SetbackMode.SIMULATION);
+    private final Setting<Integer> boostTimeoutTicks = fixed("BoostTimeoutTicks", 20, 5, 100);
+    private final Setting<Integer> correctionPauseTicks = fixed("CorrectionPauseTicks", 10, 1, 60);
+
+    private final Setting<Boolean> flipHover = fixed("FlipHover", true);
+    private final Setting<Boolean> autoEquip = bool("AutoEquip", true);
+    private final Setting<Boolean> groundHop = fixed("GroundHop", false);
+    private final Setting<Double> hopHeight = fixed("HopHeight", 3.0, 1.0, 8.0);
+    private final Setting<Double> hopPitch = fixed("HopPitch", 80.0, 40.0, 89.0);
 
     private static final int CHEST_MENU_SLOT = 6;
     private static final int OFFHAND_MENU_SLOT = 45;
@@ -223,24 +231,52 @@ public class GuangxiElytraModule extends Module {
             float width, float height, float depth, double gravity) {}
 
     public GuangxiElytraModule() {
-        super("GuangxiElytra", "Elytra flight: CONTROL/ROTATION steering, vanilla-physics firework rescale (yclimb V2 + corner climb).", Category.MOVEMENT);
-        accMin.setVisibility(v -> grimBoost.getValue());
-        accMax.setVisibility(v -> grimBoost.getValue());
-        setbackMode.setVisibility(v -> grimBoost.getValue());
-        boostTimeoutTicks.setVisibility(v -> grimBoost.getValue());
-        pullupAngle.setVisibility(v -> flightMode.getValue() == FlightMode.CONTROL);
-        downwardAngle.setVisibility(v -> flightMode.getValue() == FlightMode.CONTROL);
-        zeroPointThree.setVisibility(v -> legacyVerticalBoost.getValue());
-        horizontalNoGravity.setVisibility(v -> motionMode.getValue() == MotionMode.VOID);
-        for (Setting<?> setting : new Setting<?>[]{cruisePitch, cruiseClimbPitch, cruiseDescentPitch,
-                cruiseSmartClimb, cruiseDescentFloor, cruisePorpoise, cruiseHeightWindow,
-                cruiseSpeedCap, cruiseBoxCap, cruiseInset, cruiseDualLook, cruiseSpeedLog}) {
-            setting.setVisibility(v -> coupledCruise.getValue());
-        }
-        for (Setting<?> setting : new Setting<?>[]{cruiseDualClimbAngle, cruiseDualDiveAngle}) {
-            setting.setVisibility(v -> coupledCruise.getValue() && cruiseDualLook.getValue());
-        }
+        super("GuangxiElytra", "Grim cruise and climb; NoAC direct flight. GZBoost enables fast cruise, Space climbs, Shift descends.", Category.MOVEMENT);
+        gzBoost.setVisibility(v -> flightProfile.getValue() == Mode.Grim);
+        gzBoostMode.setVisibility(v -> flightProfile.getValue() == Mode.Grim && gzBoost.getValue());
+        adaptiveSlowdown.setVisibility(v -> flightProfile.getValue() == Mode.Grim);
+        horizontalSpeed.setVisibility(v -> flightProfile.getValue() == Mode.NoAC);
+        climbSpeed.setVisibility(v -> flightProfile.getValue() == Mode.NoAC);
     }
+
+    private <T> Setting<T> fixed(String name, T value) {
+        Setting<T> setting = new Setting<>(name, value);
+        policy.put(name, setting);
+        return setting;
+    }
+
+    private <T> Setting<T> fixed(String name, T value, T min, T max) {
+        return fixed(name, value);
+    }
+
+    private void synchronizeProfile() {
+        Mode next = flightProfile.getValue();
+        boolean adaptive = next == Mode.Grim && adaptiveSlowdown.getValue();
+        if (activeAdaptiveSlowdown != adaptive) {
+            activeAdaptiveSlowdown = adaptive;
+            adaptation.reset();
+        }
+        if (activeProfile != next) {
+            resetFlightState();
+            activeProfile = next;
+            adaptation.reset();
+        }
+        motionMode.setValueNoEvent(next == Mode.Grim ? MotionMode.FIREWORKS : MotionMode.VOID);
+        coupledCruise.setValueNoEvent(next == Mode.Grim && gzBoost.getValue());
+        grimBoost.setValueNoEvent(false);
+        groundHop.setValueNoEvent(false);
+        speed.setValueNoEvent(next == Mode.NoAC ? horizontalSpeed.getValue() / 20.0 : 6.0);
+        rescaleAmount.setValueNoEvent(1.7);
+        yCap.setValueNoEvent(next == Mode.NoAC ? climbSpeed.getValue() / 20.0 : 8.0);
+        cruiseSpeedCap.setValueNoEvent(gzBoostMode.getValue() == BoostMode.Gentle ? 8.0 : 15.0);
+    }
+
+    private double grimBudget() {
+        return flightProfile.getValue() == Mode.Grim && adaptiveSlowdown.getValue() ? adaptation.budget() : 1.0;
+    }
+
+    @Override
+    public String getInfo() { return flightProfile.getValue().name(); }
 
     public void enableByChase() {
         if (!isEnabled()) {
@@ -417,6 +453,7 @@ public class GuangxiElytraModule extends Module {
     @Subscribe(priority = -100)
     private void onPreTick(PreTickEvent event) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        synchronizeProfile();
         // Observation lifetime: a rocket-gate result is only valid for the tick that produced it.
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
         rocketSentThisTick = false;
@@ -523,6 +560,11 @@ public class GuangxiElytraModule extends Module {
         double amount = speed.getValue();
         Vec3 realVector = dir.lengthSqr() > 1.0E-9
                 ? dir.normalize().scale(amount) : Vec3.ZERO;
+        if (flightProfile.getValue() == Mode.NoAC && hasInput) {
+            Vec3 horizontal = new Vec3(dir.x, 0, dir.z);
+            if (horizontal.lengthSqr() > 1e-9) horizontal = horizontal.normalize().scale(amount);
+            realVector = horizontal.add(0, Math.signum(dir.y) * climbSpeed.getValue() / 20.0, 0);
+        }
 
         // acceleration smoothing toward the previous applied velocity
         double a = motionLerp.getValue();
@@ -608,6 +650,9 @@ public class GuangxiElytraModule extends Module {
         pendingPrecision = fv.isPrecise();
         pendingDirectional = fv.isDirectional();
         cruiseTickActive = pendingCruise != null;
+        if (flightProfile.getValue() == Mode.Grim && adaptiveSlowdown.getValue()) {
+            adaptation.applied(mc.player.tickCount, mc.player.isFallFlying());
+        }
     }
 
     /** Called after vanilla glide acceleration, immediately before movement. */
@@ -699,7 +744,7 @@ public class GuangxiElytraModule extends Module {
     private CoupledCruise.Config cruiseConfig() {
         return new CoupledCruise.Config(cruisePitch.getValue(), cruiseClimbPitch.getValue(), cruiseDescentPitch.getValue(),
                 cruiseSmartClimb.getValue(), cruiseDescentFloor.getValue(), cruisePorpoise.getValue(),
-                cruiseHeightWindow.getValue(), cruiseSpeedCap.getValue(), cruiseBoxCap.getValue(), cruiseInset.getValue(),
+                cruiseHeightWindow.getValue(), cruiseSpeedCap.getValue() * grimBudget(), cruiseBoxCap.getValue() * grimBudget(), cruiseInset.getValue(),
                 cruiseDualClimbAngle.getValue(), cruiseDualDiveAngle.getValue());
     }
 
@@ -1329,6 +1374,9 @@ public class GuangxiElytraModule extends Module {
         if (event.getPacket() instanceof ClientboundPlayerPositionPacket
                 || event.getPacket() instanceof ClientboundRespawnPacket) {
             correctionPending.set(true);
+            if (flightProfile.getValue() == Mode.Grim && adaptiveSlowdown.getValue() && mc.player != null) {
+                adaptation.corrected(mc.player.tickCount);
+            }
             return;
         }
         // Velocity filtering belongs to the optional freeze exploit, not normal flight.
