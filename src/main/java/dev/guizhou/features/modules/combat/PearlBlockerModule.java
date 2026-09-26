@@ -26,8 +26,8 @@ public class PearlBlockerModule extends Module {
 
     private final Setting<Boolean> render        = bool("Render", true).setPage("Render");
     private final Setting<Float>   fadeTime      = num("FadeTime", 1.0f, 0.05f, 2.0f).setPage("Render");
-    private final Setting<Color>   fillColor     = color("FillColor", 255, 0, 0, 44).setPage("Render");
-    private final Setting<Color>   outlineColor  = color("OutlineColor", 255, 0, 0, 44).setPage("Render");
+    private final Setting<Color>   fillColor     = color("FillColor", 224, 138, 108, 44).setPage("Render");
+    private final Setting<Color>   outlineColor  = color("OutlineColor", 224, 138, 108, 44).setPage("Render");
 
     private final Map<Integer, BlockPos> tracked = new HashMap<>();
     private final Map<BlockPos, Long> renderMap = new HashMap<>();

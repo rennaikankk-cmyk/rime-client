@@ -28,11 +28,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class LogoutSpotsModule extends Module {
 
-    public Setting<Color>   spotColor = color("SpotColor",  0xF8, 0x71, 0x71, 255);
-    public Setting<Color>   sideColor = color("SideColor",  0xF8, 0x71, 0x71,  55);
+    public Setting<Color>   spotColor = color("SpotColor",  0xE3, 0x9A, 0x92, 255);
+    public Setting<Color>   sideColor = color("SideColor",  0xE3, 0x9A, 0x92,  55);
     public Setting<Float>   lineWidth = num("LineWidth",    1.5f, 0.5f, 5.0f);
     public Setting<Boolean> showTime  = bool("ShowTime",    true);
-    public Setting<Color>   nameColor = color("NameColor",  0xF8, 0x71, 0x71, 255);
+    public Setting<Color>   nameColor = color("NameColor",  0xE3, 0x9A, 0x92, 255);
 
     private static final EquipmentSlot[] ARMOR_SLOTS = {
         EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET

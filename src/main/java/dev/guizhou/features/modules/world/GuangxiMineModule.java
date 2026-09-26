@@ -66,9 +66,9 @@ public class GuangxiMineModule extends Module implements MineApi {
 
     private final Setting<Boolean> render = bool("Render", true).setPage("Render");
     private final Setting<Float> lineWidth = num("LineWidth", 2.0f, 0.5f, 5.0f).setPage("Render");
-    private final Setting<Color> lineColor = color("LineColor", 255, 255, 255, 150).setPage("Render");
-    private final Setting<Color> sideColor = color("SideColor", 255, 255, 255, 40).setPage("Render");
-    private final Setting<Color> primaryColor = color("PrimaryColor", 255, 180, 255, 60).setPage("Render");
+    private final Setting<Color> lineColor = color("LineColor", 194, 192, 182, 150).setPage("Render");
+    private final Setting<Color> sideColor = color("SideColor", 224, 138, 108, 40).setPage("Render");
+    private final Setting<Color> primaryColor = color("PrimaryColor", 224, 138, 108, 60).setPage("Render");
 
     private BlockPos pos;
     private Direction direction;

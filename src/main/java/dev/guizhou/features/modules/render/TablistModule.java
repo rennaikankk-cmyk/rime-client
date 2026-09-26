@@ -11,8 +11,8 @@ public class TablistModule extends Module {
 
     public Setting<Boolean> friends = bool("Friends", true);
     public Setting<Boolean> enemies = bool("Enemies", true);
-    public final Setting<Color> friendColor = color("Friend Color",   0, 255, 100, 255);
-    public final Setting<Color> enemyColor  = color("Enemy Color",  255,   0,   0, 255);
+    public final Setting<Color> friendColor = color("Friend Color", 155, 191, 166, 255);
+    public final Setting<Color> enemyColor  = color("Enemy Color",  227, 154, 146, 255);
 
     public TablistModule() {
         super("Tablist", "Hides players in the tablist who aren't you, a friend, or an enemy", Category.RENDER);

@@ -13,10 +13,10 @@ import org.joml.Matrix3x2f;
  * rectangle is one mesh: three body quads and four corner fans. No web runtime.
  */
 public final class ShadcnDraw {
-    // Graphite + iris palette. The low RGB bits are HudAppearance lookup keys; keep them unique.
-    public static final int BG = 0xFF0F1117, CARD = 0xF2151820, SURFACE = 0xFF1D212C, RAISED = 0xFF252A37,
-            BORDER = 0xFF2B3140, TEXT = 0xFFECEEF4, MUTED = 0xFF8A92A6, SUBTLE = 0xFF5D6478,
-            ACCENT = 0xFF8B7CFF, ACCENT_2 = 0xFF5CC8FF, SUCCESS = 0xFF4ADE80, WARNING = 0xFFFBBF24, DANGER = 0xFFF87171;
+    // Night + terracotta. The low RGB bits are HudAppearance lookup keys; keep them unique.
+    public static final int BG = 0xFF262624, CARD = 0xF230302E, SURFACE = 0xFF1F1E1C, RAISED = 0xFF3A3935,
+            BORDER = 0xFF45443F, TEXT = 0xFFFAF9F5, MUTED = 0xFFC2C0B6, SUBTLE = 0xFF8A887F,
+            ACCENT = 0xFFE08A6C, ACCENT_2 = 0xFFD97757, SUCCESS = 0xFF9BBFA6, WARNING = 0xFFE0B15C, DANGER = 0xFFE39A92;
 
     private static final Identifier ICONS = Identifier.fromNamespaceAndPath("guizhouware", "textures/gui/shell_icons.png");
     private static final int ICON_CELL = 96, ICON_COLUMNS = 8, ATLAS_W = 768, ATLAS_H = 384;

@@ -32,8 +32,8 @@ public class AutoPortalModule extends Module {
 
     private final Setting<Boolean> render       = bool("Render", true);
     private final Setting<Float>   fadeTime     = num("FadeTime", 1.0f, 0.05f, 2.0f);
-    private final Setting<Color>   fillColor    = color("FillColor", 85, 0, 255, 44);
-    private final Setting<Color>   outlineColor = color("OutlineColor", 85, 0, 255, 44);
+    private final Setting<Color>   fillColor    = color("FillColor", 224, 138, 108, 44);
+    private final Setting<Color>   outlineColor = color("OutlineColor", 224, 138, 108, 44);
 
     private final List<BlockPos> portalBlocks = new ArrayList<>();
     private final Map<BlockPos, Long> renderMap = new HashMap<>();

@@ -86,7 +86,7 @@ public class GuangxiBedModule extends Module {
     private final Setting<Boolean> tpsSync = bool("TpsSync", true);
 
     private final Setting<Boolean> render      = bool("Render", true);
-    private final Setting<Color>   renderColor = color("Color", 255, 60, 60, 60);
+    private final Setting<Color>   renderColor = color("Color", 224, 138, 108, 60);
 
     private final Timer timer = new Timer();
 

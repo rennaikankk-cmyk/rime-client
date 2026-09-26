@@ -10,7 +10,7 @@ import net.minecraft.client.gui.GuiGraphics;
  * the vanilla timing and completion logic and only swaps what is drawn.
  *
  * <p>Typography and shapes reuse {@link HudFonts} through {@link ShadcnDraw} /
- * {@link HudDraw}: graphite field, iris {@code #8B7CFF} and cyan {@code #5CC8FF}.
+ * {@link HudDraw}: night field {@code #262624} and terracotta {@code #E08A6C}.
  * No badge, no halo. A failed frame disables the skin for the rest of the session
  * so vanilla can take over.
  */

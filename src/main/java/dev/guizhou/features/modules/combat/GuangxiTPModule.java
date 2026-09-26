@@ -72,7 +72,7 @@ public class GuangxiTPModule extends Module {
     }
 
     private final Setting<Boolean> render      = bool("Render", true);
-    private final Setting<Color>   renderColor = color("Color", 130, 80, 255, 60);
+    private final Setting<Color>   renderColor = color("Color", 224, 138, 108, 60);
 
     /** Per-second decision diagnostics: which gate killed the placement attempt. */
     private final Setting<Boolean> debug = bool("Debug", false);

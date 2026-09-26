@@ -4,18 +4,18 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Graphite + iris chat palette (RGB, no alpha). Minecraft-free so formatting logic stays testable. */
+/** Night + terracotta chat palette (RGB, no alpha). Minecraft-free so formatting logic stays testable. */
 public final class ChatPalette {
-    public static final int TEXT = 0xECEEF4, MUTED = 0x8A92A6, SUBTLE = 0x5D6478,
-            ACCENT = 0x8B7CFF, ACCENT_2 = 0x5CC8FF, ACCENT_SOFT = 0xB9AEFF,
-            SUCCESS = 0x4ADE80, WARNING = 0xFBBF24, DANGER = 0xF87171, DANGER_SOFT = 0xFCA5A5;
+    public static final int TEXT = 0xFAF9F5, MUTED = 0xC2C0B6, SUBTLE = 0x8A887F,
+            ACCENT = 0xE08A6C, ACCENT_2 = 0xD97757, ACCENT_SOFT = 0xE0B15C,
+            SUCCESS = 0x9BBFA6, WARNING = 0xE0B15C, DANGER = 0xE39A92, DANGER_SOFT = 0xE39A92;
 
     /** Legacy markup names ({green}, {red}, ...) remapped onto the new palette. */
     public static final Map<String, Integer> LEGACY;
 
     static {
         Map<String, Integer> map = new LinkedHashMap<>();
-        map.put("black", 0x0F1117);
+        map.put("black", 0x262624);
         map.put("dark_blue", 0x4656C8);
         map.put("dark_green", 0x22A35A);
         map.put("dark_aqua", 0x3A9CC9);

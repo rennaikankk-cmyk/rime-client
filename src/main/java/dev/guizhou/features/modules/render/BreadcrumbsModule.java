@@ -28,7 +28,7 @@ public class BreadcrumbsModule extends Module {
     public Setting<Boolean> pearls    = bool("Pearls", true);
     public Setting<Integer> length    = num("Length", 40, 5, 200);
     public Setting<Float>   lineWidth = num("LineWidth", 2.0f, 0.5f, 5.0f);
-    public Setting<Color>   color     = color("Color", 255, 255, 255, 200);
+    public Setting<Color>   color     = color("Color", 224, 138, 108, 200);
     public Setting<Boolean> fade      = bool("Fade", true);
     public Setting<Float>   fadeStart = num("FadeStart", 0.5f, 0f, 1f);
 

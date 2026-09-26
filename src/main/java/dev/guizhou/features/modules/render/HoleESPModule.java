@@ -22,9 +22,9 @@ public class HoleESPModule extends Module {
     private final Setting<Boolean> fill = bool("Fill", true).setPage("Render");
     private final Setting<Boolean> outline = bool("Outline", true).setPage("Render");
     private final Setting<Float> lineWidth = num("LineWidth", 1.5f, 0.5f, 4.0f).setPage("Render");
-    private final Setting<Color> bedrockColor = color("BedrockColor", 60, 220, 120, 70).setPage("Render");
-    private final Setting<Color> obsidianColor = color("ObsidianColor", 220, 70, 70, 70).setPage("Render");
-    private final Setting<Color> doubleColor = color("DoubleColor", 230, 200, 60, 70).setPage("Render");
+    private final Setting<Color> bedrockColor = color("BedrockColor", 155, 191, 166, 70).setPage("Render");
+    private final Setting<Color> obsidianColor = color("ObsidianColor", 227, 154, 146, 70).setPage("Render");
+    private final Setting<Color> doubleColor = color("DoubleColor", 224, 177, 92, 70).setPage("Render");
 
     private List<HoleClassifier.Hole> holes = List.of();
     private int ticks;

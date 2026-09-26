@@ -91,8 +91,8 @@ public class AutoAnchorModule extends Module {
     private final Setting<Boolean> damageSync    = bool("DamageSync", false).setPage("General");
     private final Setting<Boolean> render        = bool("Render", true).setPage("Render");
     private final Setting<Float>   fadeTime      = num("FadeTime", 1.0f, 0.05f, 2.0f).setPage("Render");
-    private final Setting<Color>   fillColor     = color("FillColor", 130, 80, 255, 45).setPage("Render");
-    private final Setting<Color>   outlineColor  = color("OutlineColor", 130, 80, 255, 255).setPage("Render");
+    private final Setting<Color>   fillColor     = color("FillColor", 224, 138, 108, 45).setPage("Render");
+    private final Setting<Color>   outlineColor  = color("OutlineColor", 224, 138, 108, 255).setPage("Render");
 
     private final CombatPlanningTask<AnchorPlanner.Input, AnchorPlanner.Result> planner = new CombatPlanningTask<>(input -> {
         long timer = ClientDiagnostics.startTimer();

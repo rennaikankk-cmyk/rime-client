@@ -46,8 +46,8 @@ public class TargetHudModule extends HudModule {
     // ---- graphite + iris palette; low RGB bits are HudAppearance keys ----
     private static final int CARD     = 0xEB151820;
     private static final int FG       = 0xFFECEEF4;
-    private static final int PRIMARY  = 0xFF8B7CFF;
-    private static final int CYAN     = 0xFF5CC8FF;
+    private static final int PRIMARY  = 0xFFE08A6C;
+    private static final int CYAN     = 0xFFD97757;
     private static final int MUTED_FG = 0xFF8A92A6;
     private static final int SUBTLE   = 0xFF5D6478;
     private static final int TRACK    = 0xFF1D212C;

@@ -8,13 +8,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Geist-backed HUD fonts sized in CSS pixels — the shadcn prototype is the
- * design truth. Three static weights; glyphs bake at a 26px ascent so the
- * 22/26px hero numbers stay sharp while smaller sizes downscale. Latin and
- * digits come from Geist, CJK falls through to an installed sans face
- * (Microsoft YaHei on Windows), then the side-download ib_zh face, then the
- * OS logical sans. No drop shadow; fully transparent text is skipped rather
- * than forced opaque by the renderer's legacy alpha floor.
+ * Serif HUD fonts sized in CSS pixels. The night preview is the design truth.
+ * Three static weights share one face chain: Anthropic Serif when installed,
+ * then Source Serif 4, Noto Serif SC, Palatino, Songti, then the logical serif.
+ * Anthropic Serif is never embedded. No drop shadow; fully transparent text is
+ * skipped rather than forced opaque by the renderer's legacy alpha floor.
  */
 public final class HudFonts {
 
@@ -79,12 +77,9 @@ public final class HudFonts {
         FontRenderer nextRegular = null, nextSemibold = null, nextBold = null;
         boolean published = false;
         try {
-            Font yahei = installedSans();
-            Font zh = zhFace();
-            nextRegular = make("/assets/guizhouware/font/geist-400.ttf", yahei, zh);
-            Font strongCjk = yahei == null ? null : yahei.deriveFont(Font.BOLD);
-            nextSemibold = make("/assets/guizhouware/font/geist-600.ttf", strongCjk, zh);
-            nextBold = make("/assets/guizhouware/font/geist-700.ttf", strongCjk, zh);
+            nextRegular = make(Font.PLAIN);
+            nextSemibold = make(Font.BOLD);
+            nextBold = make(Font.BOLD);
             semibold = nextSemibold;
             bold = nextBold;
             regular = nextRegular; // Publish only after all weights succeed.
@@ -104,24 +99,26 @@ public final class HudFonts {
         catch (Throwable failure) { FontFallback.fail("partial font cleanup", failure); }
     }
 
-    private static FontRenderer make(String geistPath, Font yahei, Font zh) {
-        List<Font> chain = new ArrayList<>(4);
-        Font geist = loadResource(geistPath);
-        if (geist != null) chain.add(geist);
-        if (yahei != null) chain.add(yahei);
-        if (zh != null) chain.add(zh);
-        chain.add(new Font(Font.SANS_SERIF, Font.PLAIN, 1));
+    private static final String[] SERIF_FAMILIES = {
+            "Anthropic Serif", "Source Serif 4", "Noto Serif SC", "Palatino Linotype", "Songti SC", "宋体"
+    };
+
+    private static FontRenderer make(int style) {
+        List<Font> chain = new ArrayList<>(SERIF_FAMILIES.length + 1);
+        for (String family : SERIF_FAMILIES) {
+            Font face = installedFamily(family, style);
+            if (face != null) chain.add(face);
+        }
+        chain.add(new Font(Font.SERIF, style, 1));
         return new FontRenderer(chain.toArray(new Font[0]), CHARS_PER_PAGE, 4, BAKE_ASCENT);
     }
 
-    /** Installed CJK sans (Microsoft YaHei on Windows), preferred over the IB face. */
-    private static Font installedSans() {
+    /** Installed family only. A missing name must not fall through to the logical dialog face. */
+    private static Font installedFamily(String family, int style) {
         try {
-            for (String family : java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+            for (String name : java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
                     .getAvailableFontFamilyNames()) {
-                if (family.equalsIgnoreCase("Microsoft YaHei") || family.equals("微软雅黑")) {
-                    return new Font(family, Font.PLAIN, 1);
-                }
+                if (name.equalsIgnoreCase(family)) return new Font(name, style, 1);
             }
         } catch (Throwable ignored) {
             // headless or font lookup failure — fall through

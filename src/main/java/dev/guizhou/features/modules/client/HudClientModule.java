@@ -45,10 +45,10 @@ public class HudClientModule extends Module {
     private int dragX, dragY;
     private boolean editorOpen;
 
-    public final Setting<Color> radarEnemyColor  = color("Radar Enemy Color",  0xEC, 0xEE, 0xF4, 255).setPage("Colors");
-    public final Setting<Color> radarFriendColor = color("Radar Friend Color", 0x4A, 0xDE, 0x80, 255).setPage("Colors");
-    public final Setting<Color> radarSelfColor   = color("Radar Self Color",   0x8B, 0x7C, 0xFF, 255).setPage("Colors");
-    public final Setting<Color> activeModuleColor = color("Active Module Color", 0x8B, 0x7C, 0xFF, 255).setPage("Colors");
+    public final Setting<Color> radarEnemyColor  = color("Radar Enemy Color",  0xE3, 0x9A, 0x92, 255).setPage("Colors");
+    public final Setting<Color> radarFriendColor = color("Radar Friend Color", 0x9B, 0xBF, 0xA6, 255).setPage("Colors");
+    public final Setting<Color> radarSelfColor   = color("Radar Self Color",   0xE0, 0x8A, 0x6C, 255).setPage("Colors");
+    public final Setting<Color> activeModuleColor = color("Active Module Color", 0xE0, 0x8A, 0x6C, 255).setPage("Colors");
 
     public Setting<HudPosition> coordinatesPosition;
     public Setting<HudPosition> activeModulesPosition;
@@ -69,7 +69,7 @@ public class HudClientModule extends Module {
         pingShowTps = bool("Ping 显示 TPS", true).setPage("Ping");
         pingShowFps = bool("Ping 显示 FPS", true).setPage("Ping");
         register(new RadarHudModule(), true);
-        register(new PlayersHudModule(), true);
+        register(new PlayersHudModule(), false);
         register(new ActiveModulesHudModule(), true);
         activeModulesPosition = mode("ActiveModules Position", HudPosition.CENTER_RIGHT).setPage("Elements");
         activeModulesSort = mode("ActiveModules 排序", ActiveModulesHudModule.Sort.ADDED).setPage("ActiveModules");
@@ -89,9 +89,9 @@ public class HudClientModule extends Module {
         posY.put(element, num(id + " Y", 0.5, 0.0, 1.0).setPage("Layout"));
         sizes.put(element, num(id + " 大小 (%)", 100.0, 50.0, 200.0).setPage(id));
         opacity.put(element, num(id + " 背景不透明度 (%)", 100.0, 0.0, 100.0).setPage(id));
-        backgrounds.put(element, register(new Setting<>(id + " 背景颜色", new Color(0x151820))).setPage(id));
-        foregrounds.put(element, register(new Setting<>(id + " 文字颜色", new Color(0xECEEF4))).setPage(id));
-        accents.put(element, register(new Setting<>(id + " 强调色", new Color(0x8B7CFF))).setPage(id));
+        backgrounds.put(element, register(new Setting<>(id + " 背景颜色", new Color(0x30302E))).setPage(id));
+        foregrounds.put(element, register(new Setting<>(id + " 文字颜色", new Color(0xFAF9F5))).setPage(id));
+        accents.put(element, register(new Setting<>(id + " 强调色", new Color(0xE08A6C))).setPage(id));
     }
 
     public float scaleOf(HudModule element) { return sizes.get(element).getValue().floatValue()/100f; }
@@ -103,9 +103,9 @@ public class HudClientModule extends Module {
     }
 
     // Opaque colours that shipped as defaults before the graphite + iris palette.
-    private static final int[] LEGACY_BG = {0xFF182338, 0xFF171717};
-    private static final int[] LEGACY_FG = {0xFFE0E6F2, 0xFFFAFAFA};
-    private static final int[] LEGACY_ACCENT = {0xFF72A8D8, 0xFFE5E5E5};
+    private static final int[] LEGACY_BG = {0xFF182338, 0xFF171717, 0xFF151820};
+    private static final int[] LEGACY_FG = {0xFFE0E6F2, 0xFFFAFAFA, 0xFFECEEF4};
+    private static final int[] LEGACY_ACCENT = {0xFF72A8D8, 0xFFE5E5E5, 0xFF8B7CFF};
 
     /**
      * Settings still holding a previous default follow the new palette; any
@@ -118,10 +118,10 @@ public class HudClientModule extends Module {
             migrate(foregrounds.get(element), LEGACY_FG);
             migrate(accents.get(element), LEGACY_ACCENT);
         }
-        migrate(radarEnemyColor, 0xFFFFFFFF);
-        migrate(radarFriendColor, 0xFF00FF64);
-        migrate(radarSelfColor, 0xFFFFFFFF);
-        migrate(activeModuleColor, 0xFFAF0000);
+        migrate(radarEnemyColor, 0xFFFFFFFF, 0xFFECEEF4);
+        migrate(radarFriendColor, 0xFF00FF64, 0xFF4ADE80);
+        migrate(radarSelfColor, 0xFFFFFFFF, 0xFF8B7CFF);
+        migrate(activeModuleColor, 0xFFAF0000, 0xFF8B7CFF);
     }
 
     private static void migrate(Setting<Color> setting, int... legacy) {

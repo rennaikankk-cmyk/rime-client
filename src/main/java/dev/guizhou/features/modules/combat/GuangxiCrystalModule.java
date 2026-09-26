@@ -177,18 +177,18 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<Boolean> packetLog     = bool("PacketLog", false).setPage("Extra");
 
     private final Setting<RenderMode> renderMode = mode("Render", RenderMode.GRADIENT).setPage("Render");
-    private final Setting<Color>   sideColor     = color("SideColor", 130, 80, 255, 45).setPage("Render");
-    private final Setting<Color>   lineColor     = color("LineColor", 130, 80, 255, 255).setPage("Render");
+    private final Setting<Color>   sideColor     = color("SideColor", 224, 138, 108, 97).setPage("Render");
+    private final Setting<Color>   lineColor     = color("LineColor", 224, 138, 108, 255).setPage("Render");
     private final Setting<Float>   lineWidth     = num("LineWidth", 1.5f, 0.5f, 5.0f).setPage("Render");
     private final Setting<Double>  gradientHeight = num("GradientHeight", 0.7, 0.0, 1.0).setPage("Render");
     private final Setting<Integer> renderTime    = num("RenderTime", 10, 1, 40).setPage("Render");
     private final Setting<Integer> smoothness    = num("Smoothness", 10, 1, 50).setPage("Render");
-    private final Setting<Color>   pulseColor    = color("PulseColor", 130, 80, 255, 150).setPage("Render");
+    private final Setting<Color>   pulseColor    = color("PulseColor", 224, 138, 108, 150).setPage("Render");
     private final Setting<Double>  pulseSpeed    = num("PulseSpeed", 2.0, 0.2, 6.0).setPage("Render");
     private final Setting<Double>  pulseExpand   = num("PulseExpand", 0.35, 0.0, 1.0).setPage("Render");
     private final Setting<Boolean> damageText   = bool("DamageText", true).setPage("Render")
             .setVisibility(v -> renderMode.getValue() != RenderMode.NONE);
-    private final Setting<Color>   damageColor  = color("DamageColor", 255, 255, 255, 255).setPage("Render")
+    private final Setting<Color>   damageColor  = color("DamageColor", 250, 249, 245, 255).setPage("Render")
             .setVisibility(v -> renderMode.getValue() != RenderMode.NONE && damageText.getValue());
 
     private BlockPos renderPos = null;
@@ -521,7 +521,7 @@ public class GuangxiCrystalModule extends Module {
         pose.pushMatrix();
         pose.translate(screen[0], screen[1]);
         pose.scale(scale, scale);
-        graphics.drawString(mc.font, text, -half + 1, 1, 0xFF202020, false);
+        graphics.drawString(mc.font, text, -half + 1, 1, 0xFF1C1B19, false);
         graphics.drawString(mc.font, text, -half, 0, color, false);
         pose.popMatrix();
     }

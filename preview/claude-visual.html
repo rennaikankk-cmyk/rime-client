@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en" data-tone="night" data-face="all" data-accent="one" data-on="bar" data-frame="glass" data-desc="on" data-blur="off" data-framed="off" data-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rime · Claude visual preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --side: #F0EEE6;
+    --card: #FFFFFF;
+    --raised: #F6F5F0;
+    --line: #E6E4DA;
+    --ink: #141413;
+    --muted: #5E5D59;
+    --faint: #87867F;
+    --accent: #D97757;
+    --accent-deep: #C15F3C;
+    --wash: #F3E6DF;
+    --on-accent: #FAF9F5;
+    --ok: #3F6B4E;
+    --warn: #A9782A;
+    --danger: #B5453A;
+    --world-sky: #6E5A49;
+    --world-land: #3A332C;
+    --world-far: #4E4338;
+    --combat: var(--accent);
+    --world: var(--accent);
+    --render: var(--accent);
+    --movement: var(--accent);
+    --player: var(--accent);
+    --funny: var(--accent);
+    --client: var(--accent);
+    --hud: var(--accent);
+    --serif: "Anthropic Serif", "Source Serif 4", "Noto Serif SC", "Palatino Linotype", "Songti SC", serif;
+    --sans: "Anthropic Sans", "Source Sans 3", "Noto Sans SC", "Segoe UI", sans-serif;
+    --ui: var(--serif);
+    --radius: 12px;
+  }
+  html[data-tone="night"] {
+    --bg: #262624;
+    --side: #1F1E1C;
+    --card: #30302E;
+    --raised: #3A3935;
+    --line: #45443F;
+    --ink: #FAF9F5;
+    --muted: #C2C0B6;
+    --faint: #8A887F;
+    --accent: #E08A6C;
+    --accent-deep: #D97757;
+    --wash: #3C2E28;
+    --on-accent: #1C1B19;
+    --ok: #9BBFA6;
+    --warn: #E0B15C;
+    --danger: #E39A92;
+    --world-sky: #3A312A;
+    --world-land: #221E1A;
+    --world-far: #2C261F;
+  }
+  html[data-accent="warm"] {
+    --combat: #C4654A;
+    --world: #6E8B74;
+    --render: #A6846A;
+    --movement: #C4A574;
+    --player: #8E877C;
+    --funny: #A07C78;
+    --client: #6A655E;
+    --hud: #D97757;
+  }
+  html[data-face="display"] { --ui: var(--sans); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--ui);
+    font-size: 14px;
+    line-height: 1.45;
+    font-optical-sizing: auto;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .display { font-family: var(--serif); }
+  .bar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+    padding: 12px 22px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; flex-direction: column; min-width: 148px; }
+  .brand b { font-family: var(--serif); font-weight: 600; font-size: 18px; letter-spacing: -0.02em; }
+  .brand span { color: var(--faint); font-size: 11px; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--card); }
+  .seg button, .chip {
+    border: 0; background: transparent; padding: 5px 10px; color: var(--muted); font-size: 12px;
+  }
+  .seg button.is-on, .chip.is-on { background: var(--ink); color: var(--bg); }
+  .jumps { display: flex; gap: 12px; margin-left: auto; }
+  .jumps a { color: var(--muted); font-size: 12px; text-decoration: none; }
+  .jumps a:hover { color: var(--ink); }
+  main { max-width: 1120px; margin: 0 auto; padding: 22px 22px 64px; }
+  .lead { display: grid; grid-template-columns: 1.1fr .9fr; gap: 28px; align-items: end; margin-bottom: 28px; }
+  h1 { font-family: var(--serif); font-weight: 560; font-size: 28px; letter-spacing: -0.03em; margin: 0 0 8px; }
+  .lede { margin: 0; color: var(--muted); max-width: 46em; }
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .swatch { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--card); }
+  .swatch i { display: block; height: 36px; }
+  .swatch b, .swatch em { display: block; padding: 0 8px; font-style: normal; }
+  .swatch b { font-size: 12px; font-weight: 600; padding-top: 6px; }
+  .swatch em { font-size: 10px; color: var(--faint); padding-bottom: 6px; font-family: var(--sans); }
+  h2 {
+    font-family: var(--serif); font-weight: 600; font-size: 20px; letter-spacing: -0.02em;
+    margin: 34px 0 4px;
+  }
+  .sub { margin: 0 0 12px; color: var(--faint); font-size: 12px; }
+  #menu-scene {
+    position: relative; border: 0; background: transparent;
+    min-height: 0; align-self: start; overflow: visible;
+  }
+  #menu-scene .sky, #menu-scene .veil { display: none; }
+  html[data-blur="on"] #menu-scene {
+    background: color-mix(in srgb, var(--world-land) 88%, transparent);
+    border-radius: 16px;
+  }
+  html[data-blur="on"] #menu-scene .veil { display: block; }
+  .menus { position: relative; z-index: 1; padding: 0; }
+  html[data-blur="on"] .menus { padding: 16px; }
+  .sky { position: absolute; left: 0; right: 0; top: 0; height: 46%; background: var(--world-sky); }
+  .ridge { display: none; }
+  .tree { position: absolute; width: 10px; background: #2A241E; }
+  .veil { position: absolute; inset: 0; }
+  html[data-blur="on"] .veil { backdrop-filter: blur(5px); background: rgba(20, 20, 19, .28); }
+  .pair { display: grid; grid-template-columns: 1fr 220px; gap: 12px; align-items: start; }
+  .menus { position: relative; z-index: 1; }
+  .cols { display: flex; gap: 8px; align-items: flex-start; }
+  .panel {
+    width: 124px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--card);
+    overflow: hidden;
+  }
+  .phd {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 8px; font-size: 12px; border-bottom: 1px solid var(--line);
+    background: var(--side);
+  }
+  .phd i { width: 6px; height: 6px; border-radius: 50%; background: var(--mark, var(--accent)); display: inline-block; }
+  .row, .mod {
+    width: 100%; text-align: left; border: 0; background: transparent;
+    padding: 4px 8px; display: flex; justify-content: space-between; gap: 6px; font-size: 12px;
+  }
+  .row:hover, .mod:hover { background: var(--wash); }
+  .mod .name { color: var(--muted); }
+  html[data-on="bar"] .mod.on { box-shadow: inset 3px 0 0 var(--mark, var(--accent)); }
+  html[data-on="ink"] .mod.on .name { color: var(--mark, var(--accent)); }
+  html[data-on="bar"] .mod.on .name { color: var(--ink); }
+  .mod .key { color: var(--faint); font-size: 10px; }
+  .inline { padding: 4px 8px 8px; display: grid; gap: 6px; }
+  .inline label { display: flex; justify-content: space-between; color: var(--faint); font-size: 10px; }
+  .desc { margin: 8px 2px 0; color: var(--muted); font-size: 11px; }
+  html[data-desc="off"] .desc { display: none; }
+  .list-card { border: 1px solid var(--line); border-radius: 16px; background: var(--card); padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+  .list-card .panel { width: 100%; }
+  .list-card .panel.shut .body { display: none; }
+  .cat-combat { --mark: var(--combat); }
+  .cat-world { --mark: var(--world); }
+  .cat-render { --mark: var(--render); }
+  .cat-movement { --mark: var(--movement); }
+  .cat-player { --mark: var(--player); }
+  .cat-client { --mark: var(--client); }
+  .cat-hud { --mark: var(--hud); }
+  .shell {
+    display: grid; grid-template-columns: 168px 1fr 280px; min-height: 460px;
+    border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--bg);
+  }
+  .side, .drawer { background: var(--side); padding: 14px 12px; }
+  .drawer { border-left: 1px solid var(--line); background: var(--card); max-height: 640px; overflow: auto; }
+  .side .logo { font-family: var(--serif); font-size: 20px; margin: 4px 8px 14px; }
+  .nav {
+    width: 100%; text-align: left; border: 0; background: transparent; border-radius: 8px;
+    padding: 7px 8px; display: flex; justify-content: space-between; color: var(--muted); font-size: 13px;
+  }
+  .nav.is-on { background: var(--wash); color: var(--ink); }
+  .nav em { font-style: normal; color: var(--faint); font-size: 11px; }
+  .stage { padding: 16px 18px 20px; }
+  .stage h3 { margin: 0; font-family: var(--serif); font-weight: 600; font-size: 22px; }
+  .stage .meta { color: var(--faint); font-size: 12px; margin: 2px 0 12px; }
+  .search {
+    border: 1px solid var(--line); background: var(--card); border-radius: 8px;
+    padding: 7px 10px; color: var(--faint); font-size: 12px; margin-bottom: 10px;
+  }
+  .filters { display: flex; gap: 6px; margin-bottom: 12px; }
+  .filters button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 3px 8px; font-size: 11px; color: var(--muted); }
+  .filters button.is-on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .center-note { color: var(--muted); font-size: 13px; }
+  .card {
+    text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 10px;
+  }
+  .card.on { background: var(--wash); border-color: color-mix(in srgb, var(--mark, var(--accent)) 45%, var(--line)); }
+  .card .name { display: block; font-size: 14px; }
+  .card small { color: var(--faint); }
+  .opt { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+  .opt:last-child { border-bottom: 0; }
+  .opt .k { color: var(--muted); }
+  .toggle { width: 28px; height: 16px; border-radius: 99px; border: 0; background: var(--line); position: relative; padding: 0; }
+  .toggle i { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--card); }
+  .toggle.on { background: var(--accent); }
+  .toggle.on i { left: 14px; }
+  input[type="range"] { width: 110px; accent-color: var(--accent); }
+  .modes { display: flex; gap: 4px; }
+  .modes button { border: 1px solid var(--line); background: var(--raised); border-radius: 6px; padding: 2px 6px; font-size: 11px; color: var(--muted); }
+  .modes button.is-on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .dot { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; }
+  .page-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .page-tabs button { border: 0; background: transparent; color: var(--faint); padding: 0 0 4px; font-size: 12px; border-bottom: 1px solid transparent; }
+  .page-tabs button.is-on { color: var(--ink); border-bottom-color: var(--accent); }
+  .sheet { display: none; }
+  .sheet.is-on { display: block; }
+  .hud {
+    position: relative; height: 540px; border-radius: 16px; overflow: hidden;
+    background: var(--world-land); border: 1px solid var(--line);
+  }
+  .hud .sky { height: 42%; }
+  .cross {
+    position: absolute; left: 50%; top: 46%; width: 10px; height: 10px; transform: translate(-50%, -50%);
+  }
+  .cross::before, .cross::after { content: ""; position: absolute; background: #F4F1EA; }
+  .cross::before { left: 4px; top: 0; width: 1px; height: 10px; }
+  .cross::after { left: 0; top: 4px; width: 10px; height: 1px; }
+  .world { position: absolute; inset: 0; pointer-events: none; }
+  .hole { position: absolute; width: 28px; height: 18px; border: 1px solid; }
+  .hole.bedrock { left: 34%; top: 58%; border-color: #9BBFA6; background: rgba(155,191,166,.18); }
+  .hole.obsidian { left: 40%; top: 64%; border-color: #E39A92; background: rgba(227,154,146,.16); }
+  .hole.double { left: 46%; top: 57%; width: 52px; border-color: #E0B15C; background: rgba(224,177,92,.14); }
+  .block-hl { position: absolute; left: 58%; top: 50%; width: 34px; height: 34px; border: 1px solid #E08A6C; }
+  .trail { position: absolute; left: 62%; top: 28%; width: 180px; height: 120px; }
+  .crumbs { position: absolute; left: 22%; top: 70%; width: 90px; height: 2px; background: rgba(250,249,245,.45); transform: rotate(-18deg); }
+  .crumbs::after { content: ""; position: absolute; left: 70px; top: 10px; width: 36px; height: 2px; background: rgba(250,249,245,.45); transform: rotate(24deg); }
+  .wpt, .logout {
+    position: absolute; color: #FAF9F5; font-size: 11px; background: transparent; border: 0;
+  }
+  .wpt { left: 78%; top: 18%; color: #E08A6C; }
+  .wpt i { display: inline-block; width: 5px; height: 5px; margin-right: 4px; background: #E08A6C; vertical-align: middle; }
+  .logout { left: 8px; top: 318px; color: #E39A92; }
+  .brk {
+    position: absolute; left: 53%; top: 46%; width: 36px; height: 36px;
+    border: 1px solid #C2C0B6;
+  }
+  .brk i {
+    position: absolute; left: 18%; top: 18%; width: 64%; height: 64%;
+    background: rgba(224,138,108,.22); border: 1px solid #E08A6C;
+  }
+  .pops { position: absolute; left: 52%; top: 78px; width: 36px; height: 28px; }
+  .pops i { position: absolute; width: 3px; height: 3px; background: #E08A6C; border-radius: 50%; }
+  .shulker {
+    position: absolute; right: 16px; top: 210px; width: 108px;
+    background: color-mix(in srgb, var(--card) 92%, transparent);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px;
+    color: var(--ink);
+  }
+  .shulker .hair { height: 2px; background: var(--accent); margin: -6px -6px 6px; border-radius: 8px 8px 0 0; }
+  .slots { display: grid; grid-template-columns: repeat(3, 14px); gap: 3px; }
+  .slots i { width: 14px; height: 14px; background: var(--side); display: block; }
+  .tab {
+    position: absolute; left: 39%; top: 36px;
+    display: flex; gap: 10px; font-size: 11px; color: #FAF9F5;
+  }
+  .crystal { position: absolute; left: 27%; top: 40%; width: 78px; }
+  .crystal svg { display: block; width: 100%; height: 46px; }
+  .crystal .dmg {
+    position: absolute; left: 50%; top: -4px; transform: translateX(-50%);
+    font-family: var(--serif); font-size: 13px; font-weight: 600; color: #FAF9F5;
+    letter-spacing: -0.02em; text-shadow: 1px 1px 0 #1C1B19;
+  }
+  .bed {
+    position: absolute; left: 68%; top: 60%; width: 58px; height: 22px;
+    background: rgba(224,138,108,.2); border: 1px solid #E08A6C;
+  }
+  .surround { position: absolute; left: 18%; top: 76%; width: 42px; height: 42px; }
+  .surround i {
+    position: absolute; width: 12px; height: 12px;
+    background: rgba(224,138,108,.18); border: 1px solid #E08A6C;
+  }
+  .surround i:nth-child(1) { left: 0; top: 15px; }
+  .surround i:nth-child(2) { left: 15px; top: 0; }
+  .surround i:nth-child(3) { right: 0; top: 15px; }
+  .surround i:nth-child(4) { left: 15px; bottom: 0; }
+  .quad {
+    position: absolute; left: 62%; top: 68%; width: 36px; height: 24px;
+    background:
+      linear-gradient(#C2C0B6, #C2C0B6) 0 0 / 100% 1px,
+      linear-gradient(#C2C0B6, #C2C0B6) 0 50% / 100% 1px,
+      linear-gradient(#C2C0B6, #C2C0B6) 0 100% / 100% 1px,
+      linear-gradient(#C2C0B6, #C2C0B6) 0 0 / 1px 100%,
+      linear-gradient(#C2C0B6, #C2C0B6) 50% 0 / 1px 100%,
+      linear-gradient(#C2C0B6, #C2C0B6) 100% 0 / 1px 100%;
+    background-repeat: no-repeat;
+  }
+  .tab .ok { color: #9BBFA6; }
+  .tab .danger { color: #E39A92; }
+  .hotbar {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; gap: 2px; padding: 3px; background: rgba(20, 18, 16, .72); border-radius: 4px;
+  }
+  .hotbar i { width: 22px; height: 22px; background: rgba(250, 249, 245, .08); display: block; }
+  .hotbar i.sel { outline: 1px solid #E7D7C8; }
+  .w {
+    position: absolute; background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12px;
+  }
+  .w .lbl { color: var(--faint); font-size: 10px; display: block; }
+  .w b { font-weight: 600; }
+  .w-mark { left: 50%; top: 14px; transform: translateX(-50%); background: transparent; border: 0; font-family: var(--serif); font-size: 18px; color: var(--bg); padding: 0; }
+  html[data-tone="night"] .w-mark { color: var(--ink); }
+  .focus {
+    position: absolute; left: 16px; top: 16px; width: 232px;
+    background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 7px;
+  }
+  .focus-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; }
+  .w-target { flex: 1; min-width: 0; }
+  .focus-name { display: flex; align-items: baseline; gap: 6px; margin-top: 1px; }
+  .focus-name b { font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: -0.03em; }
+  .w-speed { flex: none; text-align: right; margin-left: auto; }
+  .spd { display: flex; align-items: baseline; justify-content: flex-end; gap: 3px; }
+  .spd b { font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
+  .w-diag { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--line); color: var(--faint); font-size: 11px; }
+  .w-note { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; }
+  .w-note .tick { width: 2px; height: 11px; background: var(--accent); flex: none; }
+  .w-note .barline { margin-left: auto; width: 42px; height: 2px; background: var(--line); }
+  .w-note .barline i { display: block; width: 62%; height: 2px; background: var(--accent); }
+  #hud-stage[data-hide~="target"][data-hide~="speed"] .w-diag { margin-top: 0; padding-top: 0; border-top: 0; }
+  #hud-stage[data-hide~="target"][data-hide~="speed"][data-hide~="diag"] .w-note { margin-top: 0; }
+  #hud-stage[data-hide~="notifier"][data-hide~="target"][data-hide~="diag"][data-hide~="speed"] .focus { display: none; }
+  .hp { height: 3px; background: var(--line); border-radius: 3px; margin-top: 7px; }
+  .hp i { display: block; height: 3px; width: 72%; background: var(--accent); border-radius: 3px; }
+  .w-mods { right: 14px; top: 16px; background: transparent; border: 0; text-align: right; padding: 0; white-space: nowrap; }
+  .w-mods div { padding: 1px 0 1px 8px; }
+  html[data-on="bar"] .w-mods div { box-shadow: inset -2px 0 0 var(--accent); }
+  html[data-on="ink"] .w-mods div { color: var(--accent); }
+  .spark { display: flex; align-items: flex-end; justify-content: flex-end; gap: 2px; height: 14px; margin-top: 3px; }
+  .spark i { width: 3px; background: var(--accent); display: block; opacity: .85; }
+  .w-textradar {
+    left: 6px; top: 156px; right: auto; width: 176px;
+    background: transparent; border: 0; border-radius: 0; padding: 0;
+    box-shadow: none; color: #FAF9F5;
+  }
+  .w-textradar .tr-head { color: #C2C0B6; border-bottom: 0; padding-bottom: 2px; }
+  .w-textradar .dist { color: #C2C0B6; }
+  .w-counts, .w-totem {
+    background: transparent; border: 0; border-radius: 0; box-shadow: none;
+    color: #FAF9F5; padding: 0;
+  }
+  .w-counts .faint, .w-totem .lbl { color: #C2C0B6; }
+  html[data-framed="on"] .w-textradar,
+  html[data-framed="on"] .w-coord,
+  html[data-framed="on"] .w-ping,
+  html[data-framed="on"] .w-armor,
+  html[data-framed="on"] .w-counts,
+  html[data-framed="on"] .w-totem,
+  html[data-framed="on"] .wpt,
+  html[data-framed="on"] .logout {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 8px; color: var(--ink); box-shadow: none;
+  }
+  html[data-framed="on"] .w-textradar .tr-head { color: var(--faint); border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+  html[data-framed="on"] .w-coord .lbl,
+  html[data-framed="on"] .w-ping .lbl,
+  html[data-framed="on"] .w-coord .faint,
+  html[data-framed="on"] .w-textradar .dist { color: var(--faint); }
+  html[data-framed="on"] .w-textradar .tr-row.close .dist { color: var(--warn); }
+  .nametag {
+    position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: transparent; border: 0; border-radius: 0; padding: 0; box-shadow: none;
+    color: #FAF9F5;
+  }
+  .nt-near { left: 50%; top: 68px; transform: translateX(-50%); }
+  .nt-far { left: 66%; top: 122px; transform: translateX(-50%) scale(.88); }
+  .nt-armor { display: flex; gap: 1px; }
+  .nt-armor svg { width: 12px; height: 12px; display: block; }
+  .nt-line { display: flex; align-items: center; gap: 3px; }
+  .nt-line .hand { width: 10px; height: 10px; display: block; }
+  .nt-name { font-family: var(--serif); font-size: 13px; font-weight: 600; letter-spacing: -0.02em; color: #FAF9F5; line-height: 1; }
+  .nt-near .nt-name { color: #E39A92; }
+  .nt-far .nt-name { color: #9BBFA6; }
+  .nt-dist { color: #C2C0B6; font-size: 11px; }
+  .nt-pop { color: #E08A6C; font-size: 11px; }
+  html[data-framed="on"] .nametag {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 4px 6px; color: var(--ink); box-shadow: none;
+  }
+  html[data-framed="on"] .nt-name { color: var(--ink); }
+  html[data-framed="on"] .nt-dist { color: var(--faint); }
+  .tr-head { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; color: var(--faint); padding-bottom: 4px; margin-bottom: 2px; border-bottom: 1px solid var(--line); }
+  .tr-row { display: flex; align-items: center; gap: 6px; min-height: 18px; font-size: 12px; }
+  .tr-row .nm { flex: 1; min-width: 0; }
+  .tr-row .dist { color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tr-row.close .dist { color: var(--warn); }
+  .dotk { width: 5px; height: 5px; border-radius: 50%; flex: none; }
+  .self-mark { width: 7px; height: 7px; border-radius: 2px; background: var(--accent); flex: none; }
+  .pop { font-size: 10px; line-height: 14px; padding: 0 4px; border-radius: 99px; color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--line)); }
+  #text-radar[data-off~="player"] .tr-row[data-kind="player"],
+  #text-radar[data-off~="item"] .tr-row[data-kind="item"],
+  #text-radar[data-off~="crystal"] .tr-row[data-kind="crystal"],
+  #text-radar[data-off~="mob"] .tr-row[data-kind="mob"] { display: none; }
+  .kind-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+  .kind-row button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 3px 8px; font-size: 11px; color: var(--muted); }
+  .kind-row button.is-on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .edge-br {
+    position: absolute; right: 6px; bottom: 6px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  }
+  .w-coord, .w-ping {
+    position: static; right: auto; bottom: auto;
+    background: transparent; border: 0; border-radius: 0; padding: 0;
+    box-shadow: none; color: #FAF9F5; text-align: right;
+  }
+  .w-coord .lbl, .w-ping .lbl, .w-coord .faint { color: #C2C0B6; }
+  .axes { display: flex; gap: 10px; justify-content: flex-end; }
+  .axes b { font-variant-numeric: tabular-nums; }
+  .w-ping { display: flex; gap: 10px; }
+  .w-armor {
+    left: 50%; bottom: 46px; transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 0;
+    background: transparent; border: 0; border-radius: 0; box-shadow: none;
+    color: #FAF9F5;
+  }
+  .w-armor .piece { width: 22px; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .w-armor svg { width: 18px; height: 18px; display: block; }
+  .w-armor .prot { font-size: 8px; line-height: 1; font-weight: 600; color: var(--accent); }
+  .w-armor .dur { display: block; width: 16px; height: 2px; background: rgba(250,249,245,.28); position: relative; }
+  .w-armor .dur i { display: block; height: 2px; width: var(--d); background: var(--accent); }
+  .w-armor .pct { font-size: 8px; line-height: 1; color: #C2C0B6; }
+  html[data-framed="on"] .w-armor .dur { background: var(--line); }
+  html[data-framed="on"] .w-armor .pct { color: var(--faint); }
+  .w-counts { left: calc(50% + 128px); bottom: 18px; transform: none; padding: 4px 6px; }
+  .w-counts div { display: flex; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
+  .w-totem { left: calc(50% - 176px); bottom: 22px; transform: none; }
+  #hud-stage[data-hide~="notifier"] .w-note,
+  #hud-stage[data-hide~="target"] .w-target,
+  #hud-stage[data-hide~="mods"] .w-mods,
+  #hud-stage[data-hide~="speed"] .w-speed,
+  #hud-stage[data-hide~="radar"] .w-textradar,
+  #hud-stage[data-hide~="diag"] .w-diag,
+  #hud-stage[data-hide~="coord"] .w-coord,
+  #hud-stage[data-hide~="ping"] .w-ping,
+  #hud-stage[data-hide~="armor"] .w-armor,
+  #hud-stage[data-hide~="counts"] .w-counts,
+  #hud-stage[data-hide~="totem"] .w-totem,
+  #hud-stage[data-hide~="mark"] .w-mark { display: none; }
+  .trio { display: grid; grid-template-columns: 1.1fr .9fr .9fr; gap: 12px; }
+  .block { border: 1px solid var(--line); border-radius: 14px; background: var(--card); padding: 16px; min-height: 220px; }
+  .title-card { text-align: center; padding-top: 28px; }
+  .title-card .wm { font-family: var(--serif); font-size: 40px; letter-spacing: -0.03em; margin: 0; }
+  .title-card .rule { width: 42px; height: 1px; background: var(--accent); margin: 8px auto 16px; }
+  .title-card button { display: block; width: 100%; margin: 4px 0; border: 1px solid var(--line); background: var(--raised); border-radius: 8px; padding: 7px; }
+  .title-card button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .splash { background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .splash .wm { font-family: var(--serif); font-size: 36px; margin: 0; }
+  .splash .rule { width: 72px; height: 1px; background: var(--accent); margin: 10px 0; }
+  .track { width: 140px; height: 2px; background: var(--line); }
+  .track i { display: block; width: 68%; height: 2px; background: var(--accent); }
+  .chat p { margin: 0 0 6px; }
+  .tag { color: var(--accent); font-family: var(--serif); font-weight: 600; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .danger { color: var(--danger); }
+  .cmd {
+    margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--raised);
+  }
+  .cmd .hair { height: 2px; background: var(--accent); }
+  .cmd div { padding: 5px 8px; font-size: 12px; }
+  .cmd div.hit { background: var(--wash); box-shadow: inset 2px 0 0 var(--accent); }
+  .muted { color: var(--muted); }
+  .faint { color: var(--faint); }
+  .foot { margin-top: 18px; color: var(--faint); font-size: 11px; }
+  .hide { display: none; }
+  @media (max-width: 980px) {
+    .lead, .pair, .shell, .trio { grid-template-columns: 1fr; }
+    .cols { flex-wrap: wrap; }
+    .jumps { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand">
+    <b class="display">Rime</b>
+    <span data-i18n="brand">Claude preview · not in the client</span>
+  </div>
+  <div class="seg" data-group="lang">
+    <button type="button" data-set="lang" data-value="en" class="is-on">EN</button>
+    <button type="button" data-set="lang" data-value="zh">中文</button>
+  </div>
+  <div class="seg" data-group="tone">
+    <button type="button" data-set="tone" data-value="paper" data-i18n="tone.paper">Paper</button>
+    <button type="button" data-set="tone" data-value="night" class="is-on" data-i18n="tone.night">Night</button>
+  </div>
+  <div class="seg" data-group="face">
+    <button type="button" data-set="face" data-value="all" class="is-on" data-i18n="face.all">All serif</button>
+    <button type="button" data-set="face" data-value="display" data-i18n="face.display">Title serif</button>
+  </div>
+  <div class="seg" data-group="accent">
+    <button type="button" data-set="accent" data-value="one" class="is-on" data-i18n="accent.one">One terracotta</button>
+    <button type="button" data-set="accent" data-value="warm" data-i18n="accent.warm">Warm categories</button>
+  </div>
+  <div class="seg" data-group="on">
+    <button type="button" data-set="on" data-value="bar" class="is-on" data-i18n="on.bar">Edge bar</button>
+    <button type="button" data-set="on" data-value="ink" data-i18n="on.ink">Colored text</button>
+  </div>
+  <nav class="jumps">
+    <a href="#menu" data-i18n="jump.menu">Menu</a>
+    <a href="#options" data-i18n="jump.options">Appearance</a>
+    <a href="#hud" data-i18n="jump.hud">HUD</a>
+    <a href="#rest" data-i18n="jump.rest">Title and chat</a>
+  </nav>
+</header>
+<main>
+  <section class="lead">
+    <div>
+      <h1 class="display" data-i18n="h1">Paper, terracotta, serif.</h1>
+      <p class="lede" data-i18n="lede">The page follows the switches above. Paper is Claude ivory #FAF9F5, ink #141413, terracotta #D97757. Night uses the same relationship on warm charcoal, for in-game overlays. Latin uses Anthropic Serif when installed, otherwise Source Serif 4. Chinese uses Noto Serif SC.</p>
+    </div>
+    <div class="swatches" id="swatches"></div>
+  </section>
+
+  <h2 id="menu" class="display" data-i18n="sec.menu">Menu</h2>
+  <p class="sub" data-i18n="sec.menuSub">Glass columns on the left, the category stack on the right. Click a row to toggle. Blur, descriptions, and scale in the next section move this preview.</p>
+  <div class="pair">
+    <div class="scene" id="menu-scene">
+      <div class="sky"></div>
+      <div class="veil"></div>
+      <div class="menus" id="menus">
+        <div class="cols" id="glass"></div>
+      </div>
+    </div>
+    <div class="list-card" id="list"></div>
+  </div>
+  <p class="desc" id="menu-desc" data-i18n="sec.menuDesc">KillAura · attacks targets near the crosshair. Crystal expands to edit range and render.</p>
+
+  <h2 id="options" class="display" data-i18n="sec.options">Appearance</h2>
+  <p class="sub" data-i18n="sec.optionsSub">ClickGui, HUD, chat, and the boot screen. Changes here update the menu above and the HUD below.</p>
+  <div class="shell">
+    <aside class="side">
+      <div class="logo display">Rime</div>
+      <button class="nav is-on" data-page="menu"><span data-i18n="nav.menu">Menu</span> <em>ClickGui</em></button>
+      <button class="nav" data-page="hud"><span data-i18n="nav.hud">HUD</span> <em data-i18n="nav.hudCount">12</em></button>
+      <button class="nav" data-page="chat" data-i18n="nav.chat">Chat</button>
+      <button class="nav" data-page="boot" data-i18n="nav.boot">Boot</button>
+      <button class="nav" data-page="tokens" data-i18n="nav.tokens">Palette</button>
+    </aside>
+    <section class="stage">
+      <h3 class="display" id="page-title" data-i18n="page.menu">Menu</h3>
+      <p class="meta" id="page-meta" data-i18n="page.menuMeta">Tone, menu style, blur, descriptions, smooth, scale, accent</p>
+      <div class="search" data-i18n="search">Search modules…</div>
+      <div class="cards" id="center-menu">
+        <button type="button" class="card on cat-combat"><span class="name">KillAura</span><small data-i18n="card.combatOn">Combat · On</small></button>
+        <button type="button" class="card on cat-combat"><span class="name">Crystal</span><small data-i18n="card.crystalOn">Combat · On</small></button>
+        <button type="button" class="card cat-render"><span class="name">HoleESP</span><small data-i18n="card.holeOff">Render · Off</small></button>
+        <button type="button" class="card on cat-client"><span class="name">ClickGui</span><small data-i18n="card.guiOn">Client · On</small></button>
+      </div>
+      <div class="cards hide" id="center-hud"></div>
+      <p class="center-note hide" id="center-note"></p>
+    </section>
+    <aside class="drawer">
+      <div class="page-tabs" id="drawer-tabs">
+        <button type="button" class="is-on" data-sheet="general" data-i18n="sheet.general">General</button>
+        <button type="button" data-sheet="near" data-i18n="sheet.near">Nearby</button>
+        <button type="button" data-sheet="color" data-i18n="sheet.color">Colors</button>
+      </div>
+      <div class="sheet is-on" id="sheet-general"></div>
+      <div class="sheet" id="sheet-near"></div>
+      <div class="sheet" id="sheet-color"></div>
+    </aside>
+  </div>
+
+  <h2 id="hud" class="display" data-i18n="sec.hud">In-game HUD</h2>
+  <p class="sub" data-i18n="sec.hudSub">Night covers names, holes, block highlight, trajectories, breadcrumbs, waypoints, logout, the break box, pop particles, shulker, tab, the crystal gradient, bed, surround, and the ground grid. Text is frameless by default.</p>
+  <div class="hud" id="hud-stage">
+    <div class="sky"></div>
+    <div class="ridge"></div>
+    <div class="ridge b"></div>
+    <div class="world">
+      <div class="hole bedrock" title="基岩洞"></div>
+      <div class="hole obsidian" title="黑曜石洞"></div>
+      <div class="hole double" title="双洞"></div>
+      <div class="block-hl" title="方块高亮"></div>
+      <svg class="trail" viewBox="0 0 180 120" aria-hidden="true">
+        <path d="M8 20 C 50 18, 90 40, 150 108" fill="none" stroke="#FAF9F5" stroke-width="1.25"/>
+        <path d="M20 70 C 48 78, 70 96, 96 112" fill="none" stroke="#E39A92" stroke-width="1.25"/>
+        <circle cx="150" cy="108" r="3" fill="none" stroke="#E08A6C"/>
+      </svg>
+      <div class="crumbs" title="脚印"></div>
+      <div class="wpt"><i></i>基地 120m</div>
+      <div class="logout">Steve 登出</div>
+      <div class="brk" title="破坏进度"><i></i></div>
+      <div class="pops" title="图腾粒子"><i style="left:4px;top:6px"></i><i style="left:14px;top:0"></i><i style="left:22px;top:12px"></i><i style="left:8px;top:18px"></i></div>
+      <div class="shulker" title="潜影盒">
+        <div class="hair"></div>
+        <div class="slots"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="tab"><span class="ok">Alex</span><span>你</span><span class="danger">Steve</span></div>
+      <div class="crystal" title="AutoCrystal">
+        <span class="dmg">12.40</span>
+        <svg viewBox="0 0 78 52" aria-hidden="true">
+          <defs>
+            <linearGradient id="cside" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#E08A6C" stop-opacity="0.42"/>
+              <stop offset="1" stop-color="#E08A6C" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <polygon points="10,18 68,18 60,46 18,46" fill="url(#cside)"/>
+          <polygon points="10,18 39,8 68,18 39,26" fill="#E08A6C" fill-opacity="0.38" stroke="#E08A6C" stroke-width="1"/>
+          <line x1="10" y1="18" x2="18" y2="46" stroke="#E08A6C" stroke-width="1"/>
+          <line x1="68" y1="18" x2="60" y2="46" stroke="#E08A6C" stroke-width="1"/>
+          <line x1="18" y1="46" x2="60" y2="46" stroke="#E08A6C" stroke-width="1" stroke-opacity="0.35"/>
+        </svg>
+      </div>
+      <div class="bed" title="床"></div>
+      <div class="surround" title="围脚"><i></i><i></i><i></i><i></i></div>
+      <div class="quad" title="脚下网格"></div>
+    </div>
+    <div class="cross"></div>
+    <div class="nametag nt-near" title="Nametag">
+      <div class="nt-armor" aria-hidden="true">
+        <svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 1.2A4.8 4.8 0 0 0 3.2 6v2h9.6V6A4.8 4.8 0 0 0 8 1.2zM1.6 9h12.8v1.8H1.6z"/></svg>
+        <svg viewBox="0 0 16 16"><path fill="currentColor" d="M3.2 4.2 5 2.2h1.4L8 3.6 9.6 2.2H11l1.8 2v1.6L11.4 6.6v6.6H4.6V6.6L3.2 5.8V4.2z"/></svg>
+        <svg viewBox="0 0 16 16"><path fill="currentColor" d="M3.6 2h8.8v2.4H3.6V2zm.2 3.2h3.2v8.6H3.8V5.2zm4.4 0h3.2v8.6H8.4V5.2z"/></svg>
+        <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2.4 3.6h2.4v5.4H1.2v1.8h4.8V3.6H2.4zm6.4 0h2.4v5.4h3.6v1.8H8.8V3.6z"/></svg>
+      </div>
+      <div class="nt-line">
+        <svg class="hand" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 1.5h4v3H6zM5 5.2h6v8H5z"/></svg>
+        <span class="nt-name">Steve</span>
+        <span class="nt-dist">6m</span>
+        <span class="nt-pop">-2</span>
+        <svg class="hand" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7 1h2l1 8H6L7 1zM4 11h8v1.6H4z"/></svg>
+      </div>
+    </div>
+    <div class="nametag nt-far" title="Nametag">
+      <div class="nt-armor" aria-hidden="true">
+        <svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 1.2A4.8 4.8 0 0 0 3.2 6v2h9.6V6A4.8 4.8 0 0 0 8 1.2zM1.6 9h12.8v1.8H1.6z"/></svg>
+        <svg viewBox="0 0 16 16"><path fill="currentColor" d="M3.2 4.2 5 2.2h1.4L8 3.6 9.6 2.2H11l1.8 2v1.6L11.4 6.6v6.6H4.6V6.6L3.2 5.8V4.2z"/></svg>
+        <svg viewBox="0 0 16 16"><path fill="currentColor" d="M3.6 2h8.8v2.4H3.6V2zm.2 3.2h3.2v8.6H3.8V5.2zm4.4 0h3.2v8.6H8.4V5.2z"/></svg>
+        <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2.4 3.6h2.4v5.4H1.2v1.8h4.8V3.6H2.4zm6.4 0h2.4v5.4h3.6v1.8H8.8V3.6z"/></svg>
+      </div>
+      <div class="nt-line">
+        <span class="nt-name">Alex</span>
+        <span class="nt-dist">32m</span>
+      </div>
+    </div>
+    <div class="w w-mark display">Rime</div>
+    <div class="focus" id="hud-cluster">
+      <div class="focus-top">
+        <div class="w-target">
+          <span class="lbl">目标</span>
+          <div class="focus-name"><b>Steve</b><span class="faint">14.2 m</span></div>
+          <div class="hp"><i></i></div>
+        </div>
+        <div class="w-speed">
+          <span class="lbl">速度</span>
+          <div class="spd"><b>12.4</b><span class="faint">b/s</span></div>
+          <div class="spark"><i style="height:5px"></i><i style="height:9px"></i><i style="height:6px"></i><i style="height:12px"></i><i style="height:8px"></i><i style="height:10px"></i></div>
+        </div>
+      </div>
+      <div class="w-diag">计划 12 ms · 队列 0</div>
+      <div class="w-note"><i class="tick"></i><span class="danger">图腾已消耗</span><span class="barline"><i></i></span></div>
+    </div>
+    <div class="w w-mods display" id="active-mods"></div>
+    <div class="w w-textradar" id="text-radar">
+      <div class="tr-head"><span data-i18n="radar.title">Nearby</span><span id="tr-count">6</span></div>
+      <div class="tr-row" data-kind="player"><i class="dotk" style="background:var(--faint)"></i><span class="nm">Notch</span><span class="dist">64m</span></div>
+      <div class="tr-row" data-kind="mob"><i class="dotk" style="background:var(--danger)"></i><span class="nm">僵尸</span><span class="dist">41m</span></div>
+      <div class="tr-row" data-kind="player"><i class="dotk" style="background:var(--ok)"></i><span class="nm">Alex</span><span class="dist">32m</span></div>
+      <div class="tr-row" data-kind="crystal"><i class="dotk" style="background:var(--accent)"></i><span class="nm">末影水晶</span><span class="dist">11m</span></div>
+      <div class="tr-row" data-kind="item"><i class="dotk" style="background:var(--muted)"></i><span class="nm">钻石剑</span><span class="dist">8m</span></div>
+      <div class="tr-row close" data-kind="player"><i class="dotk" style="background:var(--danger)"></i><span class="nm">Steve</span><span class="pop">-2</span><span class="dist">6m</span></div>
+      <div class="tr-row" data-kind="player" data-self="1"><i class="self-mark"></i><span class="nm">你</span></div>
+    </div>
+    <div class="edge-br">
+    <div class="w w-coord">
+      <span class="lbl">主世界</span>
+      <div class="axes"><span><span class="faint">X</span> <b>128</b></span><span><span class="faint">Y</span> <b>71</b></span><span><span class="faint">Z</span> <b>-42</b></span></div>
+      <span class="faint">下界 16, 9</span>
+    </div>
+    <div class="w w-ping">
+      <div><span class="lbl">Ping</span><b class="ok">36</b></div>
+      <div><span class="lbl">TPS</span><b>20.0</b></div>
+      <div><span class="lbl">FPS</span><b>144</b></div>
+    </div>
+    </div>
+    <div class="w w-armor" title="护甲">
+      <div class="piece" title="头盔">
+        <span class="prot">P</span>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.2A4.8 4.8 0 0 0 3.2 6v2h9.6V6A4.8 4.8 0 0 0 8 1.2zM1.6 9h12.8v1.8H1.6z"/></svg>
+        <span class="dur"><i style="--d:80%"></i></span>
+        <span class="pct ok">80%</span>
+      </div>
+      <div class="piece" title="胸甲">
+        <span class="prot">BP</span>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M3.2 4.2 5 2.2h1.4L8 3.6 9.6 2.2H11l1.8 2v1.6L11.4 6.6v6.6H4.6V6.6L3.2 5.8V4.2z"/></svg>
+        <span class="dur"><i style="--d:55%"></i></span>
+        <span class="pct warn">55%</span>
+      </div>
+      <div class="piece" title="护腿">
+        <span class="prot">PP</span>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M3.6 2h8.8v2.4H3.6V2zm.2 3.2h3.2v8.6H3.8V5.2zm4.4 0h3.2v8.6H8.4V5.2z"/></svg>
+        <span class="dur"><i style="--d:100%"></i></span>
+        <span class="pct">100%</span>
+      </div>
+      <div class="piece" title="靴子">
+        <span class="prot">FP</span>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2.4 3.6h2.4v5.4H1.2v1.8h4.8V3.6H2.4zm6.4 0h2.4v5.4h3.6v1.8H8.8V3.6z"/></svg>
+        <span class="dur"><i style="--d:30%"></i></span>
+        <span class="pct danger">30%</span>
+      </div>
+    </div>
+    <div class="w w-counts">
+      <div><span class="faint">水晶</span><b>64</b></div>
+      <div><span class="faint">黑曜石</span><b>12</b></div>
+      <div><span class="faint">珍珠</span><b class="danger">0</b></div>
+      <div><span class="faint">经验瓶</span><b>8</b></div>
+    </div>
+    <div class="w w-totem"><span class="lbl">图腾</span><b>3</b></div>
+    <div class="hotbar"><i></i><i class="sel"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+
+  <h2 id="rest" class="display" data-i18n="sec.rest">Title, boot, chat</h2>
+  <p class="sub" data-i18n="sec.restSub">Title card, boot wordmark, chat prefix, and command completion. Config cards use the same surface.</p>
+  <div class="trio">
+    <div class="block title-card">
+      <p class="wm display">Rime</p>
+      <div class="rule"></div>
+      <button class="primary" type="button">单人游戏</button>
+      <button type="button">多人游戏</button>
+      <button type="button">选项</button>
+      <button type="button">退出游戏</button>
+    </div>
+    <div class="block splash">
+      <p class="wm display">Rime</p>
+      <div class="rule"></div>
+      <div class="track"><i></i></div>
+      <p class="faint" style="margin-top:10px">正在加载</p>
+    </div>
+    <div class="block chat">
+      <p><span class="tag display">Rime</span> <span class="ok">Crystal 已启用</span></p>
+      <p><span class="tag display">Rime</span> 命令前缀已改为 <span class="tag">rime</span></p>
+      <p><span class="tag display">Rime</span> <span class="warn">延迟偏高</span></p>
+      <p><span class="tag display">Rime</span> <span class="danger">图腾耗尽</span></p>
+      <div class="cmd">
+        <div class="hair"></div>
+        <div class="hit">crystal range</div>
+        <div class="muted">crystal place</div>
+        <div class="muted">clickgui theme</div>
+      </div>
+    </div>
+  </div>
+  <div class="trio" style="margin-top:12px">
+    <div class="block">
+      <div class="lbl faint">配置</div>
+      <p class="display" style="font-size:18px;margin:6px 0">默认</p>
+      <p class="faint" style="margin:0">本地 · 今天 23:10</p>
+      <div class="rule" style="width:42px;height:2px;background:var(--accent);margin:12px 0"></div>
+      <p class="display" style="font-size:18px;margin:6px 0">床战</p>
+      <p class="faint" style="margin:0">云端 · 公开</p>
+    </div>
+    <div class="block">
+      <div class="lbl faint">按键</div>
+      <div class="opt"><span>ClickGui</span><span>右 Shift</span></div>
+      <div class="opt"><span>Crystal</span><span>R</span></div>
+      <div class="opt"><span>KillAura</span><span class="faint">未绑定</span></div>
+    </div>
+    <div class="block">
+      <div class="lbl faint">现行对照</div>
+      <div class="opt"><span>底</span><span class="faint">#0F1117 石墨</span></div>
+      <div class="opt"><span>字</span><span class="faint">#ECEEF4</span></div>
+      <div class="opt"><span>强调</span><span class="faint">#8B7CFF 鸢尾</span></div>
+      <div class="opt"><span>第二强调</span><span class="faint">#5CC8FF 青</span></div>
+      <div class="opt"><span>字体</span><span class="faint">Geist</span></div>
+    </div>
+  </div>
+  <p class="foot" data-i18n="foot">This preview is color and type only. Blur here is a veil behind the menu; in game it blurs the world. Anthropic Serif is proprietary; this page uses Source Serif 4 for Latin.</p>
+</main>
+<script>
+const CATS = [
+  ["combat", "战斗", [
+    ["KillAura", "R", true],
+    ["Crystal", "", true],
+    ["AutoTrap", "", false],
+    ["AutoSword", "", true]
+  ]],
+  ["movement", "移动", [
+    ["Sprint", "", true],
+    ["Scaffold", "V", false],
+    ["NoFall", "", false]
+  ]],
+  ["render", "渲染", [
+    ["Fullbright", "", true],
+    ["Nametags", "", true],
+    ["HoleESP", "", false]
+  ]],
+  ["player", "玩家", [
+    ["AutoEat", "", false],
+    ["FastUse", "", true]
+  ]],
+  ["world", "世界", [
+    ["Nuker", "", false]
+  ]],
+  ["client", "客户端", [
+    ["ClickGui", "RShift", true],
+    ["Hud", "", true]
+  ]]
+];
+const SWATCHES = [
+  ["sw.bg", "#FAF9F5", "--bg"],
+  ["sw.side", "#F0EEE6", "--side"],
+  ["sw.card", "#FFFFFF", "--card"],
+  ["sw.ink", "#141413", "--ink"],
+  ["sw.muted", "#5E5D59", "--muted"],
+  ["sw.accent", "#D97757", "--accent"],
+  ["sw.ok", "#3F6B4E", "--ok"],
+  ["sw.danger", "#B5453A", "--danger"]
+];
+const root = document.documentElement;
+const hud = document.getElementById("hud-stage");
+const I18N = {
+  en: {
+    brand: "Claude preview · not in the client",
+    h1: "Paper, terracotta, serif.",
+    lede: "The page follows the switches above. Paper is Claude ivory #FAF9F5, ink #141413, terracotta #D97757. Night uses the same relationship on warm charcoal, for in-game overlays. Latin uses Anthropic Serif when installed, otherwise Source Serif 4. Chinese uses Noto Serif SC.",
+    "tone.paper": "Paper", "tone.night": "Night",
+    "face.all": "All serif", "face.display": "Title serif",
+    "accent.one": "One terracotta", "accent.warm": "Warm categories",
+    "on.bar": "Edge bar", "on.ink": "Colored text",
+    "jump.menu": "Menu", "jump.options": "Appearance", "jump.hud": "HUD", "jump.rest": "Title and chat",
+    "sec.menu": "Menu",
+    "sec.menuSub": "Glass columns on the left, the category stack on the right. Click a row to toggle. Blur, descriptions, and scale in the next section move this preview.",
+    "sec.menuDesc": "KillAura · attacks targets near the crosshair. Crystal expands to edit range and render.",
+    "sec.options": "Appearance",
+    "sec.optionsSub": "ClickGui, HUD, chat, and the boot screen. Changes here update the menu above and the HUD below.",
+    "sec.hud": "In-game HUD",
+    "sec.hudSub": "Night covers names, holes, block highlight, trajectories, breadcrumbs, waypoints, logout, the break box, pop particles, shulker, tab, the crystal gradient, bed, surround, and the ground grid. Text is frameless by default.",
+    "sec.rest": "Title, boot, chat",
+    "sec.restSub": "Title card, boot wordmark, chat prefix, and command completion. Config cards use the same surface.",
+    foot: "This preview is color and type only. Blur here is a veil behind the menu; in game it blurs the world. Anthropic Serif is proprietary; this page uses Source Serif 4 for Latin.",
+    "nav.menu": "Menu", "nav.hud": "HUD", "nav.hudCount": "12", "nav.chat": "Chat", "nav.boot": "Boot", "nav.tokens": "Palette",
+    "page.menu": "Menu", "page.menuMeta": "Tone, menu style, blur, descriptions, smooth, scale, accent",
+    "page.hud": "HUD", "page.hudMeta": "The status card combines target, speed, diagnostics, and notices. Nearby is filtered on its own.",
+    "page.chat": "Chat", "page.chatMeta": "Prefix, body, success, warning, danger",
+    "page.boot": "Boot", "page.bootMeta": "Wordmark, rule, progress",
+    "page.tokens": "Palette", "page.tokensMeta": "Interface colors against the old graphite and iris defaults",
+    search: "Search modules…",
+    "card.combatOn": "Combat · On", "card.crystalOn": "Combat · On", "card.holeOff": "Render · Off", "card.guiOn": "Client · On",
+    "sheet.general": "General", "sheet.near": "Nearby", "sheet.color": "Colors",
+    "opt.lang": "Language", "opt.tone": "Tone", "opt.frame": "Menu style", "opt.face": "Font",
+    "opt.enabled": "Enabled look", "opt.accent": "Accent", "opt.blur": "Blur background",
+    "opt.desc": "Descriptions", "opt.smooth": "Smooth", "opt.scale": "Menu scale", "opt.framed": "Frame",
+    "frame.glass": "Glass", "frame.list": "Stack",
+    "kind.player": "Players", "kind.item": "Drops", "kind.crystal": "Crystals", "kind.mob": "Hostiles",
+    "col.name": "Name", "col.friend": "Friend", "col.enemy": "Enemy", "col.dist": "Distance", "col.pop": "Totem pops",
+    "col.side": "Crystal side", "col.line": "Crystal line", "col.dmg": "Damage number",
+    "col.bedrock": "Bedrock hole", "col.obsidian": "Obsidian hole", "col.double": "Double hole",
+    "col.highlight": "Block highlight", "col.trailSelf": "Own trajectory", "col.trailEnemy": "Enemy trajectory",
+    "col.breakFill": "Break fill", "col.breakLine": "Break outline", "col.waypoint": "Waypoint", "col.logout": "Logout",
+    "col.shulkerLine": "Shulker edge", "col.shulkerBg": "Shulker background",
+    "col.tabFriend": "Tab friend", "col.tabEnemy": "Tab enemy",
+    "col.hudText": "HUD text", "col.hudAccent": "HUD accent",
+    "col.nearSelf": "Nearby self", "col.nearFriend": "Nearby friend", "col.nearEnemy": "Nearby enemy",
+    "hud.mark": "Wordmark", "hud.notifier": "Notice", "hud.target": "Target", "hud.diag": "Diagnostics", "hud.speed": "Speed",
+    "hud.mods": "Active modules", "hud.radar": "Nearby", "hud.coord": "Coordinates", "hud.ping": "Ping",
+    "hud.armor": "Armor", "hud.counts": "Counts", "hud.totem": "Totem",
+    shown: "Shown", hidden: "Hidden",
+    "cat.combat": "Combat", "cat.movement": "Movement", "cat.render": "Render", "cat.player": "Player",
+    "cat.world": "World", "cat.client": "Client",
+    "inline.range": "Range", "inline.render": "Render", "inline.gradient": "Gradient",
+    "note.chat": "The chat prefix is terracotta serif. Success, warning, and danger stay warm, not neon green, yellow, or red.",
+    "note.boot": "The boot screen keeps the Rime wordmark, one terracotta rule, and the progress bar. The background follows the tone.",
+    "note.tokens": "Background, text, and accent move from graphite #0F1117, ivory #ECEEF4, and iris #8B7CFF to paper #FAF9F5, ink #141413, and terracotta #D97757. Night flips the same relationship onto warm charcoal.",
+    "sw.bg": "Ground", "sw.side": "Sidebar", "sw.card": "Card", "sw.ink": "Ivory",
+    "sw.muted": "Muted", "sw.accent": "Terracotta", "sw.ok": "Success", "sw.danger": "Danger",
+    "radar.title": "Nearby",
+    "count.onlySelf": "Only you", "count.none": "None"
+  },
+  zh: {
+    brand: "Claude 视觉预览 · 未写入客户端",
+    h1: "纸色、陶土、衬线。",
+    lede: "整页跟着上面的开关变。纸色是 Claude 的象牙底 #FAF9F5、墨色字 #141413、陶土强调 #D97757。夜色是同一套暖炭，给游戏内叠层用。拉丁字母优先本机 Anthropic Serif，没有则用 Source Serif 4；中文用 Noto Serif SC。",
+    "tone.paper": "纸色", "tone.night": "夜色",
+    "face.all": "全部衬线", "face.display": "标题衬线",
+    "accent.one": "统一陶土", "accent.warm": "分类暖色",
+    "on.bar": "启用色条", "on.ink": "启用着色",
+    "jump.menu": "菜单", "jump.options": "视觉选项", "jump.hud": "HUD", "jump.rest": "标题与聊天",
+    "sec.menu": "菜单",
+    "sec.menuSub": "左侧是现在的默认玻璃列，右侧是分类列。点模块行可开关。模糊、描述、大小在下一节里改，这里会跟着动。",
+    "sec.menuDesc": "KillAura · 靠近时攻击准星附近的目标。Crystal 展开后可改范围和渲染。",
+    "sec.options": "视觉选项",
+    "sec.optionsSub": "对应 ClickGui、Hud、聊天和启动画面里现有的视觉设置。改这里，上面的菜单和下面的 HUD 会一起变。",
+    "sec.hud": "游戏内 HUD",
+    "sec.hudSub": "夜色覆盖名字、洞、方块高亮、轨迹、脚印、路径点、下线、破坏盒子、图腾粒子、潜影盒、Tab、水晶渐变、床、围脚和脚下网格。文字默认不带框。",
+    "sec.rest": "标题、启动、聊天",
+    "sec.restSub": "标题画面卡片、加载字标、聊天前缀和命令补全。配置卡沿用同一套表面。",
+    foot: "预览只看颜色和字体。模糊背景在这页里是菜单背后的一层虚化，进游戏后才会是世界画面。Anthropic Serif 是专有字体，此页用 Source Serif 4 代替拉丁字母。",
+    "nav.menu": "菜单", "nav.hud": "HUD", "nav.hudCount": "12 项", "nav.chat": "聊天", "nav.boot": "启动", "nav.tokens": "色板",
+    "page.menu": "菜单", "page.menuMeta": "色调、菜单样式、模糊、描述、平滑、大小、强调",
+    "page.hud": "HUD", "page.hudMeta": "状态面板把目标、速度、诊断、通知合成一张卡。附近列表单独筛选",
+    "page.chat": "聊天", "page.chatMeta": "前缀、正文、成功、警告、危险",
+    "page.boot": "启动", "page.bootMeta": "字标、细线、进度",
+    "page.tokens": "色板", "page.tokensMeta": "界面用色与现行石墨鸢尾的对应",
+    search: "搜索全部模块…",
+    "card.combatOn": "战斗 · 已启用", "card.crystalOn": "战斗 · 已启用", "card.holeOff": "渲染 · 关闭", "card.guiOn": "客户端 · 已启用",
+    "sheet.general": "通用", "sheet.near": "附近", "sheet.color": "颜色",
+    "opt.lang": "语言", "opt.tone": "色调", "opt.frame": "菜单样式", "opt.face": "字体",
+    "opt.enabled": "已启用", "opt.accent": "强调", "opt.blur": "模糊背景",
+    "opt.desc": "描述", "opt.smooth": "平滑", "opt.scale": "菜单大小", "opt.framed": "带框",
+    "frame.glass": "玻璃", "frame.list": "分类列",
+    "kind.player": "玩家", "kind.item": "掉落物", "kind.crystal": "水晶", "kind.mob": "敌对生物",
+    "col.name": "名字", "col.friend": "友方", "col.enemy": "敌对", "col.dist": "距离", "col.pop": "图腾次数",
+    "col.side": "水晶侧面", "col.line": "水晶边线", "col.dmg": "伤害数字",
+    "col.bedrock": "基岩洞", "col.obsidian": "黑曜石洞", "col.double": "双洞",
+    "col.highlight": "方块高亮", "col.trailSelf": "自己的轨迹", "col.trailEnemy": "敌人的轨迹",
+    "col.breakFill": "破坏填充", "col.breakLine": "破坏描边", "col.waypoint": "路径点", "col.logout": "下线",
+    "col.shulkerLine": "潜影盒边", "col.shulkerBg": "潜影盒底",
+    "col.tabFriend": "Tab 友方", "col.tabEnemy": "Tab 敌对",
+    "col.hudText": "HUD 文字", "col.hudAccent": "HUD 强调",
+    "col.nearSelf": "附近自己", "col.nearFriend": "附近友方", "col.nearEnemy": "附近敌对",
+    "hud.mark": "字标", "hud.notifier": "通知", "hud.target": "目标", "hud.diag": "诊断", "hud.speed": "速度",
+    "hud.mods": "启用列表", "hud.radar": "附近", "hud.coord": "坐标", "hud.ping": "延迟",
+    "hud.armor": "护甲", "hud.counts": "计数", "hud.totem": "图腾",
+    shown: "显示", hidden: "隐藏",
+    "cat.combat": "战斗", "cat.movement": "移动", "cat.render": "渲染", "cat.player": "玩家",
+    "cat.world": "世界", "cat.client": "客户端",
+    "inline.range": "范围", "inline.render": "渲染", "inline.gradient": "渐变",
+    "note.chat": "聊天前缀用陶土衬线，正文用墨色。成功、警告、危险是压暗后的暖色，不再用亮绿、亮黄和亮红。",
+    "note.boot": "启动画面只留 Rime 字标、一条陶土细线和进度。背景跟当前色调走。",
+    "note.tokens": "底、字、强调从石墨 #0F1117、象牙字 #ECEEF4、鸢尾 #8B7CFF 换成纸色 #FAF9F5、墨色 #141413、陶土 #D97757。夜色把同一套关系翻到暖炭上。",
+    "sw.bg": "底", "sw.side": "侧栏", "sw.card": "卡片", "sw.ink": "象牙",
+    "sw.muted": "次要", "sw.accent": "陶土", "sw.ok": "成功", "sw.danger": "危险",
+    "radar.title": "附近",
+    "count.onlySelf": "仅自己", "count.none": "无"
+  }
+};
+function t(key) {
+  const lang = root.dataset.lang === "zh" ? "zh" : "en";
+  return I18N[lang][key] ?? I18N.en[key] ?? key;
+}
+function applyLang() {
+  const lang = root.dataset.lang === "zh" ? "zh" : "en";
+  root.dataset.lang = lang;
+  root.lang = lang === "zh" ? "zh-CN" : "en";
+  document.title = lang === "zh" ? "Rime · Claude 视觉预览" : "Rime · Claude visual preview";
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  syncSeg("lang");
+  paintSwatches();
+  fillDrawer();
+  paintCards();
+  applyKinds();
+  const active = document.querySelector(".nav.is-on");
+  if (active) showPage(active.dataset.page);
+}
+
+function syncSeg(name) {
+  document.querySelectorAll(`[data-set="${name}"]`).forEach(b => {
+    b.classList.toggle("is-on", b.dataset.value === root.dataset[name]);
+  });
+}
+document.querySelectorAll("[data-set]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    root.dataset[btn.dataset.set] = btn.dataset.value;
+    syncSeg(btn.dataset.set);
+    if (btn.dataset.set === "tone") paintSwatches();
+    if (btn.dataset.set === "lang") applyLang();
+  });
+});
+
+function row(cat, name, key, on) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "mod" + (on ? " on" : "") + " cat-" + cat;
+  b.innerHTML = `<span class="name">${name}</span>${key ? `<span class="key">${key}</span>` : ""}`;
+  b.addEventListener("click", () => {
+    b.classList.toggle("on");
+    paintActive();
+  });
+  return b;
+}
+function paintColumns() {
+  const glass = document.getElementById("glass");
+  const list = document.getElementById("list");
+  glass.replaceChildren();
+  list.replaceChildren();
+  CATS.forEach((c, i) => {
+    const panel = document.createElement("div");
+    panel.className = "panel cat-" + c[0];
+    const head = document.createElement("div");
+    head.className = "phd";
+    head.innerHTML = `<span data-i18n="cat.${c[0]}"></span><i></i>`;
+    const body = document.createElement("div");
+    body.className = "body";
+    c[2].forEach(m => body.appendChild(row(c[0], m[0], m[1], m[2])));
+    if (c[0] === "combat") {
+      const extra = document.createElement("div");
+      extra.className = "inline";
+      extra.innerHTML = `<label><span data-i18n="inline.range"></span><span>4.5</span></label><input type="range" min="1" max="8" value="4.5" step="0.1"><label><span data-i18n="inline.render"></span><span data-i18n="inline.gradient"></span></label>`;
+      body.appendChild(extra);
+    }
+    panel.append(head, body);
+    glass.appendChild(panel);
+
+    const stacked = panel.cloneNode(true);
+    stacked.classList.toggle("shut", i !== 0);
+    stacked.querySelectorAll(".mod").forEach((m, idx) => {
+      m.addEventListener("click", () => {
+        m.classList.toggle("on");
+        paintActive();
+      });
+    });
+    stacked.querySelector(".phd").addEventListener("click", () => {
+      list.querySelectorAll(".panel").forEach(p => p.classList.add("shut"));
+      stacked.classList.remove("shut");
+    });
+    list.appendChild(stacked);
+  });
+}
+function paintActive() {
+  const box = document.getElementById("active-mods");
+  const names = [...document.querySelectorAll("#glass .mod.on .name")].map(n => n.textContent);
+  box.replaceChildren(...names.slice(0, 6).map(n => {
+    const d = document.createElement("div");
+    d.textContent = n;
+    return d;
+  }));
+}
+function paintSwatches() {
+  const night = root.dataset.tone === "night";
+  const map = night ? {
+    "--bg": ["#262624", t("sw.bg")],
+    "--side": ["#1F1E1C", t("sw.side")],
+    "--card": ["#30302E", t("sw.card")],
+    "--ink": ["#FAF9F5", t("sw.ink")],
+    "--muted": ["#C2C0B6", t("sw.muted")],
+    "--accent": ["#E08A6C", t("sw.accent")],
+    "--ok": ["#9BBFA6", t("sw.ok")],
+    "--danger": ["#E39A92", t("sw.danger")]
+  } : null;
+  const host = document.getElementById("swatches");
+  host.replaceChildren();
+  SWATCHES.forEach(s => {
+    const pair = map ? map[s[2]] : [s[1], t(s[0])];
+    const el = document.createElement("div");
+    el.className = "swatch";
+    el.innerHTML = `<i style="background:${pair[0]}"></i><b>${pair[1]}</b><em>${pair[0]}</em>`;
+    host.appendChild(el);
+  });
+}
+function showPage(page) {
+  const title = document.getElementById("page-title");
+  const meta = document.getElementById("page-meta");
+  title.dataset.i18n = "page." + page;
+  meta.dataset.i18n = "page." + page + "Meta";
+  title.textContent = t(title.dataset.i18n);
+  meta.textContent = t(meta.dataset.i18n);
+  document.getElementById("center-menu").classList.toggle("hide", page !== "menu");
+  document.getElementById("center-hud").classList.toggle("hide", page !== "hud");
+  const note = document.getElementById("center-note");
+  const key = page === "chat" || page === "boot" || page === "tokens" ? "note." + page : "";
+  note.textContent = key ? t(key) : "";
+  note.classList.toggle("hide", !key);
+}
+function opt(label, control) {
+  const d = document.createElement("div");
+  d.className = "opt";
+  const k = document.createElement("span");
+  k.className = "k";
+  k.textContent = label;
+  d.append(k, control);
+  return d;
+}
+function seg(name, pairs) {
+  const box = document.createElement("div");
+  box.className = "modes";
+  pairs.forEach(p => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = p[0];
+    b.dataset.set = name;
+    b.dataset.value = p[1];
+    b.classList.toggle("is-on", root.dataset[name] === p[1]);
+    b.addEventListener("click", () => {
+      root.dataset[name] = p[1];
+      syncSeg(name);
+      if (name === "tone") paintSwatches();
+      if (name === "lang") applyLang();
+    });
+    box.appendChild(b);
+  });
+  return box;
+}
+function tog(on, fn) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "toggle" + (on ? " on" : "");
+  b.innerHTML = "<i></i>";
+  b.addEventListener("click", () => {
+    b.classList.toggle("on");
+    fn(b.classList.contains("on"));
+  });
+  return b;
+}
+function fillDrawer() {
+  const g = document.getElementById("sheet-general");
+  const c = document.getElementById("sheet-color");
+  const near = document.getElementById("sheet-near");
+  const scaleNow = Math.round((parseFloat(document.getElementById("menus").style.zoom) || 1) * 100);
+  g.replaceChildren(
+    opt(t("opt.lang"), seg("lang", [["EN", "en"], ["中文", "zh"]])),
+    opt(t("opt.tone"), seg("tone", [[t("tone.paper"), "paper"], [t("tone.night"), "night"]])),
+    opt(t("opt.frame"), seg("frame", [[t("frame.glass"), "glass"], [t("frame.list"), "list"]])),
+    opt(t("opt.face"), seg("face", [[t("face.all"), "all"], [t("face.display"), "display"]])),
+    opt(t("opt.enabled"), seg("on", [[t("on.bar"), "bar"], [t("on.ink"), "ink"]])),
+    opt(t("opt.accent"), seg("accent", [[t("accent.one"), "one"], [t("accent.warm"), "warm"]])),
+    opt(t("opt.blur"), tog(root.dataset.blur === "on", v => root.dataset.blur = v ? "on" : "off")),
+    opt(t("opt.desc"), tog(root.dataset.desc !== "off", v => root.dataset.desc = v ? "on" : "off")),
+    opt(t("opt.smooth"), tog(true, () => {})),
+    opt(t("opt.scale"), (() => {
+      const wrap = document.createElement("span");
+      const r = document.createElement("input");
+      r.type = "range"; r.min = "60"; r.max = "130"; r.value = String(scaleNow);
+      const n = document.createElement("span");
+      n.textContent = scaleNow + "%";
+      r.addEventListener("input", () => {
+        n.textContent = r.value + "%";
+        document.getElementById("menus").style.zoom = r.value / 100;
+      });
+      wrap.append(r, n);
+      return wrap;
+    })())
+  );
+  near.replaceChildren();
+  const frameSw = tog(root.dataset.framed === "on", setFramed);
+  frameSw.dataset.framedToggle = "1";
+  near.appendChild(opt(t("opt.framed"), frameSw));
+  KINDS.forEach(k => {
+    const sw = tog(kinds[k[0]], v => setKind(k[0], v));
+    sw.dataset.kindSwitch = k[0];
+    near.appendChild(opt(t("kind." + k[0]), sw));
+  });
+  c.replaceChildren(
+    ...[
+      ["col.name", "#FAF9F5"], ["col.friend", "#9BBFA6"], ["col.enemy", "#E39A92"],
+      ["col.dist", "#C2C0B6"], ["col.pop", "#E08A6C"],
+      ["col.side", "#E08A6C"], ["col.line", "#E08A6C"], ["col.dmg", "#FAF9F5"],
+      ["col.bedrock", "#9BBFA6"], ["col.obsidian", "#E39A92"], ["col.double", "#E0B15C"],
+      ["col.highlight", "#E08A6C"], ["col.trailSelf", "#FAF9F5"], ["col.trailEnemy", "#E39A92"],
+      ["col.breakFill", "#E08A6C"], ["col.breakLine", "#C2C0B6"],
+      ["col.waypoint", "#E08A6C"], ["col.logout", "#E39A92"],
+      ["col.shulkerLine", "#E08A6C"], ["col.shulkerBg", "#30302E"],
+      ["col.tabFriend", "#9BBFA6"], ["col.tabEnemy", "#E39A92"],
+      ["col.hudText", "#FAF9F5"], ["col.hudAccent", "#E08A6C"],
+      ["col.nearSelf", "#E08A6C"], ["col.nearFriend", "#9BBFA6"], ["col.nearEnemy", "#E39A92"]
+    ].map(([key, hex]) => opt(t(key), colorDot(hex)))
+  );
+}
+function colorDot(hex) {
+  const wrap = document.createElement("span");
+  wrap.style.display = "inline-flex";
+  wrap.style.alignItems = "center";
+  wrap.style.gap = "6px";
+  const i = document.createElement("i");
+  i.className = "dot";
+  i.style.background = hex;
+  const t = document.createElement("span");
+  t.textContent = hex;
+  t.style.color = "var(--faint)";
+  t.style.fontSize = "10px";
+  wrap.append(i, t);
+  return wrap;
+}
+const HUD_BITS = [
+  "mark", "notifier", "target", "diag", "speed", "mods", "radar", "coord", "ping", "armor", "counts", "totem"
+];
+const KINDS = [["player", "玩家"], ["item", "掉落物"], ["crystal", "水晶"], ["mob", "敌对生物"]];
+const kinds = { player: true, item: true, crystal: true, mob: true };
+function setFramed(on) {
+  root.dataset.framed = on ? "on" : "off";
+  document.querySelectorAll("[data-framed-toggle]").forEach(b => {
+    b.classList.toggle("on", on);
+    b.classList.toggle("is-on", on && !b.classList.contains("toggle"));
+  });
+}
+function setKind(key, on) {
+  kinds[key] = on;
+  applyKinds();
+  document.querySelectorAll(`[data-kind-toggle="${key}"]`).forEach(b => b.classList.toggle("is-on", on));
+  document.querySelectorAll(`[data-kind-switch="${key}"]`).forEach(b => b.classList.toggle("on", on));
+}
+function applyKinds() {
+  const radar = document.getElementById("text-radar");
+  radar.dataset.off = KINDS.filter(k => !kinds[k[0]]).map(k => k[0]).join(" ");
+  const rows = [...radar.querySelectorAll(".tr-row")].filter(r => kinds[r.dataset.kind]);
+  const others = rows.filter(r => !r.dataset.self);
+  const onlyPlayers = others.every(r => r.dataset.kind === "player");
+  document.getElementById("tr-count").textContent = others.length === 0
+    ? (kinds.player ? t("count.onlySelf") : t("count.none"))
+    : (root.dataset.lang === "zh"
+        ? others.length + (onlyPlayers ? " 人" : " 个")
+        : String(others.length));
+}
+function paintCards() {
+  const host = document.getElementById("center-hud");
+  const off = new Set((hud.dataset.hide || "").split(" ").filter(Boolean));
+  host.replaceChildren();
+  HUD_BITS.forEach(id => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.hud = id;
+    b.className = "card" + (off.has(id) ? "" : " on");
+    b.innerHTML = `<span class="name">${t("hud." + id)}</span><small>${off.has(id) ? t("hidden") : t("shown")}</small>`;
+    b.addEventListener("click", () => {
+      b.classList.toggle("on");
+      b.querySelector("small").textContent = b.classList.contains("on") ? t("shown") : t("hidden");
+      hud.dataset.hide = [...host.querySelectorAll(".card:not(.on)")].map(card => card.dataset.hud).join(" ");
+    });
+    host.appendChild(b);
+  });
+  const row = document.createElement("div");
+  row.className = "kind-row";
+  const frameChip = document.createElement("button");
+  frameChip.type = "button";
+  frameChip.dataset.framedToggle = "1";
+  frameChip.textContent = t("opt.framed");
+  frameChip.classList.toggle("is-on", root.dataset.framed === "on");
+  frameChip.addEventListener("click", () => setFramed(root.dataset.framed !== "on"));
+  row.appendChild(frameChip);
+  KINDS.forEach(k => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = kinds[k[0]] ? "is-on" : "";
+    b.dataset.kindToggle = k[0];
+    b.textContent = t("kind." + k[0]);
+    b.addEventListener("click", () => setKind(k[0], !kinds[k[0]]));
+    row.appendChild(b);
+  });
+  host.appendChild(row);
+}
+document.querySelectorAll(".nav").forEach(n => {
+  n.addEventListener("click", () => {
+    document.querySelectorAll(".nav").forEach(x => x.classList.remove("is-on"));
+    n.classList.add("is-on");
+    showPage(n.dataset.page);
+  });
+});
+document.querySelectorAll("[data-sheet]").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll("[data-sheet]").forEach(x => x.classList.remove("is-on"));
+    document.querySelectorAll(".sheet").forEach(x => x.classList.remove("is-on"));
+    tab.classList.add("is-on");
+    document.getElementById("sheet-" + tab.dataset.sheet).classList.add("is-on");
+  });
+});
+paintSwatches();
+paintColumns();
+paintActive();
+applyLang();
+</script>
+</body>
+</html>

@@ -44,12 +44,12 @@ public class NametagsModule extends Module {
     public Setting<Boolean> showResistance = bool("ShowResistance", true).setPage("Info");
     public Setting<Boolean> showStrength   = bool("ShowStrength",   true).setPage("Info");
 
-    public Setting<Color>   nameColor   = color("NameColor",   255, 255, 255, 255).setPage("Colors");
-    public Setting<Color>   friendColor = color("FriendColor", 0x4A, 0xDE, 0x80, 255).setPage("Colors");
-    public Setting<Color>   enemyColor  = color("EnemyColor",  0xF8, 0x71, 0x71, 255).setPage("Colors");
-    public Setting<Color>   bgColor     = color("BgColor",     0x15, 0x18, 0x20, 184).setPage("Colors");
-    public Setting<Color>   distColor   = color("DistColor",   0x8A, 0x92, 0xA6, 255).setPage("Colors");
-    public Setting<Color>   popColor    = color("PopColor",   255,  80,  80, 255).setPage("Colors");
+    public Setting<Color>   nameColor   = color("NameColor",   250, 249, 245, 255).setPage("Colors");
+    public Setting<Color>   friendColor = color("FriendColor", 0x9B, 0xBF, 0xA6, 255).setPage("Colors");
+    public Setting<Color>   enemyColor  = color("EnemyColor",  0xE3, 0x9A, 0x92, 255).setPage("Colors");
+    public Setting<Color>   bgColor     = color("BgColor",     0x30, 0x30, 0x2E, 184).setPage("Colors");
+    public Setting<Color>   distColor   = color("DistColor",   0xC2, 0xC0, 0xB6, 255).setPage("Colors");
+    public Setting<Color>   popColor    = color("PopColor",   224, 138, 108, 255).setPage("Colors");
 
     public Setting<Float>   gap         = num("Gap",       1.0f, 0.1f, 15.0f).setPage("Render");
     public Setting<Float>   armorGap    = num("ArmorGap",  2.0f, 0.0f, 20.0f).setPage("Render");

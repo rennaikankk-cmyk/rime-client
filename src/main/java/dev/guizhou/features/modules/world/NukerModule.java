@@ -33,8 +33,8 @@ public class NukerModule extends Module {
 
     private final Setting<Boolean> render    = bool("Render", true).setPage("Render");
     private final Setting<Float>   lineWidth = num("LineWidth", 1.5f, 0.5f, 5.0f).setPage("Render");
-    private final Setting<Color>   lineColor = color("LineColor", 255, 40, 40, 255).setPage("Render");
-    private final Setting<Color>   fillColor = color("FillColor", 255, 40, 40, 0).setPage("Render");
+    private final Setting<Color>   lineColor = color("LineColor", 224, 138, 108, 255).setPage("Render");
+    private final Setting<Color>   fillColor = color("FillColor", 224, 138, 108, 40).setPage("Render");
 
     private final List<BlockPos> targetedBlocks = new ArrayList<>();
 

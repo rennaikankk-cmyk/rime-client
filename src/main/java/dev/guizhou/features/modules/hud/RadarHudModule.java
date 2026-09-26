@@ -24,7 +24,7 @@ import java.util.UUID;
  * relation dot, name, totem-pop pill and distance.
  */
 public class RadarHudModule extends HudModule {
-    private static final int DEFAULT_POP_COLOR = 0xFFFF5050;
+    private static final int DEFAULT_POP_COLOR = 0xFFE08A6C;
     private static final float NAME = 8.5f, META = 7f, ROW = 12f, PAD = 6f, HEADER = 14f;
     private static final float LOGO = 8f;
 

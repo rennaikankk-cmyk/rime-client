@@ -50,8 +50,8 @@ public class ClickGuiModule extends Module {
     private static final Color CAT_CLIENT   = new Color( 90, 105, 135); // 深夜蓝灰
     private static final Color CAT_HUD      = new Color(128, 176, 224); // 雾浅蓝
 
-    private static final Color GUIZHOUWARE_ACCENT = new Color(139, 124, 255); // iris #8B7CFF
-    private static final Color GUIZHOUWARE_MODULE = new Color(139, 124, 255);
+    private static final Color GUIZHOUWARE_ACCENT = new Color(224, 138, 108); // terracotta #E08A6C
+    private static final Color GUIZHOUWARE_MODULE = new Color(224, 138, 108);
 
     public Color categoryAccent(Module.Category cat) {
         return categoryAccent(cat, 0f);
@@ -143,7 +143,7 @@ public class ClickGuiModule extends Module {
 
     @Override
     public void onLoad() {
-        Color fixedAccent = new Color(139, 124, 255, 230);
+        Color fixedAccent = new Color(224, 138, 108, 230);
         GuizhouWare.colorManager.register("ui",          () -> fixedAccent);
         GuizhouWare.colorManager.register("chat",        this::chatAccent);
         GuizhouWare.colorManager.register("chatBracket", this::chatAccent);

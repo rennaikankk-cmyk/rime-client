@@ -65,8 +65,8 @@ public class SurroundModule extends Module {
 
     private final Setting<Boolean> render        = bool("Render", true).setPage("Render");
     private final Setting<Float>   fadeTime      = num("FadeTime", 0.2f, 0.05f, 2.0f).setPage("Render");
-    private final Setting<Color>   fillColor     = color("FillColor", 0, 62, 122, 148).setPage("Render");
-    private final Setting<Color>   outlineColor  = color("OutlineColor", 0, 62, 122, 148).setPage("Render");
+    private final Setting<Color>   fillColor     = color("FillColor", 224, 138, 108, 148).setPage("Render");
+    private final Setting<Color>   outlineColor  = color("OutlineColor", 224, 138, 108, 148).setPage("Render");
 
     private final Map<BlockPos, Long> renderMap = new HashMap<>();
 

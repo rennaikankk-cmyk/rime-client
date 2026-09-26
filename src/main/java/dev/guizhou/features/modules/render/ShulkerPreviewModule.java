@@ -29,8 +29,8 @@ public class ShulkerPreviewModule extends Module {
 
     public enum Thumbnail { Off, MostCommon, First }
 
-    public final Setting<Color> background = color("Background", 0x15, 0x18, 0x20, 240);
-    public final Setting<Color> border = color("Border", 0x8B, 0x7C, 0xFF, 255);
+    public final Setting<Color> background = color("Background", 0x30, 0x30, 0x2E, 240);
+    public final Setting<Color> border = color("Border", 0xE0, 0x8A, 0x6C, 255);
     public final Setting<Boolean> hideEmpty = bool("HideEmpty", false);
     public final Setting<Thumbnail> thumbnail = mode("Thumbnail", Thumbnail.Off);
     public final Setting<Double> thumbnailScale = num("ThumbnailScale", 0.6, 0.3, 1.0)
