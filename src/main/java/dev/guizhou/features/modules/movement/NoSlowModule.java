@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
 public class NoSlowModule extends Module {
-    public enum EatMode { SlotResend, Grim, Client }
+    public enum EatMode { SlotResend, Grim, Client, GrimV3 }
 
     public final Setting<Boolean> crawl = bool("Crawl", true);
     public final Setting<Boolean> eat = bool("Eat", true);
@@ -58,6 +58,16 @@ public class NoSlowModule extends Module {
     private int sessionSlot = -1;
     private boolean observedConsumption;
     private boolean forwardingMovement;
+    /** GrimV3 session armed (Boze V). Slowdown cancel follows this flag only. */
+    private boolean grimV3Active;
+    /** GrimV3 ground-rotation gate (Boze T). Starts at 1 and sends nothing while positive. */
+    private int grimTickGate;
+    /** GrimV3 slot resends still to send (Boze U). */
+    private int grimRemaining;
+    /** GrimV3 skips the first position packet (Boze W). */
+    private boolean grimSkipFirst;
+    /** GrimV3 has already seen ground after the gate (Boze X). */
+    private boolean grimGrounded;
 
     public NoSlowModule() {
         super("NoSlow", "Configurable item, crouch and block slowdown removal.", Category.MOVEMENT);
@@ -71,6 +81,11 @@ public class NoSlowModule extends Module {
         if (!HeartbeatManager.authorized()) { HeartbeatManager.notifyDeniedOnce(); resetState(); return; }
         if (nullCheck() || corrected.getAndSet(false) || sessionPlayer != mc.player || sessionWorld != mc.level) {
             resetState();
+            return;
+        }
+        if (eatMode.getValue() == EatMode.GrimV3) {
+            // U == 0 already cleared the session. Ending the use early is the safer stop.
+            if (!eat.getValue() || !grimV3Active || !mc.player.isUsingItem()) resetGrimV3();
             return;
         }
         validateSession();
@@ -88,6 +103,10 @@ public class NoSlowModule extends Module {
                 || mc.getConnection() == null || corrected.get() || forwardingMovement) return;
 
         if (event.getPacket() instanceof ServerboundUseItemPacket use) {
+            if (eat.getValue() && eatMode.getValue() == EatMode.GrimV3) {
+                armGrimV3(use);
+                return;
+            }
             // Pearls, rockets, shields and offhand use must never arm the eat packet sequence.
             if (use.getHand() != InteractionHand.MAIN_HAND || !slotResendEnabled()
                     || !isConsumable(mc.player.getMainHandItem()) || !serverHoldsSelectedSlot()) return;
@@ -118,6 +137,10 @@ public class NoSlowModule extends Module {
             event.cancel();
             return;
         }
+        if (eatMode.getValue() == EatMode.GrimV3) {
+            if (eat.getValue()) handleGrimV3Move(move);
+            return;
+        }
         if (!validateSession() || !isConsumingMainHandItem() || !serverHoldsSelectedSlot()) return;
 
         if (!forwardingMovement && move.hasPosition() && !move.hasRotation()) {
@@ -139,6 +162,53 @@ public class NoSlowModule extends Module {
         if (move.hasPosition() && move.hasRotation()
                 && spoof.poll(mc.player.tickCount, sessionSlot, true)) {
             mc.getConnection().send(new ServerboundSetCarriedItemPacket(sessionSlot));
+        }
+    }
+
+    private void armGrimV3(ServerboundUseItemPacket use) {
+        if (use.getHand() != InteractionHand.MAIN_HAND || !isEatOrDrink(mc.player.getMainHandItem())) return;
+        // Boze clears the session before the stillness test, so a moving use does not keep the old one.
+        resetGrimV3();
+        if (mc.player.xo != mc.player.getX() || mc.player.yo != mc.player.getY() || mc.player.zo != mc.player.getZ()) return;
+        grimV3Active = true;
+        grimTickGate = 1;
+        grimRemaining = 37;
+        grimSkipFirst = true;
+        grimGrounded = false;
+        sessionPlayer = mc.player;
+        sessionWorld = mc.level;
+    }
+
+    private void handleGrimV3Move(ServerboundMovePlayerPacket move) {
+        if (!grimV3Active || sessionPlayer != mc.player || sessionWorld != mc.level || !move.hasPosition()) return;
+        if (grimSkipFirst) {
+            grimSkipFirst = false;
+            return;
+        }
+        if (grimTickGate > 0) {
+            if (move.isOnGround() && move.hasRotation()) grimTickGate--;
+            return;
+        }
+        if (!move.hasRotation() || (!move.isOnGround() && !grimGrounded) || grimRemaining <= 0) return;
+        int slot = mc.player.getInventory().selected;
+        if (slot < 0 || slot > 8) return;
+        forwardingMovement = true;
+        try {
+            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
+        } finally { forwardingMovement = false; }
+        if (move.isOnGround()) grimGrounded = true;
+        if (--grimRemaining == 0) grimV3Active = false;
+    }
+
+    private void resetGrimV3() {
+        grimV3Active = false;
+        grimTickGate = 0;
+        grimRemaining = 0;
+        grimSkipFirst = false;
+        grimGrounded = false;
+        if (!spoof.active()) {
+            sessionWorld = null;
+            sessionPlayer = null;
         }
     }
 
@@ -180,6 +250,11 @@ public class NoSlowModule extends Module {
         sessionSlot = -1;
         observedConsumption = false;
         corrected.set(false);
+        grimV3Active = false;
+        grimTickGate = 0;
+        grimRemaining = 0;
+        grimSkipFirst = false;
+        grimGrounded = false;
     }
 
     private boolean isConsumingMainHandItem() {
@@ -194,11 +269,20 @@ public class NoSlowModule extends Module {
                 || stack.getUseAnimation() == UseAnim.DRINK);
     }
 
+    private static boolean isEatOrDrink(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        UseAnim animation = stack.getUseAnimation();
+        return animation == UseAnim.EAT || animation == UseAnim.DRINK;
+    }
+
     public static boolean shouldCancelConsumeSlow() {
         NoSlowModule module = getInstance();
         if (module == null || !module.isEnabled() || !HeartbeatManager.authorized()
                 || mc.player == null || !mc.player.isUsingItem()) return false;
         ItemStack used = mc.player.getUseItem();
+        if (module.eatMode.getValue() == EatMode.GrimV3 && isEatOrDrink(used)) {
+            return module.eat.getValue() && module.grimV3Active;
+        }
         if (isConsumable(used)) {
             if (!module.eat.getValue()) return false;
             if (module.eatMode.getValue() == EatMode.Client || module.eatMode.getValue() == EatMode.Grim) return true;
