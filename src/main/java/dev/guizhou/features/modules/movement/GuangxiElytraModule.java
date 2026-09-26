@@ -742,6 +742,15 @@ public class GuangxiElytraModule extends Module {
         return applied;
     }
 
+    /** GZBoost owns the server look for this glide. Other modules must not insert a look packet. */
+    public boolean gzBoostControlsLook() {
+        if (!isEnabled() || !gzBoost.getValue() || mc.player == null || !mc.player.isFallFlying()) return false;
+        if (chaseActive() || chaseWantsFlight()) return false;
+        if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive()
+                || dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()) return false;
+        return true;
+    }
+
     private boolean cruiseEligible() {
         return coupledCruise.getValue() && motionMode.getValue() == MotionMode.FIREWORKS && !grimBoost.getValue()
                 && mc.player != null && mc.player.isFallFlying() && !mc.player.onGround()

@@ -11,7 +11,6 @@ import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.features.modules.world.GuangxiMineModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.PlacementManager;
-import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.DamageSyncTracker;
 import dev.guizhou.util.combat.CrystalAttackWindow;
 import dev.guizhou.util.combat.CrystalSelectionPolicy;
@@ -64,6 +63,8 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.tags.ItemTags;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -130,6 +131,10 @@ public class GuangxiCrystalModule extends Module {
     private enum AutoSwapMode { NONE, SILENT, INVENTORY }
     private final Setting<AutoSwapMode> autoSwap = mode("AutoSwap", AutoSwapMode.SILENT).setPage("General");
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
+
+    /** Default keeps same-tick break and place. Rusher spends the tick on a break when one exists. */
+    private enum CrystalLogic { DEFAULT, RUSHER }
+    private final Setting<CrystalLogic> logic = mode("Logic", CrystalLogic.DEFAULT).setPage("General");
 
     private final Setting<Boolean> predict          = bool("Predict", true).setPage("Sync");
     private final Setting<Integer> predictTicks     = num("PredictTicks", 4, 0, 20).setPage("Sync");
@@ -816,10 +821,8 @@ public class GuangxiCrystalModule extends Module {
         AABB bb = crystal.getBoundingBox();
         if (bestReachSq(bb) > breakRangeSq()) { instaGates[5]++; return; }
 
-        if (rotate.getValue()) {
-            acceptPendingRotation();
-            if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) { instaGates[7]++; return; }
-        }
+        if (rusherLogic() && !prepareRusherSword()) { instaGates[7]++; return; }
+        if (rotate.getValue() && !aimBreakNow(crystal)) { instaGates[7]++; return; }
         ensureSelfCache();
         updateSeeThrough();
         float playerHealth = selfNow().health();
@@ -903,8 +906,8 @@ public class GuangxiCrystalModule extends Module {
 
         if (canBreak) {
             EndCrystal target = findBestCrystal(potentialTargets);
-            if (target != null && breakCrystal(target)) {
-                return;
+            if (target != null) {
+                if (breakCrystal(target) || rusherLogic()) return;
             }
         }
 
@@ -964,16 +967,24 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 ? collectTargets(targets, scanRadius) : List.of();
 
         boolean broke = false;
+        EndCrystal breakTarget = null;
         if (canBreak) {
-            EndCrystal target = findBestCrystal(potentialTargets);
-            if (target != null && breakCrystal(target)) {
+            breakTarget = findBestCrystal(potentialTargets);
+            if (breakTarget != null && breakCrystal(breakTarget)) {
                 broke = true;
             }
         }
 
-        if (!broke && antiChineseReady && breakReady) {
+        if (!broke && antiChineseReady && breakReady && !(rusherLogic() && breakTarget != null)) {
             EndCrystal acTarget = findAntiChineseCrystal();
-            if (acTarget != null) breakCrystal(acTarget);
+            if (acTarget != null && breakCrystal(acTarget)) broke = true;
+        }
+
+        // Rusher spends the tick on the break whenever a crystal was eligible, even if the swing was refused.
+        if (rusherLogic() && (broke || breakTarget != null)) {
+            lastCalcMs = (System.nanoTime() - calcStart) / 1_000_000.0;
+            ClientDiagnostics.endTimer("combat.GuangxiCrystal.scan", calculationTimer);
+            return;
         }
 
         // World collision, entity lists, and mining state are owned by the client thread.
@@ -1146,8 +1157,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                         placeRangeValue(), placeRangeValue());
                 if (aim != null) {
                     float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), aim.getLocation());
-                    if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
-                            "AutoCrystal_base", 60, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
+                    if (!sendLook(angles[0], angles[1])) return false;
                 }
             }
             return placeBaseShared(target.base, mc.player.getEyePosition(), mode, scope);
@@ -1220,18 +1230,65 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (mc.gameMode == null || mc.getConnection() == null || weaponControlBusy()
                 || !crystalAttackEligible(crystal)
                 || !switchTimer.passedMs(tpsMs(switchPause.getValue()))) return false;
-        if (rotate.getValue()) {
-            Vec3 eyePos = mc.player.getEyePosition(1.0f);
-            Vec3 hit = getClosestPointToEye(eyePos, crystal.getBoundingBox());
-            float[] angles = MathUtil.calcAngle(eyePos, hit);
-            if (!canBreakCrystal(crystal, angles[0], angles[1])) return false;
-            GuizhouWare.rotationManager.submit(new RotationRequest(
-                "AutoCrystal_break", 60, angles[0], angles[1], RotationRequest.Mode.SILENT
-            ));
-        }
+        if (rusherLogic() && !prepareRusherSword()) return false;
+        if (rotate.getValue() && !aimBreakNow(crystal)) return false;
         acceptPendingRotation();
         if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) return false;
         return sendCrystalAttack(crystal, false);
+    }
+
+    private boolean rusherLogic() {
+        return logic.getValue() == CrystalLogic.RUSHER;
+    }
+
+    /**
+     * Weakness without a stronger Strength effect, and without a sword in the main hand, blocks the break.
+     * A hotbar sword is selected in place; no sword means this break is refused.
+     */
+    private boolean prepareRusherSword() {
+        if (!weaknessBlocksAttack()) return true;
+        if (mc.player.getMainHandItem().is(ItemTags.SWORDS)) return true;
+        int sword = -1;
+        for (int slot = 0; slot < 9; slot++) {
+            if (mc.player.getInventory().getItem(slot).is(ItemTags.SWORDS)) {
+                sword = slot;
+                break;
+            }
+        }
+        if (sword < 0) return false;
+        ownSwapPackets.set(1);
+        try {
+            InventoryUtil.swap(sword);
+        } finally {
+            ownSwapPackets.set(0);
+        }
+        return mc.player.getMainHandItem().is(ItemTags.SWORDS);
+    }
+
+    private boolean weaknessBlocksAttack() {
+        var weakness = mc.player.getEffect(MobEffects.WEAKNESS);
+        if (weakness == null) return false;
+        var strength = mc.player.getEffect(MobEffects.STRENGTH);
+        return strength == null || weakness.getAmplifier() >= strength.getAmplifier();
+    }
+
+    /** Same-tick look packet, then the attack uses that yaw and pitch. */
+    private boolean aimBreakNow(EndCrystal crystal) {
+        Vec3 eyePos = mc.player.getEyePosition(1.0f);
+        Vec3 hit = getClosestPointToEye(eyePos, crystal.getBoundingBox());
+        float[] angles = MathUtil.calcAngle(eyePos, hit);
+        if (!canBreakCrystal(crystal, angles[0], angles[1])) return false;
+        return sendLook(angles[0], angles[1]);
+    }
+
+    /** Look packet on this tick. The following place or attack uses these angles. */
+    private boolean sendLook(float yaw, float pitch) {
+        if (!GuizhouWare.rotationManager.look(yaw, pitch)) return false;
+        acceptPendingRotation();
+        sentYaw = GuizhouWare.rotationManager.getServerYaw();
+        sentPitch = GuizhouWare.rotationManager.getServerPitch();
+        sentRotationKnown = true;
+        return true;
     }
 
     private boolean crystalAttackEligible(EndCrystal crystal) {
@@ -1409,12 +1466,14 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         }
 
         PlaceTarget best = null;
+        Vec3 bestCenter = null;
         int rejLocked = 0, rejBlocked = 0, rejPending = 0, rejSelf = 0, rejMin = 0, rejBal = 0;
         String topReject = "-";
         float topRejectBound = -1f;
         for (int i = 0, n = candidates.size(); i < n; i++) {
             PlaceCandidate c = candidates.get(i);
-            if (best != null && c.bound <= best.damage) break;
+            // Optimistic bound cannot beat a spot that is already more than 1 damage ahead.
+            if (best != null && c.bound <= best.damage - 1.0f) break;
 
             if (locked != null && !c.airPos.equals(locked)) {
                 if (c.bound > topRejectBound) { topRejectBound = c.bound; topReject = c.airPos + " locked"; }
@@ -1462,11 +1521,17 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 rejBal++;
                 continue;
             }
-            if (best == null || totalDmg > best.damage) {
+            boolean higherDamage = best == null || totalDmg > best.damage;
+            // Spots within 1 damage keep the one closer to the eye. A far crystal that is
+            // barely stronger is harder to rotate onto and harder to break.
+            boolean closerTie = best != null && totalDmg > best.damage - 1.0f
+                    && eyePos.distanceToSqr(c.crystalCenter) < eyePos.distanceToSqr(bestCenter);
+            if (higherDamage || closerTie) {
                 // Do not let an unreachable high-damage candidate starve a valid runner-up.
                 if (GuizhouWare.placementManager.prepareInteractionHit(c.base, null, mc.player.getEyePosition(),
                         placeRangeValue(), wallPlace.getValue() ? wallRange.getValue() : 0.0, false) == null) continue;
                 best = new PlaceTarget(c.base, totalDmg, faceEntity);
+                bestCenter = c.crystalCenter;
             }
         }
         logPlacePick(best, topReject, topRejectBound,
@@ -1854,8 +1919,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (hit == null) return false;
         if (rotate.getValue()) {
             float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
-            if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
-                    "AutoCrystal_place", 60, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
+            if (!sendLook(angles[0], angles[1])) return false;
         }
         boolean sent = placeCrystalShared(target.base, trustBase, target.faceEntity(), options, null);
         if (sent) {

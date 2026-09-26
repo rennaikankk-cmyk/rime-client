@@ -17,7 +17,8 @@ public class RotationManager {
 
     private static final float SPEED = 360f;
 
-    private static final float EASE = 1.0f;
+    /** One update may cover a full turn. Smaller steps are for callers that pass their own limit. */
+    private static final float STEP = 180f;
 
     private static final float THRESHOLD = 5f;
 
@@ -81,13 +82,15 @@ public class RotationManager {
         trySubmit(request);
     }
 
-    /** SILENT returns true only after an uncancelled local send; other modes are queued. */
+    /**
+     * SILENT turns at most {@link #STEP} degrees and, when the server angle actually changes,
+     * sends a look packet on this tick. It does not repeat position and does not refuse a
+     * later aim in the same tick. MOTION stays on the movement packet.
+     */
     public boolean trySubmit(RotationRequest request) {
         if (!mc.isSameThread() || mc.player == null || mc.getConnection() == null) return false;
         if (request.mode == RotationRequest.Mode.SILENT) {
-            if (silentWindow.blocks(request.priority)) return false;
-            if (!performSilent(request)) return false;
-            silentWindow.accepted(request.priority);
+            if (!look(request.targetYaw, request.targetPitch)) return false;
             silentSentPriority = request.priority;
             silentSyncRequired = true;
             lastSilentMs = System.currentTimeMillis();
@@ -213,11 +216,8 @@ public class RotationManager {
     }
 
     private void interpolateRotation(float yawDiff, float pitchDiff, boolean jitter) {
-        currentYawSpeed = lerp(currentYawSpeed, yawDiff, EASE);
-        currentPitchSpeed = lerp(currentPitchSpeed, pitchDiff, EASE);
-
-        float yawSpeed = Mth.clamp(currentYawSpeed, -SPEED, SPEED);
-        float pitchSpeed = Mth.clamp(currentPitchSpeed, -SPEED, SPEED);
+        float yawSpeed = Mth.clamp(yawDiff, -SPEED, SPEED);
+        float pitchSpeed = Mth.clamp(pitchDiff, -SPEED, SPEED);
 
         float newYaw = rotationYaw + yawSpeed;
         float newPitch = rotationPitch + pitchSpeed;
@@ -273,24 +273,40 @@ public class RotationManager {
         return new Input(f, b, l, r, real.jump(), real.shift(), real.sprint());
     }
 
-    private boolean performSilent(RotationRequest req) {
-        float targetYaw = req.targetYaw;
-        float targetPitch = req.targetPitch;
-
-        float f = (float) ((Math.random() * 2.0 - 1.0) * 0.001f);
-        targetPitch = Mth.clamp(targetPitch + f, -90.0f, 90.0f);
-
-        boolean horizontalCollision = !dev.guizhou.util.elytra.DualViewSupport.forceLegacyProtocol();
-        ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.PosRot(
-                mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                targetYaw, targetPitch, mc.player.onGround(), horizontalCollision
-        );
-        boolean sent = dev.guizhou.util.PacketSendUtil.send(packet);
-        if (sent) {
-            setServerYaw(packet.getYRot(targetYaw));
-            setServerPitch(packet.getXRot(targetPitch));
+    /**
+     * Face {@code yaw}/{@code pitch} on this tick. Already-matching server angles send nothing.
+     * The packet is look-only, so it does not replay position.
+     */
+    public boolean look(float yaw, float pitch) {
+        if (!mc.isSameThread() || mc.player == null || mc.getConnection() == null) return false;
+        var flight = dev.guizhou.GuizhouWare.moduleManager == null ? null
+                : dev.guizhou.GuizhouWare.moduleManager.getModuleByClass(
+                        dev.guizhou.features.modules.movement.GuangxiElytraModule.class);
+        if (flight != null && flight.gzBoostControlsLook()) return false;
+        float nextYaw = stepYaw(serverYaw, yaw, STEP);
+        float nextPitch = stepPitch(serverPitch, pitch, STEP);
+        if (Math.abs(Mth.wrapDegrees(nextYaw - serverYaw)) < 0.05f
+                && Math.abs(nextPitch - serverPitch) < 0.05f) {
+            return true;
         }
-        return sent;
+        boolean horizontalCollision = !dev.guizhou.util.elytra.DualViewSupport.forceLegacyProtocol();
+        ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.Rot(
+                nextYaw, nextPitch, mc.player.onGround(), horizontalCollision);
+        if (!dev.guizhou.util.PacketSendUtil.send(packet)) return false;
+        setServerYaw(packet.getYRot(nextYaw));
+        setServerPitch(packet.getXRot(nextPitch));
+        silentSyncRequired = true;
+        lastSilentMs = System.currentTimeMillis();
+        return true;
+    }
+
+    private static float stepYaw(float current, float target, float step) {
+        float diff = Mth.wrapDegrees(target - current);
+        return current + Mth.clamp(diff, -step, step);
+    }
+
+    private static float stepPitch(float current, float target, float step) {
+        return Mth.clamp(current + Mth.clamp(target - current, -step, step), -90f, 90f);
     }
 
     private RotationRequest getActiveRequest() {
@@ -372,7 +388,4 @@ public class RotationManager {
         return base + wraps * 360f;
     }
 
-    private static float lerp(float from, float to, float factor) {
-        return from + (to - from) * factor;
-    }
 }
