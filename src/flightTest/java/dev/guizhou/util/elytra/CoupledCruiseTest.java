@@ -20,6 +20,7 @@ public final class CoupledCruiseTest {
         acceleratedCruise();
         acceleratedClimb();
         boostModeSelection();
+        levelSpeedCap();
         System.out.println("CoupledCruiseTest passed: " + checks + " checks");
     }
 
@@ -344,6 +345,33 @@ public final class CoupledCruiseTest {
         Selection gentleOff = new CoupledCruise().select(cfg, new Intent(NORTH, 1, false, false, BoostMode.Gentle), 0, 200, true);
         Selection ordinary = new CoupledCruise().select(cfg, new Intent(NORTH, 1, false), 0, 200, true);
         check(gentleOff.equals(ordinary), "a saved gentle profile cannot affect disabled GZBoost");
+    }
+
+    private static void levelSpeedCap() {
+        Config fast = Config.defaults().withBoxCap(Config.defaults().speedCap());
+        check(fast.boxCap() == 15, "level axis allowance can match the aggressive total cap");
+        check(new Config(15, -45, 30, true, -1.7, false, 60, 15, 100, .002).boxCap() == 15,
+                "axis allowance does not exceed the total-cap bound");
+        CoupledCruise c = new CoupledCruise();
+        Selection level = c.select(fast, new Intent(NORTH, 0, false), 0, 200);
+        check(level.active() && level.vertical() == 0 && !level.dualActive(), "level boost stays on one view");
+        Result straight = c.apply(fast, level, Vec3.ZERO, Vec3.ZERO, level.look(), level.look());
+        check(straight.feasible() && straight.velocity().length() > 14 && straight.velocity().length() <= 15 + 1e-6,
+                "cardinal level flight reaches the speed cap: " + straight.velocity().length());
+        Selection diagonal = c.select(fast, new Intent(new Vec3(1, 0, 1), 0, false), 0, 200);
+        Result diag = c.apply(fast, diagonal, Vec3.ZERO, Vec3.ZERO, diagonal.look(), diagonal.look());
+        check(diag.feasible() && diag.velocity().length() > 14 && diag.velocity().length() <= 15 + 1e-6,
+                "diagonal level flight reaches the speed cap: " + diag.velocity().length());
+        Config gentle = new Config(15, -45, 30, true, -1.7, false, 60, 8, 1.7, .002).withBoxCap(8);
+        Selection g = new CoupledCruise().select(gentle, new Intent(NORTH, 0, false), 0, 200);
+        Result gr = new CoupledCruise().apply(gentle, g, Vec3.ZERO, Vec3.ZERO, g.look(), g.look());
+        check(gr.feasible() && gr.velocity().length() > 7.5 && gr.velocity().length() <= 8 + 1e-6,
+                "gentle level cap is honored: " + gr.velocity().length());
+        Config boxed = Config.defaults();
+        Selection boxedLevel = new CoupledCruise().select(boxed, new Intent(NORTH, 0, false), 0, 200);
+        Result limited = new CoupledCruise().apply(boxed, boxedLevel, Vec3.ZERO, Vec3.ZERO, boxedLevel.look(), boxedLevel.look());
+        check(limited.feasible() && limited.velocity().length() < 2.5,
+                "the 1.7 axis box still limits level flight when the caller keeps it");
     }
 
     private static Config pulse() { return new Config(15,-45,30,true,-1.7,true,60,15,1.7,.002); }

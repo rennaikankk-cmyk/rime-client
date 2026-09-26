@@ -28,7 +28,9 @@ public final class CoupledCruise {
             descentFloor = bounded(descentFloor, -20, 0, -1.7);
             heightWindow = bounded(heightWindow, 1, 256, 60);
             speedCap = bounded(speedCap, 0.05, 15, 15);
-            boxCap = bounded(boxCap, 0.01, 5, 1.7);
+            // Level flight can raise this to the speed cap. 5 was below that cap, so a
+            // forward axis died at 1.7 even when the total cap was 15.
+            boxCap = bounded(boxCap, 0.01, 15, 1.7);
             inset = bounded(inset, 0, 0.1, 0.002);
             dualClimbAngle = bounded(dualClimbAngle, 0, 89.5, 0);
             dualDiveAngle = bounded(dualDiveAngle, 0, 30, 0);
@@ -39,6 +41,12 @@ public final class CoupledCruise {
                       double heightWindow, double speedCap, double boxCap, double inset) {
             this(cruisePitch, climbPitch, descentPitch, smartClimb, descentFloor, porpoise,
                     heightWindow, speedCap, boxCap, inset, 0, 0);
+        }
+
+        /** Same sample with a different axis allowance. Level flight uses the speed cap here. */
+        public Config withBoxCap(double axisCap) {
+            return new Config(cruisePitch, climbPitch, descentPitch, smartClimb, descentFloor, porpoise,
+                    heightWindow, speedCap, axisCap, inset, dualClimbAngle, dualDiveAngle);
         }
 
         public static Config defaults() {
