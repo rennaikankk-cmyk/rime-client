@@ -64,8 +64,19 @@ public final class CombatPlannerTest {
             wall.put(index, List.of(new CombatCollisionSnapshot.Box(3, y, z, 4, y + 1, z + 1)));
         }
         var shield = new CombatCollisionSnapshot(minX, minY, minZ, 24, sy, sz, wall);
-        var blocked = new AnchorPlanner.Input(4, 10, 2, false, 1, 100, self, List.of(target), List.of(nearSelf), shield);
-        check(AnchorPlanner.plan(blocked).candidate() == null, "Wall shielding removes target damage instead of only sorting distances");
+        var blocked = new AnchorPlanner.Input(4, 10, 2, false, 1, 100, person(1, -5, 100), List.of(target), List.of(nearSelf), shield);
+        check(AnchorPlanner.plan(blocked).candidate() != null && AnchorPlanner.plan(blocked).damage() == 1f,
+                "Full cover retains vanilla base damage");
+        var strict = new AnchorPlanner.Input(4, 10, 2, false, 1.1, 100, person(1, -5, 100), List.of(target), List.of(nearSelf), shield);
+        check(AnchorPlanner.plan(strict).candidate() == null, "Full cover fails a threshold above base damage");
+        var distant = new AnchorPlanner.Input(4, 10, 2, false, .1, 100, self, List.of(person(2, 30, 20)), List.of(nearSelf), terrain);
+        check(AnchorPlanner.plan(distant).candidate() == null, "Outside blast radius has no base damage");
+        var edge = new AnchorPlanner.Input(4, 10, 2, false, .1, 100, person(1, -20, 100),
+                List.of(target.at(10.5, .5, .5)), List.of(nearSelf), terrain);
+        check(AnchorPlanner.plan(edge).damage() == 1f, "Exact power-five radius retains base damage");
+        var beyond = new AnchorPlanner.Input(4, 10, 2, false, .1, 100, person(1, -20, 100),
+                List.of(target.at(10.5001, .5, .5)), List.of(nearSelf), terrain);
+        check(AnchorPlanner.plan(beyond).candidate() == null, "Just outside radius cannot wrap into a positive upper bound");
     }
     private static void predictions() {
         var terrain = new CombatCollisionSnapshot(-10, -3, -4, 32, 8, 9, Map.of());

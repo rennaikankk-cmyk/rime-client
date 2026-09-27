@@ -446,7 +446,7 @@ public class GuangxiBedModule extends Module {
                         // Empty candidates share the same terrain at a head; existing bed pairs need both halves removed.
                         float local = existing ? AnchorDamageUtil.damage(self, center, foot, head)
                                 : selfDamage.computeIfAbsent(head.asLong(), k -> AnchorDamageUtil.damage(self, center, foot, head));
-                        if (!safeSelfDamage(local)) continue;
+                        if (!safeSelfDamage(local) || tpMode.getValue() && safeTpFeet(foot, head) == null) continue;
                         best = new BedSpot(foot, head, dir, center, damage, local, target);
                     }
                 }
@@ -463,7 +463,7 @@ public class GuangxiBedModule extends Module {
     }
 
     private boolean safeSelfDamage(float damage) {
-        return damage <= maxSelf.getValue()
+        return Float.isFinite(damage) && damage >= 0 && damage <= maxSelf.getValue()
                 && (damage <= 0f || damage + 1.5f < mc.player.getHealth() + mc.player.getAbsorptionAmount());
     }
 
@@ -510,7 +510,25 @@ public class GuangxiBedModule extends Module {
         return swapped && sent[0];
     }
 
+    private Vec3 tpDetonationFeet;
+
+    private Vec3 safeTpFeet(BlockPos foot, BlockPos head) {
+        Vec3 center = Vec3.atCenterOf(head);
+        var self = AnchorDamageUtil.Target.of(mc.player);
+        return dev.guizhou.util.combat.TeleportBlastPosition.find(center, new AABB(head), 6.0,
+                feet -> safeSelfDamage(AnchorDamageUtil.damage(self.at(feet), center, foot, head)));
+    }
+
     private boolean detonate() {
+        if (tpMode.getValue()) {
+            tpDetonationFeet = safeTpFeet(pendingFoot, pendingHead);
+            if (tpDetonationFeet == null) return false;
+        }
+        try { return detonateAtSpot(); }
+        finally { tpDetonationFeet = null; }
+    }
+
+    private boolean detonateAtSpot() {
         BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(pendingHead, null,
                 interactionEye(), interactionRange(), interactionRange(), false);
         if (hit == null) return false;
@@ -530,6 +548,7 @@ public class GuangxiBedModule extends Module {
     }
 
     private Vec3 interactionFeet() {
+        if (tpDetonationFeet != null) return tpDetonationFeet;
         return new Vec3(pendingFoot.getX() + 0.5, pendingFoot.getY() + 2.0, pendingFoot.getZ() + 0.5);
     }
 
@@ -544,10 +563,18 @@ public class GuangxiBedModule extends Module {
         java.util.function.BooleanSupplier action = () -> GuizhouWare.placementManager.sendUseItemOnDirect(
                 hit, hand, interactionEye(), interactionRange(), interactionRange());
         if (!tpMode.getValue()) return action.getAsBoolean();
-        float[] look = MathUtil.calcAngle(interactionFeet(), hit.getLocation());
+        Vec3 feet = interactionFeet();
+        if (!placing && !safeSelfDamage(AnchorDamageUtil.damage(AnchorDamageUtil.Target.of(mc.player).at(feet),
+                Vec3.atCenterOf(pendingHead), pendingFoot, pendingHead))) return false;
+        var connection = mc.player.connection;
+        var restore = new ServerboundMovePlayerPacket.PosRot(mc.player.getX(), mc.player.getY(), mc.player.getZ(),
+                GuizhouWare.rotationManager.getServerYaw(), GuizhouWare.rotationManager.getServerPitch(),
+                mc.player.onGround(), mc.player.horizontalCollision);
+        float[] look = rotate.getValue() ? MathUtil.calcAngle(interactionEye(), hit.getLocation())
+                : new float[]{GuizhouWare.rotationManager.getServerYaw(), GuizhouWare.rotationManager.getServerPitch()};
         return dev.guizhou.util.InteractionTransaction.run(
                 () -> sendFakeMove(interactionFeet(), placing ? desiredYaw : look[0], look[1]),
-                action, this::sendRealMove);
+                action, () -> connection.send(restore));
     }
 
     private void noteRender() {
@@ -559,14 +586,6 @@ public class GuangxiBedModule extends Module {
     private boolean sendFakeMove(Vec3 pos, float yaw, float pitch) {
         return PacketSendUtil.send(new ServerboundMovePlayerPacket.PosRot(
                 pos.x, pos.y, pos.z, yaw, pitch, false, false));
-    }
-
-    private void sendRealMove() {
-        mc.player.connection.send(new ServerboundMovePlayerPacket.PosRot(
-                mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                GuizhouWare.rotationManager.getServerYaw(),
-                GuizhouWare.rotationManager.getServerPitch(),
-                mc.player.onGround(), mc.player.horizontalCollision));
     }
 
     private static float cardinalYaw(Direction dir) {

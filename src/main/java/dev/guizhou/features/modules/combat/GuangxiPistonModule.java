@@ -1,6 +1,7 @@
 package dev.guizhou.features.modules.combat;
 
 import dev.guizhou.GuizhouWare;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import dev.guizhou.event.impl.entity.player.TickEvent;
 import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
@@ -339,6 +340,10 @@ public class GuangxiPistonModule extends Module {
                 case ATTACK -> {
                     var entity = mc.level.getEntity(trackedCrystal);
                     if (!(entity instanceof EndCrystal crystal) || !crystal.isAlive()) { clearActive(); return; }
+                    var victim = mc.level.getEntity(setup.targetId());
+                    if (!(victim instanceof LivingEntity living) || calcDamage(living, crystal.position(), null) < minDamage.getValue()) {
+                        clearActive(); return;
+                    }
                     if (breakCrystal(crystal)) { enterStage(Stage.CONFIRM); lastStageSubmit = mc.player.tickCount; }
                     return;
                 }
@@ -370,6 +375,8 @@ public class GuangxiPistonModule extends Module {
     private boolean breakCrystal(EndCrystal crystal) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (mc.gameMode == null || !crystal.isAlive() || crystal.isRemoved() || !selfSafe(crystal.position(), null)) return false;
+        if (!dev.guizhou.util.combat.CrystalWeaponDamage.canDamage(mc.player.getAttribute(Attributes.ATTACK_DAMAGE),
+                mc.player.getMainHandItem(), mc.player.getMainHandItem())) return false;
         long now = System.currentTimeMillis();
         if (!attacks.canAttempt(crystal.getId(), now, attackWait.getValue() * 50L, 3, 500)) return false;
         Vec3 eye = mc.player.getEyePosition();
@@ -446,11 +453,9 @@ public class GuangxiPistonModule extends Module {
                     for (BlockPos head : heads) {
                         for (Direction dir : Direction.Plane.HORIZONTAL) {
                             for (int gap = 1; gap <= 2; gap++) {
-                                float bestDamage = best == null ? 0f : best.damage();
-                                Setup side = sideSetup(target, head, dir, eye, range, gap, bestDamage);
+                                Setup side = sideSetup(target, head, dir, eye, range, gap, best);
                                 if (betterSetup(side, best)) best = side;
-                                bestDamage = best == null ? 0f : best.damage();
-                                Setup top = topSetup(target, head, dir, eye, range, gap, bestDamage);
+                                Setup top = topSetup(target, head, dir, eye, range, gap, best);
                                 if (betterSetup(top, best)) best = top;
                             }
                         }
@@ -473,7 +478,7 @@ public class GuangxiPistonModule extends Module {
     }
 
     private Setup sideSetup(LivingEntity target, BlockPos head, Direction dir,
-                            Vec3 eye, double range, int gap, float bestDamage) {
+                            Vec3 eye, double range, int gap, Setup best) {
         BlockPos crystalPos = head.relative(dir);
         BlockPos base       = crystalPos.below();
         BlockPos pistonPos  = crystalPos.relative(dir, gap);
@@ -486,11 +491,11 @@ public class GuangxiPistonModule extends Module {
         Vec3 explosionPos = gap == 2 ? PistonPowerSequence.predictedPush(crystalPos, dir)
                 : new Vec3(head.getX() + 0.5, head.getY(), head.getZ() + 0.5);
         return buildSetup(target, head, dir, crystalPos, base, pistonPos,
-                          explosionPos, eye, range, placeBase, bestDamage);
+                          explosionPos, eye, range, placeBase, best);
     }
 
     private Setup topSetup(LivingEntity target, BlockPos head, Direction dir,
-                           Vec3 eye, double range, int gap, float bestDamage) {
+                           Vec3 eye, double range, int gap, Setup best) {
         BlockPos base       = head.relative(dir);
         BlockPos crystalPos = base.above();
         BlockPos pistonPos  = crystalPos.relative(dir, gap);
@@ -507,7 +512,7 @@ public class GuangxiPistonModule extends Module {
                            crystalPos.getY(),
                            crystalPos.getZ() + 0.5 - dir.getStepZ() * 0.5);
         return buildSetup(target, head, dir, crystalPos, base, pistonPos,
-                          explosionPos, eye, range, placeBase, bestDamage);
+                          explosionPos, eye, range, placeBase, best);
     }
 
     private boolean needsBase(BlockPos base) {
@@ -540,7 +545,7 @@ public class GuangxiPistonModule extends Module {
     private Setup buildSetup(LivingEntity target, BlockPos head, Direction dir,
                              BlockPos crystalPos, BlockPos base, BlockPos pistonPos,
                              Vec3 explosionPos, Vec3 eye, double range,
-                             boolean placeBase, float bestDamage) {
+                             boolean placeBase, Setup best) {
         BlockState pistonState = mc.level.getBlockState(pistonPos);
         boolean existingPiston = (pistonState.is(Blocks.PISTON) || pistonState.is(Blocks.STICKY_PISTON))
                 && pistonState.hasProperty(BlockStateProperties.FACING)
@@ -559,9 +564,7 @@ public class GuangxiPistonModule extends Module {
         if (distSqToBox(eye, crystalBox) > breakRangeSq) return null;
 
         float upper = optimisticDamage(target, explosionPos);
-        if (upper < minDamage.getValue() || bestDamage > 0f && upper <= bestDamage) return null;
-        float damage = calcDamage(target, explosionPos, placeBase ? base : null);
-        if (damage < minDamage.getValue() || !selfSafe(explosionPos, placeBase ? base : null)) return null;
+        if (upper < minDamage.getValue()) return null;
 
         RedstoneSpot redstone = findRedstoneSpot(pistonPos, dir, explosionPos, eye, rangeSq);
         if (redstone == null) return null;
@@ -578,6 +581,14 @@ public class GuangxiPistonModule extends Module {
         if (!keepPower && (itemSlot(Items.REDSTONE_BLOCK) < 0 || mc.level.hasNeighborSignal(pistonPos)
                 || existingPiston && pistonState.getValue(BlockStateProperties.EXTENDED))) return null;
         if (keepPower && !PistonPowerSequence.clearForPiston(crystalPos, pistonPos)) return null;
+        // The upper bound must obey the same resource priorities as the final choice.
+        Setup bound = new Setup(dir, pistonPos, redstone.pos(), crystalPos, base, head,
+                keepPower, plan == PistonPowerSequence.Plan.RECYCLE_PISTON,
+                placeBase, upper, target.getId(), target.position(), explosionPos);
+        if (!betterSetup(bound, best)) return null;
+        float damage = calcDamage(target, explosionPos, placeBase ? base : null);
+        if (damage < minDamage.getValue() || !selfSafe(explosionPos, placeBase ? base : null)) return null;
+
 
         return new Setup(dir, pistonPos, redstone.pos(), crystalPos, base, head,
                          keepPower, plan == PistonPowerSequence.Plan.RECYCLE_PISTON,
@@ -631,7 +642,7 @@ public class GuangxiPistonModule extends Module {
         return false;
     }
 
-    private double calcExposure(Vec3 source, AABB box, BlockPos phantomBase) {
+    private double calcExposure(Vec3 source, AABB box, BlockPos phantomBase, boolean projectedSelf) {
         double dx = box.getXsize();
         double dy = box.getYsize();
         double dz = box.getZsize();
@@ -651,7 +662,7 @@ public class GuangxiPistonModule extends Module {
                             box.minX + dx * xi + offsetX,
                             box.minY + dy * yi,
                             box.minZ + dz * zi + offsetZ);
-                    if (!explosionBlocked(point, source, phantomBase)) unblocked++;
+                    if (!explosionBlocked(point, source, phantomBase, projectedSelf)) unblocked++;
                     total++;
                 }
             }
@@ -659,11 +670,11 @@ public class GuangxiPistonModule extends Module {
         return total == 0 ? 0 : (double) unblocked / total;
     }
 
-    private boolean explosionBlocked(Vec3 from, Vec3 to, BlockPos phantomBase) {
+    private boolean explosionBlocked(Vec3 from, Vec3 to, BlockPos phantomBase, boolean projectedSelf) {
         return net.minecraft.world.level.BlockGetter.traverseBlocks(from, to, phantomBase, (ignored, pos) -> {
             if (pos.equals(phantomBase)) return net.minecraft.world.phys.shapes.Shapes.block().clip(from, to, pos);
             BlockState state = mc.level.getBlockState(pos);
-            if (state.isAir() || (blockDestruction.getValue() && state.getBlock().getExplosionResistance() < 600.0f)) return null;
+            if (state.isAir() || (projectedSelf && blockDestruction.getValue() && state.getBlock().getExplosionResistance() < 600.0f)) return null;
             VoxelShape shape = state.getCollisionShape(mc.level, pos);
             return shape.isEmpty() ? null : shape.clip(from, to, pos);
         }, ignored -> null) != null;
@@ -695,10 +706,8 @@ public class GuangxiPistonModule extends Module {
 
         double distSq = target.position().distanceToSqr(explosionPos);
         if (distSq > 144.0) return 0;
-        double exposure = calcExposure(explosionPos, target.getBoundingBox(), phantomBase);
-        if (exposure <= 0) return 0;
+        double exposure = calcExposure(explosionPos, target.getBoundingBox(), phantomBase, target == mc.player);
         double impact = (1.0 - Math.sqrt(distSq) / 12.0) * exposure;
-        if (impact <= 0) return 0;
 
         float damage = (float)((impact * impact + impact) / 2.0 * 7.0 * 12.0 + 1.0);
         switch (mc.level.getDifficulty()) {
@@ -708,7 +717,7 @@ public class GuangxiPistonModule extends Module {
             default   -> {}
         }
 
-        ArmorProfile p = target == mc.player ? (selfProfile == null ? profileOf(target) : selfProfile) : targetProfile;
+        ArmorProfile p = profileOf(target);
         return ExplosionDamageModel.reduce(damage, p.armor(), p.toughness(), p.resistanceMul(), p.protPoints());
     }
 

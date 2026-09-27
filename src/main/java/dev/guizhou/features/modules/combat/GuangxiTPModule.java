@@ -7,31 +7,26 @@ import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.features.settings.Setting;
-import dev.guizhou.util.DamageUtil;
+import dev.guizhou.util.AnchorDamageUtil;
+import dev.guizhou.util.combat.TeleportBlastPosition;
+import dev.guizhou.util.combat.CrystalWeaponDamage;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PacketSendUtil;
 import java.util.function.BooleanSupplier;
-import dev.guizhou.util.inventory.InventoryUtil;
-import dev.guizhou.util.inventory.SwapMode;
-import dev.guizhou.util.inventory.SwapPriority;
 import dev.guizhou.util.models.Timer;
 import dev.guizhou.util.render.RenderUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.util.Mth;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -107,6 +102,9 @@ public class GuangxiTPModule extends Module {
         dWindow = now;
     }
 
+    private final dev.guizhou.util.combat.CrystalRetryTracker attacks = new dev.guizhou.util.combat.CrystalRetryTracker();
+    private Object attackLevel, attackPlayer;
+
     private final Timer placeTimer = new Timer();
     private final Timer breakTimer = new Timer();
     private final Timer baseTimer = new Timer();
@@ -133,6 +131,7 @@ public class GuangxiTPModule extends Module {
 
     @Override
     public void onEnable() {
+        attacks.clear();
         placeTimer.reset();
         breakTimer.reset();
         baseTimer.reset();
@@ -140,6 +139,7 @@ public class GuangxiTPModule extends Module {
 
     @Override
     public void onDisable() {
+        attacks.clear();
         renderPos = null;
     }
 
@@ -151,6 +151,7 @@ public class GuangxiTPModule extends Module {
             return;
         }
         if (nullCheck() || mc.player.isDeadOrDying()) return;
+        ensureAttackSession();
         if (tpsSync.getValue() && GuizhouWare.tpsCounterService.isRubberbandRecent()) return;
 
         Player target = findTarget();
@@ -231,7 +232,7 @@ public class GuangxiTPModule extends Module {
                     Vec3 center = new Vec3(airPos.getX() + 0.5, airPos.getY(), airPos.getZ() + 0.5);
                     float dmg = estimateDamage(target, center);
                     if (dmg < minDamage.getValue()) { dDmgRej++; continue; }
-                    if (DamageUtil.crystalMaxSelfDamage(center) > maxSelf.getValue()) { dSelfRej++; continue; }
+                    if (!safeSelf(center, null)) { dSelfRej++; continue; }
 
                     if (dmg > bestDmg + SELECT_EPSILON) {
                         bestDmg = dmg;
@@ -259,9 +260,10 @@ public class GuangxiTPModule extends Module {
         float bestDmg = 0f;
         for (Entity e : mc.level.getEntities(null, target.getBoundingBox().inflate(scanRange.getValue() + 2))) {
             if (!(e instanceof EndCrystal crystal) || !crystal.isAlive()) continue;
+            if (!attacks.canAttempt(crystal.getId(), System.currentTimeMillis(), 100, 3, 500)) continue;
             float dmg = estimateDamage(target, crystal.position());
             if (dmg < minDamage.getValue()) continue;
-            if (DamageUtil.crystalMaxSelfDamage(crystal.position()) > maxSelf.getValue()) continue;
+            if (!safeSelf(crystal.position(), null) || !useLegacy112() && breakFeet(crystal) == null) continue;
             if (dmg > bestDmg) { bestDmg = dmg; best = crystal; }
         }
         return best;
@@ -305,9 +307,9 @@ public class GuangxiTPModule extends Module {
                     if (neighbor == null) continue;
 
                     Vec3 crystalCenter = new Vec3(cursor.getX() + 0.5, cursor.getY() + 1.0, cursor.getZ() + 0.5);
-                    float dmg = estimateDamage(target, crystalCenter);
+                    float dmg = AnchorDamageUtil.explosionDamage(AnchorDamageUtil.Target.of(target), crystalCenter, 12, null, cursor);
                     if (dmg < minDamage.getValue()) continue;
-                    if (DamageUtil.crystalMaxSelfDamage(crystalCenter) > maxSelf.getValue()) continue;
+                    if (!safeSelf(crystalCenter, cursor)) continue;
 
                     if (best == null || dmg > best.damage() + SELECT_EPSILON) {
                         best = new BaseOpportunity(cursor.immutable(), neighbor.immutable(), face, dmg);
@@ -336,7 +338,8 @@ public class GuangxiTPModule extends Module {
     }
 
     private Vec3 fakeFeet(BlockPos base) {
-        return new Vec3(base.getX() + 0.5, base.getY() + 2.0, base.getZ() + 0.5);
+        // The server includes this player in the crystal cell occupancy test (two blocks tall).
+        return new Vec3(base.getX() + 0.5, base.getY() + 3.05, base.getZ() + 0.5);
     }
 
     private boolean tpPlace(BlockPos base) { return tpPlace(base, false); }
@@ -359,13 +362,18 @@ public class GuangxiTPModule extends Module {
     private boolean tpBreak(EndCrystal crystal) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (mc.getConnection() == null || !crystal.isAlive()) return false;
-        // Fake stand ~2.2 above the crystal: inside the 3-block attack reach, looking at it.
+        ensureAttackSession();
+        long now = System.currentTimeMillis();
+        if (!attacks.canAttempt(crystal.getId(), now, 100, 3, 500)) return false;
+        if (!safeSelf(crystal.position(), null) || !CrystalWeaponDamage.canDamage(
+                mc.player.getAttribute(Attributes.ATTACK_DAMAGE), mc.player.getMainHandItem(), mc.player.getMainHandItem())) return false;
         Vec3 cp = crystal.position();
-        Vec3 fake = new Vec3(cp.x, cp.y + 2.2, cp.z);
+        Vec3 fake = useLegacy112() ? mc.player.position() : breakFeet(crystal);
+        if (fake == null) return false;
         float[] look = lookAt(fake, cp);
         boolean sent = sandwich(fake, look[0], look[1], () -> PacketSendUtil.send(
                 ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown())));
-        if (sent) dBreakSent++;
+        if (sent) { attacks.markSent(crystal.getId(), now, 500); dBreakSent++; }
         return sent;
     }
 
@@ -373,15 +381,19 @@ public class GuangxiTPModule extends Module {
         if (!rotate.getValue()) {
             return new float[]{GuizhouWare.rotationManager.getServerYaw(), GuizhouWare.rotationManager.getServerPitch()};
         }
-        return MathUtil.calcAngle(from, to);
+        return MathUtil.calcAngle(from.add(0, mc.player.getEyeHeight(), 0), to);
     }
 
     /** Restore the real position even when an interaction throws or is cancelled. */
     private boolean sandwich(Vec3 fake, float yaw, float pitch, BooleanSupplier action) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (useLegacy112()) return action.getAsBoolean();
+        var connection = mc.player.connection;
+        var restore = new ServerboundMovePlayerPacket.PosRot(mc.player.getX(), mc.player.getY(), mc.player.getZ(),
+                GuizhouWare.rotationManager.getServerYaw(), GuizhouWare.rotationManager.getServerPitch(),
+                mc.player.onGround(), mc.player.horizontalCollision);
         return dev.guizhou.util.InteractionTransaction.run(
-                () -> sendDesyncMove(fake, yaw, pitch), action, this::sendRealMove);
+                () -> sendDesyncMove(fake, yaw, pitch), action, () -> connection.send(restore));
     }
 
     private boolean sendDesyncMove(Vec3 pos, float yaw, float pitch) {
@@ -389,25 +401,30 @@ public class GuangxiTPModule extends Module {
                 pos.x, pos.y, pos.z, yaw, pitch, false, false));
     }
 
-    private void sendRealMove() {
-        mc.player.connection.send(new ServerboundMovePlayerPacket.PosRot(
-                mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                GuizhouWare.rotationManager.getServerYaw(),
-                GuizhouWare.rotationManager.getServerPitch(),
-                mc.player.onGround(), mc.player.horizontalCollision));
+    private void ensureAttackSession() {
+        if (attackLevel != mc.level || attackPlayer != mc.player) {
+            attacks.clear(); attackLevel = mc.level; attackPlayer = mc.player;
+        }
+        attacks.expire(System.currentTimeMillis(), 2000);
     }
 
-    /** Optimistic explosion damage (exposure 1.0) with armor reduction; prot skipped on purpose. */
+    private boolean safeDamage(float damage) {
+        return Float.isFinite(damage) && damage >= 0 && damage <= maxSelf.getValue()
+                && (damage == 0 || damage + 1.5f < mc.player.getHealth() + mc.player.getAbsorptionAmount());
+    }
+
+    private boolean safeSelf(Vec3 source, BlockPos base) {
+        return safeDamage(AnchorDamageUtil.explosionDamage(AnchorDamageUtil.Target.of(mc.player), source, 12, null, base));
+    }
+
+    private Vec3 breakFeet(EndCrystal crystal) {
+        var self = AnchorDamageUtil.Target.of(mc.player);
+        return TeleportBlastPosition.find(crystal.position(), crystal.getBoundingBox(), 3.0,
+                feet -> safeDamage(AnchorDamageUtil.explosionDamage(self.at(feet), crystal.position(), 12, null)));
+    }
+
     private float estimateDamage(LivingEntity target, Vec3 center) {
-        double dist = target.position().distanceTo(center);
-        if (dist > 12.0) return 0f;
-        double impact = 1.0 - dist / 12.0;
-        float dmg = (float) ((impact * impact + impact) / 2.0 * 7.0 * 12.0 + 1.0);
-        float armor = (float) target.getAttributeValue(Attributes.ARMOR);
-        float toughness = (float) target.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
-        float i = 2.0f + toughness / 4.0f;
-        float j = Mth.clamp(armor - dmg / i, armor * 0.2f, 20.0f);
-        return dmg * (1.0f - j / 25.0f);
+        return AnchorDamageUtil.explosionDamage(AnchorDamageUtil.Target.of(target), center, 12, null);
     }
 
     @Override
