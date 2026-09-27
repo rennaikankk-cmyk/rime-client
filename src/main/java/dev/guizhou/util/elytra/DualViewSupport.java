@@ -33,6 +33,21 @@ public final class DualViewSupport {
         return forceLegacyProtocol() || status() == Status.SUPPORTED;
     }
 
+    /** Via may supply a modern default component for an old NBT-less rocket. */
+    public static boolean usesLegacyFireworkData() {
+        status();
+        return forceLegacyProtocol() || legacyFireworkFamily(cachedVersionName);
+    }
+
+    public static boolean legacyFireworkFamily(String name) {
+        if (name == null) return false;
+        var match = java.util.regex.Pattern.compile("1\\.(\\d{1,2})(?:\\.(\\d{1,2}))?(?:-1\\.(\\d{1,2})(?:\\.(\\d{1,2}))?)?").matcher(name);
+        if (!match.matches()) return false;
+        int low = Integer.parseInt(match.group(1)) * 100 + (match.group(2) == null ? 0 : Integer.parseInt(match.group(2)));
+        int high = match.group(3) == null ? low : Integer.parseInt(match.group(3)) * 100 + (match.group(4) == null ? 0 : Integer.parseInt(match.group(4)));
+        return low >= 900 && high >= low && high <= 2004;
+    }
+
     /** Resolved once per connection; cheap on every later call. */
     public static Status status() {
         Object connection = mc == null ? null : mc.getConnection();

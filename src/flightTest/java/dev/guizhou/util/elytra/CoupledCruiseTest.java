@@ -17,8 +17,25 @@ public final class CoupledCruiseTest {
         realGlideCycle();
         randomizedConstraints();
         dualViewSelection();
-        levelSpeedCap();
+        acceleratedCruise();
+        acceleratedClimb();
+        boostModeSelection();
+        longWaveWindow();
         System.out.println("CoupledCruiseTest passed: " + checks + " checks");
+    }
+
+    private static void longWaveWindow() {
+        Config cfg = new Config(15, -45, 30, true, -1.7, true, 1000, 14.5, 1.7, .002);
+        check(cfg.heightWindow() == 1000, "long wave must not silently become a 256-block window");
+        CoupledCruise controller = new CoupledCruise();
+        Intent cruise = new Intent(NORTH, 0, false, true, BoostMode.Aggressive);
+        check(controller.select(cfg, cruise, 0, 2500, true).phase() == Phase.DESCEND, "wave starts descending");
+        check(controller.select(cfg, cruise, 0, 2000, true).phase() == Phase.DESCEND, "halfway is still descent");
+        check(controller.select(cfg, cruise, 0, 1500, true).phase() == Phase.CLIMB, "wave turns at the full window");
+        check(controller.select(cfg, cruise, 0, 2501, true).phase() == Phase.DESCEND, "wave completes its cycle");
+        check(controller.select(cfg, cruise, 0, 1500, true).phase() == Phase.CLIMB, "overshoot does not raise the next floor");
+        check(controller.select(cfg, new Intent(NORTH, -1, false, true), 0, 1800, true).phase() == Phase.LEVEL,
+                "manual descent takes over from the automatic wave");
     }
 
     private static void dualViewSelection() {
@@ -232,31 +249,116 @@ public final class CoupledCruiseTest {
         }
     }
 
-    private static void levelSpeedCap() {
-        Config fast = Config.defaults().withBoxCap(Config.defaults().speedCap());
-        check(fast.boxCap() == 15, "level axis allowance can match the aggressive total cap");
-        check(new Config(15, -45, 30, true, -1.7, false, 60, 15, 100, .002).boxCap() == 15,
-                "axis allowance does not exceed the total-cap bound");
+    private static void acceleratedCruise() {
+        Config cfg = Config.defaults();
         CoupledCruise c = new CoupledCruise();
-        Selection level = c.select(fast, new Intent(NORTH, 0, false), 0, 200);
-        check(level.active() && level.vertical() == 0 && !level.dualActive(), "level boost stays on one view");
-        Result straight = c.apply(fast, level, Vec3.ZERO, Vec3.ZERO, level.look(), level.look());
-        check(straight.feasible() && straight.velocity().length() > 14 && straight.velocity().length() <= 15 + 1e-6,
-                "cardinal level flight reaches the speed cap: " + straight.velocity().length());
-        Selection diagonal = c.select(fast, new Intent(new Vec3(1, 0, 1), 0, false), 0, 200);
-        Result diag = c.apply(fast, diagonal, Vec3.ZERO, Vec3.ZERO, diagonal.look(), diagonal.look());
-        check(diag.feasible() && diag.velocity().length() > 14 && diag.velocity().length() <= 15 + 1e-6,
-                "diagonal level flight reaches the speed cap: " + diag.velocity().length());
-        Config gentle = new Config(15, -45, 30, true, -1.7, false, 60, 8, 1.7, .002).withBoxCap(8);
-        Selection g = new CoupledCruise().select(gentle, new Intent(NORTH, 0, false), 0, 200);
-        Result gr = new CoupledCruise().apply(gentle, g, Vec3.ZERO, Vec3.ZERO, g.look(), g.look());
-        check(gr.feasible() && gr.velocity().length() > 7.5 && gr.velocity().length() <= 8 + 1e-6,
-                "gentle level cap is honored: " + gr.velocity().length());
-        Config boxed = Config.defaults();
-        Selection boxedLevel = new CoupledCruise().select(boxed, new Intent(NORTH, 0, false), 0, 200);
-        Result limited = new CoupledCruise().apply(boxed, boxedLevel, Vec3.ZERO, Vec3.ZERO, boxedLevel.look(), boxedLevel.look());
-        check(limited.feasible() && limited.velocity().length() < 2.5,
-                "the 1.7 axis box still limits level flight when the caller keeps it");
+        Intent fast = new Intent(NORTH, 0, false, true);
+        Selection unsupported = c.select(cfg, fast, 0, 200, false);
+        check(!unsupported.dualActive() && unsupported.vertical() == 0, "unsupported protocol retains ordinary level flight");
+        check(!c.select(cfg, new Intent(Vec3.ZERO, 1, false, true), 0, 200, true).dualActive(), "GZBoost does not alter pure vertical input");
+        Selection up = c.select(cfg, fast, 0, 200, true);
+        check(up.dualActive() && up.vertical() == 1 && !up.banked(), "accelerated level starts its altitude cycle");
+        check(c.select(cfg, fast, 0, 202, true).vertical() == -1, "cycle returns toward entry altitude");
+        Selection ordinary = c.select(cfg, new Intent(NORTH, 0, false), 0, 202, true);
+        check(ordinary.vertical() == 0 && !ordinary.dualActive(), "disabling GZBoost restores ordinary cruise immediately");
+        check(c.select(cfg, fast, 0, 220, true).vertical() == 1, "reentering acceleration anchors the new altitude");
+        c.reset();
+        check(c.select(cfg, fast, 0, -100, true).vertical() == 1, "world reset discards accelerated altitude");
+        Selection left = c.select(cfg, new Intent(NORTH, -1, false, true), 0, 200, true);
+        Selection right = c.select(cfg, new Intent(NORTH, -1, false, true), 0, 198, true);
+        check(left.banked() && right.banked() && left.boxLook().x * right.boxLook().x < 0,
+                "cardinal descent alternates bounded transverse support");
+        check(!c.select(cfg, new Intent(new Vec3(1,0,1), -1, false, true), 0, 200, true).banked(),
+                "noncardinal headings are not silently redirected for banking");
+        Vec3 velocity = Vec3.ZERO;
+        double height = 6000;
+        for (int i = 0; i < 800; i++) {
+            Selection selection = c.select(cfg, new Intent(NORTH,-1,false,true), 0, height, true);
+            Vec3 simulated = ElytraPhysics.simulateGlide(velocity, selection.look(), .08);
+            Result result = c.apply(cfg, selection, velocity, simulated, selection.look(), selection.look());
+            Envelope box = CoupledCruise.envelope(cfg, velocity, simulated, selection.look(), selection.boxLook());
+            check(result.feasible() && box.contains(result.velocity(), 1e-8), "accelerated result remains inside the predicted envelope");
+            check(result.velocity().length() <= cfg.speedCap() + 1e-8, "acceleration retains the total speed limit");
+            velocity = result.velocity();
+            height += velocity.y;
+        }
+        check(velocity.z > 13 && velocity.y < 0 && Math.abs(velocity.x) < 1,
+                "model gains sustained forward speed with explicit altitude cost and bounded banking");
+    }
+
+    private static void acceleratedClimb() {
+        Config cfg = cap(15);
+        for (BoostMode mode : BoostMode.values()) {
+            double cardinalY = Double.NaN, diagonalY = Double.NaN;
+            for (int angle = 0; angle < 360; angle += 45) {
+                CoupledCruise c = new CoupledCruise();
+                double yaw = Math.toRadians(angle);
+                Vec3 direction = new Vec3(-Math.sin(yaw), 0, Math.cos(yaw));
+                Vec3 v = Vec3.ZERO;
+                for (int tick = 0; tick < 600; tick++) {
+                    Selection choice = c.select(cfg, new Intent(direction, 1, false, true, mode), angle, 200, true);
+                    Vec3 predicted = ElytraPhysics.simulateGlide(v, choice.look(), .08);
+                    Result result = c.apply(cfg, choice, v, predicted, choice.look(), choice.look());
+                    Envelope envelope = CoupledCruise.envelope(cfg, v, predicted, choice.look(), choice.boxLook());
+                    check(result.feasible() && envelope.contains(result.velocity(), 1e-8), "boosted climb stays inside every envelope axis");
+                    check(result.velocity().length() <= 15 + 1e-8, "boosted climb retains total speed bound");
+                    v = result.velocity();
+                }
+                check(v.y > (mode == BoostMode.Gentle ? 7 : 10), "powered directional climb sustains the intended model gain");
+                if (angle % 90 == 0) {
+                    if (Double.isNaN(cardinalY)) cardinalY = v.y;
+                    check(Math.abs(v.y - cardinalY) < .005, "all cardinal axes have equivalent climb, including tiny sin/cos residues");
+                } else {
+                    if (Double.isNaN(diagonalY)) diagonalY = v.y;
+                    check(Math.abs(v.y - diagonalY) < .005, "all diagonal quadrants have equivalent climb");
+                }
+                Selection off = c.select(cfg, new Intent(direction, 1, false, false, mode), angle, 200, true);
+                check(!off.banked(), "switching GZBoost off leaves the ordinary climb path");
+                check(!c.select(cfg, new Intent(direction, 1, false, true, mode), angle, 200, false).dualActive(),
+                        "unsupported protocol cannot select boosted dual climb");
+            }
+            CoupledCruise turning = new CoupledCruise();
+            Vec3 v = Vec3.ZERO;
+            for (int tick = 0; tick < 720; tick++) {
+                double yaw = Math.toRadians(tick * .5);
+                Vec3 direction = new Vec3(-Math.sin(yaw), 0, Math.cos(yaw));
+                Selection choice = turning.select(cfg, new Intent(direction, 1, false, true, mode), tick * .5, 200, true);
+                Vec3 predicted = ElytraPhysics.simulateGlide(v, choice.look(), .08);
+                Result result = turning.apply(cfg, choice, v, predicted, choice.look(), choice.look());
+                check(result.feasible() && result.velocity().length() <= 15 + 1e-8,
+                        "heading transitions remain feasible across both blend regions and all quadrants");
+                v = result.velocity();
+            }
+        }
+    }
+
+    private static void boostModeSelection() {
+        Config cfg = cap(15);
+        check(new Intent(NORTH, 1, false, true).boostMode() == BoostMode.Aggressive,
+                "existing accelerated callers retain the released aggressive behavior");
+        check(new Intent(NORTH, 1, false, true, null).boostMode() == BoostMode.Aggressive,
+                "missing boost mode uses the aggressive default");
+        CoupledCruise switching = new CoupledCruise();
+        for (BoostMode mode : new BoostMode[]{BoostMode.Aggressive, BoostMode.Gentle, BoostMode.Aggressive}) {
+            Selection selected = switching.select(cfg, new Intent(NORTH, 1, false, true, mode), 0, 200, true);
+            near(pitch(selected.look()), mode == BoostMode.Gentle ? -86.25 : -89.25,
+                    "live mode changes use the measured candidate pitch");
+            near(Math.abs(Math.toDegrees(Math.atan2(-selected.boxLook().x, selected.boxLook().z))),
+                    mode == BoostMode.Gentle ? 20 : 72.5, "live mode changes select the measured lateral span");
+            Selection vertical = switching.select(cfg, new Intent(Vec3.ZERO, 1, false, true, mode), 0, 200, true);
+            check(vertical.pureVertical() && vertical.look().x == 0 && vertical.look().z == 0,
+                    "neither profile adds horizontal motion to vertical input");
+        }
+        for (Vec3 heading : new Vec3[]{NORTH, new Vec3(1, 0, 1)}) {
+            for (int vertical : new int[]{-1, 0}) {
+                Selection gentle = new CoupledCruise().select(cfg, new Intent(heading, vertical, false, true, BoostMode.Gentle), 0, 200, true);
+                Selection aggressive = new CoupledCruise().select(cfg, new Intent(heading, vertical, false, true, BoostMode.Aggressive), 0, 200, true);
+                check(gentle.equals(aggressive), "boost modes share the validated cruise and descent behavior");
+            }
+        }
+        Selection gentleOff = new CoupledCruise().select(cfg, new Intent(NORTH, 1, false, false, BoostMode.Gentle), 0, 200, true);
+        Selection ordinary = new CoupledCruise().select(cfg, new Intent(NORTH, 1, false), 0, 200, true);
+        check(gentleOff.equals(ordinary), "a saved gentle profile cannot affect disabled GZBoost");
     }
 
     private static Config pulse() { return new Config(15,-45,30,true,-1.7,true,60,15,1.7,.002); }

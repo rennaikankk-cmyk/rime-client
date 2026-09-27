@@ -70,7 +70,7 @@ import static dev.guizhou.util.inventory.InventoryUtil.FULL_SCOPE;
 public class GuangxiElytraModule extends Module {
 
     public enum Mode { Grim, NoAC }
-    public enum BoostMode { Gentle, Aggressive }
+    public enum WaveRange { Standard220, Long1000 }
     public enum FlightMode { CONTROL, ROTATION }
     public enum MotionMode { VOID, FIREWORKS }
     public enum SetbackMode { SIMULATION, CRASH_PACKETS }
@@ -78,7 +78,15 @@ public class GuangxiElytraModule extends Module {
     private final java.util.Map<String, Setting<?>> policy = new java.util.LinkedHashMap<>();
     private final Setting<Mode> flightProfile = mode("Mode", Mode.Grim);
     private final Setting<Boolean> gzBoost = bool("GZBoost", false);
-    private final Setting<BoostMode> gzBoostMode = mode("GZBoostMode", BoostMode.Aggressive);
+    private final Setting<CoupledCruise.BoostMode> gzBoostMode = mode("GZBoostMode", CoupledCruise.BoostMode.Aggressive);
+    private final Setting<Boolean> gzBoostWave = bool("GZBoostWave", false)
+            .described("以大幅下降和拉升往返提高平均水平速度；需要空旷高空，默认关闭。");
+    private final Setting<WaveRange> gzBoostWaveRange = mode("GZBoostWaveRange", WaveRange.Standard220)
+            .described("Standard220 使用约220格高度窗口；Long1000 使用约1000格，需要更大垂直净空。");
+    private final dev.guizhou.util.elytra.FlightMotionSample motionSample = new dev.guizhou.util.elytra.FlightMotionSample();
+    private final AtomicBoolean externalImpulsePending = new AtomicBoolean();
+    private Object submittedLookConnection;
+    private float submittedLookYaw = Float.NaN, submittedLookPitch = Float.NaN;
     private final Setting<Double> horizontalSpeed = num("SpeedBps", 40.0, 1.0, 2000.0);
     private final Setting<Double> climbSpeed = num("ClimbBps", 40.0, 1.0, 2000.0);
     private final Setting<Boolean> adaptiveSlowdown = bool("AdaptiveSlowdown", false);
@@ -146,8 +154,6 @@ public class GuangxiElytraModule extends Module {
 
     private static final int CHEST_MENU_SLOT = 6;
     private static final int OFFHAND_MENU_SLOT = 45;
-    /** Cruise ticks kept after the firework entity detaches. Old rocket-extra-effect-ticks default. */
-    private static final int ROCKET_EXTRA_EFFECT_TICKS = 3;
     private static final String ROTATION_ID = "GuangxiElytra_flight";
     private static final String SAFETY_ROTATION_ID = "GuangxiElytra_safety";
 
@@ -190,7 +196,6 @@ public class GuangxiElytraModule extends Module {
     private int boostScanTick = Integer.MIN_VALUE;
     private int boostRemaining;
     private boolean attachedBoost;
-    private int rocketTailTicks;
 
     // passive diagnostics, written on the game thread and read by TelemetryManager; never affect flight
     private volatile double lastRequestedBpt;
@@ -241,6 +246,16 @@ public class GuangxiElytraModule extends Module {
         super("GuangxiElytra", "Grim cruise and climb; NoAC direct flight. GZBoost enables fast cruise, Space climbs, Shift descends.", Category.MOVEMENT);
         gzBoost.setVisibility(v -> flightProfile.getValue() == Mode.Grim);
         gzBoostMode.setVisibility(v -> flightProfile.getValue() == Mode.Grim && gzBoost.getValue());
+        gzBoostWave.setVisibility(v -> flightProfile.getValue() == Mode.Grim && gzBoost.getValue()
+                && gzBoostMode.getValue() == CoupledCruise.BoostMode.Aggressive);
+        gzBoostWaveRange.setVisibility(v -> gzBoostWave.isVisible() && gzBoostWave.getValue());
+        dev.guizhou.util.PacketSendUtil.addSubmissionListener(packet -> {
+            if (mc.isSameThread() && packet instanceof ServerboundMovePlayerPacket movement && movement.hasRotation()) {
+                submittedLookConnection = mc.getConnection();
+                submittedLookYaw = movement.getYRot(0);
+                submittedLookPitch = movement.getXRot(0);
+            }
+        });
         adaptiveSlowdown.setVisibility(v -> flightProfile.getValue() == Mode.Grim);
         horizontalSpeed.setVisibility(v -> flightProfile.getValue() == Mode.NoAC);
         climbSpeed.setVisibility(v -> flightProfile.getValue() == Mode.NoAC);
@@ -275,7 +290,8 @@ public class GuangxiElytraModule extends Module {
         speed.setValueNoEvent(next == Mode.NoAC ? horizontalSpeed.getValue() / 20.0 : 6.0);
         rescaleAmount.setValueNoEvent(1.7);
         yCap.setValueNoEvent(next == Mode.NoAC ? climbSpeed.getValue() / 20.0 : 8.0);
-        cruiseSpeedCap.setValueNoEvent(gzBoostMode.getValue() == BoostMode.Gentle ? 8.0 : 15.0);
+        // Gentle changes climb geometry, not the shared cruise/descent speed ceiling.
+        cruiseSpeedCap.setValueNoEvent(15.0);
     }
 
     private double grimBudget() {
@@ -402,6 +418,7 @@ public class GuangxiElytraModule extends Module {
     }
 
     private void resetFlightState() {
+        externalImpulsePending.set(false);
         resetCruise();
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
         lastAppliedTick = Integer.MIN_VALUE;
@@ -445,6 +462,8 @@ public class GuangxiElytraModule extends Module {
         stowedChest = ItemStack.EMPTY;
         dualSnapYaw = Float.NaN;
         dualSnapPitch = Float.NaN;
+        submittedLookConnection = null;
+        submittedLookYaw = submittedLookPitch = Float.NaN;
         dualViewWarned = false;
     }
 
@@ -588,7 +607,6 @@ public class GuangxiElytraModule extends Module {
             CoupledCruise.Selection selection = cruiseController.select(config, cruiseInput(),
                     viewAnchor.yaw(), mc.player.getY(), dualViewAvailable());
             if (selection.active()) {
-                config = levelCruiseConfig(config, selection);
                 pendingCruise = selection;
                 pendingCruiseConfig = config;
                 // Preview only for terrain planning. The movement hook uses the actual
@@ -678,28 +696,37 @@ public class GuangxiElytraModule extends Module {
         lastLook = actualLook;
         if (request == null || !isEnabled() || correctionPending.get()
                 || mc.player == null || mc.player.tickCount < boostRetryTick) {
-            rocketTailTicks = 0;
+            motionSample.reset();
             return vanillaVelocity;
         }
 
+        // Only manual cruise uses observed displacement. Combat retains its current controller.
+        if (externalImpulsePending.getAndSet(false)) {
+            motionSample.reset();
+            if (cruise != null) return vanillaVelocity;
+        }
+        boolean continuousCruise = cruise != null && cruiseEligible() && !pendingSafetySteering
+                && !mc.player.horizontalCollision && !mc.player.verticalCollision
+                && !mc.player.hasEffect(net.minecraft.world.effect.MobEffects.SLOW_FALLING)
+                && !mc.player.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION);
+        Vec3 observed = motionSample.sample(mc.player.position(), mc.player.tickCount, incomingVelocity, continuousCruise);
+        Vec3 predictedVelocity = vanillaVelocity;
+        if (continuousCruise && !observed.equals(incomingVelocity)) {
+            incomingVelocity = observed;
+            predictedVelocity = ElytraPhysics.simulateGlide(observed, actualLook,
+                    mc.player.getAttributeValue(Attributes.GRAVITY));
+        }
         Vec3 applied = request;
         CoupledCruise.Result cruiseResult = null;
         if (cruise != null) {
             scanAttachedBoosts();
-            if (attachedBoost) rocketTailTicks = ROCKET_EXTRA_EFFECT_TICKS;
-            boolean rocketControl = attachedBoost || rocketTailTicks > 0;
-            if (rocketControl && !pendingSafetySteering && cruiseEligible()) {
-                cruiseResult = cruiseController.apply(config, cruise, incomingVelocity, vanillaVelocity, actualLook, previousLook);
-                if (!attachedBoost) rocketTailTicks--;
-            } else if (!attachedBoost) {
-                rocketTailTicks = 0;
+            if (attachedBoost && !pendingSafetySteering && cruiseEligible()) {
+                cruiseResult = cruiseController.apply(config, cruise, incomingVelocity, predictedVelocity, actualLook, previousLook);
             }
-            applied = cruiseResult != null && cruiseResult.feasible() ? cruiseResult.velocity() : vanillaVelocity;
-            // Report the box look ahead of this tick's movement packet so the widened
-            // envelope stays consistent with a rotation the server actually saw.
-            if (cruise.dualActive() && mc.getConnection() != null) sendDualViewSnap(cruise);
+            // When a rocket expires, preserve observed glide inertia but add no rocket thrust.
+            applied = cruiseResult != null && cruiseResult.feasible() ? cruiseResult.velocity()
+                    : continuousCruise ? predictedVelocity : vanillaVelocity;
         } else {
-            rocketTailTicks = 0;
             if (motionMode.getValue() == MotionMode.FIREWORKS && autoRescale.getValue()) {
                 // The expansion models a rocket; without an attached rocket only glide is available.
                 scanAttachedBoosts();
@@ -724,6 +751,9 @@ public class GuangxiElytraModule extends Module {
             applied = vanillaVelocity;
             safetyHoldTicks = 6;
         }
+        // Do not publish a widened box view when collision safety vetoed its movement.
+        if (cruiseResult != null && cruiseResult.feasible() && applied.equals(cruiseResult.velocity())
+                && cruise.dualActive() && mc.getConnection() != null) sendDualViewSnap(cruise);
         lastApplied = applied;
         lastRequestedBpt = cruiseResult != null ? cruiseResult.velocity().length() : request.length();
         lastAppliedBpt = applied.length();
@@ -769,28 +799,31 @@ public class GuangxiElytraModule extends Module {
         double strafe = (mc.options.keyLeft.isDown() ? 1 : 0) - (mc.options.keyRight.isDown() ? 1 : 0);
         double forward = (mc.options.keyUp.isDown() ? 1 : 0) - (mc.options.keyDown.isDown() ? 1 : 0);
         double vertical = (mc.options.keyJump.isDown() ? 1 : 0) - (mc.options.keyShift.isDown() ? 1 : 0);
+        if (autoFly.getValue() && !mc.options.keyUp.isDown() && !mc.options.keyDown.isDown()
+                && !mc.options.keyLeft.isDown() && !mc.options.keyRight.isDown()) forward = 1;
         Vec3 horizontal = ElytraPhysics.movementInputToVelocity(new Vec3(strafe, 0, forward), 1, viewAnchor.yaw());
-        return new CoupledCruise.Intent(horizontal, vertical, autoFly.getValue());
+        return new CoupledCruise.Intent(horizontal, vertical, autoFly.getValue(), gzBoost.getValue(), gzBoostMode.getValue());
     }
 
     private CoupledCruise.Config cruiseConfig() {
+        // An explicit large-altitude-swing cruise option. Keep both established
+        // GZBoost climb profiles and the ordinary level path unchanged by default.
+        boolean wave = flightProfile.getValue() == Mode.Grim && gzBoost.getValue()
+                && gzBoostMode.getValue() == CoupledCruise.BoostMode.Aggressive
+                && gzBoostWave.getValue() && dualViewAvailable()
+                && !mc.options.keyJump.isDown() && !mc.options.keyShift.isDown();
+        double speedCap = wave ? Math.min(cruiseSpeedCap.getValue(), 14.5) : cruiseSpeedCap.getValue();
+        double heightWindow = wave
+                ? (gzBoostWaveRange.getValue() == WaveRange.Long1000 ? 1000.0 : 220.0)
+                : cruiseHeightWindow.getValue();
         return new CoupledCruise.Config(cruisePitch.getValue(), cruiseClimbPitch.getValue(), cruiseDescentPitch.getValue(),
-                cruiseSmartClimb.getValue(), cruiseDescentFloor.getValue(), cruisePorpoise.getValue(),
-                cruiseHeightWindow.getValue(), cruiseSpeedCap.getValue() * grimBudget(), cruiseBoxCap.getValue() * grimBudget(), cruiseInset.getValue(),
+                cruiseSmartClimb.getValue(), cruiseDescentFloor.getValue(), cruisePorpoise.getValue() || wave,
+                heightWindow, speedCap * grimBudget(),
+                cruiseBoxCap.getValue() * grimBudget(), cruiseInset.getValue(),
                 cruiseDualClimbAngle.getValue(), cruiseDualDiveAngle.getValue());
     }
 
-    /**
-     * Level flight has no second view, so a 1.7 axis box hides the speed cap.
-     * The old unscaled firework boost wrote look × speed and did not apply that clamp.
-     * Climb and dive keep the stored grim box.
-     */
-    private CoupledCruise.Config levelCruiseConfig(CoupledCruise.Config config, CoupledCruise.Selection cruise) {
-        if (config == null || cruise == null || !gzBoost.getValue()) return config;
-        if (cruise.vertical() != 0 || cruise.dualActive() || cruise.pureVertical()) return config;
-        double axis = Math.max(config.boxCap(), config.speedCap());
-        return axis > config.boxCap() ? config.withBoxCap(axis) : config;
-    }
+
 
     /** Dual view runs only where duplicate rotation packets are accepted (Via target ≤ 1.20.7). */
     private boolean dualViewAvailable() {
@@ -842,11 +875,19 @@ public class GuangxiElytraModule extends Module {
         float snapYaw = dualSnapYaw, snapPitch = dualSnapPitch;
         dualSnapYaw = Float.NaN;
         dualSnapPitch = Float.NaN;
+        // The movement packet may already have restored the motion view. Count
+        // only a submitted packet, never a cancelled event or speculative rotation.
+        if (submittedLookConnection == mc.getConnection()
+                && Math.abs(net.minecraft.util.Mth.wrapDegrees(yaw - submittedLookYaw)) < 1e-4
+                && Math.abs(pitch - submittedLookPitch) < 1e-4) return;
         if (Math.abs(yaw - snapYaw) < 1e-4 && Math.abs(pitch - snapPitch) < 1e-4) return;
         sendRotationPacket(yaw, pitch);
     }
 
     private void sendRotationPacket(float yaw, float pitch) {
+        float reference = submittedLookConnection == mc.getConnection() && Float.isFinite(submittedLookYaw)
+                ? submittedLookYaw : mc.player.getYRot();
+        yaw = reference + net.minecraft.util.Mth.wrapDegrees(yaw - reference);
         boolean horizontalCollision = DualViewSupport.forceLegacyProtocol()
                 ? false : mc.player.horizontalCollision;
         mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
@@ -859,7 +900,7 @@ public class GuangxiElytraModule extends Module {
         pendingCruise = null;
         pendingCruiseConfig = null;
         cruiseTickActive = false;
-        rocketTailTicks = 0;
+        motionSample.reset();
     }
 
     /** Passive diagnostics; never drives movement or rocket decisions. */
@@ -1432,6 +1473,11 @@ public class GuangxiElytraModule extends Module {
 
     @Subscribe
     private void onPacketReceive(PacketEvent.Receive event) {
+        if (event.getPacket() instanceof net.minecraft.network.protocol.game.ClientboundExplodePacket
+                || (event.getPacket() instanceof ClientboundSetEntityMotionPacket impulse
+                && mc.player != null && impulse.getId() == mc.player.getId())) {
+            externalImpulsePending.set(true);
+        }
         if (event.getPacket() instanceof ClientboundPlayerPositionPacket
                 || event.getPacket() instanceof ClientboundRespawnPacket) {
             correctionPending.set(true);
@@ -1523,7 +1569,10 @@ public class GuangxiElytraModule extends Module {
             lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_SPEED_GATE;
             return;
         }
-        if (ticksSinceRocket < refireTicks) {
+        scanAttachedBoosts();
+        int refireWait = acceleratedManualBoost() && !attachedBoost
+                ? Math.min(refireTicks, rocketArrivalTicks() + 2) : refireTicks;
+        if (ticksSinceRocket < refireWait) {
             lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_REFIRE;
             return;
         }
@@ -1544,7 +1593,9 @@ public class GuangxiElytraModule extends Module {
             return;
         }
 
-        int nextRefire = estimatedRocketLifetime(rocket.stack()) - 1;
+        int nextRefire = acceleratedManualBoost()
+                ? Math.max(3, estimatedRocketLifetime(rocket.stack()) - rocketArrivalTicks() - 3)
+                : estimatedRocketLifetime(rocket.stack()) - 1;
         boolean[] used = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(rocket, SwapMode.ALTSILENT, SwapPriority.UTILITY,
                 () -> {
@@ -1590,8 +1641,14 @@ public class GuangxiElytraModule extends Module {
                 && !dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive();
     }
 
+    private boolean acceleratedManualBoost() {
+        return cruiseEligible() && dualViewAvailable() && gzBoost.getValue()
+                && (cruiseInput().horizontal().horizontalDistanceSqr() > 1e-6 || mc.options.keyJump.isDown());
+    }
+
     private boolean hasUsefulBoost() {
         scanAttachedBoosts();
+        if (acceleratedManualBoost()) return attachedBoost && boostRemaining > rocketArrivalTicks() + 1;
         return attachedBoost && (minBoostTicks.getValue() == 0 || boostRemaining > minBoostTicks.getValue());
     }
 
@@ -1608,14 +1665,17 @@ public class GuangxiElytraModule extends Module {
             if (!rocket.isAlive() || attachedId != mc.player.getId()) continue;
             attachedBoost = true;
             // Spawned client rockets do not receive the server's randomized lifetime.
-            int estimate = estimatedRocketLifetime(rocket.getItem());
+            ItemStack rocketData = rocket.getEntityData().get(FireworkRocketEntityAccessor.guizhouware$getFireworksItemData());
+            int estimate = estimatedRocketLifetime(rocketData);
             boostRemaining = Math.max(boostRemaining, estimate - accessor.guizhouware$getLife());
         }
     }
 
     private static int estimatedRocketLifetime(ItemStack stack) {
         Fireworks fireworks = stack.get(DataComponents.FIREWORKS);
-        return 10 * ((fireworks != null ? fireworks.flightDuration() : 0) + 1);
+        boolean legacyDefault = DualViewSupport.usesLegacyFireworkData()
+                && stack.getComponentsPatch().get(DataComponents.FIREWORKS) == null;
+        return 10 * ((fireworks != null && !legacyDefault ? fireworks.flightDuration() : 0) + 1);
     }
 
     private static boolean safeRocket(ItemStack stack) {

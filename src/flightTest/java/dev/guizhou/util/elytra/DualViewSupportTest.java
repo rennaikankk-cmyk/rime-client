@@ -12,6 +12,11 @@ public final class DualViewSupportTest {
         unsupportedFamilies();
         malformedNames();
         describeCoversAllStatuses();
+        check(DualViewSupport.legacyFireworkFamily("1.20.3-1.20.4"), "old Via range uses the legacy rocket lifetime");
+        check(!DualViewSupport.legacyFireworkFamily("1.20.5-1.20.6"), "component protocol must retain its explicit default");
+        check(!DualViewSupport.legacyFireworkFamily("1.21.11"), "native version uses modern firework components");
+        check(!DualViewSupport.legacyFireworkFamily("1.20.4-rc1"), "unknown versions do not guess a rocket lifetime");
+        check(!DualViewSupport.legacyFireworkFamily("1.20.4-1.19.4"), "reversed ranges do not enable the legacy default");
         System.out.println("DualViewSupportTest passed: " + checks + " checks");
     }
 
