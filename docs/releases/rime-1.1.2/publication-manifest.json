@@ -1,0 +1,22 @@
+{
+  "artifact": "rime-4bf9af0-1.1.2-rimeguard3.1-obfuscated.jar",
+  "sha256": "00ef9fca7ec8dcab42f076fb0c96ab7b67ef2ef1539653fa6a254f205f5589ed",
+  "sourceCommit": "4bf9af0",
+  "version": "1.1.2",
+  "guard": "rimeguard3.1",
+  "priorJar": "a4ed83ba0bff79f9b81a3ecec001281393a7be4b9aa8ad9bfa6e06022313b1e1",
+  "launcherSha256": "deac6fab4bf8e3dffe2ea378d66b6ad8e214c2043d1ca221f2caaa2ca532c707",
+  "pages": [
+    {
+      "name": "download.html",
+      "before": "58603c553130158c5c168dc8b5e42c33a0f102726316b43985d84f145024ee5c",
+      "after": "bf377dda5e86f87dac535424d3b7792b9f37e288f73a248f014f3cf3834b7327"
+    },
+    {
+      "name": "index.html",
+      "before": "116270a5b0469d9f6211d34384f6884c468282e397c1bb28a973fa759b47d95c",
+      "after": "67b978850fafa36775433ce9b853613f444f8e8a241a608464a07261edf57019"
+    }
+  ],
+  "priorLauncher": "d1950ec4e3778ecf758962f866fde9513709e006e480e766f9714eef22f6a356"
+}

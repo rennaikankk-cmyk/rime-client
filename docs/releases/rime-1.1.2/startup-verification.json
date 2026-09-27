@@ -1,0 +1,18 @@
+{
+  "candidateSha256": "00ef9fca7ec8dcab42f076fb0c96ab7b67ef2ef1539653fa6a254f205f5589ed",
+  "signedValidationSha256": "3239a2f356c6ee4bfd2d434884dc5d59e11e2fe58e1d37b43181a03b592bd937",
+  "bothSignedStartsPassed": true,
+  "originalClassesUnchanged": true,
+  "runs": [
+    {
+      "runtime": "microsoft-21.0.7",
+      "durationSeconds": 47.0,
+      "passed": true
+    },
+    {
+      "runtime": "adoptium-21.0.12.1",
+      "durationSeconds": 47.0,
+      "passed": true
+    }
+  ]
+}

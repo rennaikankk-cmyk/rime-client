@@ -13,6 +13,6 @@ DEFAULT 现在在原有较低层候选均无结果后，增加目标脚部同高
 
 复现命令见 `tools/crystal-probe/README.md` 的 `-FlatBase` 模式。原始日志和前后结果保存在仓库同级 `crystal-v2-lab/flat-base-before*` 与 `flat-base-after*`。
 
-本修复尚未发布替换线上 rimeguard3.1 发行包。
+本修复已随 Rime 1.1.2 / Rimeguard 3.1 发布至官网和登录器源，并推送 main。
 
 最终验证：生产配置下 85 个客户端回归任务全部通过（check）；代码空白检查通过。

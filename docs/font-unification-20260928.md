@@ -2,7 +2,7 @@
 
 检查确认原有两条字体链并不一致：菜单/HUD 仅按系统安装名称查找 Anthropic Serif，而 Nametag 与世界标签优先使用 `ib_latin.ttf`。该文件的真实字形名称为 Cormorant Garamond Light Regular；当前系统没有安装 Anthropic Serif，所以菜单/HUD 也实际使用回退字体。
 
-在用户本机 Claude 桌面端 2.9939.2 的 `resources/ion-dist/_frame-rt/_runtime/` 中找到 `AnthropicSerif-Roman-Web.e96fe97bb7ba2190.woff2`。内部字体家族为 Anthropic Serif Web，含 wght 300–800、opsz 16–48 两个可变轴，不含中文字形。为本机生成 400、600、700 字重的静态 TTF（opsz=16），放入当前 1.21.11 Fabric 实例的 `guizhouware/fonts/`。这些字体文件仅在本机使用，未加入仓库或线上发行包。
+在用户本机 Claude 桌面端 2.9939.2 的 `resources/ion-dist/_frame-rt/_runtime/` 中找到 `AnthropicSerif-Roman-Web.e96fe97bb7ba2190.woff2`。内部字体家族为 Anthropic Serif Web，含 wght 300–800、opsz 16–48 两个可变轴，不含中文字形。为本机生成 400、600、700 字重的静态 TTF（opsz=16），放入当前 1.21.11 Fabric 实例的 `guizhouware/fonts/`。字体文件不加入源码仓库或客户端 JAR；登录器 1.0.1 从官网独立下载三个字重及中文回退。
 
 本次改动：
 
@@ -14,4 +14,4 @@
 
 验证：86 个客户端回归任务通过，包括新字体选择/损坏文件/缓存隔离测试，以及既有字体恢复测试。独立 Minecraft 1.21.11 开发实例实际加载三个 Anthropic Serif Web 字重，确认 Nametag/通用标签宽度一致、自定义后端未回退，并检查了包含真实 Nametag 与物品数量的截图。字体探针源码位于 `tools/font-probe/`；本机结果位于仓库同级 `font-audit/render01/`。
 
-当前仅修改本地源码与本机字体目录，尚未 push、打包发布或替换正在运行的客户端。此前平地水晶底座修复仍保留在工作区。
+以上修复已推送 main，并随 Rime 1.1.2 / Rimeguard 3.1 正式发布；平地水晶底座修复同时包含在发行包中。
