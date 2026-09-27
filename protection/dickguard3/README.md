@@ -1,18 +1,22 @@
-# Rime 的 dickguard3.0 适配
+# Rime 的 dickguard3.1 适配
 
-源版本：dickguard3.0 / c2154ce（保留原始防护代码及完整测试）。本目录是 Rime 专用适配，不替换 Dick 客户端的分发产物。
+上游来源：`rennaikankk-cmyk/dick-guard` 标签 `dickguard3.1`，提交 `c912156f14556e8e54a7105b395c7797fb9be6e2`。
 
-Rime 同时使用 Fabric main/client 两个阶段：d1.G 在 main 阶段完成签名清单与在线授权，然后调用原 onInitialize；client 阶段再调用原 onInitializeClient。缺少授权不会提前启动任一原入口。心跳声明 client=guizhouware / guard=dickguard3.0，服务端仅对有 1.21.11 权限的账号返回对应入口。现有 Rime 的动作授权再与 d1.G.isAuthorized 相交，保留原心跳、HWID、签名和水印保护。
+保留 Rime 的 main/client 双阶段入口、品牌、mod 版本及逐动作授权与 guard 授权相交的检查。心跳 client=guizhouware，协议 guard=dickguard3.0；发行元数据 custom.dickguard=3.1。这两个版本标识用途不同。
 
-构建：在主仓库完成 build 后，在本目录运行 `gradlew check obfuscateJar` 和 `python -m unittest discover -s tests`，再用 `python merge.py --original <主仓库已验收的混淆JAR> --output <候选JAR>`。候选经服务端逐份水印与签名后才可启动。原客户端版本和品牌保留，guard 版本独立为 3.0。
+本次同步标准 Base64 清单解码、签名 subject/license 与当前凭据绑定、每次心跳随机 guard 类抽查及环境字段长度限制；保留并扩展完整性、模拟签名心跳和双入口授权测试。字符串池由 Rime 适配的 gen_s.py 生成。
 
-服务端配套见 ../../deployment/dickguard3/；需先部署兼容升级。下面保留上游设计说明，其中“阶段 2b 待办”是上游当时状态，本次适配已有独立服务端补丁。
+构建：主仓库完成 build 后，本目录运行 `gradlew check obfuscateJar`、`python -m unittest discover -s tests`，再以 merge.py 合入主仓库已验收的混淆 Jar。候选必须经生产水印与签名通道生成客户副本。测试需分别验证 Microsoft 21.0.7 和较新 Java 21 的真实启动。
+
+上游说明中的 subject pin 部署针对 Dick 下载凭据；Rime 的独立心跳保持既有兼容行为，本次不声称新增 Rime 服务端降级固定。下方上游说明按原样保留。
 
 ---
 
-# dickguard3.0
+# dickguard3.1
 
-当前 guard 版本：**dickguard3.0**（基于 v2.1 环境证人，融合启动授权修复、会话绑定入口及三态完整性心跳）。原客户端的 `1.10.4-L` 是 Fabric mod 的版本号，与 guard 版本分别维护。
+当前 guard 版本：**dickguard3.1**（以 `b58c07d` 的严格握手与签名清单加固为基础）。原客户端的 `1.10.4-L` 是 Fabric mod 的版本号，与 guard 版本分别维护。
+
+`guard=dickguard3.0` 是服务端严格握手的协议标识，3.1 客户端继续使用它；发布版本号与协议标识分别维护。配套服务端 subject pin 补丁已部署，独立源码仓库记录该补丁。完整客户端尚未在生产环境启动验证。
 
 Dick Client 启动器官方版的防护层。`d1.G` 在调用原客户端入口前同步验证本地完整性和 Ed25519 签名授权响应；缺少凭据、授权失败或无法验证时阻止原入口启动。
 
@@ -49,25 +53,28 @@ python merge.py --original path\to\original-client.jar
 
 ### 阶段 1 授权响应契约
 
-**客户端现已要求新字段，旧服务端不兼容。** 当且仅当 `ok=true` 时，服务端须在已签名的 `data` 对象中加入 `entryChallenge` 和 `entryCipher`，并继续回显本次 `nonce`、`session`。所有字段都是字符串，继续使用现有的 Ed25519 canonical 签名。客户端先验签、核对 nonce/session，再解密入口；缺字段或解密失败均拒绝启动。
+**客户端要求 guard3 握手字段。** 2026-09-27 线上 `server.js` 已接入 `guard3.js`：`ok=true` 时在已签名的 `data` 对象中加入 `entryChallenge` 和 `entryCipher`，并继续回显本次 `nonce`、`session`。所有字段都是字符串，继续使用现有的 Ed25519 canonical 签名。客户端先验签、核对 nonce/session，再解密入口；缺字段或解密失败均拒绝启动。
 
 - `entryChallenge`：服务端本次响应生成的 16 字节随机值，小写 hex（32 字符）。
 - `entryCipher`：原入口类全限定名的 UTF-8 字节与 `SHA-256(UTF-8("dick-guard-entry-v1|" + session + "|" + nonce + "|" + entryChallenge))` 的前缀逐字节异或，再以无填充 base64url 编码。类名最多 32 字节。
 - 服务端只在授权成功时产生这两个字段；响应签名覆盖它们。后续心跳也必须提供，因为客户端会刷新会话关联的入口材料。
 
-CONFIRMED：当前服务端只有客户端生成的 `session` 回显，无法为本地静态密文提供秘密种子。阶段 1 因而把入口类名从本地池移走，由服务端在成功授权响应里发送本次会话的密文。SUSPECTED：此机制提高离线补丁成本，但已授权客户端或能观察其 HTTP 响应者仍可取得类名；它不提供长期运行时保密性。
+CONFIRMED：原协议只有客户端生成的 `session` 回显，无法为本地静态密文提供秘密种子。阶段 1 因而把入口类名从本地池移走，由服务端在成功授权响应里发送本次会话的密文。SUSPECTED：此机制提高离线补丁成本，但已授权客户端或能观察其 HTTP 响应者仍可取得类名；它不提供长期运行时保密性。
 
 ### 阶段 2 客户端心跳契约
 
 - `integrity` 在确认篡改时为 `mismatch`，无法验证时为 `unavailable`，正常时缺省。mismatch 优先于 unavailable。
+- 请求带 `guard=dickguard3.0`、`client=superdickclient`，以启用线上 `guard3.js` 的严格握手；不带 guard 时服务端仅走兼容路径。
 - `env` 继续携带 `W.probe()` 的发现；重复标签只保留一次。环境发现不会在本地触发拒绝。
 - 收到签名响应中的 `entryChallenge` 后，下一次请求带 `challengeProof = SHA-256(UTF-8("dick-guard-echo-v1|" + 上次 entryChallenge + "|" + session + "|" + 本次 nonce))` 的小写 hex。首次请求缺省。服务端阶段 2b 需按 session 保存上次 challenge 才能校验。
 
 CONFIRMED：本地 mock 服务端覆盖正常、mismatch、unavailable+env 三条路径，并解析签名响应。SUSPECTED：回带值能关联连续心跳，但它和挑战本身都可被已授权客户端计算，不构成客户端不可伪造证明；真正的授权决定仍以服务端签名、nonce/session 绑定和服务端风控为准。
 
-### 阶段 2b 服务端待办（本仓库未实现）
+### 线上 guard3 配套（服务端不在本仓库）
 
-服务端需实现阶段 1 的 `entryChallenge`/`entryCipher` 成功响应；`integrity=mismatch` 保持既有 integrityBan；连续 N 次 `unavailable` 只提醒或限次；`env` 的 attach/agent 痕迹只标记观察；按 session 验证下一次心跳的 `challengeProof`。旧服务端没有阶段 1 字段，因此这一分支不能直接投入现有服务端环境。
+CONFIRMED：按 2026-09-27 线上 `server.js` 快照和 `guard3.js` 代码复核，服务端已提供 `entryChallenge`/`entryCipher`。`guard=dickguard3.0` 时启用同一 session 的 nonce 重放检查、下一拍 `challengeProof` 校验、连续 3 次 `unavailable` 的提醒以及 `env` 观察记录；`mismatch` 保持既有 integrityBan。已用取自线上 `guard3.js` 的本地副本通过协议链测试，尚未把本分支作为完整客户端在生产环境启动验证。
+
+完整性清单外层使用标准 Base64，条目名使用无填充 base64url；客户端分别按对应格式解码。已签名的 `subject` 和 `license` 头与本地 token、水印账号绑定；每次心跳的抽查覆盖 `d1.G`、`fabric.mod.json` 及随机一个其他 guard 类。CONFIRMED：测试签名 JAR 覆盖这些路径。SUSPECTED：抽查只能提高发现机会，完整保护仍依赖周期性全量校验和服务端策略。
 
 ## 授权态调用点清单（阶段 1 复核锚点）
 

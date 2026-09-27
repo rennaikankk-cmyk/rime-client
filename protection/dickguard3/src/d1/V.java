@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiPredicate;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -38,19 +40,35 @@ final class V {
      *  does not neutralise integrity verification. */
     static boolean spotCheck() {
         try {
-            Path jar = installedJar();
+            return spotCheck(installedJar(), B::vsig);
+        } catch (Throwable t) {
+            return unavailable("inventory_unreadable");
+        }
+    }
+
+    static boolean spotCheck(Path jar, BiPredicate<byte[], String> signatureVerifier) {
+        try {
             if (jar == null) return unavailable("missing_jar");
             try (ZipFile zf = new ZipFile(jar.toFile())) {
                 ZipEntry sigEntry = zf.getEntry(S.g(4));
                 if (sigEntry == null) { E.tamper("no_inventory"); lastResult = false; return false; }
                 String[] lines = read(zf.getInputStream(sigEntry)).split("\n");
                 if (lines.length < 2) return unavailable("bad_inventory");
-                byte[] inventory = Base64.getUrlDecoder().decode(lines[0].trim());
-                if (!B.vsig(inventory, lines[1].trim())) { E.tamper("bad_inventory_sig"); lastResult = false; return false; }
+                // Distribution service encodes the complete inventory with standard Base64.
+                // Individual entry names inside that inventory use base64url.
+                byte[] inventory = Base64.getDecoder().decode(lines[0].trim());
+                if (!signatureVerifier.test(inventory, lines[1].trim())) { E.tamper("bad_inventory_sig"); lastResult = false; return false; }
+                if (!identityMatches(inventory)) return false;
                 Map<String, String> expected = parseInventory(inventory);
-                // load-bearing entries: the kept entrypoint, the manifest, one
-                // random guard class — enough to catch targeted patches cheaply
-                String[] targets = { "d1/G.class", "fabric.mod.json" };
+                // Fixed entrypoints plus one other guard class per beat.
+                List<String> targets = new ArrayList<>(List.of("d1/G.class", "fabric.mod.json"));
+                List<String> guardClasses = new ArrayList<>();
+                for (String name : expected.keySet()) {
+                    if (name.startsWith("d1/") && name.endsWith(".class") && !name.equals("d1/G.class"))
+                        guardClasses.add(name);
+                }
+                if (!guardClasses.isEmpty())
+                    targets.add(guardClasses.get(ThreadLocalRandom.current().nextInt(guardClasses.size())));
                 MessageDigest sha = MessageDigest.getInstance("SHA-256");
                 for (String name : targets) {
                     ZipEntry e = zf.getEntry(name);
@@ -113,6 +131,33 @@ final class V {
         }
     }
 
+    private static boolean identityMatches(byte[] inventory) {
+        try {
+            String[] lines = new String(inventory, StandardCharsets.UTF_8).split("\n", 4);
+            if (lines.length < 3 || !S.g(12).equals(lines[0])
+                    || !lines[1].matches("subject=[0-9a-f]{64}")
+                    || !lines[2].startsWith("license=account_")) return unavailable("bad_inventory_header");
+            if (E.token == null || E.token.isEmpty() || E.wmA == null || E.wmA.isEmpty())
+                return unavailable("missing_identity");
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(E.token.getBytes(StandardCharsets.UTF_8));
+            StringBuilder subject = new StringBuilder(64);
+            for (byte b : digest) {
+                subject.append(Character.forDigit((b >>> 4) & 15, 16));
+                subject.append(Character.forDigit(b & 15, 16));
+            }
+            if (!lines[1].equals("subject=" + subject)) {
+                E.tamper("subject_mismatch"); lastResult = false; return false;
+            }
+            if (!lines[2].equals("license=account_" + E.wmA)) {
+                E.tamper("license_mismatch"); lastResult = false; return false;
+            }
+            return true;
+        } catch (Throwable t) {
+            return unavailable("bad_inventory_header");
+        }
+    }
+
     /** Package-scoped seam for exercising real JAR bytes with a test signing key. */
     static boolean verifyNow(Path jar, BiPredicate<byte[], String> signatureVerifier) {
         try {
@@ -124,11 +169,12 @@ final class V {
                 String sigText = read(zf.getInputStream(sigEntry));
                 String[] lines = sigText.split("\n");
                 if (lines.length < 2) { E.tamper("bad_inventory"); lastResult = false; return false; }
-                byte[] inventory = Base64.getUrlDecoder().decode(lines[0].trim());
+                byte[] inventory = Base64.getDecoder().decode(lines[0].trim());
                 String sigHex = lines[1].trim();
 
                 // 1) signature over the inventory text (covers header + every hash line)
                 if (!signatureVerifier.test(inventory, sigHex)) { E.tamper("bad_inventory_sig"); lastResult = false; return false; }
+                if (!identityMatches(inventory)) return false;
 
                 // 2) parse the signed inventory into an expected-entry map
                 Map<String, String> expected = new HashMap<>();

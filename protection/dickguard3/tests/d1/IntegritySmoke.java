@@ -20,12 +20,18 @@ public final class IntegritySmoke {
         Path jar = Files.createTempFile("guard-integrity-", ".jar");
         try {
             KeyPair key = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+            E.token = "fixture-token";
+            E.wmA = "fixture-account";
             Map<String, byte[]> entries = new LinkedHashMap<>();
             entries.put("fabric.mod.json", "{}".getBytes(StandardCharsets.UTF_8));
             entries.put("d1/G.class", new byte[] { 1, 2, 3 });
+            entries.put("d1/X.class", new byte[] { 7, 8, 9 });
             entries.put("sample.bin", new byte[] { 4, 5, 6 });
 
-            StringBuilder inventory = new StringBuilder("gzwx-integrity-v1\n");
+            StringBuilder inventory = new StringBuilder("gzwx-integrity-v1\nsubject=")
+                    .append(hex(MessageDigest.getInstance("SHA-256")
+                            .digest(E.token.getBytes(StandardCharsets.UTF_8))))
+                    .append("\nlicense=account_").append(E.wmA).append('\n');
             for (Map.Entry<String, byte[]> entry : entries.entrySet()) {
                 inventory.append(hex(MessageDigest.getInstance("SHA-256").digest(entry.getValue())))
                         .append(' ')
@@ -42,6 +48,30 @@ public final class IntegritySmoke {
             writeJar(jar, entries, signed, sig);
             require(V.verifyNow(jar, (data, signature) -> verify(key, data, signature)),
                     "signed fixture should pass");
+            entries.put("d1/X.class", new byte[] { 7, 8, 0 });
+            writeJar(jar, entries, signed, sig);
+            E.tampered = false;
+            require(!V.spotCheck(jar, (data, signature) -> verify(key, data, signature)),
+                    "spot check must cover another guard class");
+            require(E.tampered && "hash:d1/X.class".equals(E.integrityIssue),
+                    "changed guard class must be classified mismatch");
+            entries.put("d1/X.class", new byte[] { 7, 8, 9 });
+            writeJar(jar, entries, signed, sig);
+            E.tampered = false;
+            E.token = "wrong-token";
+            E.tampered = false;
+            require(!V.verifyNow(jar, (data, signature) -> verify(key, data, signature)),
+                    "signed inventory must bind to the embedded token");
+            require(E.tampered && "subject_mismatch".equals(E.integrityIssue),
+                    "wrong token must be classified as mismatch");
+            E.token = "fixture-token";
+            E.tampered = false;
+            E.wmA = "wrong-account";
+            require(!V.verifyNow(jar, (data, signature) -> verify(key, data, signature)),
+                    "signed inventory must bind to the watermark account");
+            require(E.tampered && "license_mismatch".equals(E.integrityIssue),
+                    "wrong account must be classified as mismatch");
+            E.wmA = "fixture-account";
             entries.put("sample.bin", new byte[] { 4, 5, 7 });
             writeJar(jar, entries, signed, sig);
             E.tampered = false;
@@ -73,7 +103,7 @@ public final class IntegritySmoke {
                 zip.closeEntry();
             }
             zip.putNextEntry(new ZipEntry("META-INF/gzwx-integrity.signature"));
-            zip.write((Base64.getUrlEncoder().withoutPadding().encodeToString(inventory)
+            zip.write((Base64.getEncoder().encodeToString(inventory)
                     + "\n" + signature + "\n").getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
         }

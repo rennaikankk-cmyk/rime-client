@@ -28,6 +28,10 @@ public final class MockHeartbeatTest {
 
         String nonce1 = "11111111111111111111111111111111";
         String okRequest = roundTrip(okData(session, nonce1, challenge), key, nonce1, session);
+        require("dickguard3.0".equals(E.field(okRequest, "guard")),
+                "request must opt in to the deployed strict handshake");
+        require("guizhouware".equals(E.field(okRequest, "client")),
+                "server must know which entrypoint it is issuing");
         require(E.field(okRequest, "integrity") == null, "normal request must omit integrity");
         require(E.field(okRequest, "env") == null, "clean request must omit env");
         require(E.field(okRequest, "challengeProof") == null, "first request has no prior challenge");
@@ -59,6 +63,11 @@ public final class MockHeartbeatTest {
         E.noteEnv("selfattach");
         E.noteEnv("selfattach");
         require("agent:example;selfattach".equals(E.envNote), "repeated witness must not grow env indefinitely");
+        E.envNote = "x".repeat(1100) + ";agent:example";
+        String bounded = B.requestBody("mock-hwid", nonce3, session);
+        require(E.field(bounded, "env").length() <= 1024
+                        && E.field(bounded, "env").endsWith("agent:example"),
+                "large startup environment must preserve recent witness within server limit");
         System.out.println("MockHeartbeatTest passed");
     }
 

@@ -44,7 +44,7 @@ def main(argv=None):
                         mod.get("description", "")
                         + " Launcher Edition：经启动器分发，含授权水印/心跳/完整性校验与官方版标记。"
                     )
-                    mod.setdefault("custom", {})["dickguard"] = "3.0"
+                    mod.setdefault("custom", {})["dickguard"] = "3.1"
                     # Remove other entrypoints that could run before the guard.
                     expected = {"main": ["dev.guizhou.GuizhouWare"], "client": ["dev.guizhou.GuizhouWare"]}
                     if mod.get("id") != "guizhouware" or mod.get("entrypoints") != expected:

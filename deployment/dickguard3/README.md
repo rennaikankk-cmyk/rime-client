@@ -7,3 +7,7 @@
 node backend-test.cjs <候选server.js> 使用临时签名密钥、内存账号与假文件系统验证，不读写生产账号。生产依赖路径仍由现有 /opt/gzwx-auth 提供。
 
 发行仍须由管理通道生成水印和完整性签名，绝不把未签名的合并产物当成可用客户副本。部署采用现有发行锁、SHA256 基线检查、原子替换和可恢复备份。
+
+## dickguard3.1 / Rime 1.1.1
+
+在已经部署的 3.0 发布通道上顺序应用 jar_release-3.1.patch 与 test_jar_release-3.1.patch。它们仅新增对明确版本 3.1 的接受，继续要求双 d1.G 入口、guard 类和原始 Rime 类；未知 guard 版本和缺失类仍拒绝。生产应用前校验基线 SHA256，运行完整发布通道测试，锁定发布流程并备份，原子替换后重启 web-api。本次不覆盖已更新的 gzwx-auth/server.js、guard3.js 或 Dick subject pin 配套。

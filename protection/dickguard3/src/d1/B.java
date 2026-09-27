@@ -115,7 +115,11 @@ final class B {
         appendField(body, "client", "guizhouware");
         appendField(body, "nonce", nonce);
         appendField(body, "session", session);
-        if (E.envNote != null) appendField(body, "env", E.envNote);
+        if (E.envNote != null) {
+            String env = E.envNote;
+            // Strict guard3 handshake accepts at most 1024 UTF-16 code units.
+            appendField(body, "env", env.substring(Math.max(0, env.length() - 1024)));
+        }
         if (E.entryChallenge != null && session.equals(E.entrySession)) {
             appendField(body, "challengeProof", challengeProof(E.entryChallenge, session, nonce));
         }
