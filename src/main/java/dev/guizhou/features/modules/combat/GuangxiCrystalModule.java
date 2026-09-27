@@ -14,6 +14,8 @@ import dev.guizhou.manager.PlacementManager;
 import dev.guizhou.util.DamageSyncTracker;
 import dev.guizhou.util.combat.CrystalAttackWindow;
 import dev.guizhou.util.combat.CrystalSelectionPolicy;
+import dev.guizhou.util.combat.CrystalWeaponDamage;
+import dev.guizhou.util.inventory.SwapPriority;
 import dev.guizhou.util.combat.CrystalRetryTracker;
 import dev.guizhou.util.combat.ExplosionDamageModel;
 import dev.guizhou.util.combat.OffthreadRank;
@@ -321,6 +323,7 @@ public class GuangxiCrystalModule extends Module {
     private void sendGhostAttack(int entityId) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         if (mc.getConnection() == null || weaponControlBusy()) return;
+        if (!rusherLogic() && !defaultHandCanDamage(mc.player.getMainHandItem())) return;
         FriendlyByteBuf buf = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
         try {
             buf.writeVarInt(entityId);
@@ -1114,6 +1117,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
                     float totalDmg = 0;
                     boolean anyTarget = false;
+                    boolean lethalTarget = false;
                     for (int i = 0, n = potentialTargets.size(); i < n; i++) {
                         TargetCache tc = potentialTargets.get(i);
                         if (tc.pos.distanceToSqr(crystalCenter) > 144.0) continue;
@@ -1121,11 +1125,18 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                         if (dmg < getDynamicMin(tc.hp, tc.abs, tc.armorBroken)) continue;
                         totalDmg += dmg;
                         anyTarget = true;
+                        if (!rusherLogic() && !isSyncHeld(tc.entity)
+                                && (!damageSync.getValue() || !DamageSyncTracker.shouldHold(tc.entity))
+                                && CrystalSelectionPolicy.isLethal(dmg, tc.hp, tc.abs)) lethalTarget = true;
                     }
                     if (!anyTarget) continue;
                     if (totalDmg < baseMin) continue;
-                    if (baseBalance.getValue() && totalDmg < primaryHp
-                            && totalDmg < calcDamageSelf(crystalCenter, basePos)) continue;
+                    if (baseBalance.getValue()) {
+                        if (rusherLogic()) {
+                            if (totalDmg < primaryHp && totalDmg < calcDamageSelf(crystalCenter, basePos)) continue;
+                        } else if (!CrystalSelectionPolicy.baseBalanceAllows(totalDmg,
+                                calcDamageSelf(crystalCenter, basePos), lethalTarget)) continue;
+                    }
 
                     if (totalDmg > layerDmg) {
                         layerDmg  = totalDmg;
@@ -1233,7 +1244,8 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (rusherLogic() && !prepareRusherSword()) return false;
         if (rotate.getValue() && !aimBreakNow(crystal)) return false;
         acceptPendingRotation();
-        if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) return false;
+        if ((rusherLogic() || rotate.getValue())
+                && (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch))) return false;
         return sendCrystalAttack(crystal, false);
     }
 
@@ -1328,6 +1340,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 || !breakTimer.passedMs(tpsMs(breakDelay.getValue()))
                 || !switchTimer.passedMs(tpsMs(switchPause.getValue()))) return false;
         if (!selfDamageOk(crystal.position(), null, maxSelfDamage.getValue(), selfNow().health())) return false;
+        if (!rusherLogic() && !defaultHandCanDamage(mc.player.getMainHandItem())) {
+            return attackWithDefaultWeapon(crystal, instant);
+        }
 
         // Send is cancellable at Connection HEAD; inspect the complete dispatch before committing cadence.
         pendingAttack = null;
@@ -1352,6 +1367,36 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (instant) diagInstaBreak++;
         else diagBreakSent++;
         return true;
+    }
+
+    private boolean defaultWeaponSwapActive;
+
+    private boolean defaultHandCanDamage(ItemStack candidate) {
+        return !mc.player.hasEffect(MobEffects.WEAKNESS)
+                || CrystalWeaponDamage.canDamage(mc.player.getAttribute(Attributes.ATTACK_DAMAGE),
+                        mc.player.getMainHandItem(), candidate);
+    }
+
+    private boolean attackWithDefaultWeapon(EndCrystal crystal, boolean instant) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (defaultWeaponSwapActive || autoSwap.getValue() == AutoSwapMode.NONE) return false;
+        EnumSet<ResultType> scope = autoSwap.getValue() == AutoSwapMode.INVENTORY
+                ? EnumSet.of(ResultType.HOTBAR, ResultType.INVENTORY) : EnumSet.of(ResultType.HOTBAR);
+        Result weapon = InventoryUtil.find(this::defaultHandCanDamage, scope);
+        if (!weapon.found()) return false;
+        boolean[] sent = {false};
+        defaultWeaponSwapActive = true;
+        int previousOwnSwaps = ownSwapPackets.get();
+        ownSwapPackets.set(2);
+        try {
+            SwapMode mode = autoSwap.getValue() == AutoSwapMode.INVENTORY ? SwapMode.ALTSILENT : SwapMode.SILENT;
+            GuizhouWare.swapManager.withSwap(weapon, mode, SwapPriority.CRYSTAL,
+                    () -> sent[0] = sendCrystalAttack(crystal, instant));
+        } finally {
+            ownSwapPackets.set(previousOwnSwaps);
+            defaultWeaponSwapActive = false;
+        }
+        return sent[0];
     }
 
     private boolean canBreakCrystal(EndCrystal crystal, float yaw, float pitch) {
@@ -2384,7 +2429,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     public String getMeta() {
         long now = System.currentTimeMillis();
         while (!explodeTimes.isEmpty() && now - explodeTimes.peekFirst() > 1000) explodeTimes.removeFirst();
-        return String.valueOf(explodeTimes.size());
+        return rusherLogic() ? String.valueOf(explodeTimes.size()) : "爆炸 " + explodeTimes.size() + "/s";
     }
 
     private record PlaceTarget(BlockPos base, float damage, LivingEntity faceEntity) {

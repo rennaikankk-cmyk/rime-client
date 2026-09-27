@@ -208,6 +208,7 @@ def clientRegressionTests = [
         targetHudMathTest: 'dev.guizhou.util.render.targethud.TargetHudMathTest',
         maceDropStepClampTest: 'dev.guizhou.util.elytra.MaceDropStepClampTest',
         crystalSelectionPolicyTest: 'dev.guizhou.util.combat.CrystalSelectionPolicyTest',
+        crystalWeaponDamageTest: 'dev.guizhou.util.combat.CrystalWeaponDamageTest',
         crystalAttackWindowTest: 'dev.guizhou.util.combat.CrystalAttackWindowTest',
         crystalAttackHookTest: 'dev.guizhou.util.combat.CrystalAttackHookTest',
         packetApplicationHookTest: 'dev.guizhou.manager.PacketApplicationHookTest',
