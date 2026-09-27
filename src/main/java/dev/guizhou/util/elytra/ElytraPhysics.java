@@ -205,6 +205,28 @@ public final class ElytraPhysics {
     }
 
     /**
+     * Spherical firework cap from upstream ElytraExtra.applySpeedLimit (corrected form).
+     * Climbing keeps horizontal speed and cuts Y. Diving keeps fall speed and cuts XZ.
+     * A nonpositive or nonfinite limit on that side leaves the vector unchanged.
+     */
+    public static Vec3 limitFireworkSpeed(Vec3 motion, double upLimit, double downLimit) {
+        if (!isFinite(motion)) return Vec3.ZERO;
+        double limit = motion.y > 0.0 ? upLimit : downLimit;
+        if (!Double.isFinite(limit) || limit <= 0.0 || motion.length() <= limit) return motion;
+        if (motion.y > 0.0) {
+            double horizontalSqr = motion.x * motion.x + motion.z * motion.z;
+            double newY = Math.sqrt(Math.max(0.0, limit * limit - horizontalSqr));
+            return new Vec3(motion.x, newY, motion.z);
+        }
+        double vertical = Math.abs(motion.y);
+        double newHorizontal = Math.sqrt(Math.max(0.0, limit * limit - vertical * vertical));
+        double horizontal = Math.sqrt(motion.x * motion.x + motion.z * motion.z);
+        if (horizontal < 1.0E-8) return new Vec3(0.0, motion.y, 0.0);
+        double scale = newHorizontal / horizontal;
+        return new Vec3(motion.x * scale, motion.y, motion.z * scale);
+    }
+
+    /**
      * Fill requested axes toward the local box edges, with a small inset.
      * YCap uses blocks/tick; a nonpositive or nonfinite cap disables the cap.
      */

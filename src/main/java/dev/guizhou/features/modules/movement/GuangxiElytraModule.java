@@ -108,6 +108,9 @@ public class GuangxiElytraModule extends Module {
     private final Setting<Boolean> cornerClimb = fixed("CornerClimb", true);
     private final Setting<Double> yCap = fixed("YCap", 8.0, 0.0, 20.0);
     private final Setting<Double> zeroPointThree = fixed("ZeroPointThree", 0.3, 0.0, 1.0);
+    /** 0 disables that side. Climbing cuts Y; diving cuts horizontal speed. */
+    private final Setting<Double> fireworkSpeedLimitUp = fixed("FireworkSpeedLimitUp", 0.0, 0.0, 20.0);
+    private final Setting<Double> fireworkSpeedLimitDown = fixed("FireworkSpeedLimitDown", 0.0, 0.0, 20.0);
     private final Setting<Boolean> legacyVerticalBoost = fixed("LegacyVerticalBoost", false);
 
     private final Setting<Boolean> coupledCruise = fixed("CoupledCruise", false);
@@ -701,10 +704,10 @@ public class GuangxiElytraModule extends Module {
                 // The expansion models a rocket; without an attached rocket only glide is available.
                 scanAttachedBoosts();
                 applied = attachedBoost && !pendingSafetySteering
-                        ? ElytraPhysics.clampToGrimEnvelope(request, incomingVelocity, vanillaVelocity,
+                        ? ElytraPhysics.limitFireworkSpeed(ElytraPhysics.clampToGrimEnvelope(request, incomingVelocity, vanillaVelocity,
                                 actualLook, previousLook, rescaleAmount.getValue(), cornerClimb.getValue() && !pendingDirectional,
                                 yCap.getValue(), legacyVerticalBoost.getValue() ? zeroPointThree.getValue() : 0.0,
-                                pendingPrecision)
+                                pendingPrecision), fireworkSpeedLimitUp.getValue(), fireworkSpeedLimitDown.getValue())
                         : vanillaVelocity;
             }
         }
