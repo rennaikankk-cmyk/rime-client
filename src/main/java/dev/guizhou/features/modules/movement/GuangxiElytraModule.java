@@ -193,6 +193,7 @@ public class GuangxiElytraModule extends Module {
     private volatile double lastRequestedBpt;
     private boolean rocketSentThisTick;
     private volatile double lastAppliedBpt;
+    private int glideCommandTick = Integer.MIN_VALUE;
     private volatile int lastAppliedTick = Integer.MIN_VALUE;
     private volatile int lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
 
@@ -878,6 +879,16 @@ public class GuangxiElytraModule extends Module {
         return lastAppliedBpt;
     }
 
+    private void noteGlideCommand() {
+        if (mc.player != null) glideCommandTick = mc.player.tickCount;
+    }
+
+    /** Ticks since this module sent start-fall-flying. Large when it has not. */
+    public int ticksSinceGlideCommand() {
+        if (mc.player == null || glideCommandTick == Integer.MIN_VALUE) return Integer.MAX_VALUE;
+        return mc.player.tickCount - glideCommandTick;
+    }
+
     /** Player tick of the last applyFlightVelocity; older stamps are not fresh samples. */
     public int lastAppliedTick() {
         return lastAppliedTick;
@@ -1023,6 +1034,7 @@ public class GuangxiElytraModule extends Module {
             return;
         }
         if (canStartGliding() && mc.player.tryToStartFallFlying() && mc.getConnection() != null) {
+            noteGlideCommand();
             mc.getConnection().send(new ServerboundPlayerCommandPacket(
                     mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
         }
@@ -1038,6 +1050,7 @@ public class GuangxiElytraModule extends Module {
         if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()) return false;
         if (mc.player == null || mc.getConnection() == null || mc.player.isFallFlying()
                 || !canStartGliding() || !mc.player.tryToStartFallFlying()) return false;
+        noteGlideCommand();
         mc.getConnection().send(new ServerboundPlayerCommandPacket(
                 mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
         return true;
@@ -1314,6 +1327,7 @@ public class GuangxiElytraModule extends Module {
             mc.player.setSprinting(true);
         } else if (!flying && mc.player.getDeltaMovement().y < 0 && canStartGliding()
                 && mc.player.tryToStartFallFlying() && mc.getConnection() != null) {
+            noteGlideCommand();
             mc.getConnection().send(new ServerboundPlayerCommandPacket(
                     mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
         }

@@ -107,6 +107,10 @@ public class GuangxiElytraChaseModule extends Module {
     // ---- Advanced ----
     private final Setting<Boolean> maceUseExtraAttack = bool("MaceUseExtraAttack", true).setPage("Advanced");
     private final Setting<Boolean> autoMaceDive = bool("AutoMaceDive", true).setPage("Mace");
+    private final Setting<Boolean> macePreSwap = bool("MacePreSwap", false).setPage("Mace");
+    private final Setting<Integer> macePreSwapDelay = num("MacePreSwapDelay", 2, 0, 20).setPage("Mace");
+    private final Setting<Double> macePreSwapDistancePerTick = num("MacePreSwapDistancePerTick", 0.0, 0.0, 2.0).setPage("Mace");
+    private final Setting<Integer> maceSwapMinDelay = num("MaceSwapMinDelay", 2, 0, 40).setPage("Mace");
     private final Setting<Boolean> maceAdaptive = bool("MaceAdaptive", true).setPage("Advanced");
     private final Setting<Boolean> maceTerminal = bool("MaceTerminal", true).setPage("Advanced");
     private final Setting<Double> maceHeight = num("MaceHeight", 10.0, 1.0, 64.0).setPage("Advanced");
@@ -1028,6 +1032,7 @@ if (nullCheck() || mc.player == null) {
         boolean catchingUp;
         boolean terminal;
         double passHeight = Double.NaN;
+        int glideSince = Integer.MIN_VALUE;
         final MacePassTracker pass = new MacePassTracker();
 
         @Override
@@ -1040,6 +1045,7 @@ if (nullCheck() || mc.player == null) {
             catchingUp = false;
             terminal = false;
             passHeight = Double.NaN;
+            glideSince = Integer.MIN_VALUE;
             pass.reset();
         }
 
@@ -1133,6 +1139,7 @@ if (nullCheck() || mc.player == null) {
 
         int tickFollow(boolean armed) {
             if (target == null) return NONE;
+            tryMacePreSwap();
             if (armed && shouldStartDive() && maceDive.begin()) {
                 wasDiving = true;
                 naturalFallTicks = 12;
@@ -1281,6 +1288,24 @@ if (nullCheck() || mc.player == null) {
             pass.reset();
             maceDive.requestRecovery();
             state = tickPullUp();
+        }
+
+        private void tryMacePreSwap() {
+            if (!macePreSwap.getValue() || maceDive.isActive() || target == null || mc.player == null) return;
+            var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+            if (flight != null && flight.isArmorSwapActive()) return;
+            if (!mc.player.isFallFlying()) {
+                glideSince = Integer.MIN_VALUE;
+                return;
+            }
+            if (glideSince == Integer.MIN_VALUE) glideSince = mc.player.tickCount;
+            if (mc.player.tickCount - glideSince < maceSwapMinDelay.getValue()) return;
+            int delay = Math.max(0, macePreSwapDelay.getValue());
+            AABB future = observedTargetBox().move(target.getDeltaMovement().scale(delay));
+            double range = mc.player.entityInteractionRange()
+                    + macePreSwapDistancePerTick.getValue() * delay;
+            if (future.distanceToSqr(mc.player.getEyePosition()) > range * range) return;
+            maceDive.beginPreSwap();
         }
 
         private boolean shouldStartDive() {

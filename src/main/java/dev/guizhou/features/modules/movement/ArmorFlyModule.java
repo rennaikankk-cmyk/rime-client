@@ -9,11 +9,16 @@ import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.HeartbeatManager;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
+
+import static dev.guizhou.util.traits.Util.mc;
 
 /** Equipment ownership is independent of the optional flight direction controller. */
 public final class ArmorFlyModule extends Module {
     private static ArmorFlyModule instance;
     private final Setting<Boolean> autoRocket = bool("AutoRocket", true);
+    /** 0 leaves entity-tracker updates alone. A positive value drops our own tracker packet for that many ticks after glide starts. */
+    private final Setting<Integer> glideTrackerDelay = num("GlideTrackerDelay", 0, 0, 40);
 
     public ArmorFlyModule() {
         super("ArmorFly", "Independent armor/elytra switching while gliding; keeps manual steering.", Category.MOVEMENT);
@@ -61,5 +66,10 @@ public final class ArmorFlyModule extends Module {
             var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
             if (flight != null) flight.independentArmorCorrection();
         }
+        int delay = glideTrackerDelay.getValue();
+        if (delay <= 0 || !isEnabled() || !(event.getPacket() instanceof ClientboundSetEntityDataPacket data)) return;
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        if (flight == null || mc.player == null || data.id() != mc.player.getId()) return;
+        if (flight.ticksSinceGlideCommand() < delay) event.cancel();
     }
 }

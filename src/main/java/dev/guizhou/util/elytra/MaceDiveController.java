@@ -33,6 +33,15 @@ public final class MaceDiveController {
     private boolean registered;
 
     public boolean begin() {
+        return begin(true);
+    }
+
+    /** Swap before the steep drop when a predicted hit is already inside reach. */
+    public boolean beginPreSwap() {
+        return begin(false);
+    }
+
+    private boolean begin(boolean requireDescent) {
         if (!mc.isSameThread()) return false;
         if (!sameSession()) forget();
         if (isActive()) return false;
@@ -40,7 +49,8 @@ public final class MaceDiveController {
         level = mc.level;
         if (!safeInventory() || player.isUsingItem() || !player.isFallFlying() || player.onGround()
                 || player.isInWater() || player.isInLava() || player.isPassenger()
-                || player.getAbilities().flying || player.getDeltaMovement().y >= -0.05
+                || player.getAbilities().flying
+                || (requireDescent && player.getDeltaMovement().y >= -0.05)
                 || !(player.getMainHandItem().getItem() instanceof MaceItem)) return false;
         ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
         if (!usableWings(chest) || !player.inventoryMenu.getSlot(CHEST_MENU_SLOT).mayPickup(player)) return false;
