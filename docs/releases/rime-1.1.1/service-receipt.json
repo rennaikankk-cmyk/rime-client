@@ -1,0 +1,12 @@
+{
+  "backup": "/var/backups/guizhouware-guard31/20260928-services",
+  "files": [
+    {
+      "source": "jar_release.py",
+      "target": "/opt/web-api/jar_release.py",
+      "before": "491936b9172d97936fac9c18bc8f1aaf938c9dcaa21f0351d847f0efce1e82fd",
+      "after": "a2df0212649cdd3fae51e0d8572fcad34062317a2acc8fc69d591ff580bf2476"
+    }
+  ],
+  "health": "ok"
+}

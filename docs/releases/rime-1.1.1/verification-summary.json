@@ -1,0 +1,23 @@
+{
+  "modVersion": "1.1.1",
+  "guardVersion": "3.1",
+  "guardUpstreamCommit": "c912156f14556e8e54a7105b395c7797fb9be6e2",
+  "sourceCommit": "63e3b4b",
+  "releaseTag": "rime-v1.1.1",
+  "candidateSha256": "948f0d1af2adde4b29f0d1ad68792cbc32ee7f480663e300fa7723c87e9669ba",
+  "regressionTasks": 85,
+  "obfuscationChecks": 35959,
+  "publisherTests": 25,
+  "guardJavaSuites": 4,
+  "guardPythonTests": 1,
+  "desktopMatches": true,
+  "temporaryValidationAccountRevoked": true,
+  "startupProcessesStopped": true,
+  "authServiceUnchanged": true,
+  "notes": [
+    "Both Java 21 starts initialized Rime and created texture atlases; stable observation was 20 seconds each.",
+    "Offline Minecraft identity produced Microsoft/Yggdrasil/Realms network errors; startup and signed Rime authorization succeeded.",
+    "The first external raw-JAR probe transiently returned HTTP 502. Repeated external probes and origin checks both confirmed the expected 404; both HTML pages matched their published hashes.",
+    "No measured PvP CPS or victory-rate claim."
+  ]
+}
