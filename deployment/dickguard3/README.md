@@ -11,3 +11,7 @@ node backend-test.cjs <候选server.js> 使用临时签名密钥、内存账号�
 ## dickguard3.1 / Rime 1.1.1
 
 在已经部署的 3.0 发布通道上顺序应用 jar_release-3.1.patch 与 test_jar_release-3.1.patch。它们仅新增对明确版本 3.1 的接受，继续要求双 d1.G 入口、guard 类和原始 Rime 类；未知 guard 版本和缺失类仍拒绝。生产应用前校验基线 SHA256，运行完整发布通道测试，锁定发布流程并备份，原子替换后重启 web-api。本次不覆盖已更新的 gzwx-auth/server.js、guard3.js 或 Dick subject pin 配套。
+
+## rimeguard3.1 品牌更名
+
+在 3.1 发布通道上应用 jar_release-rimeguard.patch 和 test_jar_release-rimeguard.patch。新版元数据使用 custom.rimeguard=3.1，继续兼容旧 dickguard 标记；双标记冲突、空值、未知版本、缺失 guard 类和双入口均拒绝。协议握手、密码学域分隔串及共享认证服务不改。更名发行仍须双 Java 21 签名启动验收及三处分发同步。

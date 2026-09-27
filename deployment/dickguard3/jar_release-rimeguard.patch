@@ -1,0 +1,20 @@
+--- jar_release.py
++++ jar_release.py
+@@ -131,10 +131,14 @@
+                 found = found or any(value == "dev.guizhou.GuizhouWare" or
+                                     isinstance(value, dict) and value.get("value") == "dev.guizhou.GuizhouWare"
+                                     for value in values)
+-            guard_version = metadata.get("custom", {}).get("dickguard") if isinstance(metadata.get("custom", {}), dict) else None
+-            if guard_version is not None:
++            custom = metadata.get("custom", {})
++            guard_keys = [key for key in ("rimeguard", "dickguard") if isinstance(custom, dict) and key in custom]
++            if guard_keys:
++                guard_version = custom[guard_keys[0]]
++                if any(custom[key] != guard_version for key in guard_keys):
++                    raise ReleaseError("Conflicting guard metadata")
+                 if guard_version not in ("3.0", "3.1") or entrypoints != {"main": ["d1.G"], "client": ["d1.G"]} or "d1/G.class" not in names:
+-                    raise ReleaseError("Invalid dickguard3.x entrypoints or guard class")
++                    raise ReleaseError("Invalid rimeguard entrypoints or guard class")
+                 found = True
+             if not found or "dev/guizhou/GuizhouWare.class" not in names:
+                 raise ReleaseError("GuizhouWare entrypoint or class is missing")

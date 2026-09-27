@@ -8,6 +8,17 @@ import java.util.ArrayDeque;
 /** Executes the actual action-gate boolean control flow without loading Minecraft. */
 public final class GuardActionGateTest {
     public static void main(String[] args) throws Exception {
+        for (boolean current : new boolean[]{false, true}) for (boolean legacy : new boolean[]{false, true}) {
+            var metadata = (net.fabricmc.loader.api.metadata.ModMetadata) java.lang.reflect.Proxy.newProxyInstance(
+                    GuardActionGateTest.class.getClassLoader(),
+                    new Class<?>[]{net.fabricmc.loader.api.metadata.ModMetadata.class},
+                    (proxy, method, values) -> {
+                        if (!method.getName().equals("containsCustomValue")) throw new AssertionError("Unexpected metadata access");
+                        return values[0].equals("rimeguard") ? current : values[0].equals("dickguard") && legacy;
+                    });
+            if (GuardStatus.requiresGuard(metadata) != (current || legacy))
+                throw new AssertionError("Current and legacy guard metadata must both require authorization");
+        }
         ClassNode cls = new ClassNode();
         try (var in = GuardActionGateTest.class.getClassLoader().getResourceAsStream(
                 "dev/guizhou/manager/HeartbeatManager.class")) {
@@ -37,6 +48,6 @@ public final class GuardActionGateTest {
             }
             if (!returned) throw new AssertionError("Gate did not return");
         }
-        System.out.println("GuardActionGateTest: all four lease/guard authorization combinations passed");
+        System.out.println("GuardActionGateTest: four metadata aliases and four lease/guard authorization combinations passed");
     }
 }

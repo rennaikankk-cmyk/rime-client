@@ -46,7 +46,8 @@ class MergeTest(unittest.TestCase):
                 merged = json.loads(jar.read("fabric.mod.json"))
                 self.assertEqual(merged["version"], metadata["version"])
                 self.assertEqual(merged["name"], "Rime")
-                self.assertEqual(merged["custom"]["dickguard"], "3.1")
+                self.assertEqual(merged["custom"]["rimeguard"], "3.1")
+                self.assertNotIn("dickguard", merged["custom"])
                 self.assertEqual(merged["entrypoints"]["client"], ["d1.G"])
                 self.assertEqual(merged["entrypoints"]["main"], ["d1.G"])
 

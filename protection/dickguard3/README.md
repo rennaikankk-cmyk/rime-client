@@ -1,8 +1,10 @@
-# Rime 的 dickguard3.1 适配
+# Rime 的 rimeguard3.1
 
 上游来源：`rennaikankk-cmyk/dick-guard` 标签 `dickguard3.1`，提交 `c912156f14556e8e54a7105b395c7797fb9be6e2`。
 
-保留 Rime 的 main/client 双阶段入口、品牌、mod 版本及逐动作授权与 guard 授权相交的检查。心跳 client=guizhouware，协议 guard=dickguard3.0；发行元数据 custom.dickguard=3.1。这两个版本标识用途不同。
+Rime 使用的防护名称由 dickguard 改为 rimeguard；当前发行元数据为 custom.rimeguard=3.1，mod 版本仍为 1.1.1。客户端授权门及发布校验兼容旧 custom.dickguard 标记，新构建仅写入新名称。
+
+保留 Rime 的 main/client 双阶段入口及逐动作授权与 guard 授权相交的检查。心跳 client=guizhouware、协议 guard=dickguard3.0 和密码学域分隔串保持兼容；这些是内部协议，不是发行品牌。既有 protection/dickguard3 与 deployment/dickguard3 目录保留，便于复现历史发布。上游仓库名称、标签及下方原文不改写。
 
 本次同步标准 Base64 清单解码、签名 subject/license 与当前凭据绑定、每次心跳随机 guard 类抽查及环境字段长度限制；保留并扩展完整性、模拟签名心跳和双入口授权测试。字符串池由 Rime 适配的 gen_s.py 生成。
 

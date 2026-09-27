@@ -1,6 +1,7 @@
 package dev.guizhou.util.license;
 
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.metadata.ModMetadata;
 import java.lang.reflect.Method;
 
 /** The distribution guard supplements the existing per-action licence checks. */
@@ -23,11 +24,15 @@ public final class GuardStatus {
         required = true;
         try {
             var mod = FabricLoader.getInstance().getModContainer("guizhouware");
-            required = mod.isPresent() && mod.get().getMetadata().containsCustomValue("dickguard");
+            required = mod.isPresent() && requiresGuard(mod.get().getMetadata());
             if (required) authorization = Class.forName("d1.G").getMethod("isAuthorized");
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
             authorization = null;
         }
         resolved = true;
+    }
+
+    static boolean requiresGuard(ModMetadata metadata) {
+        return metadata.containsCustomValue("rimeguard") || metadata.containsCustomValue("dickguard");
     }
 }
