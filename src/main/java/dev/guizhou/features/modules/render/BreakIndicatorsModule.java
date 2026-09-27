@@ -355,14 +355,14 @@ public class BreakIndicatorsModule extends Module {
 
             float s = (float) Math.max(chineseMinTextScale.getValue(),
                     chineseTextScale.getValue() * 8.0 / (dist + 8.0));
-            int lineH = mc.font.lineHeight;
+            int lineH = dev.guizhou.util.render.font.Fonts.lineHeight();
 
             graphics.pose().pushMatrix();
             graphics.pose().translate(screen[0], screen[1]);
             graphics.pose().scale(s, s);
 
-            graphics.drawString(mc.font, name, -mc.font.width(name) / 2, -lineH - 1, 0xFFFFFFFF);
-            graphics.drawString(mc.font, status, -mc.font.width(status) / 2, 1, statusColor.getRGB() | 0xFF000000);
+            dev.guizhou.util.render.font.Fonts.drawString(graphics, name, -dev.guizhou.util.render.font.Fonts.width(name) / 2, -lineH - 1, 0xFFFFFFFF);
+            dev.guizhou.util.render.font.Fonts.drawString(graphics, status, -dev.guizhou.util.render.font.Fonts.width(status) / 2, 1, statusColor.getRGB() | 0xFF000000);
 
             graphics.pose().popMatrix();
         }

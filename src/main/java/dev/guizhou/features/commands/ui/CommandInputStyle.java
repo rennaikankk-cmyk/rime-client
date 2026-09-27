@@ -8,6 +8,7 @@ import com.mojang.brigadier.suggestion.Suggestion;
 import com.mojang.brigadier.tree.ArgumentCommandNode;
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.util.render.ShadcnDraw;
+import dev.guizhou.util.render.font.Fonts;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -89,6 +90,13 @@ public final class CommandInputStyle {
 
     // -------------------------------------------------------------------- popup
 
+    public static void measurePopup(Rect2i rect, List<Suggestion> list, int screenWidth) {
+        int width = 4;
+        for (Suggestion suggestion : list) width = Math.max(width, Fonts.width(suggestion.getText()) + 4);
+        rect.setWidth(Math.min(width, Math.max(4, screenWidth - 8)));
+        rect.setX(Math.clamp(rect.getX(), 4, Math.max(4, screenWidth - rect.getWidth() - 4)));
+    }
+
     public static void renderPopup(GuiGraphics g, Rect2i rect, List<Suggestion> list, int offset, int rows,
                                    int current, String input) {
         Font font = Minecraft.getInstance().font;
@@ -110,7 +118,7 @@ public final class CommandInputStyle {
                 ShadcnDraw.round(g, x - 2, rowY, w + 4, ROW, 3, ShadcnDraw.alpha(accent, 0.2f));
                 ShadcnDraw.round(g, x - 2, rowY + 2, 1.5f, ROW - 4, 0.75f, accent);
             }
-            g.drawString(font, highlight(suggestion, input, selected, accent), x + 2, rowY + 2,
+            Fonts.renderOverrideText(g, highlight(suggestion, input, selected, accent).getVisualOrderText(), x + 2, rowY + 2,
                     selected ? TEXT : MUTED, false);
         }
 
@@ -126,13 +134,13 @@ public final class CommandInputStyle {
     }
 
     private static void renderDetail(GuiGraphics g, Font font, Component text, float panelX, float panelY, int accent) {
-        int width = font.width(text) + 14;
+        int width = Fonts.overrideWidth(text.getVisualOrderText()) + 14;
         float cardY = panelY - 17;
         ShadcnDraw.shadow(g, panelX, cardY, width, 14, 4, 4, 0x66000000);
         ShadcnDraw.round(g, panelX, cardY, width, 14, 4, CARD);
         ShadcnDraw.outline(g, panelX, cardY, width, 14, 4, 1, BORDER);
         ShadcnDraw.round(g, panelX + 3, cardY + 3.5f, 1.5f, 7, 0.75f, accent);
-        g.drawString(font, text, (int) panelX + 8, (int) cardY + 3, MUTED, false);
+        Fonts.renderOverrideText(g, text.getVisualOrderText(), (int) panelX + 8, (int) cardY + 3, MUTED, false);
     }
 
     private static Component highlight(Suggestion suggestion, String input, boolean selected, int accent) {
@@ -161,6 +169,8 @@ public final class CommandInputStyle {
     public static void renderUsage(GuiGraphics g, List<FormattedCharSequence> lines, int x, int width,
                                    boolean anchorToBottom, int screenHeight) {
         if (lines.isEmpty()) return;
+        width = 0;
+        for (FormattedCharSequence line : lines) width = Math.max(width, Fonts.overrideWidth(line));
         Font font = Minecraft.getInstance().font;
         int accent = 0xFF000000 | ChatFeed.accent();
         int top = Integer.MAX_VALUE, bottom = Integer.MIN_VALUE;
@@ -175,7 +185,7 @@ public final class CommandInputStyle {
         ShadcnDraw.outline(g, px, py, pw, ph, 4, 1, BORDER);
         ShadcnDraw.round(g, px + 2.5f, py + 3, 1.5f, ph - 6, 0.75f, accent);
         for (int i = 0; i < lines.size(); i++) {
-            g.drawString(font, lines.get(i), x, lineY(i, anchorToBottom, screenHeight) + 2, TEXT, false);
+            Fonts.renderOverrideText(g, lines.get(i), x, lineY(i, anchorToBottom, screenHeight) + 2, TEXT, false);
         }
     }
 

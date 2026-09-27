@@ -34,7 +34,7 @@ import dev.guizhou.util.render.font.Fonts;
 
 public class NametagsModule extends Module {
 
-    /** CJK-capable custom font (bundled IB serif chain) for nametag text. */
+    /** Shared Anthropic Serif/CJK font chain for nametag text. */
     public Setting<Boolean> nametagFont = bool("NametagFont", true).setPage("Info");
     public Setting<Boolean> showPearls  = bool("ShowPearls",  true).setPage("Info");
     public Setting<Boolean> showItems   = bool("ShowItems",   true).setPage("Info");
@@ -343,7 +343,7 @@ public class NametagsModule extends Module {
                     graphics.pose().pushMatrix();
                     graphics.pose().translate(slotX, armorTopY);
                     graphics.renderItem(armorStack, 0, 0);
-                    graphics.renderItemDecorations(mc.font, armorStack, 0, 0);
+                    Fonts.renderNametagItemDecorations(graphics, armorStack, 0, 0);
                     graphics.pose().popMatrix();
                 }
             }
@@ -363,11 +363,11 @@ public class NametagsModule extends Module {
             }
             if (!offHand.isEmpty()) {
                 graphics.renderItem(offHand, offX, itemY);
-                graphics.renderItemDecorations(mc.font, offHand, offX, itemY);
+                Fonts.renderNametagItemDecorations(graphics, offHand, offX, itemY);
             }
             if (!mainHand.isEmpty()) {
                 graphics.renderItem(mainHand, mainX, itemY);
-                graphics.renderItemDecorations(mc.font, mainHand, mainX, itemY);
+                Fonts.renderNametagItemDecorations(graphics, mainHand, mainX, itemY);
             }
         }
 

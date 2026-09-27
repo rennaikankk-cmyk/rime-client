@@ -44,6 +44,7 @@ public abstract class MixinCommandSuggestionsList {
             return;
         }
         ci.cancel();
+        CommandInputStyle.measurePopup(rect, suggestionList, graphics.guiWidth());
         int rows = Math.min(suggestionList.size(), rect.getHeight() / 12);
         boolean moved = lastMouse.x != mouseX || lastMouse.y != mouseY;
         if (moved) {

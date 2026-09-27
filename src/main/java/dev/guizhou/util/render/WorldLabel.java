@@ -13,14 +13,14 @@ public final class WorldLabel {
         float[] screen = MatrixCapture.worldToScreen(x, y, z);
         if (screen == null) return false;
         float s = (float) Math.max(minScale, scale * 8.0 / (Math.max(0.0, distance) + 8.0));
-        int width = Fonts.nametagWidth(text);
-        int height = Fonts.nametagLineHeight();
+        int width = Fonts.width(text);
+        int height = Fonts.lineHeight();
         int half = width / 2;
         graphics.pose().pushMatrix();
         graphics.pose().translate(screen[0], screen[1]);
         graphics.pose().scale(s, s);
         graphics.fill(-half - 2, -height - 1, half + 2, 1, backgroundArgb);
-        Fonts.drawNametagString(graphics, text, -half, -height, textArgb);
+        Fonts.drawString(graphics, text, -half, -height, textArgb);
         graphics.pose().popMatrix();
         return true;
     }

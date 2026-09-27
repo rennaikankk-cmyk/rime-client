@@ -3,13 +3,10 @@ package dev.guizhou.util.render.font;
 import net.minecraft.client.gui.GuiGraphics;
 
 import java.awt.Font;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Serif HUD fonts sized in CSS pixels. The night preview is the design truth.
- * Three static weights share one face chain: Anthropic Serif when installed,
+ * Three static weights share one face chain: local or installed Anthropic Serif,
  * then Source Serif 4, Noto Serif SC, Palatino, Songti, then the logical serif.
  * Anthropic Serif is never embedded. No drop shadow; fully transparent text is
  * skipped rather than forced opaque by the renderer's legacy alpha floor.
@@ -77,9 +74,9 @@ public final class HudFonts {
         FontRenderer nextRegular = null, nextSemibold = null, nextBold = null;
         boolean published = false;
         try {
-            nextRegular = make(Font.PLAIN);
-            nextSemibold = make(Font.BOLD);
-            nextBold = make(Font.BOLD);
+            nextRegular = make(REGULAR);
+            nextSemibold = make(SEMI);
+            nextBold = make(BOLD);
             semibold = nextSemibold;
             bold = nextBold;
             regular = nextRegular; // Publish only after all weights succeed.
@@ -99,53 +96,8 @@ public final class HudFonts {
         catch (Throwable failure) { FontFallback.fail("partial font cleanup", failure); }
     }
 
-    private static final String[] SERIF_FAMILIES = {
-            "Anthropic Serif", "Source Serif 4", "Noto Serif SC", "Palatino Linotype", "Songti SC", "宋体"
-    };
-
-    private static FontRenderer make(int style) {
-        List<Font> chain = new ArrayList<>(SERIF_FAMILIES.length + 1);
-        for (String family : SERIF_FAMILIES) {
-            Font face = installedFamily(family, style);
-            if (face != null) chain.add(face);
-        }
-        chain.add(new Font(Font.SERIF, style, 1));
-        return new FontRenderer(chain.toArray(new Font[0]), CHARS_PER_PAGE, 4, BAKE_ASCENT);
-    }
-
-    /** Installed family only. A missing name must not fall through to the logical dialog face. */
-    private static Font installedFamily(String family, int style) {
-        try {
-            for (String name : java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
-                    .getAvailableFontFamilyNames()) {
-                if (name.equalsIgnoreCase(family)) return new Font(name, style, 1);
-            }
-        } catch (Throwable ignored) {
-            // headless or font lookup failure — fall through
-        }
-        return null;
-    }
-
-    private static Font zhFace() {
-        try {
-            java.nio.file.Path p = java.nio.file.Paths.get("guizhouware", "fonts", "ib_zh.ttf");
-            if (java.nio.file.Files.exists(p)) {
-                return Font.createFont(Font.TRUETYPE_FONT, p.toFile()).deriveFont(1f);
-            }
-        } catch (Exception ignored) {
-            // external font optional
-        }
-        return loadResource("/assets/guizhouware/font/ib_zh.ttf");
-    }
-
-    private static Font loadResource(String path) {
-        try (InputStream is = HudFonts.class.getResourceAsStream(path)) {
-            if (is != null) {
-                return Font.createFont(Font.TRUETYPE_FONT, is).deriveFont(1f);
-            }
-        } catch (Exception ignored) {
-            // optional face — fall through
-        }
-        return null;
+    private static FontRenderer make(int weight) {
+        Font[] chain = FontFaces.resolve(net.minecraft.client.Minecraft.getInstance().gameDirectory.toPath(), weight);
+        return new FontRenderer(chain, CHARS_PER_PAGE, 4, BAKE_ASCENT);
     }
 }

@@ -108,7 +108,7 @@ public class ClickGuiModule extends Module {
         rainbowSaturation.setVisibility(v -> theme.getValue() == Theme.RAINBOW);
         customColor.setVisibility(v -> theme.getValue() == Theme.CUSTOM);
         // Retain legacy font keys for old config compatibility. Native screens and
-        // the rebuilt HUD share the bundled Geist/CJK chain, so these are not UI controls.
+        // the rebuilt HUD share the Anthropic Serif/CJK chain, so these are not UI controls.
         clickGuiFont.setVisibility(v -> false);
         hudFont.setVisibility(v -> false);
         fontName.setVisibility(v -> false);

@@ -3,6 +3,7 @@ package dev.guizhou.features.modules.combat;
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.impl.render.Render3DEvent;
+import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.client.TargetsModule;
@@ -66,8 +67,12 @@ public class GuangxiTPModule extends Module {
         return legacy112.getValue() || dev.guizhou.util.elytra.DualViewSupport.forceLegacyProtocol();
     }
 
-    private final Setting<Boolean> render      = bool("Render", true);
-    private final Setting<Color>   renderColor = color("Color", 224, 138, 108, 60);
+    private final Setting<Boolean> render      = bool("Render", true).setPage("Render");
+    private final Setting<Color>   renderColor = color("Color", 224, 138, 108, 60).setPage("Render");
+    private final Setting<Boolean> renderDamage = bool("RenderDamage", true).setPage("Render")
+            .described("在水晶位置显示本次选择的预估目标伤害，可独立于方框开启。");
+    private final Setting<Color> damageColor = color("DamageColor", 250, 249, 245, 255).setPage("Render");
+    private final Setting<Double> damageScale = num("DamageScale", 1.0, 0.5, 3.0).setPage("Render");
 
     /** Per-second decision diagnostics: which gate killed the placement attempt. */
     private final Setting<Boolean> debug = bool("Debug", false);
@@ -119,6 +124,7 @@ public class GuangxiTPModule extends Module {
 
     private BlockPos renderPos = null;
     private long renderStartMs = 0L;
+    private float renderedDamage;
 
     public GuangxiTPModule() {
         super("GuangxiTP", "Long-range crystal placement via desync move packets. Lenient-move-check servers only.", Category.COMBAT);
@@ -132,6 +138,7 @@ public class GuangxiTPModule extends Module {
     @Override
     public void onEnable() {
         attacks.clear();
+        renderPos = null;
         placeTimer.reset();
         breakTimer.reset();
         baseTimer.reset();
@@ -167,8 +174,8 @@ public class GuangxiTPModule extends Module {
             if (base != null) {
                 if (tpPlace(base)) {
                     placeTimer.reset();
-                    renderPos = base.above();
-                    renderStartMs = System.currentTimeMillis();
+                    noteRender(base.above(), estimateDamage(target,
+                            new Vec3(base.getX() + 0.5, base.getY() + 1, base.getZ() + 0.5)));
                 }
             } else {
                 dBaseNull++;
@@ -180,8 +187,7 @@ public class GuangxiTPModule extends Module {
                     if (opp == null) dOppNull++;
                     else if (tpBasePlaceChain(opp)) {
                         placeTimer.reset();
-                        renderPos = opp.base().above();
-                        renderStartMs = System.currentTimeMillis();
+                        noteRender(opp.base().above(), opp.damage());
                     } else dObsFail++;
                 }
             }
@@ -191,6 +197,7 @@ public class GuangxiTPModule extends Module {
             EndCrystal crystal = findCrystalNear(target);
             if (crystal != null && tpBreak(crystal)) {
                 breakTimer.reset();
+                noteRender(crystal.blockPosition(), estimateDamage(target, crystal.position()));
             }
         }
     }
@@ -404,6 +411,7 @@ public class GuangxiTPModule extends Module {
     private void ensureAttackSession() {
         if (attackLevel != mc.level || attackPlayer != mc.player) {
             attacks.clear(); attackLevel = mc.level; attackPlayer = mc.player;
+            renderPos = null;
         }
         attacks.expire(System.currentTimeMillis(), 2000);
     }
@@ -429,12 +437,31 @@ public class GuangxiTPModule extends Module {
 
     @Override
     public void onRender3D(Render3DEvent event) {
-        if (!render.getValue() || renderPos == null || nullCheck()) return;
-        if (System.currentTimeMillis() - renderStartMs > 800L) {
-            renderPos = null;
-            return;
-        }
+        if (!render.getValue() || !hasRender()) return;
         RenderUtil.drawBoxFilled(event.getMatrix(), new AABB(renderPos), renderColor.getValue());
         RenderUtil.drawBox(event.getMatrix(), new AABB(renderPos), renderColor.getValue(), 1.5f);
+    }
+
+    private void noteRender(BlockPos pos, float damage) {
+        renderPos = pos.immutable();
+        renderedDamage = damage;
+        renderStartMs = System.currentTimeMillis();
+    }
+
+    private boolean hasRender() {
+        if (nullCheck() || attackLevel != mc.level || attackPlayer != mc.player
+                || System.currentTimeMillis() - renderStartMs > 800L) renderPos = null;
+        return renderPos != null;
+    }
+
+    @Override
+    public void onRender2D(Render2DEvent event) {
+        if (!renderDamage.getValue() || !hasRender() || !Float.isFinite(renderedDamage)) return;
+        Vec3 at = Vec3.atCenterOf(renderPos);
+        float scale = damageScale.getValue().floatValue();
+        dev.guizhou.util.render.WorldLabel.draw(event.getContext(), at.x, at.y, at.z,
+                mc.player.getEyePosition().distanceTo(at),
+                String.format(java.util.Locale.ROOT, "%.1f", renderedDamage),
+                damageColor.getValue().getRGB(), 0x8030302E, scale, scale * 0.65f);
     }
 }

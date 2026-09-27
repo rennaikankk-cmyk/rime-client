@@ -175,6 +175,7 @@ def clientRegressionTests = [
         glideMetadataDelayTest: 'dev.guizhou.util.elytra.GlideMetadataDelayTest',
         fontPageTest: 'dev.guizhou.util.render.font.FontPageTest',
         fontRecoveryTest: 'dev.guizhou.util.render.font.FontRecoveryTest',
+        fontFacesTest: 'dev.guizhou.util.render.font.FontFacesTest',
         targetMotionTrackerTest: 'dev.guizhou.util.elytra.TargetMotionTrackerTest',
         aerialCombatPolicyTest: 'dev.guizhou.util.elytra.AerialCombatPolicyTest',
         aerialInterceptTest: 'dev.guizhou.util.elytra.AerialInterceptTest',

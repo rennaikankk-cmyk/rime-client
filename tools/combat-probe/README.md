@@ -15,9 +15,13 @@ tools/combat-probe/run-probe.ps1 -Name spear-high -WorldPath 'C:\test-world' -Mo
 tools/combat-probe/run-probe.ps1 -Name armor-lifecycle -WorldPath 'C:\test-world' -Mode ARMOR
 ```
 
-每次只运行一个实例，使用新的 Name。脚本复制整个世界到本目录的 runs，**不修改原世界**。运行约 800 个客户端 tick 后自动退出。客户端遥测关闭，无账号凭据写入。若环境尚未完成 Minecraft 首次引导，需要先在测试窗口完成引导。
+每次只运行一个实例，使用新的 Name。脚本复制整个世界到本目录的 runs，**不修改原世界**。运行约 800 个客户端 tick 后自动退出。测试实例不带上传凭据，无账号凭据写入。若环境尚未完成 Minecraft 首次引导，需要先在测试窗口完成引导。先单独构建仅含测试代码的 fixture Jar，再以显式开发参数启动，遵守开发构建禁止 Jar 打包的保护规则。
 
-场地为 y=100 的石头平台。初始化会在复制的世界中清除已加载的生物、关闭自然刷怪，并断言追击目标 UUID 与被计量目标一致，防止上次存档遗留目标污染结果。固定目标为 1000 生命、无 AI、无击退的僵尸，戴头盔防止日晒，武器无附魔；客户端速度设为 3.1、重锤高度 10、AutoMaceDive 开启、额外普通攻击关闭、AdaptiveCombat 关闭。开启 Air 时，服务器移动目标沿半径 12 格的圆周绕行，同时上下变化 5 格，名义水平速度约 24 格/秒；它是可复现的移动压力场景，**不等同真人 PvP、玩家飞行物理或反作弊验收**。
+场地为 y=100 的石头平台。初始化会在复制的世界中清除已加载的生物、关闭自然刷怪，并断言追击目标 UUID 与被计量目标一致，防止上次存档遗留目标污染结果。固定目标为 1000 生命、无 AI、无击退的僵尸，戴头盔防止日晒，武器无附魔；客户端 SpeedBps/ClimbBps 为 40、重锤高度默认 10、AutoMaceDive 和旧额外普攻选项开启、AdaptiveCombat 关闭。开启 Air 时，服务器移动目标沿半径 12 格的圆周绕行，同时上下变化 5 格，名义水平速度约 24 格/秒；它是可复现的移动压力场景，**不等同真人 PvP、玩家飞行物理或反作弊验收**。
+
+新增地面与装备回归参数：`-Ground true` 从双方同一地面起步；`-Gear INVENTORY` 将胸甲放在主背包；`-Gear EMPTY` 不提供胸甲；`-Gear EMPTY_INVENTORY` 填满快捷栏，仅主背包有空槽。`-Height 28`、`-Terrain false` 对应高下砸高度和关闭地形保护。`-Ticks 600 -RequireDamage true` 明确要求服务器确认伤害，重锤必须至少出现一次 `mace_smash`。结束后验证服务器胸部恢复鞘翅、胸甲回原槽、鼠标无残留物品，并记录 `PROBE_RECOVERY`。`groundTicks/maxGroundStreak` 统计起步 40 tick 后触地时间。
+
+`-Mode UI` 验证默认已开启模块列表、旧手动名单、TP 伤害选项及过期清理，并将 TP 床的四个方向与原版真实床形状边界比较。它调用真实模块渲染入口保存四张 `combat-ui-*.png`，结果为 `ui-complete.txt`；固定显示快照用于视觉检查，不把它作为自动选敌/爆炸命中的证据。
 
 ARMOR 场景关闭追人和方向控制，单独启用 ArmorFly，模拟一次手动起飞，随后由模块自行补烟花。第 200–220 tick 借用/归还飞行控制，断言独立甲飞仍启用；第 400 tick 关闭甲飞，第 410 tick 断言装备恢复。
 

@@ -43,6 +43,10 @@ public final class CrystalProbe implements ClientModInitializer {
     private final List<String> rows = new ArrayList<>();
 
     @Override public void onInitializeClient() {
+        if (Boolean.getBoolean("rime.probe.flatBase")) {
+            new FlatBaseProbe().onInitializeClient();
+            return;
+        }
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(server -> {
             if (target != null) serverHealth = target.getHealth();

@@ -19,6 +19,7 @@ allprojects {
    runDir('../crystal-v2-lab/' + (project.findProperty('probeRun') ?: 'candidate01'))
    programArgs('--quickPlaySingleplayer', 'ProbeWorld', '--username', 'CrystalProbe', '--width', '854', '--height', '480')
    vmArg('-Dfabric.addMods=' + new File(lab, 'crystal-probe.jar').path)
+   vmArg('-Drime.probe.flatBase=' + (project.findProperty('probeFlatBase') ?: 'false'))
   }
   tasks.named('runClient') { dependsOn tasks.named('crystalProbeClasses') }
  }

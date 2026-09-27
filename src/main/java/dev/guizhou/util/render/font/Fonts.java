@@ -1,22 +1,16 @@
 package dev.guizhou.util.render.font;
 
 import dev.guizhou.GuizhouWare;
-import dev.guizhou.features.modules.client.ClickGuiModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.util.FormattedCharSequence;
 
-import java.awt.Font;
-import java.io.InputStream;
 
 public final class Fonts {
 
     private Fonts() {}
 
     private static final Minecraft mc = Minecraft.getInstance();
-    // InternalBeyond-style bundled chain: serif latin first, CJK second, OS sans last.
-    private static final String BUNDLED_LATIN_PATH = "/assets/guizhouware/font/ib_latin.ttf";
-    private static final String BUNDLED_ZH_PATH = "/assets/guizhouware/font/ib_zh.ttf";
 
     private static final float SHADOW_OFFSET = 0.7f;
 
@@ -24,14 +18,6 @@ public final class Fonts {
     private static volatile boolean dirty = true;
     private static volatile boolean hudPass = false;
 
-    private static java.awt.Font bundledLatin;
-    private static java.awt.Font bundledZh;
-    private static boolean bundledLoaded;
-
-    private static ClickGuiModule cfg() { return ClickGuiModule.getInstance(); }
-
-    private static boolean clickGuiOn() { ClickGuiModule c = cfg(); return c != null && c.clickGuiFont.getValue(); }
-    private static boolean hudOn()      { ClickGuiModule c = cfg(); return c != null && c.hudFont.getValue(); }
     private static boolean nametagOn() {
         try {
             dev.guizhou.features.modules.render.NametagsModule m =
@@ -41,7 +27,6 @@ public final class Fonts {
             return false;
         }
     }
-    private static boolean anyOn()      { return clickGuiOn() || hudOn() || nametagOn(); }
 
     public static void markDirty() { dirty = true; }
 
@@ -49,11 +34,11 @@ public final class Fonts {
     public static void endHudPass()   { hudPass = false; }
 
     public static void drawString(GuiGraphics graphics, String text, float x, float y, int color) {
-        draw(safeRenderer(clickGuiOn()), graphics, text, x, y, color, true);
+        draw(safeRenderer(true), graphics, text, x, y, color, true);
     }
 
     public static int width(String text) {
-        return measure(safeRenderer(clickGuiOn()), text);
+        return measure(safeRenderer(true), text);
     }
 
     public static int lineHeight() {
@@ -62,7 +47,7 @@ public final class Fonts {
 
     public static boolean drawOverrideActive() {
         return !FontFallback.nativePass() && FontFallback.customEnabled()
-                && hudPass && hudOn() && safeRenderer(true) != null;
+                && hudPass && safeRenderer(true) != null;
     }
 
     public static void renderOverrideString(GuiGraphics graphics, String text, float x, float y, int color, boolean shadow) {
@@ -91,11 +76,11 @@ public final class Fonts {
 
     /** Nametag text through the custom renderer (CJK-capable), vanilla font as fallback. */
     public static void drawNametagString(GuiGraphics graphics, String text, float x, float y, int color) {
-        draw(safeRenderer(nametagOn() || clickGuiOn()),graphics,text,x,y,color,true);
+        draw(safeRenderer(nametagOn()),graphics,text,x,y,color,true);
     }
 
     public static int nametagWidth(String text) {
-        return measure(safeRenderer(nametagOn() || clickGuiOn()),text);
+        return measure(safeRenderer(nametagOn()),text);
     }
 
     public static int nametagLineHeight() {
@@ -123,10 +108,6 @@ public final class Fonts {
     }
 
     private static FontRenderer renderer() {
-        if (!anyOn()) {
-            disposeIfPresent();
-            return null;
-        }
         if (mc.getWindow() == null) return null;
         if (dirty || renderer == null) rebuild();
         return renderer;
@@ -136,26 +117,8 @@ public final class Fonts {
         if (!dirty && renderer != null) return;
         disposeIfPresent();
 
-        ClickGuiModule c = cfg();
-        renderer = new FontRenderer(resolveBaseFonts(c == null ? "" : c.fontName.getValue()));
+        renderer = new FontRenderer(FontFaces.resolve(mc.gameDirectory.toPath(), HudFonts.REGULAR));
         dirty = false;
-    }
-
-    /**
-     * Font chain: user's system font first (if set), then bundled IB serif latin,
-     * bundled CJK, OS sans — AWT picks the first font that has the glyph, so a
-     * latin-only custom font still renders Chinese through the bundled CJK face.
-     */
-    private static Font[] resolveBaseFonts(String familyName) {
-        java.util.List<Font> chain = new java.util.ArrayList<>(4);
-        if (familyName != null && !familyName.isBlank()) {
-            chain.add(new Font(familyName.trim(), Font.PLAIN, 1));
-        }
-        loadBundled();
-        if (bundledLatin != null) chain.add(bundledLatin);
-        if (bundledZh != null) chain.add(bundledZh);
-        chain.add(new Font(Font.SANS_SERIF, Font.PLAIN, 1));
-        return chain.toArray(new Font[0]);
     }
 
     private static synchronized void disposeIfPresent() {
@@ -164,38 +127,22 @@ public final class Fonts {
         if (old != null) old.close();
     }
 
-    private static void loadBundled() {
-        if (bundledLoaded) return;
-        bundledLoaded = true;
-        bundledLatin = loadTtf(BUNDLED_LATIN_PATH);
-        // CJK face is an optional side download (launcher puts it at
-        // guizhouware/fonts/ib_zh.ttf next to the mods dir) — keeps the jar lean.
-        bundledZh = loadExternalTtf("guizhouware", "fonts", "ib_zh.ttf");
-        if (bundledZh == null) {
-            bundledZh = loadTtf(BUNDLED_ZH_PATH);
-        }
+    /** Keep native durability and cooldown decorations, replacing only the count text. */
+    public static void renderItemDecorations(GuiGraphics g, net.minecraft.world.item.ItemStack stack, int x, int y) {
+        renderItemDecorations(g, stack, x, y, true);
     }
 
-    private static Font loadExternalTtf(String... segments) {
-        try {
-            java.nio.file.Path p = java.nio.file.Paths.get("", segments);
-            if (java.nio.file.Files.exists(p)) {
-                return Font.createFont(Font.TRUETYPE_FONT, p.toFile()).deriveFont(1f);
-            }
-        } catch (Exception e) {
-            // external font optional — fall through
-        }
-        return null;
+    public static void renderNametagItemDecorations(GuiGraphics g, net.minecraft.world.item.ItemStack stack, int x, int y) {
+        renderItemDecorations(g, stack, x, y, nametagOn());
     }
 
-    private static Font loadTtf(String resourcePath) {
-        try (InputStream is = Fonts.class.getResourceAsStream(resourcePath)) {
-            if (is != null) {
-                return Font.createFont(Font.TRUETYPE_FONT, is).deriveFont(1f);
-            }
-        } catch (Exception e) {
-            // bundled font optional — fall through to the OS sans tail of the chain
+    private static void renderItemDecorations(GuiGraphics g, net.minecraft.world.item.ItemStack stack, int x, int y, boolean custom) {
+        if (stack.isEmpty()) return;
+        if (!custom || !FontFallback.customEnabled()) { g.renderItemDecorations(mc.font, stack, x, y); return; }
+        g.renderItemDecorations(mc.font, stack, x, y, "");
+        if (stack.getCount() > 1) {
+            String text = String.valueOf(stack.getCount());
+            drawString(g, text, x + 17 - width(text), y + 9, 0xFFFFFFFF);
         }
-        return null;
     }
 }

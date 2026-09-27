@@ -2,7 +2,7 @@
 
 上游来源：`rennaikankk-cmyk/dick-guard` 标签 `dickguard3.1`，提交 `c912156f14556e8e54a7105b395c7797fb9be6e2`。
 
-Rime 使用的防护名称由 dickguard 改为 rimeguard；当前发行元数据为 custom.rimeguard=3.1，mod 版本仍为 1.1.1。客户端授权门及发布校验兼容旧 custom.dickguard 标记，新构建仅写入新名称。
+Rime 使用的防护名称由 dickguard 改为 rimeguard；当前发行元数据为 custom.rimeguard=3.1，mod 版本为 1.1.2。客户端授权门及发布校验兼容旧 custom.dickguard 标记，新构建仅写入新名称。
 
 保留 Rime 的 main/client 双阶段入口及逐动作授权与 guard 授权相交的检查。心跳 client=guizhouware、协议 guard=dickguard3.0 和密码学域分隔串保持兼容；这些是内部协议，不是发行品牌。既有 protection/dickguard3 与 deployment/dickguard3 目录保留，便于复现历史发布。上游仓库名称、标签及下方原文不改写。
 

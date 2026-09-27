@@ -77,7 +77,7 @@ public class ShulkerPreviewModule extends Module {
             ItemStack item = items.get(i);
             if (item.isEmpty()) continue;
             graphics.renderItem(item, ix, iy);
-            graphics.renderItemDecorations(mc.font, item, ix, iy);
+            dev.guizhou.util.render.font.Fonts.renderItemDecorations(graphics, item, ix, iy);
         }
 
         return true;
@@ -129,7 +129,7 @@ public class ShulkerPreviewModule extends Module {
         pose.scale(scale, scale);
         graphics.renderItem(icon, 0, 0);
         if (thumbnailCount.getValue()) {
-            graphics.renderItemDecorations(mc.font, icon, 0, 0);
+            dev.guizhou.util.render.font.Fonts.renderItemDecorations(graphics, icon, 0, 0);
         }
         pose.popMatrix();
     }
@@ -222,7 +222,7 @@ public class ShulkerPreviewModule extends Module {
             int ix = LIST_PAD + (i % LIST_COLS) * LIST_CELL;
             int iy = gridY + (i / LIST_COLS) * LIST_CELL;
             graphics.renderItem(item, ix, iy);
-            graphics.renderItemDecorations(mc.font, item, ix, iy);
+            dev.guizhou.util.render.font.Fonts.renderItemDecorations(graphics, item, ix, iy);
         }
     }
 

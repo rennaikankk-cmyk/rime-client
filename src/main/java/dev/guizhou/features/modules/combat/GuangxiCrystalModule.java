@@ -524,13 +524,12 @@ public class GuangxiCrystalModule extends Module {
         float scale = damagePixelScale(x, y, z);
         if (!(scale > 0f)) return;
 
-        int half = mc.font.width(text) / 2;
+        int half = dev.guizhou.util.render.font.Fonts.width(text) / 2;
         var pose = graphics.pose();
         pose.pushMatrix();
         pose.translate(screen[0], screen[1]);
         pose.scale(scale, scale);
-        graphics.drawString(mc.font, text, -half + 1, 1, 0xFF1C1B19, false);
-        graphics.drawString(mc.font, text, -half, 0, color, false);
+        dev.guizhou.util.render.font.Fonts.drawString(graphics, text, -half, 0, color);
         pose.popMatrix();
     }
 
@@ -1070,10 +1069,15 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         ensureMiningSnapshot();
         int topLayerY    = targetFeetY - 1;
         int bottomLayerY = playerPos.getY() - r;
+        int lowerLayerCount = Math.max(0, topLayerY - bottomLayerY + 1);
+        // Keep the existing below-feet preference. On solid flat ground those cells
+        // cannot be replaced, so DEFAULT also considers a base on top of the ground.
+        int layerCount = lowerLayerCount + (rusherLogic() ? 0 : 1);
 
         int rr = r * r;
 
-        for (int by = topLayerY; by >= bottomLayerY; by--) {
+        for (int layer = 0; layer < layerCount; layer++) {
+            int by = layer < lowerLayerCount ? topLayerY - layer : targetFeetY;
             BlockPos layerBest = null;
             float layerDmg = 0;
             int dy = by - playerPos.getY();

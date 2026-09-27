@@ -23,14 +23,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
- * Watch list of chosen modules. Each row eases between the active colour and
- * muted text as its module toggles; a thin edge mark on the anchored side
+ * Live enabled-module list, with an optional saved watch list. A thin edge mark
  * shows the on state. Meta and bind render as muted text and a framed hint.
  * Row order: as added, by name, or longest first.
  */
 public class ActiveModulesHudModule extends HudModule implements Jsonable {
 
     public enum Sort { ADDED, NAME, WIDTH }
+    public enum Source { ENABLED, WATCHLIST }
 
     private static final float NAME = 8.5f, META = 7f, ROW = 13f, PAD = 6f, EDGE = 2f;
 
@@ -72,9 +72,23 @@ public class ActiveModulesHudModule extends HudModule implements Jsonable {
         return new ArrayList<>(entries);
     }
 
+    /** The normal module list follows live toggles; the explicit watch list remains available. */
+    public List<Module> displayedModules() {
+        HudClientModule hud = GuizhouWare.moduleManager.getModuleByClass(HudClientModule.class);
+        if (hud != null && hud.activeModulesSource.getValue() == Source.WATCHLIST) {
+            return entries.stream().map(GuizhouWare.moduleManager::getModuleByName)
+                    .filter(java.util.Objects::nonNull).toList();
+        }
+        return GuizhouWare.moduleManager.getModules().stream()
+                .filter(m -> m.isEnabled() && !m.hidden).toList();
+    }
+
+    public int renderedLineCount() { return displayedModules().size(); }
+
     @Override
     public void render(Render2DEvent event) {
-        if (entries.isEmpty()) {
+        List<Module> displayed = displayedModules();
+        if (displayed.isEmpty()) {
             bounds(0, 0, 0, 0);
             return;
         }
@@ -90,9 +104,7 @@ public class ActiveModulesHudModule extends HudModule implements Jsonable {
 
         lines.clear();
         float textW = 0f;
-        for (String name : entries) {
-            Module module = GuizhouWare.moduleManager.getModuleByName(name);
-            if (module == null) continue;
+        for (Module module : displayed) {
             String display = module.getDisplayName();
             String meta = module.getMeta();
             meta = meta == null || meta.isEmpty() ? "" : meta;

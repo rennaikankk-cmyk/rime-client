@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][ValidatePattern('^[a-z0-9-]+$')][string]$Name,
     [Parameter(Mandatory)][string]$WorldPath,
-    [Parameter(Mandatory)][string]$JavaHome
+    [Parameter(Mandatory)][string]$JavaHome,
+    [switch]$FlatBase
 )
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -20,7 +21,7 @@ try {
     # The fixture Jar contains only the probe classes. Never package the development-authorized client.
     & .\gradlew.bat --offline --console=plain -I tools/crystal-probe/probe.gradle crystalProbeJar *> "$lab\$Name-fixture.log"
     if($LASTEXITCODE -ne 0){throw 'Fixture compilation failed'}
-    & .\gradlew.bat --offline --console=plain -PgzwDevelopmentBuild=true -I tools/crystal-probe/probe.gradle "-PprobeRun=$Name" runClient *> "$lab\$Name.log"
+    & .\gradlew.bat --offline --console=plain -PgzwDevelopmentBuild=true -I tools/crystal-probe/probe.gradle "-PprobeRun=$Name" "-PprobeFlatBase=$($FlatBase.IsPresent.ToString().ToLowerInvariant())" runClient *> "$lab\$Name.log"
     if($LASTEXITCODE -ne 0){throw 'Client launch failed'}
 } finally { Pop-Location }
 if((Test-Path -LiteralPath "$run\failure.txt") -or !(Test-Path -LiteralPath "$run\complete.txt")){

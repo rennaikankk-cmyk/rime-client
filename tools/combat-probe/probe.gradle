@@ -16,14 +16,21 @@ allprojects {
    }
    loom.runs.client {
     runDir('tools/combat-probe/runs/' + (project.findProperty('probeRun') ?: 'baseline-spear'))
-    programArgs('--quickPlaySingleplayer', 'ProbeWorld', '--username', 'CombatProbe', '--width', '854', '--height', '480')
+    def ui = project.findProperty('probeMode') == 'UI'
+    programArgs('--quickPlaySingleplayer', 'ProbeWorld', '--username', 'CombatProbe', '--width', ui ? '1280' : '854', '--height', ui ? '900' : '480')
     vmArg('-Dfabric.addMods=' + probeRoot + '/combat-probe.jar')
     vmArg('-Dprobe.mode=' + (project.findProperty('probeMode') ?: 'SPEAR'))
     vmArg('-Dprobe.armor=' + (project.findProperty('probeArmor') ?: 'false'))
     vmArg('-Dprobe.air=' + (project.findProperty('probeAir') ?: 'false'))
     vmArg('-Dprobe.high=' + (project.findProperty('probeHigh') ?: 'false'))
+    vmArg('-Dprobe.ground=' + (project.findProperty('probeGround') ?: 'false'))
+    vmArg('-Dprobe.ticks=' + (project.findProperty('probeTicks') ?: '800'))
+    vmArg('-Dprobe.gear=' + (project.findProperty('probeGear') ?: 'HOTBAR'))
+    vmArg('-Dprobe.height=' + (project.findProperty('probeHeight') ?: '10'))
+    vmArg('-Dprobe.terrain=' + (project.findProperty('probeTerrain') ?: 'true'))
+    vmArg('-Dprobe.requireDamage=' + (project.findProperty('probeRequireDamage') ?: 'false'))
    }
-   tasks.named('runClient') { dependsOn tasks.named('runtimeProbeJar') }
+   // Build the fixture separately: development builds intentionally forbid Jar tasks.
   }
  }
 }

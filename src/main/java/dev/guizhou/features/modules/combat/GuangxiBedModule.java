@@ -613,10 +613,16 @@ public class GuangxiBedModule extends Module {
             renderPos = null;
             return;
         }
-        AABB box = new AABB(renderPos).expandTowards(
-                renderHead != null ? renderHead.getX() - renderPos.getX() : 0, 0,
-                renderHead != null ? renderHead.getZ() - renderPos.getZ() : 0);
+        AABB box = renderBox();
         RenderUtil.drawBoxFilled(event.getMatrix(), box, renderColor.getValue());
         RenderUtil.drawBox(event.getMatrix(), box, renderColor.getValue(), 1.5f);
+    }
+
+    private AABB renderBox() {
+        // A bed is two horizontal cells but only 9/16 block tall.
+        return new AABB(renderPos.getX(), renderPos.getY(), renderPos.getZ(),
+                renderPos.getX() + 1.0, renderPos.getY() + 9.0 / 16.0, renderPos.getZ() + 1.0).expandTowards(
+                renderHead != null ? renderHead.getX() - renderPos.getX() : 0, 0,
+                renderHead != null ? renderHead.getZ() - renderPos.getZ() : 0);
     }
 }

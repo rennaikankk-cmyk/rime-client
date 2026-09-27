@@ -107,7 +107,8 @@ public class GuangxiElytraChaseModule extends Module {
     private final Setting<Double> followGroundHeightExtra = num("FollowGroundHeightExtra", 2.0, 0.0, 10.0).setPage("General");
 
     // ---- Advanced ----
-    private final Setting<Boolean> maceUseExtraAttack = bool("MaceUseExtraAttack", true).setPage("Advanced");
+    private final Setting<Boolean> maceUseExtraAttack = bool("MaceUseExtraAttack", true).setPage("Advanced")
+            .described("手动下砸模式允许额外普攻；AutoMaceDive 开启时保留真正重击的攻击窗口。");
     private final Setting<Boolean> autoMaceDive = bool("AutoMaceDive", true).setPage("Mace");
     private final Setting<Boolean> macePreSwap = bool("MacePreSwap", false).setPage("Mace");
     private final Setting<Integer> macePreSwapDelay = num("MacePreSwapDelay", 2, 0, 20).setPage("Mace");
@@ -373,7 +374,7 @@ public class GuangxiElytraChaseModule extends Module {
         resetRuntime();
         syncFlightControl();
         if ((mode.getValue() == Mode.MACE || mode.getValue() == Mode.MXS) && !autoMaceDive.getValue()) {
-            dev.guizhou.features.commands.Command.sendMessage("重锤自动下砸未开启：滑翔中不会产生重击。可在 Mace 页开启 AutoMaceDive；需在快捷栏放胸甲。旧配置保留了关闭状态。");
+            dev.guizhou.features.commands.Command.sendMessage("重锤自动下砸未开启：滑翔中不会产生重击。可在 Mace 页开启 AutoMaceDive；背包需有胸甲或空槽用于收翼。旧配置保留了关闭状态。");
         }
     }
 
@@ -1035,6 +1036,7 @@ if (nullCheck() || mc.player == null) {
         boolean terminal;
         double passHeight = Double.NaN;
         int glideSince = Integer.MIN_VALUE;
+        int lastDiveWarningTick = Integer.MIN_VALUE / 2;
         final MacePassTracker pass = new MacePassTracker();
 
         @Override
@@ -1142,13 +1144,19 @@ if (nullCheck() || mc.player == null) {
         int tickFollow(boolean armed) {
             if (target == null) return NONE;
             tryMacePreSwap();
-            if (armed && shouldStartDive() && maceDive.begin()) {
-                wasDiving = true;
-                naturalFallTicks = 12;
-                clearSpearAim();
-                heading = Vec3.ZERO;
-                aimDiveExit();
-                return FOLLOW;
+            if (armed && shouldStartDive()) {
+                if (maceDive.begin()) {
+                    wasDiving = true;
+                    naturalFallTicks = 12;
+                    clearSpearAim();
+                    heading = Vec3.ZERO;
+                    aimDiveExit();
+                    return FOLLOW;
+                }
+                if (mc.player.tickCount - lastDiveWarningTick >= 200) {
+                    lastDiveWarningTick = mc.player.tickCount;
+                    dev.guizhou.features.commands.Command.sendMessage("重锤暂时无法收翼：请保留胸甲或背包空槽，并关闭容器界面。");
+                }
             }
             AABB observedBox = observedTargetBox();
             double distanceSquared = observedBox.distanceToSqr(mc.player.getEyePosition());
@@ -1256,7 +1264,9 @@ if (nullCheck() || mc.player == null) {
             double configuredRange = target instanceof Player p && isUsingSpear(p)
                     ? spearRange.getValue() : combatRange.getValue();
             boolean smash = willUseMaceAttack();
-            boolean ready = smash || maceUseExtraAttack.getValue()
+            // A gliding tap grants the victim hurt immunity just before the real smash.
+            // Extra attacks belong to manual-drop mode, not an automatic smash pass.
+            boolean ready = smash || !autoMaceDive.getValue() && maceUseExtraAttack.getValue()
                     && mc.player.getAttackStrengthScale(0.5F) > 0.95F;
             if (!ready || observedTargetBox().distanceToSqr(mc.player.getEyePosition())
                     > configuredRange * configuredRange || !attack(target)) return false;
@@ -1467,8 +1477,11 @@ if (nullCheck() || mc.player == null) {
                             + mc.player.getDeltaMovement().length()
                             * (SpearCombat.chargeTicks(mc.player.getMainHandItem()) + latencyTicks + 2));
             boolean ownedCharge = weapons.isHoldingUse() || isUsingSpear(mc.player);
-            boolean charge = ownedCharge || !boostRefresh
-                    && mc.player.distanceToSqr(target) <= chargeDistance * chargeDistance;
+            boolean lowUnpowered = targetGrounded && flight != null && !flight.isBoostAttached()
+                    && mc.player.getY() < target.getBoundingBox().minY + 0.9
+                    && mc.player.getDeltaMovement().y < 0;
+            boolean charge = !lowUnpowered && (ownedCharge && (!targetGrounded || !boostRefresh)
+                    || !boostRefresh && mc.player.distanceToSqr(target) <= chargeDistance * chargeDistance);
             boolean armed = prepareWeapon(true, charge);
             makingChargeRoom = false;
             preciseApproach = false;
@@ -1567,14 +1580,14 @@ if (nullCheck() || mc.player == null) {
 
         int tickPullOver() {
             Vec3 tp = targetPos();
-            if (pulledAfterHit) {
+            if (pulledAfterHit || targetGrounded) {
                 double distance = spearPullOverDistance.getValue();
                 if (spearAttackEye().distanceToSqr(tp) >= distance * distance) {
                     pulledAfterHit = false;
                     return FOLLOW;
                 }
             }
-            if (++pullOverTicks > (pulledAfterHit ? 20 : 6)) {
+            if (++pullOverTicks > (targetGrounded ? 30 : pulledAfterHit ? 20 : 6)) {
                 return FOLLOW;
             }
             heading = escapeHeading(tp);
@@ -1590,13 +1603,16 @@ if (nullCheck() || mc.player == null) {
                 if (targetGrounded) away = new Vec3(away.x, 0.0, away.z);
                 if (away.lengthSqr() < 1.0E-9) away = new Vec3(0.0, 0.0, 1.0);
             }
-            return away.lengthSqr() < 36.0 ? away.normalize().scale(6.0) : away;
+            Vec3 result = away.lengthSqr() < 36.0 ? away.normalize().scale(6.0) : away;
+            return groundLane(result);
         }
 
         @Override
         void inject(FlightVelocity fv) {
             super.inject(fv);
-            if (!preciseApproach && fv.value().lengthSqr() > 1.0E-9) {
+            // GZ's diagonal reshaping turns a level ground lane into a steep climb/drop,
+            // making terrain recovery cancel the charge on every approach.
+            if (!targetGrounded && !preciseApproach && fv.value().lengthSqr() > 1.0E-9) {
                 Vec3 current = fv.value();
                 Vec3 diagonal = ElytraPhysics.diagonalGzBoost(current, mc.player.getDeltaMovement());
                 if (diagonal.dot(current) > 0.0 && diagonal.lengthSqr() > 1.0E-9) {
@@ -1615,6 +1631,14 @@ if (nullCheck() || mc.player == null) {
                 noEntry = Math.max(noEntry, SpearCombat.minRange(mc.player, mc.player.getUseItem()) + 0.35);
             }
             AABB interceptBox = target.getBoundingBox().move(targetPacketOffset());
+            if (targetGrounded) {
+                // Vertical separation must not hide the inner dead zone: hovering
+                // directly above a target turns spear aim into a dive into the floor.
+                noEntry = Math.max(noEntry, 3.0);
+                Vec3 eye = spearAttackEye();
+                Vec3 projected = new Vec3(eye.x, interceptBox.getCenter().y, eye.z);
+                if (interceptBox.distanceToSqr(projected) < noEntry * noEntry) return true;
+            }
             return noEntry > 0.1 && interceptBox.distanceToSqr(spearAttackEye())
                     < noEntry * noEntry;
         }
@@ -1629,7 +1653,7 @@ if (nullCheck() || mc.player == null) {
 
         Vec3 approachHeading(Vec3 tp) {
             Vec3 delta = tp.subtract(spearAttackEye());
-            if (!targetGrounded || delta.y >= -2.5) return delta;
+            if (!targetGrounded || delta.y >= -2.5) return groundLane(delta);
             // Establish a shallow approach lane before aiming the weapon. A vertical
             // chase over a grounded target otherwise alternates dive and terrain pull-up.
             Vec3 flat = new Vec3(delta.x, 0.0, delta.z);
@@ -1640,6 +1664,17 @@ if (nullCheck() || mc.player == null) {
                 if (flat.lengthSqr() < 1.0E-6) flat = new Vec3(0.0, 0.0, 1.0);
             } else flat = flat.normalize();
             return flat.add(0.0, -0.18, 0.0).normalize().scale(6.0);
+        }
+
+        private Vec3 groundLane(Vec3 intent) {
+            if (!targetGrounded) return intent;
+            // Aim the weapon at the hitbox separately. Navigating the body to that
+            // same eye point scrapes the floor when armor changes the player's pose.
+            double feetY = target.getBoundingBox().minY + 1.4;
+            double error = feetY - mc.player.getY();
+            double horizontal = intent.horizontalDistance();
+            double vertical = Math.clamp(error * 0.5, -0.08, 0.18) * Math.max(1.0, horizontal);
+            return new Vec3(intent.x, vertical, intent.z);
         }
 
         /** IX.adjustMovementForSpear: sidestep when their charged-spear ray hits us. */

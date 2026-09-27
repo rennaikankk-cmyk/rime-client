@@ -19,7 +19,7 @@ import net.minecraft.world.item.equipment.Equippable;
 import static dev.guizhou.util.traits.Util.EVENT_BUS;
 import static dev.guizhou.util.traits.Util.mc;
 
-/** Exchanges only an owned chest/hotbar pair; vanilla alone supplies fall distance. */
+/** Exchanges only an owned chest/inventory pair; vanilla alone supplies fall distance. */
 public final class MaceDiveController {
     private static final int CHEST_MENU_SLOT = 6;
     private final MaceDiveState state = new MaceDiveState();
@@ -55,11 +55,21 @@ public final class MaceDiveController {
         ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
         if (!usableWings(chest) || !player.inventoryMenu.getSlot(CHEST_MENU_SLOT).mayPickup(player)) return false;
         int candidate = -1;
-        for (int slot = 0; slot < 9; slot++) {
+        for (int slot = 0; slot < 36; slot++) {
+            if (slot == InventoryUtil.selected()) continue;
             ItemStack stack = player.getInventory().getItem(slot);
             if (chestArmor(stack) && player.inventoryMenu.getSlot(CHEST_MENU_SLOT).mayPlace(stack)) {
                 candidate = slot;
                 break;
+            }
+        }
+        // Unequipping into an empty slot also ends gliding; a spare chestplate is optional.
+        if (candidate < 0) {
+            for (int slot = 0; slot < 36; slot++) {
+                if (slot != InventoryUtil.selected() && player.getInventory().getItem(slot).isEmpty()) {
+                    candidate = slot;
+                    break;
+                }
             }
         }
         if (candidate < 0) return false;
@@ -72,7 +82,7 @@ public final class MaceDiveController {
         EVENT_BUS.register(this, "MaceDiveController");
             registered = true;
         }
-        InventoryUtil.click(CHEST_MENU_SLOT, armorSlot, ClickType.SWAP);
+        swapPair();
         if (!ownsPair()) {
             forget();
             return false;
@@ -131,7 +141,7 @@ public final class MaceDiveController {
         lastRecoveryAttempt = player.tickCount;
         if (!player.inventoryMenu.getSlot(CHEST_MENU_SLOT).mayPickup(player)
                 || !player.inventoryMenu.getSlot(CHEST_MENU_SLOT).mayPlace(player.getInventory().getItem(armorSlot))) return;
-        InventoryUtil.click(CHEST_MENU_SLOT, armorSlot, ClickType.SWAP);
+        swapPair();
         if (sameEquipment(wings, player.getItemBySlot(EquipmentSlot.CHEST))
                 && sameEquipment(armor, player.getInventory().getItem(armorSlot))) {
             forget();
@@ -148,6 +158,18 @@ public final class MaceDiveController {
                 && sameEquipment(wings, player.getInventory().getItem(armorSlot));
     }
 
+    private void swapPair() {
+        if (armorSlot < 9) {
+            InventoryUtil.click(CHEST_MENU_SLOT, armorSlot, ClickType.SWAP);
+            return;
+        }
+        // Main inventory is not a SWAP button. Complete the normal cursor exchange
+        // synchronously and leave no carried stack between ticks, including empty-slot dives.
+        InventoryUtil.click(armorSlot, 0, ClickType.PICKUP);
+        InventoryUtil.click(CHEST_MENU_SLOT, 0, ClickType.PICKUP);
+        if (!player.inventoryMenu.getCarried().isEmpty()) InventoryUtil.click(armorSlot, 0, ClickType.PICKUP);
+    }
+
     private boolean safeInventory() {
         return sameSession() && mc.gameMode != null && mc.getConnection() != null && mc.screen == null
                 && !player.isDeadOrDying() && !player.isSpectator()
@@ -161,7 +183,7 @@ public final class MaceDiveController {
 
     static boolean recoverySlotAvailable(int selected, int wingsSlot) {
         // Equipment recovery may run during food use, but must never replace the held stack.
-        return selected >= 0 && selected < 9 && wingsSlot >= 0 && wingsSlot < 9 && selected != wingsSlot;
+        return selected >= 0 && selected < 9 && wingsSlot >= 0 && wingsSlot < 36 && selected != wingsSlot;
     }
 
     private boolean chestArmor(ItemStack stack) {
@@ -181,7 +203,7 @@ public final class MaceDiveController {
     }
 
     static boolean sameEquipment(ItemStack expected, ItemStack actual) {
-        if (expected.isEmpty() || actual.isEmpty()) return false;
+        if (expected.isEmpty() || actual.isEmpty()) return expected.isEmpty() && actual.isEmpty();
         ItemStack left = expected.copy();
         ItemStack right = actual.copy();
         left.remove(DataComponents.DAMAGE);

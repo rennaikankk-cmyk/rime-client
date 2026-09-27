@@ -53,6 +53,7 @@ public class HudClientModule extends Module {
     public Setting<HudPosition> coordinatesPosition;
     public Setting<HudPosition> activeModulesPosition;
     public Setting<ActiveModulesHudModule.Sort> activeModulesSort;
+    public Setting<ActiveModulesHudModule.Source> activeModulesSource;
     public Setting<Boolean> activeModulesEdge;
     public Setting<Boolean> pingShowTps;
     public Setting<Boolean> pingShowFps;
@@ -73,6 +74,8 @@ public class HudClientModule extends Module {
         register(new ActiveModulesHudModule(), true);
         activeModulesPosition = mode("ActiveModules Position", HudPosition.CENTER_RIGHT).setPage("Elements");
         activeModulesSort = mode("ActiveModules 排序", ActiveModulesHudModule.Sort.ADDED).setPage("ActiveModules");
+        activeModulesSource = mode("ActiveModules 来源", ActiveModulesHudModule.Source.ENABLED).setPage("ActiveModules")
+                .described("ENABLED 自动显示已开启模块；WATCHLIST 显示手动添加的关注列表。");
         activeModulesEdge = bool("ActiveModules 渐变边条", true).setPage("ActiveModules");
         register(new NotifierHudModule(), true);
         notifierCorner = mode("Notifier 角落", NotifierHudModule.Corner.TOP_LEFT).setPage("Notifier");
@@ -142,7 +145,7 @@ public class HudClientModule extends Module {
 
     private int lineCount(HudModule element) {
         if (element instanceof RadarHudModule radar) return radar.renderedLineCount();
-        if (element instanceof ActiveModulesHudModule active) return active.getEntries().size();
+        if (element instanceof ActiveModulesHudModule active) return active.renderedLineCount();
         return 1;
     }
 
@@ -171,7 +174,10 @@ public class HudClientModule extends Module {
             // Stack members draw bottom-up in registration order, so earlier ones are measured this frame.
             if (other.wasRendered()) height += other.boundH() + 4;
             else if (other instanceof RadarHudModule radar) height += radar.renderedLineCount() * 12 + 26;
-            else if (other instanceof ActiveModulesHudModule active) height += active.getEntries().size() * 13 + 16;
+            else if (other instanceof ActiveModulesHudModule active) {
+                int rows = active.renderedLineCount();
+                if (rows > 0) height += rows * 13 + 16;
+            }
             else height += 34;
         }
         return height;

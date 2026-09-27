@@ -66,8 +66,8 @@ public class MoveLimitDebug implements Util {
 
         String value = String.valueOf(lastCount);
         String label = " move/s (local)";
-        ctx.drawString(mc.font, value, LEFT_MARGIN, ry, GRAY);
-        ctx.drawString(mc.font, label, LEFT_MARGIN + mc.font.width(value), ry, WHITE);
+        dev.guizhou.util.render.font.Fonts.drawString(ctx, value, LEFT_MARGIN, ry, GRAY);
+        dev.guizhou.util.render.font.Fonts.drawString(ctx, label, LEFT_MARGIN + dev.guizhou.util.render.font.Fonts.width(value), ry, WHITE);
     }
 
     private int bottomAnchor() {

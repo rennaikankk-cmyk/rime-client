@@ -24,8 +24,8 @@ import static com.mojang.brigadier.arguments.StringArgumentType.word;
 public class ActiveModulesCommand extends Command {
     public ActiveModulesCommand() {
         super("activemodules", "am");
-        setDescription("Manages the ActiveModules HUD list");
-        category(CommandCategory.MODULES).summary("管理 ActiveModules HUD 的显示列表")
+        setDescription("Manages the optional ActiveModules HUD watchlist");
+        category(CommandCategory.MODULES).summary("管理手动关注列表；HUD 来源设为 WATCHLIST 时显示")
                 .usage("list", "查看列表")
                 .usage("add <模块>", "加入列表")
                 .usage("remove <模块>", "移出列表")
@@ -46,7 +46,7 @@ public class ActiveModulesCommand extends Command {
                                     if (!h.add(name)) {
                                         return warn("%s 已在列表中", module.getDisplayName());
                                     }
-                                    return success("已将 {text} %s {} 加入 ActiveModules", module.getDisplayName());
+                                    return success("已将 {text} %s {} 加入关注列表；HUD 来源设为 WATCHLIST 时显示", module.getDisplayName());
                                 })))
                 .then(literal("remove")
                         .then(argument("module", word())
@@ -58,14 +58,14 @@ public class ActiveModulesCommand extends Command {
                                     if (!h.remove(name)) {
                                         return warn("%s 不在列表中", name);
                                     }
-                                    return success("已将 {text} %s {} 移出 ActiveModules", name);
+                                    return success("已将 {text} %s {} 移出关注列表", name);
                                 })))
                 .then(literal("clear")
                         .executes((ctx) -> {
                             ActiveModulesHudModule h = ActiveModulesHudModule.getInstance();
                             if (h == null) return fail("未找到 ActiveModules HUD 元素");
                             h.clear();
-                            return success("已清空 ActiveModules 列表");
+                            return success("已清空手动关注列表；自动显示已开启模块不受影响");
                         }))
                 .then(literal("list")
                         .executes((ctx) -> {
@@ -73,11 +73,11 @@ public class ActiveModulesCommand extends Command {
                             if (h == null) return fail("未找到 ActiveModules HUD 元素");
                             List<String> entries = h.getEntries();
                             if (entries.isEmpty()) {
-                                return replyKeyed("list", ChatTone.MUTED, Component.literal("ActiveModules 列表为空"));
+                                return replyKeyed("list", ChatTone.MUTED, Component.literal("手动关注列表为空；默认自动显示已开启模块"));
                             }
                             String prefix = ctx.getSource().getCommandPrefix();
                             MutableComponent body = Component.empty()
-                                    .append(ChatFeed.text("ActiveModules " + entries.size() + "  ", ChatPalette.TEXT));
+                                    .append(ChatFeed.text("关注列表 " + entries.size() + "  ", ChatPalette.TEXT));
                             for (int i = 0; i < entries.size(); i++) {
                                 if (i > 0) body.append(ChatFeed.text(" · ", ChatPalette.SUBTLE));
                                 String entry = entries.get(i);
