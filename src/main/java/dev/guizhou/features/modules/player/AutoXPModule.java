@@ -1,20 +1,14 @@
 package dev.guizhou.features.modules.player;
 
-import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.entity.player.TickEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.commands.Command;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Bind;
 import dev.guizhou.features.settings.Setting;
-import dev.guizhou.manager.RotationRequest;
-import dev.guizhou.util.inventory.SwapMode;
-import dev.guizhou.util.inventory.SwapPriority;
-import dev.guizhou.mixin.client.ClientLevelAccessor;
 import dev.guizhou.util.EnchantmentUtil;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.Result;
-import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -26,6 +20,12 @@ public class AutoXPModule extends Module {
     private final Setting<Bind> throwBind = key("Throw", Bind.none());
     private final Setting<Boolean> pauseInAir = bool("PauseInAir", true);
     private final Setting<Boolean> autoRepair = bool("AutoRepair", false);
+    private final Setting<Boolean> nearCeiling = bool("NearCeiling", false)
+            .described("空中贴近顶板时也允许修甲；GZBoost、空战与甲飞换装期间仍让行。");
+    private final Setting<Boolean> steepAscent = bool("SteepAscent", false)
+            .described("近乎垂直上升时也允许修甲，默认关闭。");
+    private final Setting<Boolean> avoidEnemies = bool("AvoidEnemies", false)
+            .described("附近两格有非好友玩家时暂停投瓶。");
 
     private static final int THROWS_PER_BATCH = 6;
     private static final long BATCH_INTERVAL_MS = 300;
@@ -40,6 +40,7 @@ public class AutoXPModule extends Module {
 
     @Override
     public void onDisable() {
+        dev.guizhou.util.inventory.ItemUseTracker.cancel("AutoXP");
         throwing = false;
         keyWasDown = false;
         lastThrowMs = 0;
@@ -47,14 +48,18 @@ public class AutoXPModule extends Module {
 
     @Override
     public String getDisplayInfo() {
-        if (!throwing) return null;
-        if (!nullCheck() && isPaused()) return "Paused";
+        if (!throwing && !autoRepair.getValue()) return null;
+        String pause = dev.guizhou.util.combat.UtilityActionGuard.pauseReason();
+        if (pause != null) return pause;
+        if (dev.guizhou.util.inventory.ItemUseTracker.waiting("AutoXP")) return "等待动作确认";
+        if (!nullCheck() && isPaused()) return "等待投瓶条件";
         return xpNeeded() + " XP";
     }
 
     @Subscribe
     private void onTick(TickEvent event) {
         if (nullCheck()) return;
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
 
         handleThrowBind();
 
@@ -73,7 +78,11 @@ public class AutoXPModule extends Module {
     }
 
     private boolean isPaused() {
-        return pauseInAir.getValue() && !mc.player.onGround();
+        if (dev.guizhou.util.combat.UtilityActionGuard.pauseReason() != null
+                || dev.guizhou.util.inventory.ItemUseTracker.waiting("AutoXP")) return true;
+        if (avoidEnemies.getValue() && dev.guizhou.util.combat.ThrowEnvironment.nearEnemy(2)) return true;
+        return pauseInAir.getValue() && !dev.guizhou.util.combat.ThrowEnvironment.accepts(
+                true, nearCeiling.getValue(), steepAscent.getValue(), false, .5);
     }
 
     private void handleThrowBind() {
@@ -115,21 +124,13 @@ public class AutoXPModule extends Module {
 
         float yaw = mc.player.getYRot();
         float pitch = 90f;
-        GuizhouWare.rotationManager.submit(new RotationRequest("AutoXP", 40, yaw, pitch, RotationRequest.Mode.SILENT));
-        mc.gameMode.ensureHasSentCarriedItem();
-        GuizhouWare.swapManager.withSwap(xp, SwapMode.ALTSILENT, SwapPriority.UTILITY, () -> {
-            for (int i = 0; i < amount; i++) {
-                try (var handler = ((ClientLevelAccessor) mc.level).guizhouware$getBlockStatePredictionHandler().startPredicting()) {
-                    mc.getConnection().send(new ServerboundUseItemPacket(xp.hand(), handler.currentSequence(), yaw, pitch));
-                }
-            }
-        });
+        if (dev.guizhou.util.inventory.ItemUseTracker.useBatch("AutoXP", xp, yaw, pitch, null, amount) > 0)
+            lastThrowMs = System.currentTimeMillis();
     }
 
     private boolean shouldThrowNow() {
         long now = System.currentTimeMillis();
         if (now - lastThrowMs < BATCH_INTERVAL_MS) return false;
-        lastThrowMs = now;
         return true;
     }
 

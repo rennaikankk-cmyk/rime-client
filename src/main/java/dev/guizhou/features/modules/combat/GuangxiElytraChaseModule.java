@@ -93,13 +93,15 @@ public class GuangxiElytraChaseModule extends Module {
     private final Setting<Integer> range = num("Range", 80, 8, 256).setPage("General");
     private final Setting<Boolean> playerOnly = bool("PlayerOnly", true).setPage("General");
     private final Setting<Boolean> dynamicTarget = bool("DynamicTarget", false).setPage("General");
-    private final Setting<Boolean> autoControlElytra = bool("AutoControlElytra", true).setPage("General");
+    private final Setting<Boolean> autoControlElytra = bool("AutoControlElytra", true).setPage("General")
+            .described("有目标时由空战接管航向；手动已开启的 GZBoost 在空战让出控制后继续工作。");
     private final Setting<Boolean> autoWeapon = bool("AutoWeapon", true).setPage("General");
     private final Setting<Boolean> autoSpearUse = bool("AutoSpearUse", true).setPage("General");
     private final Setting<Boolean> adaptiveCombat = bool("AdaptiveCombat", true).setPage("General");
     private final Setting<ThreatMode> threatMode = mode("ThreatMode", ThreatMode.ALL_PLAYERS).setPage("General");
     private final Setting<Boolean> avoidObstacles = bool("AvoidObstacles", true).setPage("General");
-    private final Setting<Boolean> onlyWhenNoWasd = bool("OnlyWhenNoWasd", false).setPage("General");
+    private final Setting<Boolean> onlyWhenNoWasd = bool("OnlyWhenNoWasd", false).setPage("General")
+            .described("按 WASD 时暂停追击与武器控制，交回手动飞行；适合与 GZBoost 配合赶路。");
     private final Setting<Double> combatRange = num("CombatRange", 10.0, 1.0, 64.0).setPage("General");
     private final Setting<Double> spearRange = num("SpearRange", 11.0, 1.0, 64.0).setPage("General");
     private final Setting<Double> followGroundHeightExtra = num("FollowGroundHeightExtra", 2.0, 0.0, 10.0).setPage("General");
@@ -2052,6 +2054,10 @@ if (nullCheck() || mc.player == null) {
 
     @Override
     public String getDisplayInfo() {
+        if (mc.player == null) return "等待进入世界";
+        if (manualOverride()) return "手动飞行优先";
+        if (!isValid(target)) return "等待目标";
+        if (paused()) return "暂停 / 回拉恢复";
         if (maceDive.isActive()) return "Dive/" + maceDive.phase();
         if (combatAction != AerialCombatPolicy.Action.CHASE) return combatAction.name();
         Behavior b = behavior;

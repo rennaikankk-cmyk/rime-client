@@ -75,6 +75,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
         swapManager.init();
         commandManager.init();
         moduleManager.init();
+        dev.guizhou.util.inventory.ItemUseTracker.init();
         friendManager.init();
         enemyManager.init();
         playerInfoManager.init();

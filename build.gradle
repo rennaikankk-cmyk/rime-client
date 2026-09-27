@@ -171,6 +171,8 @@ def clientRegressionTests = [
         armorFlyConfigMigrationTest: 'dev.guizhou.util.ArmorFlyConfigMigrationTest',
         autoUseWhitelistTest: 'dev.guizhou.util.player.AutoUseWhitelistTest',
         itemUseOwnershipTest: 'dev.guizhou.util.player.ItemUseOwnershipTest',
+        pendingSequencesTest: 'dev.guizhou.util.inventory.PendingSequencesTest',
+        glideMetadataDelayTest: 'dev.guizhou.util.elytra.GlideMetadataDelayTest',
         fontPageTest: 'dev.guizhou.util.render.font.FontPageTest',
         fontRecoveryTest: 'dev.guizhou.util.render.font.FontRecoveryTest',
         targetMotionTrackerTest: 'dev.guizhou.util.elytra.TargetMotionTrackerTest',

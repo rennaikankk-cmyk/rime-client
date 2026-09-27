@@ -185,6 +185,8 @@ public class GuangxiElytraModule extends Module {
     private long lastTriggerTick = Long.MIN_VALUE / 2;
     private long freezeStartTick;
     private long boostRetryTick;
+    private boolean combatOwnedLastTick;
+    private long combatHandoffUntil;
     private ServerboundMovePlayerPacket sendingTrigger;
     private final AtomicBoolean correctionPending = new AtomicBoolean();
     private LocalPlayer statePlayer;
@@ -324,7 +326,7 @@ public class GuangxiElytraModule extends Module {
     }
 
     public boolean wantsArmorSwap() {
-        return armorFlyRequested() && mc.player != null && !correctionPending.get()
+        return armorFlyRequested() && !ArmorFlyModule.yieldsToCruise() && mc.player != null && !correctionPending.get()
                 && mc.player.tickCount >= boostRetryTick
                 && !dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()
                 && !needsLandingRecovery();
@@ -444,6 +446,8 @@ public class GuangxiElytraModule extends Module {
         boostTickActive = false;
         lastTriggerTick = Long.MIN_VALUE / 2;
         boostRetryTick = 0;
+        combatOwnedLastTick = false;
+        combatHandoffUntil = 0;
         ticksSinceRocket = refireTicks;
         boostScanTick = Integer.MIN_VALUE;
         attachedBoost = false;
@@ -506,6 +510,7 @@ public class GuangxiElytraModule extends Module {
             resetFlightState();
             boostRetryTick = (long) mc.player.tickCount + correctionPauseTicks.getValue();
         }
+        synchronizeCombatHandoff();
         scanAttachedBoosts();
         syncPlanningContext();
         if (!cruiseEligible()) resetCruise();
@@ -783,6 +788,19 @@ public class GuangxiElytraModule extends Module {
         if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive()
                 || dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()) return false;
         return true;
+    }
+
+    private void synchronizeCombatHandoff() {
+        boolean combatOwnsFlight = chaseActive() || chaseWantsFlight()
+                || dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive()
+                || dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent();
+        if (combatOwnedLastTick != combatOwnsFlight && gzBoost.getValue()) {
+            // Synchronize the previous controller's impulse/look before either controller takes over.
+            resetCruise(); lastLook = null; lastApplied = null;
+            combatHandoffUntil = (long) mc.player.tickCount + 3;
+            boostRetryTick = Math.max(boostRetryTick, combatHandoffUntil);
+        }
+        combatOwnedLastTick = combatOwnsFlight;
     }
 
     private boolean cruiseEligible() {
@@ -1792,8 +1810,14 @@ public class GuangxiElytraModule extends Module {
             case VOID -> "Void";
         };
         if (freezing) return m + "·Freeze";
-        if (armorFlyRequested()) return m + (armorSwap.active() ? "·ArmorFly" : "·ArmorWait");
-        if (chaseActive()) return m + "·Chase";
+        if (mc.player != null && mc.player.tickCount < combatHandoffUntil) return m + "·空战交接";
+        if (mc.player != null && (correctionPending.get() || mc.player.tickCount < boostRetryTick)) return m + "·回拉恢复";
+        if (safetySteering) return m + "·避障";
+        if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()) return m + "·下砸让行";
+        if (chaseActive() || chaseWantsFlight()) return m + "·空战" + (armorSwap.active() ? "·甲飞" : "");
+        if (gzBoostControlsLook()) m += gzBoostWave.getValue() && gzBoostMode.getValue() == CoupledCruise.BoostMode.Aggressive
+                ? (gzBoostWaveRange.getValue() == WaveRange.Long1000 ? "·往返1000" : "·往返220") : "·GZBoost";
+        if (armorFlyRequested()) return m + (armorSwap.active() ? "·甲飞" : ArmorFlyModule.yieldsToCruise() ? "·甲飞待命" : "·等待换装");
         return m;
     }
 }
