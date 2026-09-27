@@ -60,12 +60,13 @@ public final class ArmorFlyModule extends Module {
 
     @Subscribe(priority = 200)
     private void onPreTick(PreTickEvent event) {
-        ensureMetadataSession();
-        if (mc.player != null && (metadata.due(mc.player.tickCount) || !metadataEligible())) flushMetadata();
         if (!HeartbeatManager.authorized()) {
+            flushMetadata();
             HeartbeatManager.notifyDeniedOnce();
             return;
         }
+        ensureMetadataSession();
+        if (mc.player != null && (metadata.due(mc.player.tickCount) || !metadataEligible())) flushMetadata();
         var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
         if (flight != null) flight.monitorArmorFly();
     }

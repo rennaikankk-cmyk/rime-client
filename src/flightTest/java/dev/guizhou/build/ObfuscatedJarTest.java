@@ -372,7 +372,9 @@ public final class ObfuscatedJarTest {
                     "Denied tick can branch or schedule new business: " + label);
             if (step.opcode >= Opcodes.INVOKEVIRTUAL && step.opcode <= Opcodes.INVOKEINTERFACE) {
                 boolean notification = member(step, Opcodes.INVOKESTATIC, HEARTBEAT, "notifyDeniedOnce", "()V");
-                boolean ownCleanup = owner.name.equals(step.owner) && cleanup.contains(step.name) && step.descriptor.equals("()V");
+                boolean restoresGlide = owner.name.endsWith("/ArmorFlyModule") && step.name.equals("flushMetadata");
+                boolean ownCleanup = owner.name.equals(step.owner) && (cleanup.contains(step.name) || restoresGlide)
+                        && step.descriptor.equals("()V");
                 boolean clear = step.name.equals("clear") && step.descriptor.equals("()V")
                         && (step.owner.startsWith("java/util/") || step.owner.equals("dev/guizhou/features/modules/combat/MiningBreakTracker"));
                 check(notification || ownCleanup || clear, "Denied tick calls normal business: " + label + " -> " + step.name);
