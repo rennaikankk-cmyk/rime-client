@@ -14,6 +14,7 @@ import dev.guizhou.manager.PlacementManager;
 import dev.guizhou.util.DamageSyncTracker;
 import dev.guizhou.util.combat.CrystalAttackWindow;
 import dev.guizhou.util.combat.CrystalSelectionPolicy;
+import dev.guizhou.util.combat.CrystalMotionPrediction;
 import dev.guizhou.util.combat.CrystalWeaponDamage;
 import dev.guizhou.util.inventory.SwapPriority;
 import dev.guizhou.util.combat.CrystalRetryTracker;
@@ -139,6 +140,7 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<CrystalLogic> logic = mode("Logic", CrystalLogic.DEFAULT).setPage("General");
 
     private final Setting<Boolean> predict          = bool("Predict", true).setPage("Sync");
+    private final Setting<Boolean> adaptivePredict = bool("AdaptivePredict", true).setPage("Sync");
     private final Setting<Integer> predictTicks     = num("PredictTicks", 4, 0, 20).setPage("Sync");
     private final Setting<Double>  maxMotionY       = num("MaxMotionY", 0.34, 0.0, 2.0).setPage("Sync");
     private final Setting<Integer> selfPredictTicks = num("SelfPredict", 0, 0, 20).setPage("Sync");
@@ -253,6 +255,7 @@ public class GuangxiCrystalModule extends Module {
                              int epf, float resistanceMultiplier, Difficulty difficulty) {}
 
     private SelfCache selfCache = null;
+    private List<Vec3> selfPath = List.of();
     // tick-scoped entity snapshot: candidate-cell occupancy filters in memory instead of
     // one world query per candidate (O(candidates) queries -> O(1) per decision cycle)
     private volatile List<Entity> entitySnapshot = List.of();
@@ -390,6 +393,7 @@ public class GuangxiCrystalModule extends Module {
         antiChineseEnemyRange.setVisibility(v -> antiChinese.getValue());
         placeRange.setVisibility(v -> rangePreset.getValue() == RangePreset.CUSTOM);
         breakRange.setVisibility(v -> rangePreset.getValue() == RangePreset.CUSTOM);
+        adaptivePredict.setVisibility(v -> predict.getValue() && !rusherLogic());
         predictTicks.setVisibility(v -> predict.getValue());
         maxMotionY.setVisibility(v -> predict.getValue());
         selfPredictTicks.setVisibility(v -> predict.getValue());
@@ -437,6 +441,7 @@ public class GuangxiCrystalModule extends Module {
         lastCarriedSlot = -1;
         ownSwapPackets.set(0);
         selfCache = null;
+        selfPath = List.of();
         entitySnapshot = List.of();
         entitySnapshotTick = -1;
         reachEyeTick = Integer.MIN_VALUE;
@@ -1477,7 +1482,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         }
 
         candidates.sort((a, b) -> Float.compare(b.bound, a.bound));
-        promoteRankedCandidate();
+        // DEFAULT must retain the descending bound order used by lock release and pruning.
+        // The old asynchronous hint only repeats last pass's bound maximum.
+        if (rusherLogic()) promoteRankedCandidate();
 
         BlockPos locked = null;
         if (lastPlaceAir != null) {
@@ -1799,7 +1806,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             Vec3 tPos = living.position();
             AABB tBox = living.getBoundingBox();
             if (predict.getValue() && predictTicks.getValue() > 0) {
-                Vec3 p = PredictUtil.predict(living, predictTicks.getValue(), maxMotionY.getValue());
+                Vec3 p;
+                if (rusherLogic()) {
+                    p = PredictUtil.predict(living, predictTicks.getValue(), maxMotionY.getValue());
+                } else {
+                    List<Vec3> path = predictCrystalPath(living, predictionHorizon(predictTicks.getValue()));
+                    p = path.get(path.size() - 1);
+                }
                 tPos = p;
                 tBox = tBox.move(p.x - living.getX(), p.y - living.getY(), p.z - living.getZ());
             }
@@ -2153,9 +2166,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private float targetDamage(TargetCache tc, double dist, double exposure) {
-        if (exposure <= 0) return 0;
-        double impact = (1.0 - dist / 12.0) * exposure;
-        if (impact <= 0) return 0;
+        if (rusherLogic() && exposure <= 0) return 0;
+        double impact = Math.max(0, (1.0 - dist / 12.0) * exposure);
+        if (rusherLogic() && impact <= 0) return 0;
 
         float dmg = baseExplosionDamage(impact, selfNow().difficulty());
         return ExplosionDamageModel.reduce(dmg, tc.armor, tc.toughness, tc.resistanceMultiplier, tc.protPoints);
@@ -2164,6 +2177,10 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     private float maxDamageSelf(Vec3 explosionPos) {
         SelfCache sc = selfNow();
         double dist = Math.min(sc.pos().distanceTo(explosionPos), sc.currentPos().distanceTo(explosionPos));
+        if (!rusherLogic() && selfPath.size() > 1) {
+            for (Vec3 point : selfPath) dist = Math.min(dist, point.distanceTo(explosionPos));
+            dist = Math.max(0, dist - CrystalMotionPrediction.SAMPLE_SPACING / 2);
+        }
         if (dist > 12.0) return 0;
         return selfDamage(dist, 1.0, sc);
     }
@@ -2175,7 +2192,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         Float cached = selfDamageCache.get(key);
         if (cached != null) return cached;
         float damage = selfDamageAt(sc, sc.currentPos(), sc.currentBox(), explosionPos, phantomObsidianPos);
-        if (!sc.pos().equals(sc.currentPos())) {
+        if (!rusherLogic()) {
+            for (int i = 1; i < selfPath.size(); i++) {
+                Vec3 point = selfPath.get(i);
+                damage = Math.max(damage, selfDamageAt(sc, point,
+                        sc.currentBox().move(point.subtract(sc.currentPos())), explosionPos, phantomObsidianPos));
+            }
+        } else if (!sc.pos().equals(sc.currentPos())) {
             damage = Math.max(damage, selfDamageAt(sc, sc.pos(), sc.box(), explosionPos, phantomObsidianPos));
         }
         selfDamageCache.put(key, damage);
@@ -2185,8 +2208,32 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     private float selfDamageAt(SelfCache sc, Vec3 position, AABB box, Vec3 explosionPos, BlockPos phantomBase) {
         double dist = position.distanceTo(explosionPos);
         if (dist > 12.0) return 0;
-        double exposure = calcExposure(explosionPos, box, phantomBase);
+        double exposure = calcExposure(explosionPos, box, phantomBase, true);
         return selfDamage(dist, exposure, sc);
+    }
+
+    private int predictionHorizon(int configured) {
+        if (!adaptivePredict.getValue()) return configured;
+        var connection = mc.getConnection();
+        var info = connection == null ? null : connection.getPlayerInfo(mc.player.getUUID());
+        int latency = info == null ? 0 : info.getLatency();
+        return CrystalMotionPrediction.horizon(configured, latency,
+                50.0 * GuizhouWare.tpsCounterService.delayScale());
+    }
+
+    private List<Vec3> predictCrystalPath(LivingEntity entity, int ticks) {
+        Vec3 motion = entity == mc.player ? entity.getDeltaMovement()
+                : entity.position().subtract(entity.xOld, entity.yOld, entity.zOld);
+        if (entity == mc.player) {
+            var flight = GuizhouWare.moduleManager.getModuleByClass(
+                    dev.guizhou.features.modules.movement.GuangxiElytraModule.class);
+            Vec3 applied = flight == null ? null : flight.forecastCombatVelocity();
+            if (applied != null) motion = applied;
+        }
+        if (!entity.isFallFlying()) motion = new Vec3(motion.x, Math.min(motion.y, maxMotionY.getValue()), motion.z);
+        return CrystalMotionPrediction.trace(entity.position(), entity.getBoundingBox(), motion, ticks,
+                !entity.onGround() && !entity.isFallFlying() && !entity.isNoGravity() && !entity.isInWater(),
+                box -> mc.level.noCollision(entity, box));
     }
 
     private boolean selfPredictionActive() {
@@ -2219,7 +2266,16 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         AABB currentBox = mc.player.getBoundingBox();
         Vec3 pos = currentPos;
         AABB box = currentBox;
-        if (selfPredictionActive()) {
+        selfPath = List.of(currentPos);
+        if (!rusherLogic() && predict.getValue()) {
+            int horizon = selfPredictTicks.getValue();
+            // Zero retains stationary behavior; adaptive mode covers fast flight automatically.
+            if (horizon == 0 && adaptivePredict.getValue()
+                    && (mc.player.isFallFlying() || mc.player.getDeltaMovement().lengthSqr() > 0.64)) horizon = 2;
+            selfPath = predictCrystalPath(mc.player, predictionHorizon(horizon));
+            pos = selfPath.get(selfPath.size() - 1);
+            box = currentBox.move(pos.subtract(currentPos));
+        } else if (selfPredictionActive()) {
             Vec3 p = PredictUtil.predict(mc.player, selfPredictTicks.getValue(), maxMotionY.getValue());
             pos = p;
             box = box.move(p.x - mc.player.getX(), p.y - mc.player.getY(), p.z - mc.player.getZ());
@@ -2251,9 +2307,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private float selfDamage(double dist, double exposure, SelfCache sc) {
-        if (exposure <= 0) return 0;
-        double impact = (1.0 - dist / 12.0) * exposure;
-        if (impact <= 0) return 0;
+        if (rusherLogic() && exposure <= 0) return 0;
+        double impact = Math.max(0, (1.0 - dist / 12.0) * exposure);
+        if (rusherLogic() && impact <= 0) return 0;
 
         float dmg = baseExplosionDamage(impact, sc.difficulty());
         return ExplosionDamageModel.reduce(dmg, sc.armor(), sc.toughness(), sc.resistanceMultiplier(), sc.epf());
@@ -2303,6 +2359,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private double calcExposure(Vec3 source, AABB box, BlockPos phantomObsidianPos) {
+        // DEFAULT target damage uses confirmed geometry. Rusher retains its original forecast.
+        return calcExposure(source, box, phantomObsidianPos, rusherLogic());
+    }
+
+    private double calcExposure(Vec3 source, AABB box, BlockPos phantomObsidianPos, boolean projected) {
         double dx = box.getXsize();
         double dy = box.getYsize();
         double dz = box.getZsize();
@@ -2322,11 +2383,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 return Shapes.block().clip(from, to, pos);
             }
 
-            if (!seeThrough.isEmpty() && seeThrough.contains(pos)) return null;
+            if (projected && !seeThrough.isEmpty() && seeThrough.contains(pos)) return null;
             BlockState state = getStateFast(pos);
             if (state.isAir()) return null;
 
-            if (blockDestruction.getValue() && state.getBlock().getExplosionResistance() < EXPLODABLE_RESISTANCE) return null;
+            if (projected && blockDestruction.getValue() && state.getBlock().getExplosionResistance() < EXPLODABLE_RESISTANCE) return null;
 
             VoxelShape shape = state.getCollisionShape(mc.level, pos);
             if (shape.isEmpty()) return null;

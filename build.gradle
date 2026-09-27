@@ -207,6 +207,7 @@ def clientRegressionTests = [
         targetsArmorStandHookTest: 'dev.guizhou.features.modules.client.TargetsArmorStandHookTest',
         targetHudMathTest: 'dev.guizhou.util.render.targethud.TargetHudMathTest',
         maceDropStepClampTest: 'dev.guizhou.util.elytra.MaceDropStepClampTest',
+        crystalMotionPredictionTest: 'dev.guizhou.util.combat.CrystalMotionPredictionTest',
         crystalSelectionPolicyTest: 'dev.guizhou.util.combat.CrystalSelectionPolicyTest',
         crystalWeaponDamageTest: 'dev.guizhou.util.combat.CrystalWeaponDamageTest',
         guardActionGateTest: 'dev.guizhou.util.license.GuardActionGateTest',

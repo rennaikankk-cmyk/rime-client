@@ -21,7 +21,23 @@ public final class CoupledCruiseTest {
         acceleratedClimb();
         boostModeSelection();
         longWaveWindow();
+        forecastDoesNotAdvanceState();
         System.out.println("CoupledCruiseTest passed: " + checks + " checks");
+    }
+
+    private static void forecastDoesNotAdvanceState() {
+        Config cfg = new Config(15, -45, 30, true, -1.7, true, 1000, 14.5, 1.7, .002);
+        CoupledCruise live = new CoupledCruise(), control = new CoupledCruise();
+        for (int i = 0; i < 200; i++) {
+            Intent input = new Intent(NORTH, i < 60 ? -1 : i < 100 ? 1 : 0, false, true);
+            double y = 2500 - i * 12;
+            Selection expected = control.select(cfg, input, 0, y, true);
+            for (int probe = 0; probe < 4; probe++) {
+                check(live.previewSelection(cfg, input, 0, y, true).equals(expected),
+                        "repeated combat previews preserve bank and wave phase");
+            }
+            check(live.select(cfg, input, 0, y, true).equals(expected), "actual movement unchanged by preview");
+        }
     }
 
     private static void longWaveWindow() {

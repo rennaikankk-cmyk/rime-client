@@ -941,6 +941,30 @@ public class GuangxiElytraModule extends Module {
         return lastAppliedBpt;
     }
 
+    /** Read-only combat forecast input: coupled movement can exceed vanilla deltaMovement. */
+    private Vec3 recentAppliedVelocity() {
+        if (!isEnabled() || mc.player == null || !mc.player.isFallFlying()) return null;
+        long age = (long)mc.player.tickCount - lastAppliedTick;
+        return age >= 0 && age <= 1 ? lastApplied : null;
+    }
+
+    /** Prediction only: no steering, rotation packets, rocket use, or controller state mutation. */
+    public Vec3 forecastCombatVelocity() {
+        Vec3 incoming = recentAppliedVelocity();
+        if (incoming == null || !isCruiseActive() || !cruiseEligible() || pendingSafetySteering
+                || mc.player.horizontalCollision || mc.player.verticalCollision) return incoming;
+        CoupledCruise.Config config = cruiseConfig();
+        CoupledCruise.Selection selection = cruiseController.previewSelection(config, cruiseInput(),
+                viewAnchor.yaw(), mc.player.getY(), dualViewAvailable());
+        if (!selection.active()) return incoming;
+        Vec3 simulated = ElytraPhysics.simulateGlide(incoming, selection.look(),
+                mc.player.getAttributeValue(Attributes.GRAVITY));
+        if (!attachedBoost) return simulated;
+        CoupledCruise.Result result = cruiseController.apply(config, selection, incoming, simulated,
+                selection.look(), lastLook == null ? selection.look() : lastLook);
+        return result.feasible() ? result.velocity() : simulated;
+    }
+
     private void noteGlideCommand() {
         if (mc.player != null) glideCommandTick = mc.player.tickCount;
     }

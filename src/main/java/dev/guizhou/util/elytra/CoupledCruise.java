@@ -104,6 +104,17 @@ public final class CoupledCruise {
 
     public Phase phase() { return phase; }
 
+    /** Preview the next selection without advancing banking or height-cycle state. */
+    public Selection previewSelection(Config config, Intent intent, double headingYaw, double playerY, boolean dualView) {
+        CoupledCruise copy = new CoupledCruise();
+        copy.acceleratedReferenceY = acceleratedReferenceY;
+        copy.bankSide = bankSide;
+        copy.referenceY = referenceY;
+        copy.phase = phase;
+        copy.lastConfig = lastConfig;
+        return copy.select(config, intent, headingYaw, playerY, dualView);
+    }
+
     /** headingYaw is in degrees; NaN means the caller has no heading. */
     public Selection select(Config config, Intent intent, double headingYaw, double playerY) {
         return select(config, intent, headingYaw, playerY, false);
