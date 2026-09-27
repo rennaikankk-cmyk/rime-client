@@ -1,0 +1,16 @@
+{
+  "modVersion": "1.1.1",
+  "guardVersion": "rimeguard3.1",
+  "sourceCommit": "7b26cc2",
+  "releaseTag": "rime-v1.1.1-rimeguard",
+  "candidateSha256": "a4ed83ba0bff79f9b81a3ecec001281393a7be4b9aa8ad9bfa6e06022313b1e1",
+  "regressionTasks": 85,
+  "obfuscationChecks": 35960,
+  "publisherTests": 27,
+  "guardJavaSuites": 4,
+  "guardPythonTests": 1,
+  "desktopMatches": true,
+  "temporaryValidationAccountRevoked": true,
+  "startupProcessesStopped": true,
+  "authServiceUnchanged": true
+}

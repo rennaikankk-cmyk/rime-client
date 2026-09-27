@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN" data-theme="internal">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta name="description" content="Rime 1.1.1 下载与更新记录。Minecraft 1.21.11 / 1.21.1，含自动水晶、TP 水晶、活塞水晶、锚、床和 KillAura。">
+
+<title>下载与更新 · Rime</title>
+
+<script src="/theme-init.js?v=20260922b"></script>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/base.css">
+
+<style>
+
+/* ── 下载页性格：IB 规格书，玻璃分节 + 衬线标题 + 雾蓝徽标 ── */
+
+.wrap{width:min(100% - 48px,1020px);margin-inline:auto}
+
+main.wrap{padding-top:104px}
+
+a,button,summary{-webkit-tap-highlight-color:transparent}
+
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--acc);outline-offset:4px}
+
+
+
+/* 门头 */
+
+.masthead{position:relative;padding:34px 0 10px;animation:fadeUp .8s var(--ease) both}
+
+.masthead h1{font-family:var(--serif);font-weight:500;font-size:64px;line-height:1.08;letter-spacing:.01em;
+
+  text-shadow:0 0 24px var(--glow-a)}
+
+.masthead h1 em{font-style:normal;color:var(--acc)}
+
+.intro{font-family:var(--serif);color:var(--tx2);font-size:18px;margin-top:10px;max-width:720px}
+
+.version{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-top:20px;font-size:12.5px;color:var(--mute);letter-spacing:.06em}
+
+.version .tag{padding:5px 14px;border-radius:999px;border:1px solid var(--glass-brd-soft);
+
+  background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+
+.version .tag.hot{color:var(--acc-hi);background:var(--pill-on);border-color:var(--glass-brd)}
+
+.download-row{display:flex;align-items:center;flex-wrap:wrap;gap:16px 26px;margin-top:26px}
+
+.download{display:inline-flex;align-items:center;gap:12px;min-height:52px;padding:12px 34px;
+
+  border-radius:999px;border:1px solid var(--glass-brd);
+
+  background:var(--pill-on);color:var(--tx);font-family:var(--serif);font-size:19px;letter-spacing:.08em;
+
+  text-decoration:none;backdrop-filter:blur(12px) saturate(1.2);-webkit-backdrop-filter:blur(12px) saturate(1.2);
+
+  box-shadow:var(--shadow);transition:all .35s var(--ease)}
+
+.download .glyph{color:var(--acc);font-size:20px;line-height:1}
+
+.download:hover{border-color:var(--acc);color:var(--acc-hi);transform:translateY(-2px);
+
+  box-shadow:0 10px 36px var(--glow-a),var(--shadow)}
+
+.telemetry-short{margin-top:14px;max-width:790px;color:var(--tx2);font-size:13px;line-height:1.8}
+#telemetry-notice .specs{margin-top:20px}
+.download-note{color:var(--mute);font-size:12px;line-height:1.9;letter-spacing:.04em}
+
+
+
+/* 目录胶囊 */
+
+.jump-nav{display:flex;flex-wrap:wrap;gap:8px;padding:22px 0 6px;animation:fadeUp .8s .1s var(--ease) both}
+
+.jump-nav a{font-size:12.5px;letter-spacing:.08em;color:var(--tx2);text-decoration:none;
+
+  padding:6px 16px;border-radius:999px;border:1px solid transparent;transition:all .3s var(--ease)}
+
+.jump-nav a:hover{color:var(--acc-hi);background:var(--glass);border-color:var(--glass-brd-soft)}
+
+
+
+/* 玻璃分节卡 */
+
+.section{position:relative;margin-top:26px;padding:34px 38px 30px;border-radius:14px;
+
+  border:1px solid var(--glass-brd-soft);background:linear-gradient(150deg,var(--glass-strong),var(--glass) 62%);
+
+  backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);
+
+  box-shadow:var(--sh);scroll-margin-top:110px;animation:fadeUp .8s var(--ease) both}
+
+.section::before{content:'';position:absolute;top:0;left:7%;right:7%;height:1px;
+
+  background:linear-gradient(90deg,transparent,var(--glass-brd),transparent)}
+
+.section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+
+.section-heading h2{font-family:var(--serif);font-weight:500;font-size:34px;line-height:1.2;
+
+  text-shadow:0 0 18px var(--glow-a)}
+
+.section-heading h2::before{content:'0' attr(data-idx) ' ';font-family:var(--serif);font-size:17px;color:var(--acc);margin-right:10px;vertical-align:.45em}
+
+.section-heading>span,.section-heading>time{font-size:13px;color:var(--mute);letter-spacing:.05em}
+
+
+
+/* 更新日志 */
+
+.release-title{font-family:var(--serif);font-size:21px;font-weight:500;margin-bottom:8px}
+
+.release-meta{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--mute);font-size:12px;margin-bottom:20px;letter-spacing:.04em}
+
+.release-meta .published{color:var(--acc-hi)}
+
+.change-list{list-style:none}
+
+.change{display:grid;grid-template-columns:150px minmax(0,1fr);gap:18px;padding:16px 0;border-top:1px solid var(--glass-brd-soft)}
+
+.change h3{font-family:var(--serif);font-size:17px;font-weight:500;color:var(--acc-hi)}
+
+.change p{font-size:14px;color:var(--tx2);max-width:790px}
+
+.change p+p{margin-top:8px}
+
+.change .default{color:var(--ember)}
+
+code{font-family:var(--mono);font-size:.94em;overflow-wrap:anywhere}
+
+.change code,.specs code,.release-meta code,.install-list code,.archive code{
+
+  padding:1px 9px;border-radius:999px;border:1px solid var(--glass-brd-soft);background:var(--pill)}
+
+.validation{padding-top:16px;font-size:13px;color:var(--mute);border-top:1px solid var(--glass-brd-soft)}
+
+.validation strong{color:var(--acc-hi);font-weight:400}
+
+.build-details{margin-top:18px}
+
+.build-details summary{font-size:12px;color:var(--mute);cursor:pointer}
+
+.build-details summary:hover{color:var(--acc-hi)}
+
+.build-details dl{margin-top:14px}
+
+
+
+/* 模块 */
+
+.modules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 36px}
+
+.module{padding:18px 0;border-top:1px solid var(--glass-brd-soft);min-width:0;transition:border-color .3s}
+
+.module:hover{border-top-color:var(--acc)}
+
+.module h3{font-family:var(--serif);font-size:19px;font-weight:500;line-height:1.5}
+
+.module .module-id{font-size:11.5px;font-family:var(--mono);color:var(--mute);overflow-wrap:anywhere;
+
+  margin:5px 0 10px;padding:1px 9px;border-radius:999px;border:1px solid var(--glass-brd-soft);
+
+  background:var(--pill);display:inline-block}
+
+.module p{font-size:13.5px;color:var(--tx2)}
+
+.experimental{font-size:11px;color:var(--ember);letter-spacing:.06em;margin-left:8px;white-space:nowrap}
+
+
+
+/* 版本与设置 */
+
+.specs{display:grid;grid-template-columns:150px minmax(0,1fr);gap:13px 18px;font-size:14px}
+
+.specs dt{color:var(--mute);letter-spacing:.04em}
+
+.specs dd{color:var(--tx2);min-width:0}
+
+
+
+/* 安装 */
+
+.install-list{counter-reset:install;list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:26px}
+
+.install-list li{padding-top:14px;border-top:1px solid var(--glass-brd-soft);min-width:0}
+
+.install-list h3{font-family:var(--serif);font-size:18px;font-weight:500;margin-bottom:9px}
+
+.install-list h3::before{counter-increment:install;content:"0" counter(install);font-family:var(--serif);
+
+  color:var(--acc);margin-right:10px;font-size:14px}
+
+.install-list p{color:var(--tx2);font-size:13px}
+
+.install-footnote{font-size:12px;color:var(--mute);margin-top:20px;letter-spacing:.03em}
+
+
+
+/* 历史 */
+
+.archive details{border-top:1px solid var(--glass-brd-soft);padding:15px 0}
+
+summary{cursor:pointer;font-size:14px;font-weight:400}
+
+summary code{color:var(--acc-hi)}
+
+.archive p{font-size:13px;color:var(--tx2);margin:12px 0 0 16px;max-width:850px}
+
+.checksum{display:block;overflow-wrap:anywhere;font-size:12px;margin-top:5px;color:var(--tx2)}
+
+
+
+footer{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:30px 4px 42px;color:var(--mute);font-size:12px;letter-spacing:.06em}
+
+footer b{font-family:var(--serif);color:var(--tx2);font-weight:500;font-size:14px}
+
+
+
+@media(max-width:700px){
+
+  main.wrap{padding-top:92px}
+
+  .masthead h1{font-size:42px}
+
+  .section{padding:24px 20px}
+
+  .change{grid-template-columns:1fr;gap:8px}
+
+  .modules{grid-template-columns:1fr}
+
+  .specs{grid-template-columns:1fr;gap:5px}
+
+  .specs dd{margin-bottom:13px}
+
+  .install-list{grid-template-columns:1fr;gap:18px}
+
+}
+
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+
+.older-releases{margin-top:6px}.older-releases>summary{cursor:pointer;color:var(--mute);font-size:13.5px;letter-spacing:.03em;padding:4px 2px}
+    </style>
+
+<link rel="stylesheet" href="/site-ui.css?v=20260922b">
+<link rel="stylesheet" href="/claude.css?v=20260927a">
+</head>
+
+<body class="calm" data-require-login>
+
+<div id="atmos"></div>
+
+<div id="fog"></div>
+
+<div id="rain"></div>
+
+<a class="skip-link" href="#main-content">跳到正文</a>
+<nav class="topnav" aria-label="主导航">
+  <a class="brand" href="/" aria-label="Rime 首页"><svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><path d="M12 1.05C13.7 5.4 14.7 7.9 14.7 9.6 14.7 12.15 13.35 13.35 12 13.35S9.3 12.15 9.3 9.6C9.3 7.9 10.3 5.4 12 1.05z"/><path d="M12 1.05C13.7 5.4 14.7 7.9 14.7 9.6 14.7 12.15 13.35 13.35 12 13.35S9.3 12.15 9.3 9.6C9.3 7.9 10.3 5.4 12 1.05z" transform="rotate(60 12 12)"/><path d="M12 1.05C13.7 5.4 14.7 7.9 14.7 9.6 14.7 12.15 13.35 13.35 12 13.35S9.3 12.15 9.3 9.6C9.3 7.9 10.3 5.4 12 1.05z" transform="rotate(120 12 12)"/><path d="M12 1.05C13.7 5.4 14.7 7.9 14.7 9.6 14.7 12.15 13.35 13.35 12 13.35S9.3 12.15 9.3 9.6C9.3 7.9 10.3 5.4 12 1.05z" transform="rotate(180 12 12)"/><path d="M12 1.05C13.7 5.4 14.7 7.9 14.7 9.6 14.7 12.15 13.35 13.35 12 13.35S9.3 12.15 9.3 9.6C9.3 7.9 10.3 5.4 12 1.05z" transform="rotate(240 12 12)"/><path d="M12 1.05C13.7 5.4 14.7 7.9 14.7 9.6 14.7 12.15 13.35 13.35 12 13.35S9.3 12.15 9.3 9.6C9.3 7.9 10.3 5.4 12 1.05z" transform="rotate(300 12 12)"/></g></svg>Rime</a>
+  <div class="links" id="site-links"><a href="/">首页</a><a href="/download.html" class="on" aria-current="page">下载与更新</a><a href="/elytra.html">使用说明</a><a href="/activity.html">战报</a><a href="/forum.html">社区</a><a class="nav-login" href="/login.html">登录</a></div>
+  <button id="themeBtn" type="button" title="切换明暗主题" aria-label="切换到浅色主题">◐</button>
+  <a class="nav-cta" href="/download.html">获取客户端</a>
+  <button class="nav-toggle" id="nav-toggle" type="button" aria-label="打开导航菜单" aria-expanded="false" aria-controls="site-links">☰</button>
+</nav>
+
+<main id="main-content" tabindex="-1" class="wrap">
+
+  <header class="masthead">
+
+    <h1>下载<em>与更新</em></h1>
+
+    <p class="intro">登录后领取 1.21.11 或 1.21.1</p>
+
+    <div class="version"><span class="tag hot">Rime 1.1.1 · 1.21.11</span><span class="tag">更新于 <time datetime="2026-09-28">2026.09.28</time></span><span class="tag">Minecraft 1.21.11 / 1.21.1 · Fabric</span></div>
+
+    <div class="download-row"><a class="download" href="/files/GuizhouWareLauncher.exe?v=1.1" download><span class="glyph">◈</span>下载 Windows 登录器</a><p class="download-note">Windows 10+ · 也提供 <a href="/files/RimeLauncher.exe?v=1.1">RimeLauncher.exe</a> · 游戏需要 Java 21</p></div>
+    <p class="telemetry-short">新版会上传诊断 并与账号关联 <a href="#telemetry-notice">查看范围</a></p>
+    <details class="build-details"><summary>登录器更新与文件校验</summary><p class="download-note">登录器 1.1 改为暖纸界面。登录、安装和设备校验方式没有改。</p><dl class="specs"><dt>版本</dt><dd>1.1 · 2026.09.27</dd><dt>SHA256</dt><dd><code class="checksum">d1950ec4e3778ecf758962f866fde9513709e006e480e766f9714eef22f6a356</code></dd><dt>开源声明</dt><dd><a href="/files/GuizhouWareLauncher-NOTICES.txt">第三方开源许可</a></dd></dl></details>
+
+  </header>
+<aside class="page-help"><span>第一次使用？先安装登录器，再选择与你游戏一致的 Minecraft 版本。</span><a href="#install">查看安装步骤 →</a></aside>
+
+  <nav class="jump-nav" aria-label="本页目录"><a href="#updates">最新更新</a><a href="#modules">模块介绍</a><a href="#compatibility">版本与设置</a><a href="#install">安装</a><a href="#telemetry-notice">自动诊断须知</a><a href="#history">历史记录</a></nav>
+
+            <section class="section" id="updates" aria-labelledby="combined-air-update-title">
+<div class="section-heading"><h2 id="combined-air-update-title" data-idx="1">本轮更新</h2><span>Rime 1.1.1</span></div>
+<h3 class="release-title">爆炸战斗逻辑更新 · rimeguard3.1</h3>
+<p>2026.09.28 名称更新：Rime 防护正式更名为 rimeguard，当前为 rimeguard3.1；授权、水印、完整性校验与心跳保护保持有效，客户端版本仍为 Rime 1.1.1。</p>
+<div class="release-meta"><span class="published">已发布</span><span>Minecraft 1.21.11</span><time datetime="2026-09-28">2026.09.28</time></div>
+<p>本次更新 Minecraft 1.21.11 客户端；Minecraft 1.21.1 继续提供 Rime 1.0，Windows 登录器保持 1.1。在登录器选择对应游戏版本即可领取本人授权包。</p>
+<ul class="change-list">
+<li class="change"><h3>DEFAULT 水晶</h3><div><p>按当前真实地形计算目标伤害，修正过期候选排序与遮挡边界；移动预测使用实际姿态，并结合 GZBoost 只读速度预测检查沿途自伤。Rusher 保持原样。</p></div></li>
+<li class="change"><h3>TP 水晶</h3><div><p>完善护甲、附魔和已知抗性计算，规划底座时计入遮挡；引爆检查临时站位的自伤，修正生成空间占用、无效重复攻击及 TP 返回。</p></div></li>
+<li class="change"><h3>锚与床</h3><div><p>修正完全遮挡与爆炸半径边界伤害。锚增加高速移动沿途自伤预测，TP 床改进可达安全站位；床的放置与引爆继续依据观察到的方块状态推进。</p></div></li>
+<li class="change"><h3>活塞水晶</h3><div><p>按真实掩体计算目标伤害，修正选点筛选与红石复用优先级；最终引爆前重新评估目标当前伤害和防御属性。</p></div></li>
+<li class="change"><h3>发行保护</h3><div><p>使用 rimeguard3.1，签名清单绑定当前凭据与水印账号，改进清单校验及运行期抽查；保留会员授权、设备绑定、水印和心跳检查。每份客户端内嵌独立水印与账号凭据，转售或共享将定位到购买账号并封禁。</p></div></li>
+</ul>
+<p>通过 85 项回归、35,960 项混淆检查及两套 Java 21 签名启动验证。独立测试存档通过 18 组原版爆炸伤害对照、5 类动作测试及 54 项检查；测试不等同真人对战，不作爆速或胜率提升承诺。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · Rime 1.1.1 / rimeguard3.1 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>rime-7b26cc2-1.1.1-rimeguard3.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">a4ed83ba0bff79f9b81a3ecec001281393a7be4b9aa8ad9bfa6e06022313b1e1</code></dd><dt>源码</dt><dd><a href="https://github.com/rennaikankk-cmyk/rime-client/commit/7b26cc2">7b26cc2</a></dd></dl><p>校验值对应混淆并合入防护的分发基础包；会员包由登录器逐份加水印和签名，校验值不同。请通过登录器领取本人授权副本。</p></details>
+<div class="section-heading"><h2>上一版</h2><span>Rime 1.1.0</span></div>
+<h3 class="release-title">巡航协同、水晶修复与 dickguard3.0</h3>
+<div class="release-meta"><span class="published">已发布</span><span>Minecraft 1.21.11</span><time datetime="2026-09-27">2026.09.27</time></div>
+<p>本次更新 Minecraft 1.21.11 客户端。Minecraft 1.21.1 继续提供 Rime 1.0，Windows 登录器保持 1.1；在登录器选择对应游戏版本即可领取本人授权包。</p>
+<ul class="change-list">
+<li class="change"><h3>耦合巡航</h3><div><p>恢复已测的 GZBoost 耦合巡航配置，改善巡航、空战接管和甲飞换装间的衔接，减少模块争抢朝向造成的中断。</p></div></li>
+<li class="change"><h3>实用功能</h3><div><p>筛选合入 SlimefunHelper 的 AntiCrystal、AutoThrow 与物品使用确认，完善补瓶、药水和甲飞协同。新增功能默认关闭，可按需开启。</p></div></li>
+<li class="change"><h3>无旋转水晶</h3><div><p>DEFAULT 模式关闭 Rotate 后，拆晶不再要求准星对准水晶，适用于无反作弊场景。Rusher 的攻击与旋转行为保持原样。</p></div></li>
+<li class="change"><h3>虚弱与自伤</h3><div><p>虚弱时按 AutoSwap 使用有效武器，攻击结束或取消后还槽；无效攻击不再消耗重试。垫黑曜石不再把多个目标伤害相加误判为单人击杀。HUD 显示附近“爆炸 N/s”，便于区分自身水晶输出。</p></div></li>
+<li class="change"><h3>发行保护</h3><div><p>接入 dickguard3.0，启动前验证签名授权和完整性清单，保留会员、设备绑定、账号水印与运行期授权检查。每份客户端内嵌独立水印与账号凭据，转售或共享将定位到购买账号并封禁。</p></div></li>
+</ul>
+<p>本版通过完整回归、混淆产物检查及两套 Java 21 签名启动验证。本次没有测量新的水晶爆速或对战胜率。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · Rime 1.1.0 / dickguard3.0 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>rime-2a71535-1.1.0-dickguard3-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">87d4a16781a9165a55906db6374b689e1cf5249b6eb6a155dc131fe8ce0dad85</code></dd><dt>源码</dt><dd><a href="https://github.com/rennaikankk-cmyk/rime-client/commit/2a71535">2a71535</a></dd></dl><p>以上校验值对应混淆并合入防护的分发基础包；会员包由登录器逐份加水印和签名，校验值不同。请使用登录器领取，不要将基础包直接当作会员包安装。</p></details>
+<div class="section-heading"><h2>上一版</h2><span>Rime 1.0</span></div>
+<h3 class="release-title">Rime 1.0</h3>
+<div class="release-meta"><span class="published">已发布</span><span>Minecraft 1.21.11</span><span>Minecraft 1.21.1</span></div>
+<p>客户端和登录器对外名称改为 Rime，版本号为 1.0。界面、标题、聊天前缀和帮助改为 rime；旧的点号、gzw、guizhouware 前缀仍可输入，帮助里只显示 rime。水晶、锚、床和近战走同一条战斗热路径。</p>
+<ul class="change-list">
+<li class="change"><h3>自动水晶</h3><div><p>候选点的乐观伤害放到后台排序。精确伤害、自伤和放置仍在主线程做完才发包。主循环放成功后记下当前 tick，反应式扫描不会在同一 tick 再放一次。</p></div></li>
+<li class="change"><h3>TP 水晶</h3><div><p>不再每 tick 扫 200 格内的全部实体。铺好黑曜石后重置计时，避免同一 tick 反复丢黑曜石和水晶。旋转打开时，假移动对准点击点或水晶。</p></div></li>
+<li class="change"><h3>活塞水晶</h3><div><p>乐观伤害盖不过当前最优时，不再做精确射线。同一阶段连续失败会结束这次流程，而不是一直等到超时。主手或副手已经拿着水晶时直接放。</p></div></li>
+<li class="change"><h3>锚、床与挖掘</h3><div><p>锚先按距离丢掉爆距外的格子。床和 TP 床只遍历玩家。TP 床的假移动带上对准床的俯仰，放置时仍用床的朝向偏航。AutoMine 把脚下方块列表按 tick 缓存。</p></div></li>
+<li class="change"><h3>副手与 KillAura</h3><div><p>图腾仍是默认。血量低于阈值时强制图腾。水晶、TP 水晶、活塞水晶、床、锚开着时，会在对应动作前把副手换成水晶、床或重生锚。KillAura 复用自动剑的距离、旋转和换武器；两者同时开时，这一拍只由 KillAura 出手。</p></div></li>
+<li class="change"><h3>主菜单和其他模组</h3><div><p>其他模组加到标题画面上的文字按钮，会跟单人、多人和选项一起排进卡片网格，不再叠在品牌字上，也不会被塞进角落小图标。语言和无障碍仍留在右上角。</p></div></li>
+<li class="change"><h3>ClickGUI 打开掉帧</h3><div><p>默认紫色面板不再每帧调用原版全屏模糊，打开后只压暗世界。配置目录只在打开配置页时读一次。面板里的模块列表按搜索词缓存。</p></div></li>
+<li class="change"><h3>设置说明</h3><div><p>每个设置项都有一句中文说明。紫色和蓝框面板把说明放在底部悬停提示里。现代卡片在设置行下面写一行小字。1.21.1 的界面在设置行下面写同一句，悬停时也显示。</p></div></li>
+<li class="change"><h3>登录器</h3><div><p>窗口和品牌改为 Rime 1.0。本机标识还没读完或账号密码为空时，会直接说明原因，而不是没有反应。登录、安装和设备校验方式没有改。</p></div></li>
+<li class="change"><h3>发行保护</h3><div><p>发行包继续带签名心跳、账号水印、混淆，以及按账号生成的文件清单校验和固定证书的授权连接。每份客户端内嵌独立水印与账号凭据，转售或共享将定位到购买账号并封禁。</p></div></li>
+</ul>
+<p>会员仍通过登录器按 Minecraft 1.21.11 或 1.21.1 领取本人授权包。不要把两个同版本 jar 同时放进 mods。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · Rime 1.0 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>rime-2662809-1.0-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">fa18eff238a220a63e18355b30e3563031dbacabff76326c3e26f423888c729d</code></dd><dt>源码</dt><dd><code>2662809</code></dd></dl><p>以上校验值对应公开混淆基础包；按账号签名的会员包校验值不同。</p></details>
+<details class="build-details"><summary>Minecraft 1.21.1 · Rime 1.0 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>rime-370081c-1.0-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">97d34a51f22e961ba500ce5b84bd4e4ce8218a5cbd772745336e17c2327f6a36</code></dd><dt>源码</dt><dd><code>370081c</code></dd></dl><p>以上校验值对应公开混淆基础包；按账号签名的会员包校验值不同。</p></details>
+<details class="build-details"><summary>登录器 1.1</summary><dl class="specs"><dt>文件</dt><dd><code>GuizhouWareLauncher.exe</code>（与 <code>RimeLauncher.exe</code> 字节相同）</dd><dt>SHA256</dt><dd><code class="checksum">d1950ec4e3778ecf758962f866fde9513709e006e480e766f9714eef22f6a356</code></dd></dl></details>
+<div class="section-heading"><h2>上一轮</h2><span>beta.6 / rc32 · 测试版</span></div>
+<h3 class="release-title">甲飞换甲循环不再被服务器校正暂停</h3>
+<div class="release-meta"><span class="published">已发布 · 测试版</span><span>1.21.11 · beta.6</span><span>1.21.1 · rc32</span></div>
+<p>真实服务器遥测显示，客人开启甲飞全程滑翔时换甲循环从未启动（armorfly_ms 始终为 0）：带反作弊的服务器频繁发送位置纠正，每次校正确发的暂停时钟把换甲请求一并挡住。旧客户端在相同服务器上换甲正常，其 TICK 模式不受校正与着陆风险影响。本版将换甲请求与加速暂停解耦：位置校正仍暂停加速重试，SafeLanding 着陆辅助照常运行，胸甲与鞘翅的循环按旧端语义持续运转。</p>
+<p class="validation"><strong>验证范围：</strong>三线（1.21.11、1.21.1、特别版）完整构建与离线回归全绿，新增 5 项换甲请求门接线钉并保留既有服务端确认换甲回归（1247 项）；1.21.1 普通版与 1.21.11 版混淆包均通过完整构建检查。实服效果以遥测 armorfly_ms 由 0 转正判定，本条目发布时尚未取得真服飞行记录，不宣称修复确认。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · v1.3.2-beta.6 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>guizhouware-6f06cc0-1.3.2-beta.6-combat.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">7ebfba339b213f7a06a3d4f6804a4ef579f1941dac8f4bccb7d8047cb9fe0976</code></dd><dt>源码</dt><dd><code>6f06cc08c21232beeee6c856b5d56254ed6de31b</code></dd></dl><p>以上校验值对应公开混淆基础包；按账号签名的会员包校验值不同。</p></details>
+<details class="build-details"><summary>Minecraft 1.21.1 · v1.3.1-rc.32 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>guizhouware-7aac1db-1.3.1-rc.32-mc1211.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">0835e8aa00e87b8951c126d82d15086c390035731fe00e7cf98f13205efc3899</code></dd><dt>源码</dt><dd><code>7aac1dbfafd32b3a74a9da3c3b3533cdb0d5affb</code></dd></dl><p>以上校验值对应公开混淆基础包；按账号签名的会员包校验值不同。</p></details>
+<h3 class="release-title">静默重锤切槽与活塞水晶空放开关</h3>
+<div class="release-meta"><span class="published">已发布 · 测试版</span><span>1.21.11 · beta.5</span><span>1.21.1 · rc31</span></div>
+<p>重锤模式新增静默切换：出手瞬间在服务端换持重锤完成打击并立即还原，客户端可见手持保持不变；战斗重置后未完成的还槽由独立监听器继续补发，不再随模块停用丢失。活塞水晶的空放（AirPlace）改为可开关选项，默认优先真实支撑面，开启后才允许空中放置参与规划。</p>
+<p class="validation"><strong>验证范围：</strong>1.21.11 最终混淆包经 Via 协议 765 接入装有 ViaVersion / ViaBackwards / Grim 2.3.73 的 Fabric 1.21.11 服务端，定向对局打出 3 次服务端真实 mace_smash，可见手持全程保持非重锤，Grim Post / Simulation / AimModulo360 与原版移动告警均为 0。两版最终混淆包均通过 Microsoft 与 Adoptium 双 Java 21 离线启动与完整日志审查，离线回归分别为 595 / 591 项检查。1.21.1 普通版经 ViaProxy 跨版本接入同一服务端时，客户端移动包络被代理路径压制（实际动力≤0.83 格/tick，同场景 1.21.11 客户端为 4.07），450 tick 内未形成重锤出手窗口，该路径下重锤出手未被激发，Grim 告警为 0；1.21.1 侧静默重锤逻辑与 1.21.11 源码等价（仅版本 API 垫片差异）并由离线回归覆盖。FCL 真机与随机玩家对局未在本轮量化，不宣称伤害提升。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · v1.3.2-beta.5 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>guizhouware-5036162-1.3.2-beta.5-combat.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">0570a14d51aa201fe8d8da167006364ee426c79a05f2b2b46d6b39c62b7ccce4</code></dd><dt>源码</dt><dd><code>5036162d58cab7c2ca695254bbb575eb73eb5288</code></dd></dl><p>以上校验值对应双 Java 启动审查过的普通混淆包；专属账号签名包有独立摘要。</p></details>
+<details class="build-details"><summary>Minecraft 1.21.1 · v1.3.1-rc.31 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>guizhouware-752aa3b-1.3.1-rc.31-mc1211.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">6a35f87f3f48fd813126b2788e6472b091db3c44da5640575d937fd7606cd05d</code></dd><dt>源码</dt><dd><code>752aa3b25ef7118f136f0bec8df5105198e9732d</code></dd></dl><p>以上校验值对应双 Java 启动审查过的普通混淆包；专属账号签名包有独立摘要。</p></details>
+</section>
+<section class="section" id="release-beta4" aria-labelledby="armor-fly-update-title">
+<div class="section-heading"><h2 id="armor-fly-update-title" data-idx="1">甲飞更新</h2><span>beta.4 / rc30 · 测试版</span></div>
+<h3 class="release-title">独立甲飞换装与滑翔恢复</h3>
+<div class="release-meta"><span class="published">已发布 · 测试版</span><span>1.21.11 · beta.4</span><span>1.21.1 · rc30</span></div>
+<p>独立甲飞按服务端滑翔状态清除通知安排重新起飞，支持从主背包选择合适胸甲参与换装并归还原槽；重锤俯冲继续由独立装备控制管理。FCL 字体兼容与 FreeLook 转向代码随版本保留。</p>
+<p class="validation"><strong>验证范围：</strong>1.21.11 客户端经 Via 使用 1.20.4 协议接入装有 ViaVersion、ViaBackwards 和 Grim 的 1.21.11 服务端；定向场景中，55 次重启指令均使服务器恢复滑翔，6 次火箭使用均发生于穿鞘翅滑翔时；1.21.1 原生服场景中，76 次重启指令均使服务器恢复滑翔，6 次火箭使用也符合该条件。1.21.1 停用边界记录到 1 个服务端 tick 的滑翔中断，下一 tick 恢复。主背包混合护甲仅有较早的 1.21.11 原生服测试；1.21.1 主背包场景未独立复测。两版最终混淆 JAR 均已完成双 Java 21 启动与日志审查。联机记录使用同提交的开发测试客户端；FCL 手机真机和随机玩家对局未在本次记录中量化，不宣称伤害提升。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · v1.3.2-beta.4 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>guizhouware-adf44d5-1.3.2-beta.4-combat.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">1e3fd3428fc057ee71899710f179bd5c32f6124a993ce60d54e74cd09145a552</code></dd><dt>源码</dt><dd><code>adf44d5a8fb7200417887857ae949bfab3df4c18</code></dd></dl><p>以上校验值对应已通过双 Java 21 启动验收的公开基础包；按账号签名的会员包校验值不同。</p></details>
+<details class="build-details"><summary>Minecraft 1.21.1 · v1.3.1-rc.30 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>guizhouware-e909176-1.3.1-rc.30-mc1211.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">61c3958062cc069aaa494aa5a6edbc93e6f100848c0412261464b41a5099d051</code></dd><dt>源码</dt><dd><code>e9091761d70162207e5857103d58c6c8306d7051</code></dd></dl><p>以上校验值对应已通过双 Java 21 启动验收的公开基础包；按账号签名的会员包校验值不同。</p></details>
+</section>
+<section class="section" id="release-beta3" aria-labelledby="updates-title">
+<div class="section-heading"><h2 id="updates-title" data-idx="1">更新日志</h2><time datetime="2026-09-24">2026.09.24</time></div>
+<h3 class="release-title">空中重锤：鞘翅留在身上也能重击</h3>
+<div class="release-meta"><span class="published">已发布 · 测试版</span><span>1.21.11 · beta.3</span><span>1.21.1 · rc29</span></div>
+<p>原生 1.21.11 优先保留鞘翅，短暂停止滑翔并确认服务器已停飞后才重击；经 Via 接入 1.20.4 的旧协议路径则直接短暂换胸甲。目标持续上升时也调整拉升与回落节奏。</p>
+<ul class="change-list">
+<li class="change"><h3>真实重锤重击</h3><div><p>原生 1.21.11 先申请停滑翔，等服务器状态确认、实际下落与攻击射线同时满足再出手；旧 Via 协议直接用短暂胸甲切换。未确认停飞时取消无换甲尝试，之后恢复鞘翅飞行。</p></div></li>
+<li class="change"><h3>上升目标追击</h3><div><p>恢复有效的拉升与回落节奏，减少首次重击错过目标的情况。远距离斜向接近继续受碰撞、飞行包络及协议支持限制，近身阶段以真实命中窗口为准。</p></div></li>
+</ul>
+<p class="validation"><strong>测试记录：</strong>1.21.11 原版集成服固定上升绕圈目标、799 个服务器 tick：旧版 17 次真实重击／1257.90 生命值伤害，新版 20 次／1438.09，鞘翅全程装备。这组原生数据只对应原版集成服，不能代替 Via/Grim 结果或随机玩家对局。Via/Grim 已完成同起点固定轨迹及远距斜降开发测试；远距斜降有服务端轨迹验证，但不代表随机玩家 PvP，最终发布包不作定量外推。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · v1.3.2-beta.3 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>guizhouware-9dd145d-1.3.2-beta.3-combat.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">a23953a6b71045ff36cba97846e798b1adda262c5b990b920fa382882423067d</code></dd><dt>源码</dt><dd><code>9dd145dbaf967d5c5691cadb13552fffa8b356a8</code></dd></dl><p>以上校验值对应已通过双 Java 21 启动验收的公开基础包；不适用于按账号签名的会员包。</p></details>
+<details class="build-details"><summary>Minecraft 1.21.1 · v1.3.1-rc.29 基础包校验</summary><dl class="specs"><dt>文件</dt><dd><code>guizhouware-6b56f39-1.3.1-rc.29-mc1211.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">2df9a43d2010d959d6dcce0cd912332dcad43e1aaf0f77e2d4d27a1e62e0e4d5</code></dd><dt>源码</dt><dd><code>6b56f3994fcaf757ecc6185e1603e6861f3fba83</code></dd></dl><p>以上校验值对应已通过双 Java 21 启动验收的公开基础包；不适用于按账号签名的会员包。</p></details>
+</section>
+<details><summary>beta.2 / rc28 · 字体与飞行修复（历史记录）</summary><section class="section" id="release-beta2" aria-labelledby="release-beta2-title">
+<div class="section-heading"><h2 id="release-beta2-title" data-idx="1">更新日志</h2><time datetime="2026-09-23">2026.09.23</time></div>
+<h3 class="release-title">手机文字兼容与鞘翅转向修复</h3>
+<div class="release-meta"><span class="published">已发布 · 测试版</span><span>1.21.11 · 1.3.2-beta.2</span><span>1.21.1 · rc28</span></div>
+<p>两个 Minecraft 版本均修复 FreeLook 下的 WASD 转向与缺字方框。1.21.11 保留 beta.1 的水晶改动，1.21.1 保留 rc27 的战斗功能。会员请通过登录器选择对应版本领取授权包；特别版单独交付。</p>
+<ul class="change-list">
+<li class="change"><h3>WASD 随视角转向</h3><div><p>Grim 与 NoAC 按方向键时以当前镜头为基准，持续按键时也可转向；松开方向键后保留基准朝向，AutoFly 可继续前进并自由观察。</p></div></li>
+<li class="change"><h3>手机字体兼容</h3><div><p>检测到手机运行环境时自动使用原版字体；其他环境缺字时整段回退，文字宽度和绘制同步，避免缺少中文字库导致菜单显示方框。</p></div></li>
+</ul>
+<p class="validation"><strong>验证范围：</strong>三个构建通过完整构建、混淆与相关回归；常规版及特别版最终文件分别通过两套 Java 21 初始化、图集加载和 20 秒稳定观察。模拟手机启动器标记已触发原版字体模式；尚未进行 Android 真机或实服飞行验收。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · v1.3.2-beta.2 基础包校验</summary><p><a href="https://github.com/rennaikankk-cmyk/guizhouware/releases/tag/v1.3.2-beta.2">GitHub 发布记录（私有仓库）</a></p><dl class="specs"><dt>文件</dt><dd><code>guizhouware-1bbc7ac-1.3.2-beta.2-combat.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">31c75a4eaa5b43a79359369b0f06dade24df6d536c131b6dfe7dce2e4918c389</code></dd><dt>源码</dt><dd><code>1bbc7acedd9429294b48473e0cbe4d183f67462b</code></dd></dl><p>以上校验值不适用于按账号签名的会员包。</p></details>
+<details class="build-details"><summary>Minecraft 1.21.1 · v1.3.1-rc.28 基础包校验</summary><p><a href="https://github.com/rennaikankk-cmyk/guizhouware/releases/tag/v1.3.1-rc.28">GitHub 发布记录（私有仓库）</a></p><dl class="specs"><dt>文件</dt><dd><code>guizhouware-58f28c5-1.3.1-rc.28-mc1211.1-obfuscated.jar</code></dd><dt>SHA256</dt><dd><code class="checksum">0bfa0e5ca46ee0b00c02ada9af1d893e82c5146ac75fb02199034eca367e4ee1</code></dd><dt>源码</dt><dd><code>58f28c5923f1dcd27e628d627437f132182f62d6</code></dd></dl><p>以上校验值不适用于按账号签名的会员包。</p></details>
+</section></details>
+<details><summary>1.3.2-beta.1 · 水晶改动（历史记录）</summary><section class="section" id="release-beta1" aria-labelledby="release-beta1-title">
+<div class="section-heading"><h2 id="release-beta1-title" data-idx="1">更新日志</h2><time datetime="2026-09-23">2026.09.23</time></div>
+<h3 class="release-title">1.3.2-beta.1 · 水晶确认补放与单目标收尾</h3>
+<div class="release-meta"><span class="published">已发布 · Beta 测试版</span><span>1.21.11 / combat.1</span><span>1.21.1 保持 rc27</span></div>
+<p>本次只更新常规 Minecraft 1.21.11。1.21.1 保持 rc27，独立授权版保持 rc26。<a href="https://github.com/rennaikankk-cmyk/guizhouware/releases/tag/v1.3.2-beta.1">GitHub Beta 发布记录（私有仓库）</a>；会员请通过登录器选择对应 Minecraft 版本领取本人授权包。</p>
+<ul class="change-list">
+<li class="change"><h3>删除确认后补放</h3><div><p>关联本机放置、收到的水晶 ID、实际发出的攻击包和删除包；客户端实体移除后，在现有预算、转向和自伤门槛内重新选点。旧删除包不会清除同一位置更新的放置记录。</p></div></li>
+<li class="change"><h3>单目标收尾评分</h3><div><p>可选 ScoreMode=FINISHER 优先当前与预测位置均达到致命门槛的单目标攻击，再比较单目标伤害。默认 GROUP 保持群体伤害排序。</p></div></li>
+<li class="change"><h3>GhostHit 范围收紧</h3><div><p>默认仍关闭。猜测 ID 只随本机有效放置尝试，并检查攻击时机、射线、自伤、已知非水晶实体和重复猜测。猜测包不能证明服务器命中。</p></div></li>
+</ul>
+<p class="validation"><strong>验证范围：</strong>1.21.11 完整构建 102 个任务通过，包含授权动作和混淆产物检查；同一最终 JAR 在 Microsoft Java 21.0.7 与 Adoptium Java 21.0.12.1 启动至主菜单并稳定观察。没有进入游戏世界、连接服务器或做游戏内测试，实际命中率、服务器接受率和补放时延尚未实测。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · Beta 基础包校验</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-0c31451-1.3.2-beta.1-combat.1-obfuscated.jar</code>（7,461,671 字节）</dd><dt>SHA256</dt><dd><code class="checksum">2d7f942722f02a776b2f2484ac3ed370d578161841667afe1212ba85c1f77061</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/0c31451d9c4813850560b33f3642e96f1ae4305c"><code>0c31451</code></a></dd></dl><p>公开基础包不含个人凭据；其校验值不适用于按账号签名的会员包。</p></details>
+</section></details>
+<details><summary>rc27 · 共用战斗预测（1.21.1 当前版本；1.21.11 历史版本）</summary>
+<section class="section" id="release-rc27" aria-labelledby="release-rc27-title">
+<div class="section-heading"><h2 id="release-rc27-title" data-idx="1">rc27 更新记录</h2><time datetime="2026-09-23">2026.09.23</time></div>
+<h3 class="release-title">rc27 · 共用战斗预测与空战对地</h3>
+<div class="release-meta"><span class="published">已发布 · 内部测试版</span><span>1.21.11 / combat.1</span><span>1.21.1 / mc1211.1</span></div>
+<p>常规 Minecraft 1.21.11 与 1.21.1 均已更新 rc27，保留 rc26 主菜单、分类列 ClickGUI 和矛动量控制；专用账号独立授权版仍为 rc26。<a href="https://github.com/rennaikankk-cmyk/guizhouware/releases/tag/v1.3.1-rc.27">GitHub 发布记录（私有仓库）</a>；会员请通过登录器选择对应 Minecraft 版本，领取本人授权包。</p>
+<ul class="change-list">
+<li class="change"><h3>1.21.1 同步与修复</h3><div><p>1.21.1 同步本轮全部预测接入，并修正原有锚最终动作维度判断取反的问题：可爆炸维度不再被误拦截，可设置重生点的维度仍拒绝战斗使用。本轮没有新的 1.21.1 实服对抗计分。</p></div></li>
+<li class="change"><h3>共用目标预测</h3><div><p>普通水晶、TP 水晶、锚、床和 TP 床共用运动观测，并保留各自放置、充能、引爆及占位时窗。急转、速度突变和姿态变化会缩短或重置预测。</p></div></li>
+<li class="change"><h3>地形与空战对地</h3><div><p>预测处理墙边滑动和已收到的 Step 属性。空战对地接近、攀升和俯冲使用受地形约束的短期轨迹；未来突然开启 Step 无法提前得知。真实攻击继续检查当前距离、视线、转向和武器条件。</p></div></li>
+<li class="change"><h3>占位与 TP 自伤</h3><div><p>水晶和床检查目标即将扫过的空间，床与锚在冷却和确认期间持续采样。TP 水晶、TP 床补上实际交互位置自伤判断；过去仅因原位安全而执行的危险 TP 可能被自伤上限阻止。</p></div></li>
+</ul>
+<p class="validation"><strong>验证范围：</strong>两版完整构建、混淆检查及动量／预测接入回归均通过；各自同一最终 JAR 在 Microsoft Java 21.0.7 与 Adoptium Java 21.0.12.1 通过启动及稳定观察。合并前 18 场配对水晶测试的平均 DPS 约下降 3.5%，放置成功率近似持平；Step 位置预报误差有所改善。未证明整体伤害或命中率提升，rc27 未新增完整对抗计分。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · rc27 公开基础包校验</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-c522cbf-1.3.1-rc.27-combat.1-obfuscated.jar</code>（7,455,886 字节）</dd><dt>SHA256</dt><dd><code class="checksum">c27687410068f46f0a01daa413cb56b33a36c0c4ea5bcfa10223adf10febc4b6</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/c522cbf6a816cd5fd69d169fe38d3e5490a67d04"><code>c522cbf</code></a></dd></dl><p>公开基础包的校验值不适用于按账号签名的会员包。</p></details>
+<details class="build-details"><summary>Minecraft 1.21.1 · rc27 发行基础包校验</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-d0930c2-1.3.1-rc.27-mc1211.1-obfuscated.jar</code>（7,485,450 字节）</dd><dt>SHA256</dt><dd><code class="checksum">ba2667b6205c3e41ab3662b07c5a76f851a37148d00439ab87672b9a101deb51</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/d0930c22325d5a15bb4ff7bef9c8b7de2351d835"><code>d0930c2</code></a></dd></dl><p>发行基础包校验值不适用于按账号签名的会员包；请在登录器中选择 Minecraft 1.21.1 下载。</p></details>
+</section></details>
+<details><summary>rc26 · 菜单与分类列 ClickGUI（独立授权版当前版本）</summary>
+<section class="section" id="release-rc26" aria-labelledby="release-rc26-title">
+<div class="section-heading"><h2 id="release-rc26-title" data-idx="1">rc26 更新记录</h2><time datetime="2026-09-23">2026.09.23</time></div>
+<h3 class="release-title">rc26 · 全新主菜单与分类列 ClickGUI</h3>
+<div class="release-meta"><span class="published">已发布 · 内部测试版</span><span>1.21.11 / combat.1</span><span>1.21.1 / mc1211.1</span><span>独立授权版 / direct.1</span></div>
+<p>rc26 延续 rc23–rc25 的中文界面、云参数与空战改动。Minecraft 版本仍需分别下载；会员请用登录器取得本人授权的构建。<a href="https://github.com/rennaikankk-cmyk/guizhouware/releases/tag/v1.3.1-rc.26">查看 GitHub 发布页与公开基础包</a>。</p>
+<ul class="change-list">
+<li class="change"><h3>主菜单重构</h3><div><p>黑色画布、顶部导航、居中标题与原创红色斜带构成启动页。窄窗口改用紧凑排列；单人、多人、Realms、语言、设置、无障碍和退出仍使用原版按钮行为。</p></div></li>
+<li class="change"><h3>分类列 ClickGUI</h3><div><p>每个分类独立成列：左键切换模块，右键在列内展开参数，拖动标题栏移动列，滚轮滚动鼠标所在列。顶部保留搜索、云参数和 HUD 布局入口。分类列数量与整体缩放随窗口尺寸调整，标志不再只显示纹理左上角。</p></div></li>
+<li class="change"><h3>长矛战斗动能</h3><div><p>rc25 加入内部动能控制器，按目标方向的相对接近速度管理蓄力跑道、GZBoost 提速、接触交接和命中后恢复。长矛提速请求默认每 tick 2 格；更高请求速度未在先前配对试验中带来稳定收益。本版没有新增实服命中率或伤害提升数据。</p></div></li>
+<li class="change"><h3>重锤深坠与接触</h3><div><p>rc24 修复末段接触路径把目标玩家当障碍、提前展开鞘翅的问题，并将 SmashCharge 默认值恢复为 0。此前同一 Grim/Via 本地环境的两轮默认值试验记录到 4 次服务端认可的 smash；两轮 SmashCharge=4 试验仍为 0。结果不能外推为所有服务器的命中保证。</p></div></li>
+<li class="change"><h3>配置与语言</h3><div><p>rc23 加入配置导入导出、独立云参数页、私有账号同步和会员公开预设；授权客户可以上传公开模块设置。客户端模块与设置增加中文显示，重锤预瞄改为本地静默显示。旧的显式配置值仍按用户保存值加载。</p></div></li>
+</ul>
+<p class="validation"><strong>验证范围：</strong>三个发行分支的完整构建及混淆产物检查通过；1.21.11、1.21.1 和独立授权版分别在 Microsoft Java 21.0.7 与 Adoptium Java 21.0.12.1 完成启动及稳定观察。此次没有游戏内 GUI 交互或实服对打验收记录。公开基础包的 SHA256 不适用于按账号签名的会员包。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · rc26 公开基础包校验</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-3734eda-1.3.1-rc.26-combat.1-obfuscated.jar</code>（7,430,068 字节）</dd><dt>SHA256</dt><dd><code class="checksum">c3c867ee46c4830d63d33e49b5d23a51849f302c017a8f3f104a34a243a6dd48</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/3734eda44cea9322b21c386e099721352666a395"><code>3734eda</code></a></dd></dl></details>
+<details class="build-details"><summary>Minecraft 1.21.1 · rc26 公开基础包校验</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-c7f3ad3-1.3.1-rc.26-mc1211.1-obfuscated.jar</code>（7,459,680 字节）</dd><dt>SHA256</dt><dd><code class="checksum">4c683f493ee00728a16a22558a1e57740398e3524a8d65d6495a839a94fec61f</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/c7f3ad31ec6a62e5223cd2cb07250c5206341efc"><code>c7f3ad3</code></a></dd></dl></details>
+<details class="build-details"><summary>rc25 · 长矛内部动能控制（2026.09.23）</summary><p>控制器按目标相对接近速度安排蓄力、烟花提速、接触和恢复；保留飞行安全约束。15 个控制器回归场景通过，但当版没有新实服对打结论。</p></details>
+<details class="build-details"><summary>rc24 · 重锤接触修复（2026.09.23）</summary><p>末段碰撞检查不再把目标玩家视为障碍；默认 SmashCharge 恢复为 0。相同本地测试环境中观察到服务端认可的 smash，具体次数与限制见上方说明。</p></details>
+<details class="build-details"><summary>rc23 · 云参数与中文界面（2026.09.23）</summary><p>加入独立云参数页、私有账号配置、会员公开预设与上传；本地 JSON 配置可通过命令导入导出。长矛战斗 GZBoost 独立于手动飞行开关，重锤预瞄使用本地静默显示。</p></details>
+</section></details>
+<details><summary>rc22 · GZBoost 巡航与拉升历史记录（2026.09.22）</summary>
+<section class="section" id="release-rc22-latest" aria-labelledby="release-rc22-latest-title">
+<div class="section-heading"><h2 id="release-rc22-latest-title" data-idx="1">rc22 更新记录</h2><time datetime="2026-09-22">2026.09.22</time></div>
+<h3 class="release-title">GZBoost 巡航与拉升 · 飞行选项精简</h3>
+<div class="release-meta"><span class="published">已发布 · 内部测试版</span><span>1.21.11 / combat.10</span><span>1.21.1 / mc1211.10</span></div>
+<p>包含官网 combat.4 / mc1211.4 之后的累计改动；GZBoost 档位与本次授权修复作为补丁合并说明。专用分发同步 direct.15。</p>
+<ul class="change-list">
+<li class="change"><h3>Grim / NoAC 两种飞行模式</h3><div><p>收起内部俯仰、接受范围和实验参数，保留自由视角、自动飞行、地形保护、自动穿翼等必要项。NoAC 保留水平与升降速度，旧 VOID 配置迁移到 NoAC。Grim 自动使用烟花耦合巡航；双视角协议不支持时在聊天栏提示并回退单视角。</p></div></li>
+<li class="change"><h3>GZBoost 独立开关</h3><div><p>位于 Mode 下方，默认关闭，不绑定冲刺键。开启后可选 GZBoostMode：Aggressive（激进，默认）或 Gentle（温和），选择随配置保存。温和档采用较小的沿轴拉升侧摆；平飞、下降和对角拉升沿用相同方案。开启后在支持双视角的协议下增强手动水平巡航、下降和按方向拉升；沿轴与对角拉升分别处理并平滑过渡。原位上升保持零水平输入。按实际位移延续惯性，优化烟花衔接，移除重复转头同步包；战斗仍使用自身控制流程。</p></div></li>
+<li class="change"><h3>回弹恢复与兼容</h3><div><p>服务器拉回时清理过期动作、暂停推进。AdaptiveSlowdown 可选且默认关闭；开启后按关联回弹降速，稳定后逐步恢复，不无限扩张未知范围。原生协议与跨版本协议分别处理，补齐自动起飞输入顺序和烟花使用时序。</p></div></li>
+<li class="change"><h3>累计空战与武器修复</h3><div><p>增加追击转向约束、阶段和规避方向缓冲，减少无条件扫头；优化重锤拉升/下落规划、长矛有效速度门槛、蓄力等待与再接敌判断。修复 Via 映射后的武器识别与持续持用，复用存活烟花，改善胸甲/鞘翅槽位归还与下落阶段装备保持。继续使用有界后台预测，动作和最终检查在主线程执行，收起内部调参项。</p><p>这些改动尚未证明稳定胜率优势；最新重锤接触实验未被采纳，未并入本版。不开出“矛、锤必胜”或无抽搐承诺。</p></div></li>
+<li class="change"><h3>交互默认值与配置</h3><div><p>水晶、锚、活塞与 Aura 使用更保守的新配置距离、可见面和转头要求；拉回后暂停旧位置动作，不额外增加每模块 Grim 开关。保留用户已保存的显式参数，并更新源码中的飞行及重锤预设。官网旧预设仅作历史参考。</p></div></li>
+<li class="change"><h3>速度实测与适用范围</h3><div><p>1.21.11 开发客户端经 Via 到 1.20.4，本机 Paper 499 / Grim 2.3.73 生存服无豁免、原版移动检查开启；每玩家区块加载/发送速率调整为 400/400。按最后 15 秒服务端净位移测得：水平约 160 格/秒，下降水平约 280，沿轴上升约 215，对角上升约 204，原位上升约 31.8。它们是不同动作，不能叠加，也不是所有 Grim 服务器的最高速度保证。</p><p>另一轮高速下降出现过原版拉回。激进沿轴拉升实测左右约 1.91 格范围，偏离轴线还可能持续侧漂，并增加烟花消耗；自由视角不会消除实际位移。1.21.1 与专用版完成构建和启动验收，未独立复测相同联机速度。</p></div></li>
+<li class="change"><h3>发行验证与会员兼容</h3><div><p>本次补丁补齐 17 个模块的动作授权检查，撤权后停止矛 TP 移动包拦截、释放 Sprint 转向请求，并终止未完成的挖掘探测；还槽等清理继续执行。授权控制流同时纳入源码与最终混淆产物检查。三个正式混淆包通过完整构建与保护检查，并分别在 Microsoft 21.0.7 / Adoptium 21.0.12.1 完成初始化、纹理图集创建和稳定启动；同时复查多模组渲染兼容。普通模板保持无凭据拒绝授权，专用包验证原凭据可在线授权。现有账号、HWID 绑定、水印、离线宽限及完整性策略不变，无需会员重新绑定。</p></div></li>
+</ul><details class="build-details"><summary>Minecraft 1.21.11 · 构建标识与 SHA256</summary><dl class="specs"><dt>版本</dt><dd>v1.3.1-rc.22-combat.10</dd><dt>构建文件</dt><dd><code>guizhouware-1.21.11-1.3.1-rc.22-combat.10-obfuscated.jar</code>（6,614,863 字节）</dd><dt>SHA256</dt><dd><code class="checksum">767a3b7b55328d322e4a817df45a11b55283beecf16e51d4a899c3d012ce3134</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/81241488c31463846b51030d78ddfd3ab388abbf"><code>8124148</code></a></dd><dt>安装</dt><dd>通过登录器选择对应 Minecraft 版本重新下载本人授权包，替换旧 JAR；不要同时安装两份。会员签名与水印不同，校验值也不同。</dd></dl></details><details class="build-details"><summary>Minecraft 1.21.1 · 构建标识与 SHA256</summary><dl class="specs"><dt>版本</dt><dd>v1.3.1-rc.22-mc1211.10</dd><dt>构建文件</dt><dd><code>guizhouware-1.21.1-1.3.1-rc.22-mc1211.10-obfuscated.jar</code>（6,644,412 字节）</dd><dt>SHA256</dt><dd><code class="checksum">91487162720b1e6b945610a8b854059887c99f2f9329b1f1c0ba35309fdc6139</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/65f3b57fa1e953f609075b261990fe4a8ba34192"><code>65f3b57</code></a></dd><dt>安装</dt><dd>通过登录器选择对应 Minecraft 版本重新下载本人授权包，替换旧 JAR；不要同时安装两份。会员签名与水印不同，校验值也不同。</dd></dl></details></section></details>
+<details><summary>combat.4 / mc1211.4 · 多模组兼容修复</summary><section class="section" id="release-render-compat" aria-labelledby="release-render-compat-title">
+<div class="section-heading"><h2 id="release-render-compat-title" data-idx="1">多模组兼容历史记录</h2><time datetime="2026-09-21">2026.09.21</time></div>
+<h3 class="release-title">多模组渲染兼容修复</h3>
+<div class="release-meta"><span class="published">已发布 · 内部测试版</span><span>1.21.11 / combat.4</span><span>1.21.1 / mc1211.4</span></div>
+<ul class="change-list">
+<li class="change"><h3>描边冲突不再阻止启动</h3><div><p>修复与 EveryDay 同时修改实体描边着色器调用时的启动崩溃。改用可衔接其他模组的调用方式；可选视觉效果的原调用被其他模组移除时，允许跳过对应效果。</p></div></li>
+<li class="change"><h3>同类兼容预防</h3><div><p>同步处理南瓜与细雪遮罩、传送门界面、黏液块减速，以及 1.21.11 透视渲染的调用冲突。功能关闭时保留原有调用链，关键移动、发包、转向和授权检查维持原有要求。</p></div></li>
+<li class="change"><h3>FOV 扩展兼容</h3><div><p>1.21.11 同步采用局部调整 FOV 范围的方式，兼容其他客户端修改上限；保留更大的已有上限，不影响其他选项。随包加入更新后的兼容依赖，无需会员额外安装。</p></div></li>
+<li class="change"><h3>验证与使用范围</h3><div><p>三版完整构建与混淆校验通过；两套 Java 21 中模拟多个强制重定向及 FOV 修改，验证启动、关闭功能后的调用传递和 160/200 上限；专用版同时验证线上授权。构建时检查原版注入目标，防止可选运行规则掩盖映射错误。</p><p>未使用对方完整整合包；报告中的 EveryDay 缺失 Sodium 兼容类属于另一个模组的问题，本次不宣称已修复。多个客户端同时开启不同着色效果时仍应选择一个效果来源。</p></div></li>
+<li class="change"><h3>授权策略保持</h3><div><p>现有账号、设备绑定及完整性自动封禁策略保持不变；普通会员从登录器重新下载对应版本即可。请保留官方原包，不要自行改写 JAR。</p></div></li>
+</ul><details class="build-details"><summary>Minecraft 1.21.11 · 构建标识与 SHA256</summary><dl class="specs"><dt>版本</dt><dd>v1.3.1-rc.22-combat.4</dd><dt>构建文件</dt><dd><code>guizhouware-1.21.11-1.3.1-rc.22-combat.4-obfuscated.jar</code>（6,589,189 字节）</dd><dt>SHA256</dt><dd><code class="checksum">22a457923238608606be394c97f8969b6fda0c99069df741addcdeeb41ad3652</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/f02e2999a8aba64460d111618879bd4901ec13ec"><code>f02e299</code></a></dd><dt>安装方式</dt><dd>通过登录器选择对应 Minecraft 版本，取得本人授权、水印及签名版本；替换旧版，不要同时安装两个 Rime JAR。每份会员包的校验值不同。</dd></dl></details><details class="build-details"><summary>Minecraft 1.21.1 · 构建标识与 SHA256</summary><dl class="specs"><dt>版本</dt><dd>v1.3.1-rc.22-mc1211.4</dd><dt>构建文件</dt><dd><code>guizhouware-1.21.1-1.3.1-rc.22-mc1211.4-obfuscated.jar</code>（6,622,860 字节）</dd><dt>SHA256</dt><dd><code class="checksum">c5f426b7f4890ec71b284048740cb9d942deda7b18d51321250fcfd65822e04a</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/e28271927703b8a3223c08ddd06751c62634dd5f"><code>e282719</code></a></dd><dt>安装方式</dt><dd>通过登录器选择对应 Minecraft 版本，取得本人授权、水印及签名版本；替换旧版，不要同时安装两个 Rime JAR。每份会员包的校验值不同。</dd></dl></details></section></details>
+<details><summary>combat.3 / mc1211.3 · 授权与分发安全升级</summary>
+<section class="section" id="release-auth-v2" aria-labelledby="release-auth-v2-title">
+<div class="section-heading"><h2 id="release-auth-v2-title" data-idx="1">授权与分发安全记录</h2><time datetime="2026-09-21">2026.09.21</time></div>
+<h3 class="release-title">授权与分发安全升级</h3>
+<div class="release-meta"><span class="published">已发布 · 内部测试版</span><span>1.21.11 / combat.3</span><span>1.21.1 / mc1211.3</span></div>
+<ul class="change-list">
+<li class="change"><h3>现有会员兼容</h3><div><p>账号、密码、会员期限和设备绑定保持原样，无需重新激活或解绑。服务端继续接受旧版登录与心跳协议，逐步升级客户端即可。</p></div></li>
+<li class="change"><h3>加密传输与请求绑定</h3><div><p>新版授权心跳和遥测使用固定信任服务器证书的 HTTPS。授权回执绑定本次请求、凭据与会话，校验签名和有效期，拒绝重复使用旧回执。</p></div></li>
+<li class="change"><h3>逐包签名与运行检查</h3><div><p>下载时为包含会员凭据和水印的完整 JAR 生成签名清单。新版只检查自身文件，发现修改时停用当前运行；不会因为其他模组修改游戏类就认定客户端被篡改，网络失败、暂时读取失败不触发自动封号。</p></div></li>
+<li class="change"><h3>后台策略更新：篡改报告自动封号</h3><div><p>2026.09.21 后台已启用：完整性不符报告通过有效授权、同账号签名水印和现有设备校验后，自动封禁对应账号，同时撤销未使用的登录、下载票据；保留原因记录，管理员可手动解封。其他模组冲突、无效报告、网络失败和暂时读取失败不会触发。当前 combat.3、mc1211.3、direct.8 已支持，无需重新下载。</p><p>这项策略依赖客户端报告，不能检测离线反编译；文件损坏也可能导致完整性不符。遇到封禁请联系管理员核查并恢复官方原包，不保证能够识别所有破解或完全避免误判。</p></div></li>
+<li class="change"><h3>网络恢复与限流修正</h3><div><p>正常授权定期更新，连接失败会重试；普通会员保留原有断网宽限，并以签名中的订阅和凭据剩余期限为上限。修复代理后的会员共用心跳限流额度的问题。</p></div></li>
+</ul>
+<p class="validation"><strong>验证：</strong>新旧协议、租约期限、失效恢复与完整性回归通过；三版完整构建、混淆控制流校验及双 Java 21 启动检查通过，专用版完成实际 HTTPS 授权检查。授权升级不会保证本地代码无法被反编译或修改。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · 构建标识与 SHA256</summary><dl class="specs"><dt>版本</dt><dd>v1.3.1-rc.22-combat.3</dd><dt>构建文件</dt><dd><code>guizhouware-1.21.11-1.3.1-rc.22-combat.3-obfuscated.jar</code>（5,954,690 字节）</dd><dt>SHA256</dt><dd><code class="checksum">1e588451bfd3e9583a83fe974c68be3fd060f4d6341f1c8bb414ba914e951ab0</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/2f0b8e1454f0538361f92230d5db52cb8c383afd"><code>2f0b8e1</code></a></dd><dt>安装方式</dt><dd>通过登录器选择对应 Minecraft 版本，取得本人授权、水印及签名版本；替换旧版，不要同时安装两个 Rime JAR。每份会员包的校验值不同。</dd></dl></details><details class="build-details"><summary>Minecraft 1.21.1 · 构建标识与 SHA256</summary><dl class="specs"><dt>版本</dt><dd>v1.3.1-rc.22-mc1211.3</dd><dt>构建文件</dt><dd><code>guizhouware-1.21.1-1.3.1-rc.22-mc1211.3-obfuscated.jar</code>（5,988,662 字节）</dd><dt>SHA256</dt><dd><code class="checksum">fed913b0592e499d7c71e2c26bf7f0126476e2e3cf8b052337d2861f307dbb63</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/b9125d22d6f9c8789b0e0588c91bd5a2c0f9aece"><code>b9125d2</code></a></dd><dt>安装方式</dt><dd>通过登录器选择对应 Minecraft 版本，取得本人授权、水印及签名版本；替换旧版，不要同时安装两个 Rime JAR。每份会员包的校验值不同。</dd></dl></details></section>
+</details>
+<details><summary>mc1211.2 · 2026.09.21 · FOV 启动兼容热修</summary>
+<section class="section" id="release-mc1211-2" aria-labelledby="release-mc1211-2-title">
+<div class="section-heading"><h2 id="release-mc1211-2-title" data-idx="1">1.21.1 启动兼容记录</h2><time datetime="2026-09-21">2026.09.21</time></div>
+<h3 class="release-title">1.21.1 启动兼容热修 · mc1211.2</h3>
+<div class="release-meta"><span class="published">已发布 · 内部测试版</span><span>1.21.1 / mc1211.2</span><span>1.21.11 / combat.2</span></div>
+<ul class="change-list">
+<li class="change"><h3>修复与 Mio 的视野上限注入冲突</h3><div><p>调整 FOV 范围的构造参数，避免占用其他客户端需要修改的同一常量。单独运行时上限保持 160；其他客户端设置更高上限时予以保留。</p></div></li>
+<li class="change"><h3>兼容修复范围</h3><div><p>本次更新修复已复现的 FOV 启动冲突。其他模组缺失类、版本不匹配或不同功能之间的冲突，需要按实际日志分别排查。</p></div></li>
+</ul>
+<p class="validation"><strong>验证：</strong>完整构建、混淆检查与双 Java 21 启动检查通过；用独立测试模组复现 Mio 同类的必需常量注入，旧包崩溃，新包启动通过，并检查 150 和 200 两种外部上限。未验证用户完整整合包。</p>
+<details class="build-details"><summary>Minecraft 1.21.1 · 构建标识与 SHA256</summary><dl class="specs"><dt>版本</dt><dd>v1.3.1-rc.22-mc1211.2</dd><dt>构建文件</dt><dd><code>guizhouware-1.21.1-1.3.1-rc.22-mc1211.2-obfuscated.jar</code>（5,979,718 字节）</dd><dt>SHA256</dt><dd><code class="checksum">1947c965f64b110f21dd3a5e7381c5fc3ed06a45e91b289fdee6b1a7be7d8541</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/2a41f1cc47f82dba8f24ba4be98b49aa45dc35d6"><code>2a41f1c</code></a></dd><dt>安装方式</dt><dd>通过登录器选择 Minecraft 1.21.1，取得本人授权与水印版本；替换旧版，不要同时保留两个 Rime JAR。水印包校验值因账号而异。</dd></dl></details>
+</section>
+</details>
+<details><summary>rc22 combat.2 / mc1211.1 · 2026.09.21 · 长矛与移植记录</summary>
+<section class="section" id="release-mc1211-1" aria-labelledby="release-mc1211-1-title">
+<div class="section-heading"><h2 id="release-mc1211-1-title" data-idx="1">长矛撤离优化与 1.21.1 首版</h2><time datetime="2026-09-21">2026.09.21</time></div>
+<h3 class="release-title">rc22 长矛撤离优化与 1.21.1 版本</h3>
+<div class="release-meta"><span class="published">已发布 · 内部测试版</span><span>1.21.11 / combat.2</span><span>1.21.1 / mc1211.1</span><span>自 combat.1 之后累计更新</span></div>
+<ul class="change-list">
+<li class="change"><h3>按蓄力和目标移动结束撤离</h3><div><p>长矛拉开距离时结合剩余蓄力、实际间距和目标远离速度判断何时重新接敌。对手已经远离、且追上前能完成蓄力时，不再继续空退；保留最短撤离时间、近距离脱离与原有超时上限。观测不稳定、位移异常时保持保守判断，继续使用已有避障和飞行控制。</p></div></li>
+<li class="change"><h3>SPEAR 与 MXS 共用修正</h3><div><p>使用武器实际蓄力参数，持用窗口过期时计入重新举矛的时间；长矛模式和 MXS 的长矛阶段共同受益。原有持矛换甲、烟花让手、手动接管、转头和攻击提交检查继续保留。</p></div></li>
+<li class="change"><h3>Minecraft 1.21.1 独立构建</h3><div><p>新增对应 1.21.1 的 Fabric 构建，适配该版本的输入、装备、渲染与 Mixin 接口。与 1.21.11 分开下载和安装，不能把两个版本同时放进同一个 mods 文件夹。两版沿用原有授权、心跳、水印和混淆保护。</p></div></li>
+<li class="change"><h3>1.21.1 放置、移动与视觉适配</h3><div><p>针对旧版协议使用潜行动作包，修复箱子等可交互方块上的放置；滑翔控制区分计算前和计算后的速度，移动修正保留潜行减速。适配旧版饮食减速、背包、聊天与 HUD 接口，修复缩放界面的文字裁剪。放置框和标签、天空、手部描边、实体特效与穿墙粒子采用对应版本的渲染接口，并处理窗口缩放和资源重载。</p></div></li>
+<li class="change"><h3>1.21.1 长矛兼容范围</h3><div><p>1.21.1 原版没有长矛。长矛模式依赖支持长矛的 1.21.11 服务端，以及保留原始物品标记的协议转换；已验证外部 ViaProxy 链路。支持持用蓄力碰撞，不包含新版协议的刺击动作；其他转换链和插件改造需另行验证。</p></div></li>
+</ul>
+<p class="validation"><strong>验证：</strong>1.21.11 完整构建、18 项新增撤离检查及开发客户端 65 项集成检查通过；官网与专用成品完成双 Java 21 启动检查。1.21.1 的验证结果见下方说明。上述检查不代表公网实服胜率或 FPS 提升。</p>
+<p class="validation">1.21.1 完整构建、31,756 项混淆产物校验及同一成品双 Java 21 启动检查通过。开发客户端完成 284 项界面、渲染、潜行放置、Aura、长矛元数据和空战检查；外部 ViaProxy 连接实际 1.21.11 服务端完成 25 项七材质及蓄力／过期／重新蓄力检查。未把这些检查当作伤害基准或公网实服对抗测试。</p>
+<details class="build-details"><summary>Minecraft 1.21.11 · 构建标识与 SHA256</summary><dl class="specs"><dt>版本</dt><dd>v1.3.1-rc.22-combat.2</dd><dt>构建文件</dt><dd><code>guizhouware-1.21.11-1.3.1-rc.22-combat.2-obfuscated.jar</code>（5,945,738 字节）</dd><dt>SHA256</dt><dd><code class="checksum">a6da2029e79f9b45fd6d34efb0669fcaf7427ff41ad659edc360db40174c139d</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/21f7504861d766cb74d298e78c0bcfa03c1be506"><code>21f7504</code></a></dd><dt>安装方式</dt><dd>通过登录器选择对应 Minecraft 版本，取得本人授权与水印版本；水印包校验值因账号而异。</dd></dl></details>
+<details class="build-details"><summary>Minecraft 1.21.1 · 构建标识与 SHA256</summary><dl class="specs"><dt>版本</dt><dd>v1.3.1-rc.22-mc1211.1</dd><dt>构建文件</dt><dd><code>guizhouware-1.21.1-1.3.1-rc.22-mc1211.1-obfuscated.jar</code>（5,979,528 字节）</dd><dt>SHA256</dt><dd><code class="checksum">70745c7d34416483d796784974a4fdd1507aa68cbffe9c11292da631f51457d5</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/7be0c7b3340883469354214778948f5d69493b49"><code>7be0c7b</code></a></dd><dt>安装方式</dt><dd>通过登录器选择对应 Minecraft 版本，取得本人授权与水印版本；水印包校验值因账号而异。</dd></dl></details>
+</section>
+</details>
+<details><summary>v1.3.1-rc.22-combat.1 · 2026.09.21 · 视觉、Aura 与空战</summary>
+<section class="section" id="release-combat1-download" aria-labelledby="release-combat1-title">
+<div class="section-heading"><h2 id="release-combat1-title" data-idx="1">rc22 视觉、Aura 与空战记录</h2><time datetime="2026-09-21">2026.09.21</time></div>
+<h3 class="release-title">rc22 视觉、Aura 与空战优化</h3>
+<div class="release-meta"><span class="published">已发布 · v1.3.1-rc.22-combat.1 · 内部测试版</span><span>自 placement.2 之后累计更新</span><span>提交 <code>540f6f7</code></span></div>
+<p class="validation">包含上一官网包之后的视觉、转头、Aura / Offhand 及空战更新；原放置、锚策略与现有红石复用继续保留。<a href="#release-placement-download">上一版记录</a>见下方历史区。</p>
+<ul class="change-list"><li class="change"><h3>放置与挖掘视觉</h3><div><p>水晶、锚、床、活塞水晶、TP 放置及 PacketMine / AutoMine 统一平滑与连续淡出。按经过时间计算动画；水晶各样式统一底座位置，床按两格与实际高度绘制。新增仅可见、穿墙、墙后淡显选项。</p></div></li>
+<li class="change"><h3>方块内的精简信息</h3><div><p>水晶文字在底座内，锚在锚体内，床保持两格中点。默认显示紧凑预测伤害，可选自伤、阶段与距离；同位置合并并加模块缩写，投影冲突时收起次要信息，不向方块外挪动。活塞可显示底座、活塞、水晶、原有／新放红石及推动阶段；挖掘可显示进度、预计剩余时间和等待确认。数值为客户端预测，进度 100% 不代表服务器已挖除。</p></div></li>
+<li class="change"><h3>模块独立转头</h3><div><p>Rotate 属于各自模块；需要转头的模块接入独立 YawStep / MoveFix，处理实际发送角度、取消与替换包，以及模块间优先级。关闭、暂停、目标失效或阶段切换时清理旧请求。</p></div></li>
+<li class="change"><h3>Aura 替代 AutoSword</h3><div><p>支持 Single / Switch / Multi、目标排序及过滤、武器选择、盾牌策略、自然暴击、冷却与 TPS 修正。Multi 按正常冷却轮换，每次最多攻击一个目标。使用实际武器属性并考虑重锤附魔；攻击前复核实际朝向、范围和遮挡。取消的攻击不消耗冷却。</p></div></li>
+<li class="change"><h3>可选 TP 往返</h3><div><p>Aura 的 TP 默认关闭，分段路线检查完整玩家碰撞体、已加载区块和世界边界，搜索与路径点数有上限。移动失败就停止依赖攻击并尝试返回；位置纠正后默认停用 TP，保留近距离 Aura。服务器可能拒绝移动或命中，尚未完成目标服务器兼容性实测。</p></div></li>
+<li class="change"><h3>Offhand 与旧配置</h3><div><p>AutoTotem 显示名改为 Offhand，保留自动图腾，修复旧爆图腾回调可能清空新副手物品的问题。旧 AutoSword / AutoTotem 名称、存档 ID 和按键继续兼容；旧攻击 Delay / Criticals 迁移为新的冷却与自然暴击选项。</p></div></li>
+<li class="change"><h3>普通飞行与空战执行</h3><div><p>按观测到的位移处理普通飞行、滑翔和穿甲滞空；只检查脚底支撑，避免空中 onGround 标记或上半身碰撞误判落地。重锤的范围、瞄准和遮挡统一使用接收到的目标位置。Mace 页加入 Rotate / YawStep / MoveFix，并让飞行安全转向优先。</p></div></li>
+<li class="change"><h3>切武器、蓄力与回拉恢复</h3><div><p>切槽按最终提交包跟踪，空战失败后下一 tick 重试；长矛使用包被取消后撤销本地虚假蓄力。重锤取消攻击不提前重置冷却或启动命中等待；回拉、换武器和阶段切换时清理旧转头、追击和闪避状态。空目标搜索降为每四 tick 一次，目标失效仍立即重搜。</p></div></li></ul>
+<p class="validation"><strong>验证：</strong>两版完整回归与混淆产物检查通过；开发客户端 Aura 28 项、空战 37 项，共 65 项集成检查通过。最终官网包与专用包分别完成 Microsoft Java 21.0.7、Adoptium Java 21.0.12.1 初始化、图集加载及 20 秒稳定启动检查。未完成实服对战验证，不承诺命中率或 FPS 提升。</p>
+<details class="build-details"><summary>构建标识与 SHA256</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-1.21.11-1.3.1-rc.22-combat.1-obfuscated.jar</code>（5,943,513 字节）</dd><dt>SHA256</dt><dd><code class="checksum">2fe5fcc7e2ced4c060abf0603472782f499a391695315ac2ad8a9852fd71b6f8</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/540f6f7b6cde05fd03905ff470120186b3d16c71"><code>540f6f7</code></a></dd><dt>安装方式</dt><dd>通过本页登录器取得本人授权与水印版本；水印包校验值因账号而异。</dd></dl></details>
+</section>
+</details>
+<details><summary>v1.3.1-rc.22-placement.2 · 2026.09.21 · 放置与锚策略</summary>
+<section class="section" id="release-placement-download" aria-labelledby="release-placement-title">
+    <div class="section-heading"><h2 id="release-placement-title" data-idx="1">rc22 放置与锚策略记录</h2><time datetime="2026-09-21">2026.09.21</time></div>
+    <h3 class="release-title">rc22 放置与锚策略优化</h3>
+    <div class="release-meta"><span class="published">已发布 · v1.3.1-rc.22-placement.2 · 内部测试版</span><span>从上次字体热修起累计更新</span><span>提交 <code>578cf84</code></span></div>
+    <p class="validation">本次包含上次上传的 fontfix.1 之后全部放置优化；<a href="#release-fontfix-download">上版字体热修</a>与更早记录保留在历史区。</p>
+    <ul class="change-list"><li class="change"><h3>统一放置检查</h3><div><p>所有共用放置路径按实际方块外形选择命中点，并在发送前复核距离、遮挡、世界边界和实体碰撞。对仅露出部分表面的方块，增加有次数上限的边缘选点；被取消的转向或发包不会推进成功计数。包围、自困、搭路和 AutoMine 补玻璃等共用模块同时受益。</p></div></li>
+<li class="change"><h3>水晶与底座</h3><div><p>水晶放置检查两格高的实体空间，使用每次操作独立的距离与潜行选项，避免模块之间相互覆盖。保留 FacePlace；允许活体目标重叠的 EntityOverlap 兼容选项默认关闭，掉落物与已有水晶仍会阻挡放置。</p></div></li>
+<li class="change"><h3>锚连续放置与挖掘协同</h3><div><p>新增 SpamPlace 与 DetectMining，默认开启。确认本次引爆后的原位可替换状态后，优先重新检查并使用该位置；避开 PacketMine 双目标、重挖及 AutoMine 规划位置。只响应当前锚的方块更新，合并重复事件，保留每步确认、超时、重试和每 tick 动作上限。</p></div></li>
+<li class="change"><h3>锚预测与分阶段设置</h3><div><p>根据还需放置、充能、引爆的步骤和已观察到的确认耗时选择预测时长，默认上限 6 tick；自伤取当前位置与预测位置的较大值。PlaceDelay、ChargeDelay、DetonateDelay 可独立设置，PlaceSwitch、ChargeSwitch、ExplodeSwitch 默认继承原换槽设置；AirPlace 与 WallRange 分别控制空放和遮挡距离。后台计算只使用不可变快照，最终动作仍在主线程复核。</p></div></li>
+<li class="change"><h3>活塞水晶与现有红石</h3><div><p>ReuseRedstone 默认开启，优先使用安全、可达且满足伤害条件的原位红石块，不要求背包里还有红石。需要重新触发已有活塞时，只重置活塞并等待旧活塞头消失，不拆红石；重置需要可用的 PacketMine 和备用活塞。采用可容纳水晶的布局，并观察水晶实际被推动后再攻击。没有可用现成电源时，仍按常规流程从背包放置红石块；红石粉与火把不属于本次复用范围。</p></div></li>
+<li class="change"><h3>TP 水晶与 TP 床</h3><div><p>放置从对应移动位置的视点计算命中点与距离；移动包被取消时跳过依赖交互，交互失败或异常时仍执行位置恢复。服务端是否接受移动和交互仍取决于具体服务器。</p></div></li>
+<li class="change"><h3>床、TNT 与传送门</h3><div><p>床和活塞等直接交互接入统一几何与实际提交结果检查。Bomber 等待观察到 TNT 后再点燃；AutoPortal 点击正确的框架支撑面，并等待观察到传送门后才报告完成。</p></div></li>
+<li class="change"><h3>诊断与兼容</h3><div><p>本地诊断新增锚响应合并、原位复用接受/拒绝、阶段阻塞和确认耗时等指标，可结合扫描耗时与 P95 排查卡顿。保留上版字体异常回退、授权与水印；字体无法正常显示时仍可用 -Dguizhouware.vanillaFonts=true 强制原版字体。</p></div></li></ul>
+    <p class="validation"><strong>验证：</strong>完整回归、混淆构建与产物检查通过；同一官网成品完成 Microsoft Java 21.0.7 和 Adoptium Java 21.0.12.1 的初始化、图集加载与稳定启动观察。回归覆盖取消清理、边界与部分外形、现有电源、延迟活塞头移除、锚确认及预测安全条件。尚未完成实服对战验证，不承诺成功率或 FPS 提升。</p>
+    <details class="build-details"><summary>构建标识与 SHA256</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-1.21.11-1.3.1-rc.22-placement.2-obfuscated.jar</code>（5,889,563 字节）</dd><dt>SHA256</dt><dd><code class="checksum">aac22443ab4cf4454a9ca1dba578d2a6c5aa4b03b442f3d8b05f934d8d3bb850</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/578cf84e60f8f1b0ffadabea285978ad84bf547f"><code>578cf84</code></a></dd><dt>安装方式</dt><dd>通过本页登录器取得本人授权与水印版本；水印包校验值因账号而异。</dd></dl></details>
+  </section>
+</details>
+
+  <section class="section" id="modules" aria-labelledby="modules-title">
+
+    <div class="section-heading"><h2 id="modules-title" data-idx="2">模块介绍</h2><span>飞行 · 追击 · 战斗</span></div>
+
+    <div class="modules">
+
+      <article class="module"><h3>鞘翅飞行</h3><div class="module-id">ElytraFlight / GuangxiElytra</div><p>提供操控与视角转向、烟花推进和贴地跳跃。管理烟花续接、鞘翅替换、胸甲恢复及位置纠正后的恢复间隔；可选耦合巡航（CoupledCruise，默认关）继续保留。甲飞换装在独立 ArmorFly 中开启，旧配置自动迁移。</p></article>
+
+      <article class="module"><h3>空战追击</h3><div class="module-id">AerialCombat / GuangxiElytraChase</div><p>支持跟随、锤击、长矛和混合追击，自动选择武器并管理长矛蓄力。结合截击预测、威胁闪避与路线检查；可选自动退翼锤击。新增按可观察目标运动调整预测，支持滑翔、加速、胸甲空中及地面等状态；HUD 显示运动标签，保留重锤保守防御预警。</p></article>
+
+      <article class="module"><h3>近战与副手</h3><div class="module-id">KillAura / AutoSword / AutoTotem</div><p>KillAura 复用自动剑的距离、旋转和静默换武器。两者同时开时只由 KillAura 出手，目标数 1–3，对方举盾时优先斧。副手默认补图腾；血量危险时强制图腾，水晶、床、锚开着时会在动作前换成对应物品。</p></article>
+      <article class="module"><h3>水晶战斗</h3><div class="module-id">CrystalAura / GuangxiCrystal</div><p>按伤害、自伤、朝向和遮挡选择放置与攻击。候选排序可以放到后台，精确判断和发包仍在主线程。同一 tick 放成功后不再补放一次。</p></article>
+
+      <article class="module"><h3>床战斗</h3><div class="module-id">AutoBed / GuangxiBed</div><p>在允许床爆炸的维度自动选址、放置和引爆，支持换手、槽位补充和可选自动合成。</p></article>
+
+      <article class="module"><h3>远距水晶<span class="experimental">实验性</span></h3><div class="module-id">GuangxiTP</div><p>远距水晶放置与攻击，支持底座补充、伤害限制和节奏设置。实际适用范围取决于服务器移动与交互校验。</p></article>
+
+      <article class="module"><h3>长矛移动攻击<span class="experimental">实验性</span></h3><div class="module-id">GuangxiSpearTP</div><p>长矛往返移动序列，包含蓄力条件、目标预测及通道检查。配置距离不代表服务器认可的有效命中距离。</p></article>
+
+      <article class="module"><h3>锚与活塞水晶</h3><div class="module-id">AnchorAura / PistonCrystal</div><p>按实际方块、充能和伸出状态推进动作，逐步复核目标、自伤、距离与材料；锚可选后台候选计算，默认关闭。</p></article>
+      <article class="module"><h3>自动与发包挖掘</h3><div class="module-id">AutoMine / PacketMine</div><p>目标回退、自身保护、好友挖掘同步及双挖工具管理；区分本地挖掘提交与空气方块确认，限制等待和重试。</p></article>
+      <article class="module"><h3>移动辅助与保护</h3><div class="module-id">NoSlow / NoFall / AntiHunger</div><p>NoSlow 提供有限消费重发及可选减速处理；新增 NoFall、AntiHunger 默认关闭，飞行、重锤等不适用状态保留暂停条件。</p></article>
+    </div>
+
+  </section>
+
+  <section class="section" id="compatibility" aria-labelledby="compatibility-title">
+
+    <div class="section-heading"><h2 id="compatibility-title" data-idx="3">版本与设置</h2></div>
+
+    <dl class="specs">
+
+      <dt>运行环境</dt><dd>Minecraft 1.21.11 或 1.21.1、对应版本 Fabric API 与 Java 21。登录器面向 Windows 10 及以上；在版本列表选择与游戏实例一致的一项，两个版本分别安装。</dd>
+
+      <dt>甲飞与名称迁移</dt><dd>甲飞统一在独立 <code>ArmorFly</code> 中启用；原飞行/追击模块显示为 <code>ElytraFlight</code> / <code>AerialCombat</code>，旧 ID、按键及自定义名保留。详见<a href="/elytra.html#armor-fly">甲飞入口说明</a>。</dd>
+      <dt>自动退翼锤击</dt><dd><code>AutoMaceDive=true</code>（当前默认开启）。启用时需要 <code>MACE</code> 或 <code>MXS</code> 模式、<code>AutoControlElytra=true</code>，以及已开启且 <code>Takeoff=true</code> 的飞行模块。准备可用鞘翅和快捷栏中无绑定诅咒的胸甲。</dd>
+
+      <dt>空战威胁策略</dt><dd><code>ThreatMode=ALL_PLAYERS</code> 为默认值。这是追击策略，不是对玩家是否使用外挂的检测结论；好友排除规则继续生效。</dd>
+
+      <dt>配置预设</dt><dd><a href="/files/guizhouware-presets-rc13.zip">rc13 历史预设包</a>：三份经对打验证的原版服重锤配置（vanilla-mace 系列）与手动耦合巡航。放入 <code>guizhouware/configs/</code> 后用 <code>.configs load &lt;名字&gt;</code> 加载；预设只覆盖列出的设置，其余沿用当前配置。</dd>
+      <dt>云参数与导入导出</dt><dd>ClickGUI 顶部“云参数”进入独立页面，提供私有账号同步与会员公开预设，授权客户可上传公开模块设置。本地可用 <code>.configs export &lt;name|live&gt; &lt;path&gt;</code> 与 <code>.configs import &lt;name&gt; &lt;path&gt;</code> 传输 JSON；云端操作可用 <code>.configs cloud private|public list|save|load|delete</code>。公开预设仅含模块设置。</dd>
+      <dt>诊断与异步默认值</dt><dd><code>.diag start 60</code> 开始本地采样，<code>.diag export</code> 保存报告。飞行 <code>ParallelPlanning</code> 默认开；锚 <code>AsyncCompute</code> 默认关，结果有效期默认 2 tick、捕获预算 4 ms。两者是独立设置。</dd>
+      <dt>服务器兼容性</dt><dd>飞行约束使用客户端预测，实际移动、命中和伤害由服务器判定。速度与 YCap 是设置值，不代表实测速度；不承诺 Grim／2b2t 通过率或零回弹。</dd>
+
+    </dl>
+
+  </section>
+
+  <section class="section" id="install" aria-labelledby="install-title">
+
+    <div class="section-heading"><h2 id="install-title" data-idx="4">安装</h2></div>
+
+    <ol class="install-list">
+
+      <li><h3>下载登录器</h3><p>运行 <code>GuizhouWareLauncher.exe</code> 或 <code>RimeLauncher.exe</code>。登录器为免安装单文件程序，名称是 Rime 1.0。</p></li>
+
+      <li><h3>激活账号</h3><p>在「卡密激活」页输入卡密并设置账号密码。账号绑定本机，换机时联系管理员处理解绑。</p></li>
+
+      <li><h3>安装客户端</h3><p>登录后选择游戏版本，点击「下载并安装」。安装完成后，通过对应的 Fabric 游戏实例启动。</p></li>
+
+    </ol>
+
+    <p class="install-footnote">每份客户端内嵌独立水印与账号凭据，转售或共享将定位到购买账号并封禁。</p>
+  </section>
+  <section class="section" id="telemetry-notice" aria-labelledby="telemetry-title">
+    <div class="section-heading"><h2 id="telemetry-title" data-idx="5">自动诊断上传须知</h2></div>
+    <p class="validation"><strong>适用版本：</strong>本须知适用于 <code>1.3.1-rc.21-protection.1</code>（rc21）起的新版客户端。使用含有效遥测凭据的客户端并进入游戏时，会自动向 Rime 服务上传诊断数据，用于排查运行问题、评估模块表现和改进版本。</p>
+    <p class="validation">新版不再提供上传 on/off 选择；旧 <code>enabled=false</code> 不再停用 rc21 自动上传。旧配置迁移时保留随机安装标识。</p>
+    <dl class="specs">
+      <dt>上传范围</dt><dd>客户端与游戏版本、相关模块及部分设置、延迟和 TPS 等运行指标，以及战斗、移动和飞行事件与摘要，包括速度、装备类型、攻击、受伤与图腾事件等诊断信息。</dd>
+      <dt>标识与账号关联</dt><dd>上传随机生成的安装标识和会话标识；服务器地址经哈希处理后上传，不发送明文地址。遥测凭据可与授权账号关联，这些数据不属于完全匿名数据。</dd>
+      <dt>不上传的内容</dt><dd>遥测不上传聊天内容、玩家姓名、玩家 UUID、绝对位置坐标或账号密码。随机诊断标识不使用玩家 UUID。</dd>
+      <dt>本地诊断报告</dt><dd><code>.diag</code> 生成的详细性能报告保存在本地，不会自动上传。</dd>
+      <dt>查看接收状态</dt><dd>使用 <code>.telemetry status</code> 查看自动遥测状态与服务端接收结果。接收器确认仅表示 HTTP 2xx 响应，不代表独立核验落盘。</dd>
+    </dl>
+  </section>
+  <section class="section archive" id="history" aria-labelledby="history-title">
+    <div class="section-heading"><h2 id="history-title" data-idx="6">历史记录</h2><span>近期记录 · 更早版本折叠</span></div>
+<details><summary>v1.3.1-rc.22-fontfix.1 · 2026.09.21 · 字体兼容修复</summary>
+<section class="section" id="release-fontfix-download" aria-labelledby="release-fontfix-title">
+    <div class="section-heading"><h2 id="release-fontfix-title" data-idx="1">rc22 字体热修记录</h2><time datetime="2026-09-21">2026.09.21</time></div>
+    <h3 class="release-title">rc22 字体兼容修复</h3>
+    <div class="release-meta"><span class="published">已发布 · v1.3.1-rc.22-fontfix.1 · 内部测试版</span><span>基于最新 rc22</span><span>提交 <code>e476e6d</code></span></div>
+    <ul class="change-list">
+      <li class="change"><h3>文字显示恢复</h3><div><p>自定义字体初始化、测量或绘制异常时，菜单、HUD、ClickGUI 与名牌自动切换为 Minecraft 原版字体，并记录一次故障原因。修复字体失败后界面只剩面板、缺少文字的恢复逻辑。</p></div></li>
+      <li class="change"><h3>渲染与兼容</h3><div><p>原版字体的测量与绘制使用一致缩放，防止回退递归；绘制异常后恢复矩阵、清空字形队列。对于未抛出异常的显卡兼容问题，可在启动器 JVM 参数加入 <code>-Dguizhouware.vanillaFonts=true</code> 强制使用原版字体。</p></div></li>
+      <li class="change"><h3>继承 rc22 更新</h3><div><p>保留放置命中点坐标修复及现有授权、水印、诊断行为。<a href="#release-rc22-download">查看 rc22 更新记录</a>；<a href="#release-rc21-download">查看 rc21 完整累计更新记录</a>。</p></div></li>
+    </ul>
+    <p class="validation"><strong>验证：</strong>41 项字体恢复检查、完整构建及 26,087 项混淆检查通过；同一成品完成 Microsoft Java 21.0.7 与 Adoptium Java 21.0.12.1 启动及稳定观察，覆盖默认和强制原版字体模式。尚未在反馈者的具体运行环境中复现。</p>
+    <details class="build-details"><summary>构建标识与 SHA256</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-1.21.11-1.3.1-rc.22-fontfix.1-obfuscated.jar</code>（5,875,055 字节）</dd><dt>SHA256</dt><dd><code class="checksum">3caca1f4cdfe06391ae6db49c0a69de62ef7a656b21cd3d65cf43c663af5acc5</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/e476e6d946b6133919ee04a959f20832d399b29a"><code>e476e6d</code></a></dd><dt>安装方式</dt><dd>通过本页登录器取得本人授权与水印版本；水印包校验值因账号而异。</dd></dl></details>
+  </section>
+</details>
+<details><summary>v1.3.1-rc.21-protection.1 · 2026.09.21 · 累计更新记录</summary>
+<section class="section" id="release-rc22-download" aria-labelledby="release-rc22-title">
+    <div class="section-heading"><h2 id="release-rc22-title" data-idx="1">rc22 更新记录</h2><time datetime="2026-09-21">2026.09.21</time></div>
+    <h3 class="release-title">放置命中点坐标修复</h3>
+    <div class="release-meta"><span class="published">已发布 · v1.3.1-rc.22 · 内部测试版</span><span>基于 rc21</span><span>提交 <code>7a6978c</code></span></div>
+    <ul class="change-list">
+      <li class="change"><h3>锚放置</h3><div><p>修复锚空放模式借助相邻方块放置时，命中点落到被点击方块范围外的问题；选面、距离判断与最终发送使用同一个命中点。</p></div></li>
+      <li class="change"><h3>坐标计算与兼容</h3><div><p>普通放置共用相对被点击方块的坐标计算，修复烟花非向下交互分支的同类问题，并补充无玩家或世界时的退出检查。保留 rc21 的发包成功判断、取消清理、授权及配置兼容。</p></div></li>
+    </ul>
+    <p class="validation"><strong>验证：</strong>68 个回归任务、26,032 项混淆检查通过；同一成品完成 Microsoft Java 21.0.7 与 Adoptium Java 21.0.12.1 启动及稳定观察。覆盖六个方向、负坐标和大坐标；尚无实服成功率提升的量化结论，本次不增加放置射程。<a href="#release-rc21-download">rc21 完整累计更新记录</a>。</p>
+    <details class="build-details"><summary>构建标识与 SHA256</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-1.21.11-1.3.1-rc.22-obfuscated.jar</code>（5,869,949 字节）</dd><dt>SHA256</dt><dd><code class="checksum">9e56ccd4988db85ed3544f5d0e8cc64dad6b5cc606a8f5173ae5dcc5129a299f</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/7a6978cccff2e5c7050ec914bac14b90d47d2d3d"><code>7a6978c</code></a></dd><dt>安装方式</dt><dd>通过本页登录器取得本人授权与水印版本；水印包校验值因账号而异。</dd></dl></details>
+  </section>
+
+  <section class="section" id="release-rc21-download" aria-labelledby="release-rc21-download-title">
+    <div class="section-heading"><h2 id="release-rc21-download-title" data-idx="1">更新日志</h2><time datetime="2026-09-21">2026.09.21</time></div>
+    <h3 class="release-title">界面、战斗、空战适配与诊断更新</h3>
+    <div class="release-meta"><span class="published">已发布 · v1.3.1-rc.21-protection.1 · 内部测试版</span><span>rc18–rc21 累计更新</span><span>提交 <code>f0f1ace</code></span></div>
+    <p class="validation">本次包含上次线上 rc17 之后的全部功能改动。旧版本说明与当时的验证结果完整保留在<a href="#release-rc17-download">历史记录</a>。</p>
+    <ul class="change-list">
+      <li class="change"><h3>界面与 HUD · rc18</h3><div><p>主菜单、三栏 ClickGUI、设置控件和 HUD 编辑器统一为原生雾蓝半透明界面。支持全局搜索、键盘导航、中文文本编辑、精确数值与颜色输入、鼠标快捷键及单项恢复默认；菜单整体可在 60%–150% 缩放。</p><p>HUD 可拖拽、键盘微调、滚轮缩放和保存位置；每个元素独立设置大小、背景/文字/强调色与背景透明度，右键直达外观页。无实时数据的元素标为预览，通知长文字、淡出与小窗口布局得到修正。编辑文字、按键或 HUD 时，GuiMove 不再带动玩家移动；从编辑器返回也会保持模块状态与订阅一致。</p></div></li>
+      <li class="change"><h3>甲飞入口与配置</h3><div><p>换装统一由 Movement → 甲飞（<code>ArmorFly</code>）控制，移除飞行 Tricks 页重复开关；飞行方向与换甲可以独立使用。旧配置按原有效启用状态迁移，关闭的飞行配置不会因残留选项自动开甲飞，已有手动布局与自定义显示名保留。</p></div></li>
+      <li class="change"><h3>水晶与活塞 · rc19</h3><div><p><code>CrystalAura</code> 增加同实体攻击抑制、有限重试、放置等待和事件扫描预算；被取消的攻击不推进节奏，致死判断按单个目标生命值处理。<code>PistonCrystal</code> 逐步确认基座、活塞、水晶、供电、伸出与攻击，重新检查距离、目标、自伤及材料，限制重试和总等待；当前目标无可用布局时继续检查其他目标。</p></div></li>
+      <li class="change"><h3>锚与床</h3><div><p><code>AnchorAura</code> 按实际充能值推进放置、充能与引爆，逐步检查物品，支持已有充能锚、背包和空快捷栏交互。<code>AutoBed</code> 按床头爆心与两半方块状态确认动作，修复自动合成分料、光标恢复、副手计数和界面归属。</p><p>水晶、活塞、床、锚统一护甲、韧性、附魔、抗性与难度减伤，改善碰撞遮挡、自伤和保命判断。确认等待按已观察到的状态提前推进，不必固定等满超时。</p></div></li>
+      <li class="change"><h3>挖掘协同</h3><div><p><code>PacketMine</code> 保留双挖、补挖和 BreakAhead 等策略，增加工具切换与持有期限、有限重试、地面/飞行/液体暂停及开始/结束旋转。明确区分“STOP 本地已提交”和“已观察到空气”，预放置仍可使用前者。矿速按 1.21.11 实际挖掘属性、水下条件和当前状态计算，比较工具不再临时改动手持物，避免换工具后错误累加历史进度。</p><p><code>AutoMine</code> 增加自身保护、好友挖掘同步和目标回退；破坏进度按玩家跟踪并过期。修复 AntiSurround 外侧预放置受阻后的回退；GlassPush 改为有限重试的放置确认流程，默认仍关闭。主挖、副挖和 SwordGap 的工具占用按所有者隔离，避免相互释放工具。</p></div></li>
+      <li class="change"><h3>移动辅助</h3><div><p>新增默认关闭的 <code>AntiHunger</code> 和 <code>NoFall</code>：前者处理冲刺/落地位，后者在下落和地面检查满足时使用现有位置包处理落地位；飞行、液体、骑乘等不适用状态暂停，保留挖掘、甲飞与重锤所需条件。</p><p><code>NoSlow</code> 保留 Eat/Crawl，增加 Client 与 SlotResend 消费模式及物品、盾、潜行、方块减速开关；修复珍珠/烟花误触发、消费状态过期和坐标覆盖，槽位重发有次数与 tick 节奏限制。新增物品与环境开关默认关闭。</p></div></li>
+      <li class="change"><h3>动作与会话</h3><div><p>关键攻击、放置与旋转在本地发包完成后检查取消结果；被拒绝的静默旋转不会登记为成功，替换包沿用完整发送检查。换世界、重生或关闭模块时清理待确认动作、缓存与放置队列。提交成功仍不等于服务端接受。</p></div></li>
+      <li class="change"><h3>诊断与缓存 · rc20</h3><div><p>新增 <code>.diag start 60</code>、<code>status</code>、<code>stop</code>、<code>export</code> 与 Diagnostics HUD，记录模块/监听器耗时、峰值、近似 P95、渲染间隔、GC、内存、发包取消和已接入的动作等待/重试原因；<code>.timings</code> 继续可用。报告仅存本地，嵌套耗时不能直接相加。</p><p>水晶伤害在同轮复用、同批方块变化合并扫描，水晶出生即时路径保留；锚、床与活塞复用当轮结果和共享装备资料。单个普通回调异常会记录并隔离，后续模块继续运行。</p></div></li>
+      <li class="change"><h3>可选战斗后台计算</h3><div><p>锚光环加入真实后台碰撞射线、伤害和候选计算：<code>AsyncCompute=false</code> 默认关闭，<code>AsyncMaxAge=2</code> tick、<code>SnapshotBudgetMs=4</code> ms。世界和装备读取在主线程完成，结果过期或状态不符则丢弃并回退；应用前再次检查当前伤害、自伤、范围和材料。是否更快需在本机采样对比。</p></div></li>
+      <li class="change"><h3>自适应空战</h3><div><p>根据目标可观察的位置、滑翔/地面状态、胸部装备、加速和转向历史调整预测，覆盖普通滑翔、滑翔加速、胸甲空中、其他空中与地面运动。装备/姿态变化缩短预测并作废旧计划，连续位移仍用于估速；落地、传送、异常跳变和采样间断会清理不适用的数据。保留普通落体重锤的防御预警，HUD 显示目标运动类型。</p></div></li>
+      <li class="change"><h3>名称兼容</h3><div><p>默认显示名称统一为 <code>CrystalAura</code>、<code>PacketMine</code>、<code>PistonCrystal</code>、<code>AutoBed</code>、<code>AnchorAura</code>、<code>AerialCombat</code>、<code>ElytraFlight</code>。旧配置 ID 与按键不变，自定义名称保留；模块命令支持旧 ID 和新标准名，重名或歧义会提示使用完整名称。</p></div></li>
+      <li class="change"><h3>自动诊断 · rc21</h3><div><p>含有效遥测凭据的客户端进入游戏后自动上传诊断；不再提供 on/off 选择，旧 <code>enabled=false</code> 不再关闭新版上传，迁移时保留安装标识。<code>.telemetry status</code> 显示尝试、接收器确认、失败、队列和退避状态；HTTP 确认不代表独立核实落盘。修复攻击摘要计数，飞行摘要失败降级按实际发送内容处理。</p><p>遥测可关联授权账号；上传范围、排除项及本地 <code>.diag</code> 报告边界见<a href="#telemetry-notice">自动诊断上传须知</a>。</p></div></li>
+      <li class="change"><h3>授权与发行检查</h3><div><p>完善授权租期、网络宽限、签名响应检查和动作入口限制，收紧正式包的开发环境豁免；继续保留混淆、账号水印和设备绑定。本人授权版本仍通过登录器取得，通用构建文件没有客户凭据，不能解锁受保护模块。保护措施不构成绝对防破解保证。</p></div></li>
+    </ul>
+    <p class="validation"><strong>验证：</strong>67 个回归任务、26,026 项混淆检查通过；同一 SHA256 成品在 Microsoft Java 21.0.7 与 Adoptium Java 21.0.12.1 下完成启动并稳定观察。新版尚无实服对战、FPS 提升或 rc21 遥测接收验证结论；历史战绩仅对应旧版本。<a href="/elytra.html#release-rc21">查看本版空战与使用说明</a>。</p>
+    <details class="build-details"><summary>构建标识与 SHA256</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-1.21.11-1.3.1-rc.21-protection.1-obfuscated.jar</code>（5,869,438 字节）</dd><dt>SHA256</dt><dd><code class="checksum">072dbd300b83aed20e73a25781bb3fe78b8938463ed7f7993ecebc01c5d5174b</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/f0f1ace74ecf97ff14cde9413b65eab9bdf4f7c9"><code>f0f1ace</code></a></dd><dt>安装方式</dt><dd>通过本页登录器取得本人授权与水印版本；上列文件名仅为构建标识，水印包校验值因账号而异。</dd></dl></details>
+  </section>
+</details>
+<details><summary>v1.3.1-rc.17 · 2026.09.20 · 历史版本完整说明</summary>
+<p>以下保留 rc17 发布时的说明与当时验证；其中战绩不代表 rc21 的实服结果。</p>
+<section class="section" id="release-rc17-download" aria-labelledby="release-rc17-download-title">
+    <div class="section-heading"><h2 id="release-rc17-download-title" data-idx="1">更新日志</h2><time datetime="2026-09-20">2026.09.20</time></div>
+    <h3 class="release-title">长矛接敌、重锤蓄能与甲飞回甲更新</h3>
+    <div class="release-meta"><span class="published">已发布 · v1.3.1-rc.17 · 内部测试版</span><span>提交 <code>129d993</code></span><span>构建校验 <code>fbbab3d0e7ce</code></span></div>
+    <ul class="change-list"><li class="change"><h3>长矛接敌与 MXS 衔接</h3><div><p>接敌距离和方向统一使用甲飞攻击眼高；蓄力就绪后在近距离收短前进步长，减少冲过刺击机会。有效机会最多保留两 tick，明确武器威胁仍可打断。MXS 的长矛阶段同步采用这套逻辑。</p></div></li><li class="change"><h3>重锤蓄能高度</h3><div><p>拉升规划保持配置的蓄能高度下限，改善砸落后下一轮高度不足的问题；继续保留真实下落、距离和视线检查。</p></div></li><li class="change"><h3>甲飞及时回甲</h3><div><p>正常甲飞在移动发送后尽早穿回胸甲，保留末尾恢复路径和重锤装备优先权；不增加换装次数，修正与起飞恢复仍按原规则处理。</p></div></li><li class="change"><h3>空战 HUD 与启动修复</h3><div><p>游戏内空战 HUD 按已选原型调整布局、字体、图标、雷达与层间动画，修正目标切换、透明度及缩放。Fullbright 延后读取亮度选项，修复启动恢复时选项尚未初始化的问题。</p></div></li><li class="change"><h3>授权与安装</h3><div><p>发行包继续混淆，保留独立账号水印、设备绑定和签名心跳。通过登录器更新为本人授权版本。本页所列 rc17 版本保留原诊断开关；rc21 起的新版自动诊断机制见<a href="#telemetry-notice">上传须知</a>。</p></div></li></ul>
+    <p class="validation"><strong>验证：</strong>完整构建、全部配置的回归与 10177 项混淆校验通过。长矛同模式本地对照各 12 场：原逻辑 7 胜 5 负，接敌候选 11 胜 1 负；双方初始装备与消耗品一致，对手为原始旧包 + 729 参数。策略配置与协议链路不同，结果不代表所有服务器的胜率；MXS 暂无同模式实战结论。<a href="/elytra.html#release-rc17">查看本版说明与验证边界</a>。</p>
+    <details class="build-details"><summary>构建标识与 SHA256</summary><dl class="specs"><dt>构建文件</dt><dd><code>guizhouware-1.21.11-1.3.1-rc.17-obfuscated.jar</code>（5,758,512 字节）</dd><dt>SHA256</dt><dd><code class="checksum">fbbab3d0e7ce18a2aa68dfad76ee0b9de1b968dc37bcf20754d326de1376a5f6</code></dd><dt>源码提交</dt><dd><a href="https://github.com/rennaikankk-cmyk/guizhouware/commit/129d993f31b915223eb22c17ea3b397258284e7b"><code>129d993</code></a></dd><dt>安装方式</dt><dd>通过登录器取得本人授权与水印版本；水印包校验值因账号而异。</dd></dl></details>
+  </section>
+</details>
+<details><summary>v1.3.1-rc.16 · 2026.09.20 · 空战 HUD 视觉修复</summary><ul class="change-list">
+      <li class="change"><h3>雷达盘与面板排版对齐设计稿</h3><div><p>修复 rc.14 引入的空战 HUD 在游戏内与网页预览不一致的问题：雷达方位盘此前被渲染成方块，现改为真正的圆形刻度盘（外环加虚线内环，逐段绘制逼近圆弧）；面板高度不足导致底部图腾／敌速一行被裁出面板外，现已完整显示；血量与护甲一行改为固定列位，图标、血条、数值不再相互重叠；右侧数据列（接近率／拦截／能量／砸落／包络）的数值统一右对齐到同一边缘。</p></div></li>
+      <li class="change"><h3>目标显示守卫</h3><div><p>追击行为未就绪（如刚关闭鞘翅 Bot）时，HUD 不再短暂显示残留的旧目标。</p></div></li>
+      <li class="change"><h3>包含 rc.15 全部内容</h3><div><p>高空俯冲顿挫修复（下落路径预检钳制到攻击平面）等。详见历史记录。</p></div></li>
+    </ul><p>客户端构建 4abac48；本条保留发布时的记录。</p></details><details><summary>v1.3.1-rc.15 · 2026.09.20 · 高空重锤俯冲顿挫修复</summary><ul class="change-list">
+      <li class="change"><h3>俯冲路径预检修复</h3><div><p>修复重锤／MXS 模式从高处俯冲时"落到一半停顿再继续下落"的现象：下落前的路径碰撞预检按当前速度前瞻扫描（高空末速约 2.2 格/tick，前瞻约 4.6 格），在离地约 4.6 格时把目标脚下的地面误判为障碍，提前进入恢复滑翔（视觉停顿）后再次俯冲。现在扫描范围钳制到攻击平面（目标盒上方）为止，高速俯冲可直接穿过砸击窗口。</p></div></li>
+      <li class="change"><h3>包含 rc.14 全部内容</h3><div><p>两层空战 HUD（TargetHud）、rc.13 耦合巡航双视角等。详见历史记录。</p></div></li>
+    </ul><p>客户端构建 1046069；本条为该版本发布时的更新记录。</p></details><details><summary>v1.3.1-rc.14 · 2026.09.20 · 空战 HUD 进入客户端</summary><ul class="change-list">
+      <li class="change"><h3>两层空战 HUD</h3><div><p>Hud 模块新增 TargetHud 元素（默认开启，屏幕右侧中部）：未锁定目标时显示巡航层（朝向刻度带含目标方位菱形、空速、垂直速度与高度、能量储备）；追击模块锁定目标后交叉淡入目标层。</p></div></li>
+      <li class="change"><h3>目标层 · 敌情面板</h3><div><p>姿态雷达盘（相对方位、距离开方压缩、高度差读数）、血量/护甲条与图腾计数、敌我速度，数据逐帧平滑（连续量指数缓动，计数器直读）。</p></div></li>
+      <li class="change"><h3>算法可视化</h3><div><p>接近率（正接近/负拉开）、拦截解算倒计时（无解时显示"平追回退"）、能量优势、砸落窗口蓄能与就绪、Grim 包络钳制（请求速度 vs 实际放行）、追击状态机意图徽章（爬升/追击/俯冲/待确认/规避/缠斗/脱离）。</p></div></li>
+      <li class="change"><h3>包含 rc.13 全部内容</h3><div><p>耦合巡航双视角（Via 旧协议门控与自动回退）、rc.12 盔甲架目标层等。详见历史记录。</p></div></li>
+    </ul><p>客户端构建 f722420；本条为该版本发布时的更新记录。</p></details><details><summary>v1.3.1-rc.13 · 2026.09.19 · 耦合巡航双视角</summary><ul class="change-list">
+      <li class="change"><h3>双视角（CruiseDualLook，默认开）</h3><div><p>拉升/俯冲段额外求解一个“盒视角”（拉升=平视，俯冲=自动求解对），并在本 tick 移动包之前直发一个同位置的追加转头包上报它；包络盒的第二视线由上一 tick 实际视角改为锚定盒视角。效果：运动视角可以很陡以获得强爬升，而水平速度的增长额度按平视计算——拉升段不再丢弃水平速度。每 tick 包序（重同步 → 盒视角包 → 移动包）与参考端一致。</p></div></li>
+      <li class="change"><h3>协议能力门与自动回退</h3><div><p>双视角仅在客户端安装 ViaFabricPlus 且 Via 目标协议为 1.20.7 族及以下时生效（1.21+ 协议不接受一 tick 双旋转包）。不满足时自动回退单视角（行为与旧版完全一致），并在每次连接内首次启用时聊天栏提示：需安装 ViaFabricPlus 并通过 Via 连接 1.20.7 及以下版本服务器。纯垂直与水平巡航不受影响；俯冲解不存在的 tick 同样回退单视角。</p></div></li>
+      <li class="change"><h3>配套更新</h3><div><p>速度日志追加当前盒视角俯仰显示；手动耦合巡航预设内置双视角；预设包更新为 <code>guizhouware-presets-rc13.zip</code>。包含 rc.12 全部内容（盔甲架目标层等）。</p></div></li>
+    </ul><p>客户端构建 6696494；本条为该版本发布时的更新记录。</p></details><details open><summary>站点与服务 · 2026.09.19 · 诊断保留、聊天室与下载页（非客户端版本）</summary><ul class="change-list">
+      <li class="change"><h3>诊断按版本保留</h3><div><p>客户端诊断改为按发行版本保留：新版本客户端首次上报后，旧版本产生的诊断记录自动清除，未升级客户端的迟到上报不再计入——管理端始终反映当前发行版的真实数据。</p></div></li>
+      <li class="change"><h3>论坛聊天室每日重置</h3><div><p>聊天记录按天清空，进入新的一天后只显示当天消息。</p></div></li>
+      <li class="change"><h3>下载页整理</h3><div><p>更新历史默认展示最近五个版本，更早版本折叠收纳；配置预设提供统一预设包下载。</p></div></li>
+      <li class="change"><h3>空战 HUD 开发预览</h3><div><p>两层空战 HUD（巡航层/目标层）与算法可视化原型上线：<a href="/hud/">在线体验</a>，说明见鞘翅 Bot 页。尚未随客户端发布。</p></div></li>
+    </ul></details><details class="older-releases"><summary>更早版本（12）</summary><details><summary>v1.3.1-rc.12 · 2026.09.19 · 假人目标支持</summary><ul class="change-list">
+      <li class="change"><h3>盔甲架目标层</h3><div><p>Targets 模块新增 <code>ArmorStands</code> 开关（默认关）。训练假人是盔甲架，此前不属于玩家／敌对／中立／被动任何一类：需要锁定目标的战斗（如重锤俯冲链）不会对假人发起，而长矛动能伤害不受影响（它是持矛使用期间的被动逐 tick 判定，不需要锁定目标）。开启该开关并把追击的 <code>PlayerOnly</code> 关闭后，重锤即可对假人完整执行爬升—俯冲—砸落。</p></div></li>
+      <li class="change"><h3>包含 rc.11 全部内容</h3><div><p>长矛瞄准校准与蓄力就绪后的周期扫掠、重锤俯冲可达性按请求速度评估、可选耦合巡航、甲飞与长矛连续性、空战恢复与重锤预设。详见历史记录。</p></div></li>
+    </ul><p>客户端构建 8dcf0fd；本条为该版本发布时的更新记录。</p></details><details><summary>v1.3.1-rc.11 · 2026.09.19 · 空战瞄准与重锤俯冲更新</summary><ul class="change-list">
+      <li class="change"><h3>长矛瞄准校准</h3><div><p>按服务端对局数据校准长矛瞄准基准：以收包位置偏移为准，移除实测更差的预测前置项。长矛蓄力就绪后，瞄准方向以受控幅度周期扫掠，让逐 tick 的命中判定扫过预测不确定区，替代此前的单点停驻瞄准。</p></div></li>
+      <li class="change"><h3>重锤俯冲可达性</h3><div><p>俯冲航线可达性评估改用飞行控制的请求速度，而非包络钳制后的瞬时速度。此前高速接近阶段常被误判为不可达，只保持平追；现在可以按计划建立高度优势后发起俯冲。</p></div></li>
+      <li class="change"><h3>耦合巡航（可选）</h3><div><p>GuangxiElytra 新增 CoupledCruise 开关（默认关闭，仅烟花推进模式）：巡航、拉升与下压角、智能爬升角、下降帽与高度窗口等设置，把巡航飞行与追击意图并入同一运动控制器。</p></div></li>
+      <li class="change"><h3>甲飞与长矛连续性</h3><div><p>烟花使用与滑翔重启窗口联动；换装胸甲与防御机动期间保持长矛蓄力不中断，减少进攻节奏断档。</p></div></li>
+      <li class="change"><h3>空战恢复与预设</h3><div><p>空中攻击恢复与移动目标会合改进；加入经对打验证的原版重锤预设；追击的爬升意图保持原有幅度不被放大。</p></div></li>
+    </ul><p>客户端构建 f54fcdf；本条为该版本发布时的更新记录。</p></details><details><summary>v1.3.1-rc.6 · 2026.09.19 · 甲飞诊断与后台摘要更新</summary><ul class="change-list">
+      <li class="change"><h3>甲飞诊断</h3><div><p>该历史版本在诊断上报开启且授权有效时，为甲飞与追击约每 10 秒生成一条飞行摘要，记录观测速度、上升情况、甲飞与追击时间、烟花附着占比和位置修正次数。</p></div></li>
+      <li class="change"><h3>统计准确性</h3><div><p>区分有效观测速度与名义速度，记录请求和应用速度；暂停、位置修正、采样缺口和异常跳变不混入有效位移。切换配置、玩家或世界时切分或丢弃旧窗口。</p></div></li>
+      <li class="change"><h3>烟花与状态诊断</h3><div><p>统计八类明确的补烟花受阻原因，避免旧原因跨 tick 重复累计；模块重启或授权失效时清除旧观测。位置修正保留“原因未知”，不推断反作弊处罚。</p></div></li>
+      <li class="change"><h3>后台飞行摘要</h3><div><p>客户端诊断新增“飞行摘要”筛选和中文摘要行，支持按原有筛选条件查看、导出。缺失的历史字段显示“–”，不会伪装成测得的零值。</p></div></li>
+      <li class="change"><h3>兼容与控制</h3><div><p>诊断仅增加观测，不调整飞行速度、追击策略或发包。该历史版本提供诊断关闭命令；rc21 起的新版自动诊断机制见<a href="#telemetry-notice">上传须知</a>。混淆、账号水印、设备绑定、签名心跳及后台避障与拦截计算继续保留。</p></div></li>
+    </ul><p>客户端构建 5933125；本条为该版本发布时的更新记录。</p></details><details><summary>v1.3.1-rc.3 · 2026.09.19 · 重锤追击与甲飞连续性</summary><ul class="change-list">
+
+      <li class="change"><h3>重锤追击</h3><div><p>新增自适应拉升高度与三维拦截规划；追不上时先追近，目标急转时缩短预测，接近攻击范围后收速对齐。移动后补查攻击窗口，保留实际距离、视线与下落条件。</p></div></li>
+
+      <li class="change"><h3>甲飞衔接</h3><div><p>修复滑翔标志延迟期间的移动换装衔接，减少重复的起飞请求；保留手动换装、停用和重锤俯冲的装备恢复规则。</p></div></li>
+
+      <li class="change"><h3>自动使用</h3><div><p>新增独立 AutoUse，支持物品白名单、主副手和附近敌人筛选；手动操作与追击武器控制优先。修复副手举盾因主手滚轮换槽而中断的问题。</p></div></li>
+
+      <li class="change"><h3>攻击转向</h3><div><p>修复移动后攻击的转向优先级延续到下一 tick、阻挡新转向的问题，保留正常移动时的朝向恢复。</p></div></li>
+
+      <li class="change"><h3>配置与预设</h3><div><p>修复重复加载预设导致开关反转、启用时读取旧设置、字符串下划线损坏等问题；改进首次启动和配置保存。</p></div></li>
+
+      <li class="change"><h3>后台计算保留</h3><div><p>保留默认开启的 ParallelPlanning：后台进行局部避障、恢复轨迹及目标拦截计算；世界读取、攻击、换装和最终验证仍由游戏主线程完成。</p></div></li>
+
+      <li class="change"><h3>授权与诊断</h3><div><p>继续使用登录器下载、账号水印、设备绑定与签名心跳，发行包保持混淆。保留现有客户端诊断；更详细的甲飞窗口统计不包含在本次版本中。</p></div></li>
+
+    </ul><p>客户端构建 300fbdf；本条为该版本发布时的更新记录。</p></details><details><summary>v1.3 · 2026.09.18 · 混淆与授权保护修复</summary><p>修复混淆后的枚举反射和 ClickGUI 覆写，保留账号水印、设备绑定及签名心跳。上一线上包 SHA256：<code>4d0dadfca921aca28635c4a95821cd23fe97b0c8f106f89a3a60f8e7ddaa60a6</code>。</p></details><details><summary>v1.3 · 飞行多线程更新</summary><p>后台局部避障、恢复轨迹及目标拦截计算，使用有界任务队列和快照失效检查；这些能力在当前版本中继续保留。</p></details><details><summary>v1.3 · <code>ae411a6e1e16</code> · 飞行战斗与 ArmorFly 后续</summary><p>ArmorFly 让位锤击俯冲；下落所有权释放与掠空重试策略；切槽不再丢锤击命中确认；AutoSword 砸落窗口目标专属伤害估算；恢复烟花按实际飞行方向对齐；矛加速与开火共用安全弹道判定。25 项验证通过。SHA256 <code>ae411a6e1e166be5cf1d1e97639b5da9e50197bda74b9981af8f8a5e83e96569</code></p></details><details><summary>v1.3 · <code>3d4a4ab06412</code> · 自由视角、战斗恢复与避障重做</summary><p>FreeLook 默认开（视角不改变飞行航向）；MACE 追击优先攻击进近，攻击发出同 tick 建爬升航向；局部避障恢复 A* 路由（256 节点、4 tick 重规划）；SafeLanding／TerrainGuard 默认开，TerrainLookahead 12 格；意外失去滑翔可重启。Java 21 离线构建 23 项验证通过。SHA256 <code>3d4a4ab0641211ddc14142a05b6bcca24b1aa561bfb89492f6d21abca18ad38a</code></p></details><details><summary>v1.3 · <code>441da4e9e26b</code> · 鞘翅、空战与水晶协同更新</summary><p>可选退翼锤击（AutoMaceDive，默认关）；迎面／横移／逃离目标的截击预测与滑翔惯性路线；鞘翅替换与胸甲恢复修复、烟花使用检查加强；水晶攻击去重、朝向与自伤检查统一，生成即打破流程复用条件。Java 21 离线构建与 19 项检查通过。SHA256 <code>441da4e9e26bd1f72bba8c24c4ab9f28fadbb9d0918f02098befa1a9b7bf0f9e</code></p></details><details><summary>v1.3 · <code>7d2a7db</code> · 鞘翅模块与跨版本放置</summary><p>新增 GuangxiElytra、Chase、SpearTP；整合 GhostHit、TpsSync、FacePlace、FireClear、SneakPlace、Desync 等功能；调整放置命中点，改善已测试跨版本链路的兼容性；更新 ClickGUI 与字体。</p></details><details><summary>v1.3 · <code>5eb3507</code> · 床战斗</summary><p>加入 GuangxiBed 床战斗模块、三个模块的 Rotate 开关及 NoLandParticle。</p></details><details><summary>v1.3 · <code>d25dae3</code> · 战斗基础功能</summary><p>统一 Guangxi 模块命名；加入 AutoSwap、RangePreset、BasePlace 分层和 GuangxiTP；修复 BundlePacket 收包链路、即时打破自伤检查、放置锁伤害判断及 EventBus 异常隔离。</p></details></details>
+  </section>
+
+  <footer><b>Rime</b><span>内部版 · 账号与卡密请联系管理员</span></footer>
+
+</main>
+
+<script src="/site-ui.js?v=20260922b"></script>
+<script src="/boot-refresh.js?v=20260922b"></script>
+
+</body>
+
+</html>
