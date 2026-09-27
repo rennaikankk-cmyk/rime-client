@@ -1,0 +1,89 @@
+buildscript {
+    repositories {
+        maven { url 'https://repo.huaweicloud.com/repository/maven/' }
+        mavenCentral()
+    }
+    dependencies { classpath 'com.guardsquare:proguard-gradle:7.6.1' }
+}
+
+plugins {
+    id 'java'
+}
+
+version = '3.0'
+
+repositories {
+    mavenCentral()
+    maven { url 'https://maven.fabricmc.net/' }
+}
+
+dependencies {
+    compileOnly 'net.fabricmc:fabric-loader:0.16.14'
+    compileOnly 'com.github.oshi:oshi-core:6.6.5'
+    testImplementation 'net.fabricmc:fabric-loader:0.16.14'
+    testImplementation 'com.github.oshi:oshi-core:6.6.5'
+}
+
+sourceSets {
+    main.java.srcDirs = ['src']
+    test.java.srcDirs = ['tests']
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.named('jar') {
+    archiveFileName = 'guard-only.jar'
+    destinationDirectory = layout.buildDirectory
+}
+
+tasks.register('testGuard', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'd1.GuardRegressionTest'
+}
+
+tasks.register('integritySmoke', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'd1.IntegritySmoke'
+}
+
+tasks.register('entrySessionTest', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'd1.EntrySessionTest'
+}
+
+tasks.register('mockHeartbeatTest', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'd1.MockHeartbeatTest'
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('testGuard')
+    dependsOn tasks.named('integritySmoke')
+    dependsOn tasks.named('entrySessionTest')
+    dependsOn tasks.named('mockHeartbeatTest')
+}
+
+task obfuscateJar(type: proguard.gradle.ProGuardTask) {
+    dependsOn tasks.named('jar')
+    injars 'build/guard-only.jar'
+    outjars 'build/guard-obf.jar'
+    printmapping 'build/proguard-map.txt'
+    libraryjars configurations.compileClasspath
+    libraryjars fileTree("${System.getProperty('java.home')}/jmods") { include '*.jmod' }
+    // fabric entrypoint referenced by string in fabric.mod.json — keep name
+    keep 'public class d1.G { public <init>(); public void onInitializeClient(); public void onInitialize(); public static boolean isAuthorized(); }'
+    // author classes run byte-identical via reflection — never shrink or rename
+    keep 'class com.dickclient.** { *; }'
+    // runtime-provided libs (MC ships oshi/gson; fabric present at runtime)
+    dontwarn()
+    dontnote()
+    dontoptimize()
+    keepattributes '*Annotation*,Signature,InnerClasses,EnclosingMethod'
+}

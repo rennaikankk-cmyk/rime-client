@@ -93,9 +93,10 @@ public final class LicenseActionHookTest {
         guarded(CRYSTAL, "lambda$onBlockUpdate$", null, "scanBlockUpdate");
         guarded(CRYSTAL, "scanBlockUpdate", null, "findBestCrystal", "findBestPlace", "breakCrystal", "doPlace");
         guarded(CRYSTAL, "preplaceCrystal", null, "doPlace");
-        guarded(CRYSTAL, "breakCrystal", null, "submit", "sendCrystalAttack");
+        guarded(CRYSTAL, "breakCrystal", null, "aimBreakNow", "sendCrystalAttack");
         guarded(CRYSTAL, "sendCrystalAttack", null, "send", "attack", "markSent");
         guarded(CRYSTAL, "sendGhostAttack", null, "send");
+        guarded(CRYSTAL, "attackWithDefaultWeapon", null, "withSwap");
         guarded(CRYSTAL, "doPlace", ";Z)Z", "send", "placeCrystalShared", "recordPlace");
         guarded(CRYSTAL, "placeCrystalShared", "$CrystalOptions;", "placeCrystalDirect", "placeCrystal");
         Code delegate = method(CRYSTAL, "placeCrystalShared", ";Z)Z");

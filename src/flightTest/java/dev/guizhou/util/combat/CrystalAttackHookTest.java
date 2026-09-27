@@ -25,14 +25,23 @@ public final class CrystalAttackHookTest {
 
     public static void main(String[] args) throws IOException {
         Trace breaker = method("breakCrystal");
-        int submit = breaker.first("call", "submit");
+        int submit = breaker.first("call", "aimBreakNow");
         int accept = breaker.first("call", "acceptPendingRotation");
         int finalRay = breaker.last("call", "canBreakCrystal");
         int send = breaker.first("call", "sendCrystalAttack");
         check(submit < accept && accept < breaker.first("field", "sentYaw")
                 && accept < breaker.first("field", "sentPitch") && finalRay < send,
                 "Break must validate accepted outbound rotation after the rotation request");
-        check(!breaker.reachable(0, send, finalRay), "Final rotation check must dominate every normal break send");
+        check(breaker.reachable(0, send, finalRay), "DEFAULT no-rotation must have a direct attack path");
+        int rusher = breaker.last("call", "rusherLogic");
+        Step rusherJump = breaker.steps.get(rusher + 1);
+        int rusherPath = rusherJump.opcode == Opcodes.IFNE ? breaker.labels.get(rusherJump.target) : rusher + 2;
+        check(!breaker.reachable(rusherPath, send, finalRay), "Rusher must still validate the final ray");
+        Trace aim = method("aimBreakNow");
+        int ray = aim.first("call", "canBreakCrystal");
+        int look = aim.first("call", "sendLook");
+        check(!aim.reachable(0, look, ray), "Rotation must be geometrically valid before submission");
+        aim.checkBooleanFalseReturn(ray, false);
         breaker.checkBooleanFalseReturn(finalRay, false);
 
         Trace reach = method("canBreakCrystal");

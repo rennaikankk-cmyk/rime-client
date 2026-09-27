@@ -51,15 +51,15 @@ public final class PacketActionHookTest {
 
     private static void rotationAcceptance() throws IOException {
         Code submit = method(ROTATION, "trySubmit", null);
-        int arbitration = submit.call(ROTATION + "$SilentArbitration", "blocks");
-        int send = submit.call(ROTATION, "performSilent");
-        int accept = submit.call(ROTATION + "$SilentArbitration", "accepted");
-        submit.dominates(arbitration, accept, "Silent arbitration no longer gates acceptance");
-        submit.dominates(send, accept, "Acceptance can precede actual rotation submission");
-        submit.rejectedCannotReach(arbitration, true, accept);
-        submit.rejectedCannotReach(send, false, accept);
+        int look = submit.call(ROTATION, "look");
+        int sync = submit.field("silentSyncRequired", Opcodes.PUTFIELD);
+        submit.dominates(look, sync, "Silent acceptance requires successful same-tick look");
+        submit.rejectedCannotReach(look, false, sync);
 
-        Code silent = method(ROTATION, "performSilent", null);
+        Code silent = method(ROTATION, "look", null);
+        int boost = silent.call(null, "gzBoostControlsLook");
+        int guardedDispatch = silent.call(SEND, "send");
+        silent.rejectedCannotReach(boost, true, guardedDispatch);
         int dispatch = silent.call(SEND, "send");
         int yaw = silent.call(null, "getYRot");
         int pitch = silent.call(null, "getXRot");

@@ -259,22 +259,16 @@ public final class ElytraCombatHookTest {
         }
 
         Trace submit = method(rotation, "trySubmit");
-        int blocks = submit.call(SILENT_WINDOW, "blocks");
-        int send = submit.call(ROTATION, "performSilent");
-        int accept = submit.call(SILENT_WINDOW, "accepted");
+        int send = submit.call(ROTATION, "look");
         int sync = submit.field(ROTATION, "silentSyncRequired", Opcodes.PUTFIELD);
-        check(blocks < send && send < accept && accept < sync,
-                "Silent submit must arbitrate on the window before sending and still mark the sync after");
-        check(!canReach(submit, 0, send, blocks, new HashSet<>())
-                        && !canReach(submit, 0, accept, send, new HashSet<>())
-                        && !canReach(submit, 0, sync, accept, new HashSet<>()),
-                "No silent action may bypass arbitration, successful sending or accepted-window bookkeeping");
-        check(submit.steps.get(blocks + 1).opcode == Opcodes.IFEQ,
-                "A blocked request must stop before performSilent");
-        assertFalseReturn(submit, blocks + 2, "Blocked silent rotation");
+        check(send < sync && !canReach(submit, 0, sync, send, new HashSet<>()),
+                "Same-tick look must succeed before silent orientation sync is recorded");
         check(submit.steps.get(send + 1).opcode == Opcodes.IFNE,
-                "Only a successful local rotation send may consume the arbitration window");
+                "Rejected local look must stop the silent request");
         assertFalseReturn(submit, send + 2, "Rejected local rotation send");
+        Trace look = method(rotation, "look");
+        check(look.hasCall("dev/guizhou/features/modules/movement/GuangxiElytraModule", "gzBoostControlsLook"),
+                "Same-tick look must retain the GZBoost ownership gate");
 
         Trace boundary = null;
         Trace updater = null;
@@ -613,8 +607,13 @@ public final class ElytraCombatHookTest {
                         && trajectoryCheck.hasCall(terrain + "$Clearance", "clear"),
                 "Trajectory validation must simulate glide and query terrain along the movement");
         Trace velocity = method(movementMethods, "applyFlightVelocity");
-        int safetyFlag = velocity.field(FLIGHT, "pendingSafetySteering", Opcodes.GETFIELD);
         int boostEnvelope = velocity.call("dev/guizhou/util/elytra/ElytraPhysics", "clampToGrimEnvelope");
+        int safetyFlag = -1;
+        for (int i = 0; i < boostEnvelope; i++) {
+            Step step = velocity.steps.get(i);
+            if (step.opcode == Opcodes.GETFIELD && "pendingSafetySteering".equals(step.name)) safetyFlag = i;
+        }
+        check(safetyFlag >= 0, "Boost envelope requires its own safety steering guard");
         Step guardedBoost = velocity.steps.get(safetyFlag + 1);
         check(safetyFlag < boostEnvelope && guardedBoost.opcode == Opcodes.IFNE
                         && !canReach(velocity, velocity.target(guardedBoost), boostEnvelope, -1, new HashSet<>()),

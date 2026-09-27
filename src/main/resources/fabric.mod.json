@@ -3,7 +3,7 @@
   "id": "guizhouware",
   "version": "${version}",
   "name": "Rime",
-  "description": "Rime 1.0 for Minecraft. Fork of Homovore (AGPL-3.0) by Leonetic & widerthaneurasia, with AutoCrystal enhancements ported from AlienV4.",
+  "description": "Rime for Minecraft. Fork of Homovore (AGPL-3.0) by Leonetic & widerthaneurasia, with AutoCrystal enhancements ported from AlienV4.",
   "authors": [
     "renna"
   ],
