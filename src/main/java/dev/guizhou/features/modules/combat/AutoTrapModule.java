@@ -72,8 +72,8 @@ public class AutoTrapModule extends Module {
 
     private final Setting<Boolean> render           = bool("Render", true).setPage("Render");
     private final Setting<Float>   fadeTime         = num("FadeTime", 1.0f, 0.05f, 2.0f).setPage("Render");
-    private final Setting<Color>   fillColor        = color("FillColor", 255, 50, 50, 40).setPage("Render");
-    private final Setting<Color>   outlineColor     = color("OutlineColor", 255, 50, 50, 40).setPage("Render");
+    private final Setting<Color>   fillColor        = color("FillColor", 224, 138, 108, 40).setPage("Render");
+    private final Setting<Color>   outlineColor     = color("OutlineColor", 224, 138, 108, 40).setPage("Render");
 
     private final Set<BlockPos> wantedPoses = ConcurrentHashMap.newKeySet();
     private final Set<BlockPos> ownedQueued = new HashSet<>();

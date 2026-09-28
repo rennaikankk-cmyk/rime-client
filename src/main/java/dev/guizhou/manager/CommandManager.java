@@ -26,6 +26,7 @@ public class CommandManager extends Feature implements Jsonable {
     private final List<Command> commandList = new LinkedList<>();
 
     private String commandPrefix = "rime";
+    /** Older chats still type these; help and the GUI only show {@link #commandPrefix}. */
     private static final String[] LEGACY_PREFIXES = {".", "gzw", "guizhouware"};
     private boolean funnyVisible = false;
 
@@ -50,7 +51,7 @@ public class CommandManager extends Feature implements Jsonable {
         register(new dev.guizhou.features.commands.impl.TimingsCommand());
         register(new DiagnosticsCommand());
         register(new TelemetryCommand());
-        register(new dev.guizhou.features.commands.impl.WaypointCommand());
+        register(new WaypointCommand());
         register(new PanicCommand());
         dev.guizhou.features.debug.MoveLimitDebug.get();
 
@@ -58,30 +59,8 @@ public class CommandManager extends Feature implements Jsonable {
         GuizhouWare.configManager.addConfig(this);
     }
 
-    public String matchedPrefix(String message) {
-        if (message != null && message.startsWith(commandPrefix)) return commandPrefix;
-        if (message == null) return commandPrefix;
-        for (String legacy : LEGACY_PREFIXES) {
-            if (!legacy.equals(commandPrefix) && message.startsWith(legacy)) return legacy;
-        }
-        return null;
-    }
-
     public void onChatSent(String message) {
-        String prefix = matchedPrefix(message);
-        if (prefix == null) prefix = commandPrefix;
-        try {
-            int result = dispatcher.execute(message.substring(
-                    prefix.length()).trim(), this);
-            if (result == SINGLE_SUCCESS) {
-                Command.sendMessage("{green} Command executed successfully");
-            } else if (result == SINGLE_FAILURE) {
-                Command.sendMessage("{red} Failed to execute command");
-            }
-        } catch (CommandSyntaxException e) {
-            LOGGER.error("Failed to execute command", e);
-            Command.sendMessage("{red} %s", e.getMessage());
-        }
+        dev.guizhou.features.commands.ui.CommandRunner.run(this, message);
     }
 
     public void register(Command command) {
@@ -100,6 +79,16 @@ public class CommandManager extends Feature implements Jsonable {
 
     public String getCommandPrefix() {
         return commandPrefix;
+    }
+
+    /** Prefix that actually matched this chat line, including a hidden legacy alias. */
+    public String matchedPrefix(String message) {
+        if (message != null && message.startsWith(commandPrefix)) return commandPrefix;
+        if (message == null) return commandPrefix;
+        for (String legacy : LEGACY_PREFIXES) {
+            if (!legacy.equals(commandPrefix) && message.startsWith(legacy)) return legacy;
+        }
+        return null;
     }
 
     public boolean isFunnyVisible() {

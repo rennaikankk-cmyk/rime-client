@@ -46,7 +46,8 @@ public final class LicenseActionHookTest {
      * each tick/handler gate was added 2026-09-22 and must keep cleanup ungated. */
     private static void newlyGatedModules() throws IOException {
         guarded(BASE + "player/AutoXPModule", "onTick", null, "throwBottles");
-        guarded(BASE + "combat/KeyPotionModule", "onEnable", null, "withSwap");
+        guarded(BASE + "combat/KeyPotionModule", "onTick", null, "use");
+        guarded("dev/guizhou/util/inventory/ItemUseTracker", "useBatch", null, "withSwap");
         guarded(BASE + "combat/PhaseModule", "onTick", null, "withSwap");
         guarded(BASE + "world/FastPortalModule", "onPreTick", null, "withSwap");
         guarded(BASE + "player/MiddleClickExtraModule", "onMouse", null, "withSwap");
@@ -124,6 +125,7 @@ public final class LicenseActionHookTest {
         guarded(CRYSTAL, "breakCrystal", null, "tryAction", "sendCrystalAttack");
         guarded(CRYSTAL, "sendCrystalAttack", null, "send", "attack", "markSent");
         guarded(CRYSTAL, "sendGhostAttack", null, "send");
+        guarded(CRYSTAL, "attackWithDefaultWeapon", null, "withSwap");
         guarded(CRYSTAL, "doPlace", ";Z)Z", "send", "placeCrystalShared", "recordPlace");
         guarded(CRYSTAL, "placeCrystalShared", "$CrystalOptions;", "placeCrystalDirect", "placeCrystal");
         Code delegate = method(CRYSTAL, "placeCrystalShared", ";Z)Z");

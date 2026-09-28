@@ -4,6 +4,18 @@ package dev.guizhou.util.combat;
 public final class CrystalSelectionPolicy {
     private CrystalSelectionPolicy() {}
 
+    public static boolean isLethal(float damage, float health, float absorption) {
+        float effectiveHealth = health + absorption;
+        return Float.isFinite(damage) && Float.isFinite(effectiveHealth)
+                && health > 0 && absorption >= 0 && damage >= effectiveHealth;
+    }
+
+    public static boolean baseBalanceAllows(float totalDamage, float selfDamage, boolean lethalTarget) {
+        return Float.isFinite(totalDamage) && totalDamage > 0
+                && Float.isFinite(selfDamage) && selfDamage >= 0
+                && (lethalTarget || totalDamage >= selfDamage);
+    }
+
     public static double minimumDamage(double configuredMinimum, float effectiveHealth,
                                        boolean armorBroken, boolean faceEligible) {
         if (faceEligible) return 0.5;

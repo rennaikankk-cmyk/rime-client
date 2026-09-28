@@ -1,5 +1,7 @@
 package dev.guizhou.manager;
 
+import dev.guizhou.GuizhouWare;
+
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.util.PacketSendUtil;
@@ -388,6 +390,9 @@ public class RotationManager {
     }
 
     private boolean performSilent(RotationRequest req) {
+        var flight = GuizhouWare.moduleManager == null ? null : GuizhouWare.moduleManager.getModuleByClass(
+                dev.guizhou.features.modules.movement.GuangxiElytraModule.class);
+        if (flight != null && flight.gzBoostControlsLook()) return false;
         float targetYaw = req.targetYaw;
         float targetPitch = req.targetPitch;
 

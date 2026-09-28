@@ -87,7 +87,7 @@ public class GuangxiBedModule extends Module {
     private final Setting<Boolean> tpsSync = bool("TpsSync", true);
 
     private final Setting<Boolean> render      = bool("Render", true).setPage("Render");
-    private final Setting<Color>   renderColor = color("Color", 255, 60, 60, 60).setPage("Render");
+    private final Setting<Color>   renderColor = color("Color", 224, 138, 108, 60).setPage("Render");
 
     private final Timer timer = new Timer();
 
@@ -455,7 +455,7 @@ public class GuangxiBedModule extends Module {
                         // Empty candidates share the same terrain at a head; existing bed pairs need both halves removed.
                         float local = existing ? AnchorDamageUtil.damage(self, center, foot, head)
                                 : selfDamage.computeIfAbsent(head.asLong(), k -> AnchorDamageUtil.damage(self, center, foot, head));
-                        if (!safeSelfDamage(local)) continue;
+                        if (!safeSelfDamage(local) || tpMode.getValue() && safeTpFeet(foot, head) == null) continue;
                         best = new BedSpot(foot, head, dir, center, damage, local, target);
                     }
                 }
@@ -474,7 +474,7 @@ public class GuangxiBedModule extends Module {
     }
 
     private boolean safeSelfDamage(float damage) {
-        return damage <= maxSelf.getValue()
+        return Float.isFinite(damage) && damage >= 0 && damage <= maxSelf.getValue()
                 && (damage <= 0f || damage + 1.5f < mc.player.getHealth() + mc.player.getAbsorptionAmount());
     }
 
@@ -506,7 +506,7 @@ public class GuangxiBedModule extends Module {
         boolean mainBed = mc.player.getMainHandItem().is(ItemTags.BEDS);
         boolean offBed = mc.player.getOffhandItem().is(ItemTags.BEDS);
         if (mainBed || offBed) {
-            boolean sent = sendAtSpot(placeHit, offBed && !mainBed ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND);
+            boolean sent = sendAtSpot(placeHit, offBed && !mainBed ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND, true);
             if (sent) noteRender();
             return sent;
         }
@@ -515,17 +515,35 @@ public class GuangxiBedModule extends Module {
         if (!result.found()) return false;
         boolean[] sent = {false};
         boolean swapped = GuizhouWare.swapManager.withSwap(result, bedSwapMode(), SwapPriority.CRYSTAL,
-                () -> sent[0] = sendAtSpot(placeHit, result.hand()));
+                () -> sent[0] = sendAtSpot(placeHit, result.hand(), true));
         if (swapped && sent[0]) noteRender();
         return swapped && sent[0];
     }
 
+    private Vec3 tpDetonationFeet;
+
+    private Vec3 safeTpFeet(BlockPos foot, BlockPos head) {
+        Vec3 center = Vec3.atCenterOf(head);
+        var self = AnchorDamageUtil.Target.of(mc.player);
+        return dev.guizhou.util.combat.TeleportBlastPosition.find(center, new AABB(head), 6.0,
+                feet -> safeSelfDamage(AnchorDamageUtil.damage(self.at(feet), center, foot, head)));
+    }
+
     private boolean detonate() {
+        if (tpMode.getValue()) {
+            tpDetonationFeet = safeTpFeet(pendingFoot, pendingHead);
+            if (tpDetonationFeet == null) return false;
+        }
+        try { return detonateAtSpot(); }
+        finally { tpDetonationFeet = null; }
+    }
+
+    private boolean detonateAtSpot() {
         BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(pendingHead, null,
                 interactionEye(), interactionRange(), interactionRange(), false);
         if (hit == null) return false;
         if (!prepareAction(hit, false)) return false;
-        boolean sent = sendAtSpot(hit, InteractionHand.MAIN_HAND);
+        boolean sent = sendAtSpot(hit, InteractionHand.MAIN_HAND, false);
         if (sent) noteRender();
         return sent;
     }
@@ -540,6 +558,7 @@ public class GuangxiBedModule extends Module {
     }
 
     private Vec3 interactionFeet() {
+        if (tpDetonationFeet != null) return tpDetonationFeet;
         return new Vec3(pendingFoot.getX() + 0.5, pendingFoot.getY() + 2.0, pendingFoot.getZ() + 0.5);
     }
 
@@ -549,13 +568,23 @@ public class GuangxiBedModule extends Module {
 
     private double interactionRange() { return tpMode.getValue() ? 6.0 : bedRange.getValue(); }
 
-    private boolean sendAtSpot(BlockHitResult hit, InteractionHand hand) {
+    private boolean sendAtSpot(BlockHitResult hit, InteractionHand hand, boolean placing) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         java.util.function.BooleanSupplier action = () -> GuizhouWare.placementManager.sendUseItemOnDirect(
                 hit, hand, interactionEye(), interactionRange(), interactionRange());
-        return tpMode.getValue() ? dev.guizhou.util.InteractionTransaction.run(
-                () -> sendFakeMove(interactionFeet(), desiredYaw), action, this::sendRealMove)
-                : action.getAsBoolean();
+        if (!tpMode.getValue()) return action.getAsBoolean();
+        Vec3 feet = interactionFeet();
+        if (!placing && !safeSelfDamage(AnchorDamageUtil.damage(AnchorDamageUtil.Target.of(mc.player).at(feet),
+                Vec3.atCenterOf(pendingHead), pendingFoot, pendingHead))) return false;
+        var connection = mc.player.connection;
+        var restore = new ServerboundMovePlayerPacket.PosRot(mc.player.getX(), mc.player.getY(), mc.player.getZ(),
+                GuizhouWare.rotationManager.getServerYaw(), GuizhouWare.rotationManager.getServerPitch(),
+                mc.player.onGround());
+        float[] look = rotate.getValue() ? MathUtil.calcAngle(interactionEye(), hit.getLocation())
+                : new float[]{GuizhouWare.rotationManager.getServerYaw(), GuizhouWare.rotationManager.getServerPitch()};
+        return dev.guizhou.util.InteractionTransaction.run(
+                () -> sendFakeMove(interactionFeet(), placing ? desiredYaw : look[0], look[1]),
+                action, () -> connection.send(restore));
     }
 
     private void noteRender() {
@@ -565,19 +594,10 @@ public class GuangxiBedModule extends Module {
                 visualDamage, visualSelf, (tpMode.getValue() ? "TP " : "") + visualStage);
     }
 
-    private boolean sendFakeMove(Vec3 pos, float yaw) {
+    private boolean sendFakeMove(Vec3 pos, float yaw, float pitch) {
         return PacketSendUtil.send(new ServerboundMovePlayerPacket.PosRot(
-                pos.x, pos.y, pos.z, yaw,
-                GuizhouWare.rotationManager.getServerPitch(),
+                pos.x, pos.y, pos.z, yaw, pitch,
                 false));
-    }
-
-    private void sendRealMove() {
-        mc.player.connection.send(new ServerboundMovePlayerPacket.PosRot(
-                mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                GuizhouWare.rotationManager.getServerYaw(),
-                GuizhouWare.rotationManager.getServerPitch(),
-                mc.player.onGround()));
     }
 
     private static float cardinalYaw(Direction dir) {
@@ -603,4 +623,5 @@ public class GuangxiBedModule extends Module {
         if (!render.getValue()) { visuals.clear(); return; }
         visuals.render(event, visualOptions, renderColor.getValue(), outlineColor.getValue(), lineWidth.getValue(), fadeTime.getValue());
     }
+
 }

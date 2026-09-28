@@ -41,8 +41,8 @@ public class BreakIndicatorsModule extends Module {
 
     private final Setting<Boolean> render = bool("DoRender", true).setPage("Render");
     private final Setting<Float> lineWidth = num("LineWidth", 1.5f, 0.5f, 5.0f).setPage("Render");
-    private final Setting<Color> sideColor = color("SideColor", 255, 0, 80, 10).setPage("Render");
-    private final Setting<Color> lineColor = color("LineColor", 255, 255, 255, 40).setPage("Render");
+    private final Setting<Color> sideColor = color("SideColor", 224, 138, 108, 40).setPage("Render");
+    private final Setting<Color> lineColor = color("LineColor", 194, 192, 182, 255).setPage("Render");
 
     private final Setting<Boolean> chinese = bool("Chinese", false).setPage("Chinese");
     private final Setting<Easing> chineseEase = mode("Ease", Easing.CubicInOut).setPage("Chinese")
@@ -355,14 +355,14 @@ public class BreakIndicatorsModule extends Module {
 
             float s = (float) Math.max(chineseMinTextScale.getValue(),
                     chineseTextScale.getValue() * 8.0 / (dist + 8.0));
-            int lineH = mc.font.lineHeight;
+            int lineH = dev.guizhou.util.render.font.Fonts.lineHeight();
 
             graphics.pose().pushPose();
             graphics.pose().translate(screen[0], screen[1], 0);
             graphics.pose().scale(s, s, s);
 
-            graphics.drawString(mc.font, name, -mc.font.width(name) / 2, -lineH - 1, 0xFFFFFFFF);
-            graphics.drawString(mc.font, status, -mc.font.width(status) / 2, 1, statusColor.getRGB() | 0xFF000000);
+            dev.guizhou.util.render.font.Fonts.drawString(graphics, name, -dev.guizhou.util.render.font.Fonts.width(name) / 2, -lineH - 1, 0xFFFFFFFF);
+            dev.guizhou.util.render.font.Fonts.drawString(graphics, status, -dev.guizhou.util.render.font.Fonts.width(status) / 2, 1, statusColor.getRGB() | 0xFF000000);
 
             graphics.pose().popPose();
         }

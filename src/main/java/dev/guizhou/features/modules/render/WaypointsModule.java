@@ -65,9 +65,9 @@ public class WaypointsModule extends Module {
     private final Setting<Boolean> box = bool("Box", true).setPage("Render");
     private final Setting<Double> boxDistance = num("BoxDistance", 256.0, 16.0, 1024.0).setPage("Render");
     private final Setting<Float> scale = num("Scale", 1.2f, 0.3f, 3.0f).setPage("Render");
-    private final Setting<Color> manualColor = color("ManualColor", 90, 200, 255, 255).setPage("Render");
-    private final Setting<Color> deathColor = color("DeathColor", 255, 80, 80, 255).setPage("Render");
-    private final Setting<Color> logoutColor = color("LogoutColor", 255, 170, 60, 255).setPage("Render");
+    private final Setting<Color> manualColor = color("ManualColor", 224, 138, 108, 255).setPage("Render");
+    private final Setting<Color> deathColor = color("DeathColor", 227, 154, 146, 255).setPage("Render");
+    private final Setting<Color> logoutColor = color("LogoutColor", 227, 154, 146, 255).setPage("Render");
     private final Setting<Color> background = color("Background", 0, 0, 0, 120).setPage("Render");
 
     private final List<Waypoint> waypoints = new ArrayList<>();

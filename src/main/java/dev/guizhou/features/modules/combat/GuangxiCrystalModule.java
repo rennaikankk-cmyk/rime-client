@@ -1,6 +1,7 @@
 package dev.guizhou.features.modules.combat;
 
 import dev.guizhou.GuizhouWare;
+import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.impl.render.Render2DEvent;
@@ -11,10 +12,12 @@ import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.features.modules.world.GuangxiMineModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.PlacementManager;
-import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.DamageSyncTracker;
 import dev.guizhou.util.combat.CrystalAttackWindow;
 import dev.guizhou.util.combat.CrystalSelectionPolicy;
+import dev.guizhou.util.combat.CrystalMotionPrediction;
+import dev.guizhou.util.combat.CrystalWeaponDamage;
+import dev.guizhou.util.inventory.SwapPriority;
 import dev.guizhou.util.combat.CrystalRetryTracker;
 import dev.guizhou.util.combat.ExplosionDamageModel;
 import dev.guizhou.util.combat.CombatSnapshotService;
@@ -63,6 +66,8 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.tags.ItemTags;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -131,7 +136,12 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
     private final dev.guizhou.manager.RotationOptions rotationOptions = new dev.guizhou.manager.RotationOptions(this, rotate);
 
+    /** Default keeps same-tick break and place. Rusher spends the tick on a break when one exists. */
+    private enum CrystalLogic { DEFAULT, RUSHER }
+    private final Setting<CrystalLogic> logic = mode("Logic", CrystalLogic.DEFAULT).setPage("General");
+
     private final Setting<Boolean> predict          = bool("Predict", true).setPage("Sync");
+    private final Setting<Boolean> adaptivePredict = bool("AdaptivePredict", true).setPage("Sync");
     private final Setting<Integer> predictTicks     = num("PredictTicks", 4, 0, 20).setPage("Sync");
     private final Setting<Double>  maxMotionY       = num("MaxMotionY", 0.34, 0.0, 2.0).setPage("Sync");
     private final Setting<Integer> selfPredictTicks = num("SelfPredict", 0, 0, 20).setPage("Sync");
@@ -172,18 +182,18 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<Boolean> packetLog     = bool("PacketLog", false).setPage("Extra");
 
     private final Setting<RenderMode> renderMode = mode("Render", RenderMode.GRADIENT).setPage("Render");
-    private final Setting<Color>   sideColor     = color("SideColor", 130, 80, 255, 45).setPage("Render");
-    private final Setting<Color>   lineColor     = color("LineColor", 130, 80, 255, 255).setPage("Render");
+    private final Setting<Color>   sideColor     = color("SideColor", 224, 138, 108, 97).setPage("Render");
+    private final Setting<Color>   lineColor     = color("LineColor", 224, 138, 108, 255).setPage("Render");
     private final Setting<Float>   lineWidth     = num("LineWidth", 1.5f, 0.5f, 5.0f).setPage("Render");
     private final Setting<Double>  gradientHeight = num("GradientHeight", 0.7, 0.0, 1.0).setPage("Render");
     private final Setting<Integer> renderTime    = num("RenderTime", 10, 1, 40).setPage("Render");
     private final Setting<Integer> smoothness    = num("Smoothness", 10, 1, 50).setPage("Render");
-    private final Setting<Color>   pulseColor    = color("PulseColor", 130, 80, 255, 150).setPage("Render");
+    private final Setting<Color>   pulseColor    = color("PulseColor", 224, 138, 108, 150).setPage("Render");
     private final Setting<Double>  pulseSpeed    = num("PulseSpeed", 2.0, 0.2, 6.0).setPage("Render");
     private final Setting<Double>  pulseExpand   = num("PulseExpand", 0.35, 0.0, 1.0).setPage("Render");
     private final Setting<Boolean> damageText   = bool("DamageText", true).setPage("Render")
             .setVisibility(v -> renderMode.getValue() != RenderMode.NONE);
-    private final Setting<Color>   damageColor  = color("DamageColor", 255, 255, 255, 255).setPage("Render")
+    private final Setting<Color>   damageColor  = color("DamageColor", 250, 249, 245, 255).setPage("Render")
             .setVisibility(v -> renderMode.getValue() != RenderMode.NONE && damageText.getValue());
 
     private BlockPos damageAnchor;
@@ -247,6 +257,7 @@ public class GuangxiCrystalModule extends Module {
                              int epf, float resistanceMultiplier, Difficulty difficulty) {}
 
     private SelfCache selfCache = null;
+    private List<Vec3> selfPath = List.of();
     // tick-scoped entity snapshot: candidate-cell occupancy filters in memory instead of
     // one world query per candidate (O(candidates) queries -> O(1) per decision cycle)
     private volatile List<Entity> entitySnapshot = List.of();
@@ -317,6 +328,7 @@ public class GuangxiCrystalModule extends Module {
     private void sendGhostAttack(int entityId) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         if (mc.getConnection() == null || weaponControlBusy()) return;
+        if (!rusherLogic() && !defaultHandCanDamage(mc.player.getMainHandItem())) return;
         FriendlyByteBuf buf = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
         try {
             buf.writeVarInt(entityId);
@@ -382,6 +394,7 @@ public class GuangxiCrystalModule extends Module {
         antiChineseEnemyRange.setVisibility(v -> antiChinese.getValue());
         placeRange.setVisibility(v -> rangePreset.getValue() == RangePreset.CUSTOM);
         breakRange.setVisibility(v -> rangePreset.getValue() == RangePreset.CUSTOM);
+        adaptivePredict.setVisibility(v -> predict.getValue() && !rusherLogic());
         predictTicks.setVisibility(v -> predict.getValue());
         maxMotionY.setVisibility(v -> predict.getValue());
         selfPredictTicks.setVisibility(v -> predict.getValue());
@@ -429,6 +442,7 @@ public class GuangxiCrystalModule extends Module {
         lastCarriedSlot = -1;
         ownSwapPackets.set(0);
         selfCache = null;
+        selfPath = List.of();
         entitySnapshot = List.of();
         entitySnapshotTick = -1;
         selfDamageCache.clear();
@@ -494,13 +508,13 @@ public class GuangxiCrystalModule extends Module {
         float scale = damagePixelScale(x, y, z);
         if (!(scale > 0f)) return;
 
-        int half = mc.font.width(text) / 2;
+        int half = dev.guizhou.util.render.font.Fonts.width(text) / 2;
         var pose = graphics.pose();
         pose.pushPose();
         pose.translate(screen[0], screen[1], 0);
         pose.scale(scale, scale, 1f);
-        graphics.drawString(mc.font, text, -half + 1, 1, 0xFF202020, false);
-        graphics.drawString(mc.font, text, -half, 0, color, false);
+
+        dev.guizhou.util.render.font.Fonts.drawString(graphics, text, -half, 0, color);
         pose.popPose();
     }
 
@@ -732,10 +746,8 @@ public class GuangxiCrystalModule extends Module {
         if (sqDistToBox(reachEye, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ)
                 > breakRangeSq()) { instaGates[5]++; return; }
 
-        if (rotate.getValue()) {
-            acceptPendingRotation();
-            if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) { instaGates[7]++; return; }
-        }
+        if (rusherLogic() && !prepareRusherSword()) { instaGates[7]++; return; }
+        if (rotate.getValue() && !aimBreakNow(crystal)) { instaGates[7]++; return; }
         ensureSelfCache();
         updateSeeThrough();
         float playerHealth = selfNow().health();
@@ -819,8 +831,8 @@ public class GuangxiCrystalModule extends Module {
 
         if (canBreak) {
             EndCrystal target = findBestCrystal(potentialTargets);
-            if (target != null && breakCrystal(target)) {
-                return;
+            if (target != null) {
+                if (breakCrystal(target) || rusherLogic()) return;
             }
         }
 
@@ -880,16 +892,24 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 ? collectTargets(targets, scanRadius) : List.of();
 
         boolean broke = false;
+        EndCrystal breakTarget = null;
         if (canBreak) {
-            EndCrystal target = findBestCrystal(potentialTargets);
-            if (target != null && breakCrystal(target)) {
+            breakTarget = findBestCrystal(potentialTargets);
+            if (breakTarget != null && breakCrystal(breakTarget)) {
                 broke = true;
             }
         }
 
-        if (!broke && antiChineseReady && breakReady) {
+        if (!broke && antiChineseReady && breakReady && !(rusherLogic() && breakTarget != null)) {
             EndCrystal acTarget = findAntiChineseCrystal();
-            if (acTarget != null) breakCrystal(acTarget);
+            if (acTarget != null && breakCrystal(acTarget)) broke = true;
+        }
+
+        // Rusher spends the tick on the break whenever a crystal was eligible, even if the swing was refused.
+        if (rusherLogic() && (broke || breakTarget != null)) {
+            lastCalcMs = (System.nanoTime() - calcStart) / 1_000_000.0;
+            ClientDiagnostics.endTimer("combat.GuangxiCrystal.scan", calculationTimer);
+            return;
         }
 
         // World collision, entity lists, and mining state are owned by the client thread.
@@ -966,10 +986,15 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
         int topLayerY    = targetFeetY - 1;
         int bottomLayerY = playerPos.getY() - r;
+        int lowerLayerCount = Math.max(0, topLayerY - bottomLayerY + 1);
+        // Keep the existing below-feet preference. On solid flat ground those cells
+        // cannot be replaced, so DEFAULT also considers a base on top of the ground.
+        int layerCount = lowerLayerCount + (rusherLogic() ? 0 : 1);
 
         int rr = r * r;
 
-        for (int by = topLayerY; by >= bottomLayerY; by--) {
+        for (int layer = 0; layer < layerCount; layer++) {
+            int by = layer < lowerLayerCount ? topLayerY - layer : targetFeetY;
             BlockPos layerBest = null;
             float layerDmg = 0;
             int dy = by - playerPos.getY();
@@ -1019,6 +1044,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
                     float totalDmg = 0;
                     boolean anyTarget = false;
+                    boolean lethalTarget = false;
                     for (int i = 0, n = potentialTargets.size(); i < n; i++) {
                         TargetCache tc = potentialTargets.get(i);
                         if (tc.pos.distanceToSqr(crystalCenter) > 144.0) continue;
@@ -1026,11 +1052,18 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                         if (dmg < getDynamicMin(tc.hp, tc.abs, tc.armorBroken)) continue;
                         totalDmg += dmg;
                         anyTarget = true;
+                        if (!rusherLogic() && !isSyncHeld(tc.entity)
+                                && (!damageSync.getValue() || !DamageSyncTracker.shouldHold(tc.entity))
+                                && CrystalSelectionPolicy.isLethal(dmg, tc.hp, tc.abs)) lethalTarget = true;
                     }
                     if (!anyTarget) continue;
                     if (totalDmg < baseMin) continue;
-                    if (baseBalance.getValue() && totalDmg < primaryHp
-                            && totalDmg < calcDamageSelf(crystalCenter, basePos)) continue;
+                    if (baseBalance.getValue()) {
+                        if (rusherLogic()) {
+                            if (totalDmg < primaryHp && totalDmg < calcDamageSelf(crystalCenter, basePos)) continue;
+                        } else if (!CrystalSelectionPolicy.baseBalanceAllows(totalDmg,
+                                calcDamageSelf(crystalCenter, basePos), lethalTarget)) continue;
+                    }
 
                     if (totalDmg > layerDmg) {
                         layerDmg  = totalDmg;
@@ -1149,8 +1182,63 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             ))) return false;
         }
         acceptPendingRotation();
-        if (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch)) return false;
+        if ((rusherLogic() || rotate.getValue())
+                && (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch))) return false;
         return sendCrystalAttack(crystal, false);
+    }
+
+    private boolean rusherLogic() {
+        return logic.getValue() == CrystalLogic.RUSHER;
+    }
+
+    /**
+     * Weakness without a stronger Strength effect, and without a sword in the main hand, blocks the break.
+     * A hotbar sword is selected in place; no sword means this break is refused.
+     */
+    private boolean prepareRusherSword() {
+        if (!weaknessBlocksAttack()) return true;
+        if (mc.player.getMainHandItem().is(ItemTags.SWORDS)) return true;
+        int sword = -1;
+        for (int slot = 0; slot < 9; slot++) {
+            if (mc.player.getInventory().getItem(slot).is(ItemTags.SWORDS)) {
+                sword = slot;
+                break;
+            }
+        }
+        if (sword < 0) return false;
+        ownSwapPackets.set(1);
+        try {
+            InventoryUtil.swap(sword);
+        } finally {
+            ownSwapPackets.set(0);
+        }
+        return mc.player.getMainHandItem().is(ItemTags.SWORDS);
+    }
+
+    private boolean weaknessBlocksAttack() {
+        var weakness = mc.player.getEffect(MobEffects.WEAKNESS);
+        if (weakness == null) return false;
+        var strength = mc.player.getEffect(MobEffects.DAMAGE_BOOST);
+        return strength == null || weakness.getAmplifier() >= strength.getAmplifier();
+    }
+
+    /** Same-tick look packet, then the attack uses that yaw and pitch. */
+    private boolean aimBreakNow(EndCrystal crystal) {
+        Vec3 eyePos = mc.player.getEyePosition(1.0f);
+        Vec3 hit = getClosestPointToEye(eyePos, crystal.getBoundingBox());
+        float[] angles = MathUtil.calcAngle(eyePos, hit);
+        if (!canBreakCrystal(crystal, angles[0], angles[1])) return false;
+        return sendLook(angles[0], angles[1]);
+    }
+
+    /** Look packet on this tick. The following place or attack uses these angles. */
+    private boolean sendLook(float yaw, float pitch) {
+        if (!GuizhouWare.rotationManager.tryAction(rotationOptions.request("AutoCrystal_break", 60, yaw, pitch, RotationRequest.Mode.SILENT))) return false;
+        acceptPendingRotation();
+        sentYaw = GuizhouWare.rotationManager.getServerYaw();
+        sentPitch = GuizhouWare.rotationManager.getServerPitch();
+        sentRotationKnown = true;
+        return true;
     }
 
     private boolean crystalAttackEligible(EndCrystal crystal) {
@@ -1190,6 +1278,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 || !breakTimer.passedMs(tpsMs(breakDelay.getValue()))
                 || !switchTimer.passedMs(tpsMs(switchPause.getValue()))) return false;
         if (!selfDamageOk(crystal.position(), null, maxSelfDamage.getValue(), selfNow().health())) return false;
+        if (!rusherLogic() && !defaultHandCanDamage(mc.player.getMainHandItem())) {
+            return attackWithDefaultWeapon(crystal, instant);
+        }
 
         // Send is cancellable at Connection HEAD; inspect the complete dispatch before committing cadence.
         pendingAttack = null;
@@ -1214,6 +1305,36 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (instant) diagInstaBreak++;
         else diagBreakSent++;
         return true;
+    }
+
+    private boolean defaultWeaponSwapActive;
+
+    private boolean defaultHandCanDamage(ItemStack candidate) {
+        return !mc.player.hasEffect(MobEffects.WEAKNESS)
+                || CrystalWeaponDamage.canDamage(mc.player.getAttribute(Attributes.ATTACK_DAMAGE),
+                        mc.player.getMainHandItem(), candidate);
+    }
+
+    private boolean attackWithDefaultWeapon(EndCrystal crystal, boolean instant) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (defaultWeaponSwapActive || autoSwap.getValue() == AutoSwapMode.NONE) return false;
+        EnumSet<ResultType> scope = autoSwap.getValue() == AutoSwapMode.INVENTORY
+                ? EnumSet.of(ResultType.HOTBAR, ResultType.INVENTORY) : EnumSet.of(ResultType.HOTBAR);
+        Result weapon = InventoryUtil.find(this::defaultHandCanDamage, scope);
+        if (!weapon.found()) return false;
+        boolean[] sent = {false};
+        defaultWeaponSwapActive = true;
+        int previousOwnSwaps = ownSwapPackets.get();
+        ownSwapPackets.set(2);
+        try {
+            SwapMode mode = autoSwap.getValue() == AutoSwapMode.INVENTORY ? SwapMode.ALTSILENT : SwapMode.SILENT;
+            GuizhouWare.swapManager.withSwap(weapon, mode, SwapPriority.CRYSTAL,
+                    () -> sent[0] = sendCrystalAttack(crystal, instant));
+        } finally {
+            ownSwapPackets.set(previousOwnSwaps);
+            defaultWeaponSwapActive = false;
+        }
+        return sent[0];
     }
 
     private boolean canBreakCrystal(EndCrystal crystal, float yaw, float pitch) {
@@ -1329,12 +1450,14 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         }
 
         PlaceTarget best = null;
+        Vec3 bestCenter = null;
         int rejLocked = 0, rejBlocked = 0, rejPending = 0, rejSelf = 0, rejMin = 0, rejBal = 0;
         String topReject = "-";
         float topRejectBound = -1f;
         for (int i = 0, n = candidates.size(); i < n; i++) {
             PlaceCandidate c = candidates.get(i);
-            if (best != null && c.bound <= best.damage) break;
+            // Optimistic bound cannot beat a spot that is already more than 1 damage ahead.
+            if (best != null && c.bound <= best.damage - 1.0f) break;
 
             if (locked != null && !c.airPos.equals(locked)) {
                 if (c.bound > topRejectBound) { topRejectBound = c.bound; topReject = c.airPos + " locked"; }
@@ -1382,11 +1505,17 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 rejBal++;
                 continue;
             }
-            if (best == null || totalDmg > best.damage) {
+            boolean higherDamage = best == null || totalDmg > best.damage;
+            // Spots within 1 damage keep the one closer to the eye. A far crystal that is
+            // barely stronger is harder to rotate onto and harder to break.
+            boolean closerTie = best != null && totalDmg > best.damage - 1.0f
+                    && eyePos.distanceToSqr(c.crystalCenter) < eyePos.distanceToSqr(bestCenter);
+            if (higherDamage || closerTie) {
                 // Do not let an unreachable high-damage candidate starve a valid runner-up.
                 if (GuizhouWare.placementManager.prepareInteractionHit(c.base, null, mc.player.getEyePosition(),
                         placeRangeValue(), wallPlace.getValue() ? wallRange.getValue() : 0.0, false) == null) continue;
                 best = new PlaceTarget(c.base, totalDmg, faceEntity);
+                bestCenter = c.crystalCenter;
             }
         }
         logPlacePick(best, topReject, topRejectBound,
@@ -1581,7 +1710,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             Vec3 tPos = living.position();
             AABB tBox = living.getBoundingBox();
             if (predict.getValue() && predictTicks.getValue() > 0) {
-                Vec3 p = PredictUtil.predict(living, predictTicks.getValue(), maxMotionY.getValue());
+                Vec3 p;
+                if (rusherLogic()) {
+                    p = PredictUtil.predict(living, predictTicks.getValue(), maxMotionY.getValue());
+                } else {
+                    List<Vec3> path = predictCrystalPath(living, predictionHorizon(predictTicks.getValue()));
+                    p = path.get(path.size() - 1);
+                }
                 tPos = p;
                 tBox = tBox.move(p.x - living.getX(), p.y - living.getY(), p.z - living.getZ());
             }
@@ -1942,9 +2077,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private float targetDamage(TargetCache tc, double dist, double exposure) {
-        if (exposure <= 0) return 0;
-        double impact = (1.0 - dist / 12.0) * exposure;
-        if (impact <= 0) return 0;
+        if (rusherLogic() && exposure <= 0) return 0;
+        double impact = Math.max(0, (1.0 - dist / 12.0) * exposure);
+        if (rusherLogic() && impact <= 0) return 0;
 
         float dmg = baseExplosionDamage(impact, selfNow().difficulty());
         return ExplosionDamageModel.reduce(dmg, tc.armor, tc.toughness, tc.resistanceMultiplier, tc.protPoints);
@@ -1953,6 +2088,10 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     private float maxDamageSelf(Vec3 explosionPos) {
         SelfCache sc = selfNow();
         double dist = Math.min(sc.pos().distanceTo(explosionPos), sc.currentPos().distanceTo(explosionPos));
+        if (!rusherLogic() && selfPath.size() > 1) {
+            for (Vec3 point : selfPath) dist = Math.min(dist, point.distanceTo(explosionPos));
+            dist = Math.max(0, dist - CrystalMotionPrediction.SAMPLE_SPACING / 2);
+        }
         if (dist > 12.0) return 0;
         return selfDamage(dist, 1.0, sc);
     }
@@ -1964,7 +2103,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         Float cached = selfDamageCache.get(key);
         if (cached != null) return cached;
         float damage = selfDamageAt(sc, sc.currentPos(), sc.currentBox(), explosionPos, phantomObsidianPos);
-        if (!sc.pos().equals(sc.currentPos())) {
+        if (!rusherLogic()) {
+            for (int i = 1; i < selfPath.size(); i++) {
+                Vec3 point = selfPath.get(i);
+                damage = Math.max(damage, selfDamageAt(sc, point,
+                        sc.currentBox().move(point.subtract(sc.currentPos())), explosionPos, phantomObsidianPos));
+            }
+        } else if (!sc.pos().equals(sc.currentPos())) {
             damage = Math.max(damage, selfDamageAt(sc, sc.pos(), sc.box(), explosionPos, phantomObsidianPos));
         }
         selfDamageCache.put(key, damage);
@@ -1974,8 +2119,32 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     private float selfDamageAt(SelfCache sc, Vec3 position, AABB box, Vec3 explosionPos, BlockPos phantomBase) {
         double dist = position.distanceTo(explosionPos);
         if (dist > 12.0) return 0;
-        double exposure = calcExposure(explosionPos, box, phantomBase);
+        double exposure = calcExposure(explosionPos, box, phantomBase, true);
         return selfDamage(dist, exposure, sc);
+    }
+
+    private int predictionHorizon(int configured) {
+        if (!adaptivePredict.getValue()) return configured;
+        var connection = mc.getConnection();
+        var info = connection == null ? null : connection.getPlayerInfo(mc.player.getUUID());
+        int latency = info == null ? 0 : info.getLatency();
+        return CrystalMotionPrediction.horizon(configured, latency,
+                50.0 * GuizhouWare.tpsCounterService.delayScale());
+    }
+
+    private List<Vec3> predictCrystalPath(LivingEntity entity, int ticks) {
+        Vec3 motion = entity == mc.player ? entity.getDeltaMovement()
+                : entity.position().subtract(entity.xOld, entity.yOld, entity.zOld);
+        if (entity == mc.player) {
+            var flight = GuizhouWare.moduleManager.getModuleByClass(
+                    dev.guizhou.features.modules.movement.GuangxiElytraModule.class);
+            Vec3 applied = flight == null ? null : flight.forecastCombatVelocity();
+            if (applied != null) motion = applied;
+        }
+        if (!entity.isFallFlying()) motion = new Vec3(motion.x, Math.min(motion.y, maxMotionY.getValue()), motion.z);
+        return CrystalMotionPrediction.trace(entity.position(), entity.getBoundingBox(), motion, ticks,
+                !entity.onGround() && !entity.isFallFlying() && !entity.isNoGravity() && !entity.isInWater(),
+                box -> mc.level.noCollision(entity, box));
     }
 
     private boolean selfPredictionActive() {
@@ -2008,7 +2177,16 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         AABB currentBox = mc.player.getBoundingBox();
         Vec3 pos = currentPos;
         AABB box = currentBox;
-        if (selfPredictionActive()) {
+        selfPath = List.of(currentPos);
+        if (!rusherLogic() && predict.getValue()) {
+            int horizon = selfPredictTicks.getValue();
+            // Zero retains stationary behavior; adaptive mode covers fast flight automatically.
+            if (horizon == 0 && adaptivePredict.getValue()
+                    && (mc.player.isFallFlying() || mc.player.getDeltaMovement().lengthSqr() > 0.64)) horizon = 2;
+            selfPath = predictCrystalPath(mc.player, predictionHorizon(horizon));
+            pos = selfPath.get(selfPath.size() - 1);
+            box = currentBox.move(pos.subtract(currentPos));
+        } else if (selfPredictionActive()) {
             Vec3 p = PredictUtil.predict(mc.player, selfPredictTicks.getValue(), maxMotionY.getValue());
             pos = p;
             box = box.move(p.x - mc.player.getX(), p.y - mc.player.getY(), p.z - mc.player.getZ());
@@ -2040,9 +2218,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private float selfDamage(double dist, double exposure, SelfCache sc) {
-        if (exposure <= 0) return 0;
-        double impact = (1.0 - dist / 12.0) * exposure;
-        if (impact <= 0) return 0;
+        if (rusherLogic() && exposure <= 0) return 0;
+        double impact = Math.max(0, (1.0 - dist / 12.0) * exposure);
+        if (rusherLogic() && impact <= 0) return 0;
 
         float dmg = baseExplosionDamage(impact, sc.difficulty());
         return ExplosionDamageModel.reduce(dmg, sc.armor(), sc.toughness(), sc.resistanceMultiplier(), sc.epf());
@@ -2092,6 +2270,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private double calcExposure(Vec3 source, AABB box, BlockPos phantomObsidianPos) {
+        // DEFAULT target damage uses confirmed geometry. Rusher retains its original forecast.
+        return calcExposure(source, box, phantomObsidianPos, rusherLogic());
+    }
+
+    private double calcExposure(Vec3 source, AABB box, BlockPos phantomObsidianPos, boolean projected) {
         double dx = box.getXsize();
         double dy = box.getYsize();
         double dz = box.getZsize();
@@ -2111,11 +2294,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 return Shapes.block().clip(from, to, pos);
             }
 
-            if (!seeThrough.isEmpty() && seeThrough.contains(pos)) return null;
+            if (projected && !seeThrough.isEmpty() && seeThrough.contains(pos)) return null;
             BlockState state = getStateFast(pos);
             if (state.isAir()) return null;
 
-            if (blockDestruction.getValue() && state.getBlock().getExplosionResistance() < EXPLODABLE_RESISTANCE) return null;
+            if (projected && blockDestruction.getValue() && state.getBlock().getExplosionResistance() < EXPLODABLE_RESISTANCE) return null;
 
             VoxelShape shape = state.getCollisionShape(mc.level, pos);
             if (shape.isEmpty()) return null;
@@ -2218,7 +2401,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     public String getMeta() {
         long now = System.currentTimeMillis();
         while (!explodeTimes.isEmpty() && now - explodeTimes.peekFirst() > 1000) explodeTimes.removeFirst();
-        return String.valueOf(explodeTimes.size());
+        return rusherLogic() ? String.valueOf(explodeTimes.size()) : "爆炸 " + explodeTimes.size() + "/s";
     }
 
     private record PlaceTarget(BlockPos base, float damage, LivingEntity faceEntity) {

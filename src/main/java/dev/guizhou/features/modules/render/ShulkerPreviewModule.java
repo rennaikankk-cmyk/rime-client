@@ -27,8 +27,8 @@ public class ShulkerPreviewModule extends Module {
 
     public enum Thumbnail { Off, MostCommon, First }
 
-    public final Setting<Color> background = color("Background", 16, 16, 20, 240);
-    public final Setting<Color> border = color("Border", 130, 80, 255, 255);
+    public final Setting<Color> background = color("Background", 0x30, 0x30, 0x2E, 240);
+    public final Setting<Color> border = color("Border", 0xE0, 0x8A, 0x6C, 255);
     public final Setting<Boolean> hideEmpty = bool("HideEmpty", false);
     public final Setting<Thumbnail> thumbnail = mode("Thumbnail", Thumbnail.Off);
     public final Setting<Double> thumbnailScale = num("ThumbnailScale", 0.6, 0.3, 1.0)
@@ -76,7 +76,7 @@ public class ShulkerPreviewModule extends Module {
             int ix = x + PADDING + (i % COLUMNS) * CELL + 1;
             int iy = y + PADDING + (i / COLUMNS) * CELL + 1;
             graphics.renderItem(item, ix, iy);
-            graphics.renderItemDecorations(mc.font, item, ix, iy);
+            dev.guizhou.util.render.font.Fonts.renderItemDecorations(graphics, item, ix, iy);
         }
 
         return true;
@@ -101,7 +101,7 @@ public class ShulkerPreviewModule extends Module {
         pose.scale(scale, scale, scale);
         graphics.renderItem(icon, 0, 0);
         if (thumbnailCount.getValue()) {
-            graphics.renderItemDecorations(mc.font, icon, 0, 0);
+            dev.guizhou.util.render.font.Fonts.renderItemDecorations(graphics, icon, 0, 0);
         }
         pose.popPose();
     }
@@ -189,7 +189,7 @@ public class ShulkerPreviewModule extends Module {
             int ix = LIST_PAD + (i % LIST_COLS) * LIST_CELL;
             int iy = gridY + (i / LIST_COLS) * LIST_CELL;
             graphics.renderItem(item, ix, iy);
-            graphics.renderItemDecorations(mc.font, item, ix, iy);
+            dev.guizhou.util.render.font.Fonts.renderItemDecorations(graphics, item, ix, iy);
         }
     }
 

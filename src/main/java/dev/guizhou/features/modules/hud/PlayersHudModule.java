@@ -4,11 +4,12 @@ import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.features.modules.client.HudClientModule;
 import dev.guizhou.features.modules.client.HudModule;
-import dev.guizhou.util.render.GuiBlitCompat;
+import dev.guizhou.util.render.HudDraw;
 import dev.guizhou.util.render.ShadcnDraw;
 import dev.guizhou.util.render.font.HudFonts;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.PlayerInfo;
+import dev.guizhou.util.render.GuiTextureCompat;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.scores.DisplaySlot;
@@ -24,7 +25,9 @@ import java.util.List;
 
 /**
  * Compact nearby-player table. Header count is the number of rows drawn
- * (nearest eight). Render-only, same as Radar: no tick and no action entry.
+ * (nearest {@link #MAX_ROWS}), matching a full panel that reads "Players 8".
+ * Render-only, same as Radar: no tick and no action entry, so no extra
+ * licence gate.
  */
 public class PlayersHudModule extends HudModule {
     static final int MAX_ROWS = 8;
@@ -63,34 +66,35 @@ public class PlayersHudModule extends HudModule {
 
         int[] o = origin(4, 28, Math.round(cardW), Math.round(cardH));
         int ox = o[0], oy = o[1];
-        ShadcnDraw.panel(g, ox, oy, cardW, cardH, 6f);
+        HudDraw.card(g, ox, oy, cardW, cardH, HudDraw.RADIUS);
 
-        float headerY = oy + (HEADER - COL) / 2f;
-        ShadcnDraw.text(g, "Players " + rows.size(), ox + PAD, headerY, COL, HudFonts.SEMI, ShadcnDraw.MUTED);
+        float headerMid = oy + HEADER / 2f + 1f;
+        HudDraw.textMid(g, "Players " + rows.size(), ox + PAD, headerMid, COL, HudFonts.SEMI, ShadcnDraw.MUTED);
         float killsRight = ox + cardW - PAD;
         float hpRight = killsRight - killsW - GAP;
         float distRight = hpRight - hpW - GAP;
-        ShadcnDraw.textRight(g, "Dist.", distRight, headerY, COL, HudFonts.REGULAR, ShadcnDraw.MUTED);
-        ShadcnDraw.textRight(g, "HP", hpRight, headerY, COL, HudFonts.REGULAR, ShadcnDraw.MUTED);
-        ShadcnDraw.textRight(g, "Kills", killsRight, headerY, COL, HudFonts.REGULAR, ShadcnDraw.MUTED);
-        ShadcnDraw.round(g, ox + PAD, oy + HEADER, cardW - PAD * 2, 1f, 0f, ShadcnDraw.SUBTLE);
+        HudDraw.textMidRight(g, "Dist.", distRight, headerMid, COL, HudFonts.REGULAR, ShadcnDraw.MUTED);
+        HudDraw.textMidRight(g, "HP", hpRight, headerMid, COL, HudFonts.REGULAR, ShadcnDraw.MUTED);
+        HudDraw.textMidRight(g, "Kills", killsRight, headerMid, COL, HudFonts.REGULAR, ShadcnDraw.MUTED);
+        HudDraw.rule(g, ox + PAD, oy + HEADER, cardW - PAD * 2);
 
         float nameX = ox + PAD + HEAD + 3f;
         for (int i = 0; i < rows.size(); i++) {
             Player player = rows.get(i);
-            float mid = oy + HEADER + 2f + i * ROW + (ROW - NAME) / 2f;
-            face(g, player, ox + PAD, mid);
-            ShadcnDraw.text(g, clip(nameOf(player), nameW), nameX, mid, NAME, HudFonts.SEMI, nameColor(player));
+            float mid = oy + HEADER + 2f + i * ROW + ROW / 2f;
+            face(g, player, ox + PAD, mid - HEAD / 2f);
+            HudDraw.textMid(g, clip(nameOf(player), nameW), nameX, mid, NAME, HudFonts.SEMI, nameColor(player));
             int metres = (int) Math.min(9999, Math.max(0, Math.round(mc.player.position().distanceTo(player.position()))));
-            ShadcnDraw.textRight(g, metres + "m", distRight, mid, COL, HudFonts.REGULAR, ShadcnDraw.MUTED);
+            HudDraw.textMidRight(g, metres + "m", distRight, mid, COL, HudFonts.REGULAR, ShadcnDraw.MUTED);
             float maxHp = Math.max(1f, player.getMaxHealth());
             int pct = Math.round(100f * Math.max(0f, player.getHealth()) / maxHp);
-            ShadcnDraw.textRight(g, pct + "%", hpRight, mid, COL, HudFonts.SEMI, hpColor(pct / 100f));
-            ShadcnDraw.textRight(g, killsOf(player, kills), killsRight, mid, COL, HudFonts.REGULAR, ShadcnDraw.TEXT);
+            HudDraw.textMidRight(g, pct + "%", hpRight, mid, COL, HudFonts.SEMI, HudDraw.grade(pct / 100f));
+            HudDraw.textMidRight(g, killsOf(player, kills), killsRight, mid, COL, HudFonts.REGULAR, ShadcnDraw.TEXT);
         }
         bounds(ox, oy, Math.round(cardW), Math.round(cardH));
     }
 
+    /** Player-kill criterion, then a team-kill criterion. Missing score stays a dash. */
     private static Objective killObjective(Scoreboard board) {
         Objective listed = board.getDisplayObjective(DisplaySlot.LIST);
         if (listed != null && isKillCriterion(listed.getCriteria())) return listed;
@@ -144,9 +148,9 @@ public class PlayersHudModule extends HudModule {
         pose.pushPose();
         try {
             pose.translate(x, y, 0);
-            pose.scale(scale, scale, 1f);
-            GuiBlitCompat.blitTinted(g, skin, 0, 0, 8f, 8f, 8, 8, 64, 64, 0xFFFFFFFF);
-            GuiBlitCompat.blitTinted(g, skin, 0, 0, 40f, 8f, 8, 8, 64, 64, 0xFFFFFFFF);
+            pose.scale(scale, scale, 1);
+            GuiTextureCompat.blit(g, skin, 0, 0, 8f, 8f, 8, 8, 64, 64, 0xFFFFFFFF);
+            GuiTextureCompat.blit(g, skin, 0, 0, 40f, 8f, 8, 8, 64, 64, 0xFFFFFFFF);
         } catch (Throwable missing) {
             // Skin texture is not ready; the row stays aligned without a face.
         } finally {
@@ -175,12 +179,6 @@ public class PlayersHudModule extends HudModule {
             return 0xFF000000 | hud.radarEnemyColor.getValue().getRGB();
         }
         return ShadcnDraw.mix(ShadcnDraw.TEXT, ShadcnDraw.ACCENT, .18f);
-    }
-
-    private static int hpColor(float ratio) {
-        if (ratio >= 0.6f) return 0xFF4ADE80;
-        if (ratio >= 0.3f) return 0xFFFBBF24;
-        return 0xFFF87171;
     }
 
     private static String nameOf(Player player) {

@@ -149,7 +149,7 @@ final class ColorPicker {
     }
 
     private static int[] presets() {
-        return new int[]{accent(), ACCENT_2, 0xFFF87171, 0xFFFBBF24, 0xFF4ADE80, 0xFF60A5FA, 0xFFF472B6, 0xFFFFFFFF, 0xFF0F1117};
+        return new int[]{accent(), ACCENT_2, 0xFFE39A92, 0xFFE0B15C, 0xFF9BBFA6, 0xFFC2C0B6, 0xFFFAF9F5, 0xFF30302E, 0xFF262624};
     }
 
     static void checker(GuiGraphics g, float cx, float cy, float cw, float ch) {

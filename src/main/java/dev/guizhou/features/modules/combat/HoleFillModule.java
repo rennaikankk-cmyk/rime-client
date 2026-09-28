@@ -38,7 +38,7 @@ public class HoleFillModule extends Module {
     private final Setting<Integer> perTick = num("BlocksPerTick", 2, 1, 6).setPage("General");
 
     private final Setting<Boolean> render = bool("Render", true).setPage("Render");
-    private final Setting<Color> color = color("Color", 255, 120, 40, 90).setPage("Render");
+    private final Setting<Color> color = color("Color", 224, 138, 108, 90).setPage("Render");
 
     private final Map<BlockPos, Long> placed = new HashMap<>();
     private TargetsModule targets;

@@ -9,6 +9,18 @@ public final class CrystalSelectionPolicyTest {
     private record Candidate(float[] upper, float[] actual) {}
 
     public static void main(String[] args) {
+        // Two nonlethal hits must not be mistaken for a kill on the primary target.
+        boolean lethal = CrystalSelectionPolicy.isLethal(5, 8, 0)
+                || CrystalSelectionPolicy.isLethal(5, 20, 0);
+        check(!CrystalSelectionPolicy.baseBalanceAllows(10, 11, lethal), "aggregate damage is not a kill");
+        check(CrystalSelectionPolicy.baseBalanceAllows(10, 10, lethal), "balanced trade allowed");
+        check(CrystalSelectionPolicy.baseBalanceAllows(10, 11,
+                CrystalSelectionPolicy.isLethal(8, 8, 0)), "actual individual kill permits trade");
+        check(!CrystalSelectionPolicy.isLethal(8, 8, 2), "absorption prevents false kill");
+        check(CrystalSelectionPolicy.isLethal(10, 8, 2), "absorption included in lethal threshold");
+        check(!CrystalSelectionPolicy.isLethal(10, 0, 0), "dead entity is not a kill opportunity");
+        check(!CrystalSelectionPolicy.isLethal(Float.NaN, 8, 0), "unknown target damage rejected");
+        check(!CrystalSelectionPolicy.baseBalanceAllows(10, Float.NaN, true), "unknown self damage rejected");
         expect(4.0, threshold(new Target(20f, false, false)), "normal minimum");
         expect(1.0, threshold(new Target(7f, false, false)), "low health");
         expect(1.0, threshold(new Target(20f, true, false)), "broken armor");
@@ -65,6 +77,10 @@ public final class CrystalSelectionPolicyTest {
 
     private static double threshold(Target target) {
         return CrystalSelectionPolicy.minimumDamage(4.0, target.health(), target.broken(), target.face());
+    }
+
+    private static void check(boolean value, String message) {
+        if (!value) throw new AssertionError(message);
     }
 
     private static void expectSafe(boolean expected, float damage, double maximum,

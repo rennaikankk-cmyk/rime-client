@@ -32,7 +32,7 @@ import dev.guizhou.util.render.font.Fonts;
 
 public class NametagsModule extends Module {
 
-    /** CJK-capable custom font (bundled IB serif chain) for nametag text. */
+    /** Shared Anthropic Serif/CJK font chain for nametag text. */
     public Setting<Boolean> nametagFont = bool("NametagFont", true).setPage("Info");
     public Setting<Boolean> showPearls  = bool("ShowPearls",  true).setPage("Info");
     public Setting<Boolean> showItems   = bool("ShowItems",   true).setPage("Info");
@@ -42,12 +42,12 @@ public class NametagsModule extends Module {
     public Setting<Boolean> showResistance = bool("ShowResistance", true).setPage("Info");
     public Setting<Boolean> showStrength   = bool("ShowStrength",   true).setPage("Info");
 
-    public Setting<Color>   nameColor   = color("NameColor",   255, 255, 255, 255).setPage("Colors");
-    public Setting<Color>   friendColor = color("FriendColor",   0, 255, 100, 255).setPage("Colors");
-    public Setting<Color>   enemyColor  = color("EnemyColor",  255,  60,  60, 255).setPage("Colors");
-    public Setting<Color>   bgColor     = color("BgColor",       0,   0,   0, 128).setPage("Colors");
-    public Setting<Color>   distColor   = color("DistColor",   170, 170, 170, 255).setPage("Colors");
-    public Setting<Color>   popColor    = color("PopColor",   255,  80,  80, 255).setPage("Colors");
+    public Setting<Color>   nameColor   = color("NameColor",   250, 249, 245, 255).setPage("Colors");
+    public Setting<Color>   friendColor = color("FriendColor", 0x9B, 0xBF, 0xA6, 255).setPage("Colors");
+    public Setting<Color>   enemyColor  = color("EnemyColor",  0xE3, 0x9A, 0x92, 255).setPage("Colors");
+    public Setting<Color>   bgColor     = color("BgColor",     0x30, 0x30, 0x2E, 184).setPage("Colors");
+    public Setting<Color>   distColor   = color("DistColor",   0xC2, 0xC0, 0xB6, 255).setPage("Colors");
+    public Setting<Color>   popColor    = color("PopColor",   224, 138, 108, 255).setPage("Colors");
 
     public Setting<Float>   gap         = num("Gap",       1.0f, 0.1f, 15.0f).setPage("Render");
     public Setting<Float>   armorGap    = num("ArmorGap",  2.0f, 0.0f, 20.0f).setPage("Render");
@@ -321,7 +321,7 @@ public class NametagsModule extends Module {
                     graphics.pose().pushPose();
                     graphics.pose().translate(slotX, armorTopY, 0);
                     graphics.renderItem(armorStack, 0, 0);
-                    graphics.renderItemDecorations(mc.font, armorStack, 0, 0);
+                    Fonts.renderNametagItemDecorations(graphics, armorStack, 0, 0);
                     graphics.pose().popPose();
                 }
             }
@@ -341,11 +341,11 @@ public class NametagsModule extends Module {
             }
             if (!offHand.isEmpty()) {
                 graphics.renderItem(offHand, offX, itemY);
-                graphics.renderItemDecorations(mc.font, offHand, offX, itemY);
+                Fonts.renderNametagItemDecorations(graphics, offHand, offX, itemY);
             }
             if (!mainHand.isEmpty()) {
                 graphics.renderItem(mainHand, mainX, itemY);
-                graphics.renderItemDecorations(mc.font, mainHand, mainX, itemY);
+                Fonts.renderNametagItemDecorations(graphics, mainHand, mainX, itemY);
             }
         }
 

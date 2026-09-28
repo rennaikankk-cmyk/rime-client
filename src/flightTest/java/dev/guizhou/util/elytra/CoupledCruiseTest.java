@@ -9,6 +9,7 @@ public final class CoupledCruiseTest {
     private static final Vec3 NORTH = new Vec3(0, 0, 1);
 
     public static void main(String[] args) {
+        levelSpeedCap();
         inputAndHeading();
         verticalAndResidualMomentum();
         heightCycleAndReset();
@@ -20,8 +21,38 @@ public final class CoupledCruiseTest {
         acceleratedCruise();
         acceleratedClimb();
         boostModeSelection();
-        levelSpeedCap();
+        longWaveWindow();
+        forecastDoesNotAdvanceState();
         System.out.println("CoupledCruiseTest passed: " + checks + " checks");
+    }
+
+    private static void forecastDoesNotAdvanceState() {
+        Config cfg = new Config(15, -45, 30, true, -1.7, true, 1000, 14.5, 1.7, .002);
+        CoupledCruise live = new CoupledCruise(), control = new CoupledCruise();
+        for (int i = 0; i < 200; i++) {
+            Intent input = new Intent(NORTH, i < 60 ? -1 : i < 100 ? 1 : 0, false, true);
+            double y = 2500 - i * 12;
+            Selection expected = control.select(cfg, input, 0, y, true);
+            for (int probe = 0; probe < 4; probe++) {
+                check(live.previewSelection(cfg, input, 0, y, true).equals(expected),
+                        "repeated combat previews preserve bank and wave phase");
+            }
+            check(live.select(cfg, input, 0, y, true).equals(expected), "actual movement unchanged by preview");
+        }
+    }
+
+    private static void longWaveWindow() {
+        Config cfg = new Config(15, -45, 30, true, -1.7, true, 1000, 14.5, 1.7, .002);
+        check(cfg.heightWindow() == 1000, "long wave must not silently become a 256-block window");
+        CoupledCruise controller = new CoupledCruise();
+        Intent cruise = new Intent(NORTH, 0, false, true, BoostMode.Aggressive);
+        check(controller.select(cfg, cruise, 0, 2500, true).phase() == Phase.DESCEND, "wave starts descending");
+        check(controller.select(cfg, cruise, 0, 2000, true).phase() == Phase.DESCEND, "halfway is still descent");
+        check(controller.select(cfg, cruise, 0, 1500, true).phase() == Phase.CLIMB, "wave turns at the full window");
+        check(controller.select(cfg, cruise, 0, 2501, true).phase() == Phase.DESCEND, "wave completes its cycle");
+        check(controller.select(cfg, cruise, 0, 1500, true).phase() == Phase.CLIMB, "overshoot does not raise the next floor");
+        check(controller.select(cfg, new Intent(NORTH, -1, false, true), 0, 1800, true).phase() == Phase.LEVEL,
+                "manual descent takes over from the automatic wave");
     }
 
     private static void dualViewSelection() {
@@ -347,6 +378,12 @@ public final class CoupledCruiseTest {
         check(gentleOff.equals(ordinary), "a saved gentle profile cannot affect disabled GZBoost");
     }
 
+    private static Config pulse() { return new Config(15,-45,30,true,-1.7,true,60,15,1.7,.002); }
+    private static Config cap(double cap) { return new Config(15,-45,30,true,-1.7,false,60,cap,1.7,.002); }
+    private static Vec3 vector(Random random, double range) {
+        return new Vec3((random.nextDouble()*2-1)*range,(random.nextDouble()*2-1)*range,(random.nextDouble()*2-1)*range);
+    }
+    private static double pitch(Vec3 look) { return Math.toDegrees(-Math.asin(look.y)); }
     private static void levelSpeedCap() {
         Config fast = Config.defaults().withBoxCap(Config.defaults().speedCap());
         check(fast.boxCap() == 15, "level axis allowance can match the aggressive total cap");
@@ -374,12 +411,6 @@ public final class CoupledCruiseTest {
                 "the 1.7 axis box still limits level flight when the caller keeps it");
     }
 
-    private static Config pulse() { return new Config(15,-45,30,true,-1.7,true,60,15,1.7,.002); }
-    private static Config cap(double cap) { return new Config(15,-45,30,true,-1.7,false,60,cap,1.7,.002); }
-    private static Vec3 vector(Random random, double range) {
-        return new Vec3((random.nextDouble()*2-1)*range,(random.nextDouble()*2-1)*range,(random.nextDouble()*2-1)*range);
-    }
-    private static double pitch(Vec3 look) { return Math.toDegrees(-Math.asin(look.y)); }
     private static void near(double actual, double expected, String message) { check(Math.abs(actual-expected)<1e-8, message + ": " + actual); }
     private static void check(boolean condition, String message) {
         checks++;

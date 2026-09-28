@@ -2,12 +2,12 @@
   <img src="src/main/resources/assets/guizhouware/icon.png" alt="GuizhouWare" width="180" />
 </p>
 
-<h1 align="center">GuizhouWare</h1>
+<h1 align="center">Rime · Minecraft 1.21.1</h1>
 
 [![Java CI with Gradle](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/gradle-upload.yml/badge.svg?branch=main)](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/gradle-upload.yml)
 [![Security Review](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/security-review.yml/badge.svg?branch=main)](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/security-review.yml)
 
-**GuizhouWare** (贵州客户端) is a Minecraft 1.21.11 Fabric PvP client maintained by **renna**.
+**Rime** (formerly GuizhouWare) is a Minecraft 1.21.1 Fabric PvP client maintained by **renna**.
 It is a fork of **Homovore**, originally developed by **Leonetic and WiderThanEurasia**,
 with AutoCrystal enhancements ported from **AlienV4**.
 
@@ -68,10 +68,14 @@ Named presets are stored in `guizhouware/configs/<name>/`; use `.configs save <n
 
 ---
 
+## Current release
+
+Rime **1.1.2** for Minecraft **1.21.1**, distributed with **Rimeguard 3.1** through the official launcher. See [alignment notes](docs/release-rime112-1.21.1.md) and [version-specific compatibility](docs/minecraft-1.21.1.md). The `main` branch maintains the separate 1.21.11 build.
+
 ## Requirements
 
 - **JDK 21** for building; use Java 21 to launch the game.
-- Minecraft **1.21.11**, Fabric Loader **0.18.4 or newer**, and the matching Fabric API.
+- Minecraft **1.21.1**, Fabric Loader **0.18.4 or newer**, and the matching Fabric API.
 - Git for cloning and embedding commit metadata in the build.
 - The checked-in **Gradle Wrapper (9.2.0)**; a separate Gradle installation is not needed.
 

@@ -3,6 +3,7 @@ package dev.guizhou.features.commands.impl;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.guizhou.features.commands.Command;
+import dev.guizhou.features.commands.ui.CommandCategory;
 import dev.guizhou.features.modules.render.WaypointsModule;
 import dev.guizhou.manager.CommandManager;
 import dev.guizhou.util.world.WaypointMath;
@@ -16,6 +17,13 @@ public class WaypointCommand extends Command {
     public WaypointCommand() {
         super("waypoint", "waypoints", "wp");
         setDescription("Manages waypoints: add/del/list/toggle/clear, coords shows nether/overworld conversion");
+        category(CommandCategory.TOOLS).summary("管理路径点（按服务器保存）")
+                .usage("add <名称> [x y z]", "在当前位置或指定坐标添加路径点")
+                .usage("del <名称>", "删除路径点")
+                .usage("toggle <名称>", "显示/隐藏路径点")
+                .usage("list", "列出本服务器的路径点")
+                .usage("clear [deaths]", "清空全部或仅死亡点")
+                .usage("coords", "当前坐标的主世界/下界换算");
     }
 
     @Override

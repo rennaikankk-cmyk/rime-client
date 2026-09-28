@@ -180,7 +180,7 @@ public class HeartbeatManager extends Feature {
 
     /** Gate used by combat-critical module ticks. */
     public static boolean authorized() {
-        return LEASE.authorized();
+        return LEASE.authorized() && dev.guizhou.util.license.GuardStatus.authorized();
     }
 
     /** Cloud presets use the existing paid-account capability and pinned server key. */

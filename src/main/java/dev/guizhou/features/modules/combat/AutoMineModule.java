@@ -70,9 +70,9 @@ public class AutoMineModule extends Module {
     private final Setting<Boolean> glassRender = bool("GlassRender", true).setPage("Render");
     private final Setting<Float> glassFadeTime = num("GlassFadeTime", 0.5f, 0.05f, 2.0f).setPage("Render")
             .setVisibility(v -> glassRender.getValue());
-    private final Setting<Color> glassFillColor = color("GlassFillColor", 255, 255, 255, 50).setPage("Render")
+    private final Setting<Color> glassFillColor = color("GlassFillColor", 224, 138, 108, 50).setPage("Render")
             .setVisibility(v -> glassRender.getValue());
-    private final Setting<Color> glassOutlineColor = color("GlassOutlineColor", 255, 255, 255, 255).setPage("Render")
+    private final Setting<Color> glassOutlineColor = color("GlassOutlineColor", 194, 192, 182, 255).setPage("Render")
             .setVisibility(v -> glassRender.getValue());
     private final Setting<Boolean> renderDebugScores = bool("DebugScores", false).setPage("Render");
 

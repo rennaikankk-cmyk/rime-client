@@ -113,24 +113,31 @@ public class GuangxiElytraChaseModule extends Module {
     private final Setting<Integer> range = num("Range", 80, 8, 256).setPage("General");
     private final Setting<Boolean> playerOnly = bool("PlayerOnly", true).setPage("General");
     private final Setting<Boolean> dynamicTarget = bool("DynamicTarget", false).setPage("General");
-    private final Setting<Boolean> autoControlElytra = bool("AutoControlElytra", true).setPage("General");
-    private final Setting<Boolean> attackRotate = bool("Rotate", true).setPage("Mace");
-    private final RotationOptions attackRotation = new RotationOptions(this, attackRotate);
+    private final Setting<Boolean> autoControlElytra = bool("AutoControlElytra", true).setPage("General")
+            .described("有目标时由空战接管航向；手动已开启的 GZBoost 在空战让出控制后继续工作。");
     private final Setting<Boolean> autoWeapon = bool("AutoWeapon", true).setPage("General");
-    private final Setting<Boolean> autoSpearUse = fixed("AutoSpearUse", true);
-    private final Setting<Boolean> adaptiveCombat = fixed("AdaptiveCombat", true);
-    private final Setting<ThreatMode> threatMode = fixed("ThreatMode", ThreatMode.ALL_PLAYERS);
-    private final Setting<Boolean> avoidObstacles = fixed("AvoidObstacles", true);
-    private final Setting<Boolean> onlyWhenNoWasd = bool("OnlyWhenNoWasd", false).setPage("General");
-    private final Setting<Double> combatRange = fixed("CombatRange", 10.0, 1.0, 64.0);
-    private final Setting<Double> spearRange = fixed("SpearRange", 11.0, 1.0, 64.0);
+    private final Setting<Boolean> autoSpearUse = bool("AutoSpearUse", true).setPage("General");
+    private final Setting<Boolean> adaptiveCombat = bool("AdaptiveCombat", true).setPage("General");
+    private final Setting<ThreatMode> threatMode = mode("ThreatMode", ThreatMode.ALL_PLAYERS).setPage("General");
+    private final Setting<Boolean> avoidObstacles = bool("AvoidObstacles", true).setPage("General");
+    private final Setting<Boolean> onlyWhenNoWasd = bool("OnlyWhenNoWasd", false).setPage("General")
+            .described("按 WASD 时暂停追击与武器控制，交回手动飞行；适合与 GZBoost 配合赶路。");
+    private final Setting<Double> combatRange = num("CombatRange", 10.0, 1.0, 64.0).setPage("General");
+    private final Setting<Double> spearRange = num("SpearRange", 11.0, 1.0, 64.0).setPage("General");
     private final Setting<Double> followGroundHeightExtra = num("FollowGroundHeightExtra", 2.0, 0.0, 10.0).setPage("General");
 
     // ---- Advanced ----
-    private final Setting<Boolean> maceUseExtraAttack = bool("MaceUseExtraAttack", true).setPage("Advanced");
+    private final Setting<Boolean> maceUseExtraAttack = bool("MaceUseExtraAttack", true).setPage("Advanced")
+            .described("手动下砸模式允许额外普攻；AutoMaceDive 开启时保留真正重击的攻击窗口。");
+    private final Setting<Boolean> autoMaceDive = bool("AutoMaceDive", true).setPage("Mace");
+    private final Setting<Boolean> macePreSwap = bool("MacePreSwap", false).setPage("Mace");
+    private final Setting<Integer> macePreSwapDelay = num("MacePreSwapDelay", 2, 0, 20).setPage("Mace");
+    private final Setting<Double> macePreSwapDistancePerTick = num("MacePreSwapDistancePerTick", 0.0, 0.0, 2.0).setPage("Mace");
+    private final Setting<Integer> maceSwapMinDelay = num("MaceSwapMinDelay", 2, 0, 40).setPage("Mace");
+    private final Setting<Boolean> attackRotate = bool("Rotate", true).setPage("Mace");
+    private final RotationOptions attackRotation = new RotationOptions(this, attackRotate);
     private final Setting<RocketPolicy> rocketPolicy = mode("RocketPolicy", RocketPolicy.Economy).setPage("Advanced");
     private final Setting<Boolean> climbExit = bool("ClimbExit", true).setPage("Advanced");
-    private final Setting<Boolean> autoMaceDive = fixed("AutoMaceDive", true);
     private final Setting<Boolean> maceAdaptive = bool("MaceAdaptive", true).setPage("Advanced");
     private final Setting<Boolean> maceTerminal = fixed("MaceTerminal", true);
     private final Setting<Double> maceHeight = num("MaceHeight", 32.0, 1.0, 128.0).setPage("Advanced");
@@ -441,7 +448,7 @@ public class GuangxiElytraChaseModule extends Module {
         PacketSendUtil.addSubmissionListener(submissions);
         syncFlightControl();
         if ((mode.getValue() == Mode.MACE || mode.getValue() == Mode.MXS) && !autoMaceDive.getValue()) {
-            dev.guizhou.features.commands.Command.sendMessage("重锤自动下砸未开启：滑翔中不会产生重击。可在 Mace 页开启 AutoMaceDive；需在快捷栏放胸甲。旧配置保留了关闭状态。");
+            dev.guizhou.features.commands.Command.sendMessage("重锤自动下砸未开启：滑翔中不会产生重击。可在 Mace 页开启 AutoMaceDive；背包需有胸甲或空槽用于收翼。旧配置保留了关闭状态。");
         }
     }
 
@@ -1090,6 +1097,8 @@ public class GuangxiElytraChaseModule extends Module {
         double passHeight = Double.NaN;
         double executionHeight = Double.NaN;
         int pullUpStarted = -1;
+        int glideSince = Integer.MIN_VALUE;
+        int lastDiveWarningTick = Integer.MIN_VALUE / 2;
         final MacePassTracker pass = new MacePassTracker();
         final CombatSteering.FailureWindow unreachable = new CombatSteering.FailureWindow();
 
@@ -1105,6 +1114,7 @@ public class GuangxiElytraChaseModule extends Module {
             pullUpStarted = -1;
             passHeight = Double.NaN;
             executionHeight = Double.NaN;
+            glideSince = Integer.MIN_VALUE;
             pass.reset();
             unreachable.reset();
         }
@@ -1208,13 +1218,20 @@ public class GuangxiElytraChaseModule extends Module {
 
         int tickFollow(boolean armed) {
             if (target == null) return NONE;
-            if (armed && shouldStartDive() && maceDive.begin()) {
-                wasDiving = true;
-                naturalFallTicks = 12;
-                clearSpearAim();
-                heading = Vec3.ZERO;
-                aimDiveExit();
-                return FOLLOW;
+            tryMacePreSwap();
+            if (armed && shouldStartDive()) {
+                if (maceDive.begin()) {
+                    wasDiving = true;
+                    naturalFallTicks = 12;
+                    clearSpearAim();
+                    heading = Vec3.ZERO;
+                    aimDiveExit();
+                    return FOLLOW;
+                }
+                if (mc.player.tickCount - lastDiveWarningTick >= 200) {
+                    lastDiveWarningTick = mc.player.tickCount;
+                    dev.guizhou.features.commands.Command.sendMessage("重锤暂时无法收翼：请保留胸甲或背包空槽，并关闭容器界面。");
+                }
             }
             AABB observedBox = maceTargetBox();
             double distanceSquared = observedBox.distanceToSqr(maceAttackEye());
@@ -1326,7 +1343,7 @@ public class GuangxiElytraChaseModule extends Module {
             double configuredRange = target instanceof Player p && isUsingSpear(p)
                     ? spearRange.getValue() : combatRange.getValue();
             boolean smash = canCommitMaceHit();
-            boolean ready = smash || maceUseExtraAttack.getValue()
+            boolean ready = smash || !autoMaceDive.getValue() && maceUseExtraAttack.getValue()
                     && mc.player.getAttackStrengthScale(0.5F) > 0.95F;
             if (!ready || maceTargetBox().distanceToSqr(maceAttackEye())
                     > configuredRange * configuredRange || !attack(target)) return false;
@@ -1365,6 +1382,24 @@ public class GuangxiElytraChaseModule extends Module {
             unreachable.reset();
             maceDive.requestRecovery();
             state = tickPullUp();
+        }
+
+        private void tryMacePreSwap() {
+            if (!macePreSwap.getValue() || maceDive.isActive() || target == null || mc.player == null) return;
+            var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+            if (flight != null && flight.isArmorSwapActive()) return;
+            if (!mc.player.isFallFlying()) {
+                glideSince = Integer.MIN_VALUE;
+                return;
+            }
+            if (glideSince == Integer.MIN_VALUE) glideSince = mc.player.tickCount;
+            if (mc.player.tickCount - glideSince < maceSwapMinDelay.getValue()) return;
+            int delay = Math.max(0, macePreSwapDelay.getValue());
+            AABB future = observedTargetBox().move(target.getDeltaMovement().scale(delay));
+            double range = mc.player.entityInteractionRange()
+                    + macePreSwapDistancePerTick.getValue() * delay;
+            if (future.distanceToSqr(mc.player.getEyePosition()) > range * range) return;
+            maceDive.beginPreSwap();
         }
 
         private boolean shouldStartDive() {
@@ -1555,8 +1590,12 @@ public class GuangxiElytraChaseModule extends Module {
                     SpearCombat.maxRange(mc.player, mc.player.getMainHandItem())
                             + mc.player.getDeltaMovement().length()
                             * (SpearCombat.chargeTicks(mc.player.getMainHandItem()) + latencyTicks + 2));
-            boolean charge = !boostRefresh && (weapons.isHoldingUse()
-                    || mc.player.distanceToSqr(target) <= chargeDistance * chargeDistance);
+            boolean ownedCharge = weapons.isHoldingUse() || isUsingSpear(mc.player);
+            boolean lowUnpowered = targetGrounded && flight != null && !flight.isBoostAttached()
+                    && mc.player.getY() < target.getBoundingBox().minY + 0.9
+                    && mc.player.getDeltaMovement().y < 0;
+            boolean charge = !lowUnpowered && (ownedCharge && (!targetGrounded || !boostRefresh)
+                    || !boostRefresh && mc.player.distanceToSqr(target) <= chargeDistance * chargeDistance);
             boolean armed = prepareWeapon(true, charge);
             makingChargeRoom = false;
             preciseApproach = false;
@@ -1677,7 +1716,7 @@ public class GuangxiElytraChaseModule extends Module {
                     Math.sqrt(observedTargetBox().distanceToSqr(eye)), clearance, desired,
                     SpearCombat.maxRange(mc.player, spear), mc.player.getDeltaMovement().length(),
                     motion.velocity().dot(offset.normalize()), SpearCombat.readyInTicks(mc.player),
-                    ++pullOverTicks, pulledAfterHit ? 20 : 6, motion.confidence()))) {
+                    ++pullOverTicks, targetGrounded ? 30 : pulledAfterHit ? 20 : 6, motion.confidence()))) {
                 pulledAfterHit = false;
                 return tickFollow();
             }
@@ -1694,13 +1733,16 @@ public class GuangxiElytraChaseModule extends Module {
                 if (targetGrounded) away = new Vec3(away.x, 0.0, away.z);
                 if (away.lengthSqr() < 1.0E-9) away = new Vec3(0.0, 0.0, 1.0);
             }
-            return away.lengthSqr() < 36.0 ? away.normalize().scale(6.0) : away;
+            Vec3 result = away.lengthSqr() < 36.0 ? away.normalize().scale(6.0) : away;
+            return groundLane(result);
         }
 
         @Override
         void inject(FlightVelocity fv) {
             super.inject(fv);
-            if (!preciseApproach && fv.value().lengthSqr() > 1.0E-9) {
+            // GZ's diagonal reshaping turns a level ground lane into a steep climb/drop,
+            // making terrain recovery cancel the charge on every approach.
+            if (!targetGrounded && !preciseApproach && fv.value().lengthSqr() > 1.0E-9) {
                 Vec3 current = fv.value();
                 Vec3 diagonal = ElytraPhysics.diagonalGzBoost(current, mc.player.getDeltaMovement());
                 if (diagonal.dot(current) > 0.0 && diagonal.lengthSqr() > 1.0E-9) {
@@ -1719,6 +1761,14 @@ public class GuangxiElytraChaseModule extends Module {
                 noEntry = Math.max(noEntry, SpearCombat.minRange(mc.player, mc.player.getUseItem()) + 0.35);
             }
             AABB interceptBox = target.getBoundingBox().move(targetPacketOffset());
+            if (targetGrounded) {
+                // Vertical separation must not hide the inner dead zone: hovering
+                // directly above a target turns spear aim into a dive into the floor.
+                noEntry = Math.max(noEntry, 3.0);
+                Vec3 eye = spearAttackEye();
+                Vec3 projected = new Vec3(eye.x, interceptBox.getCenter().y, eye.z);
+                if (interceptBox.distanceToSqr(projected) < noEntry * noEntry) return true;
+            }
             return noEntry > 0.1 && interceptBox.distanceToSqr(spearAttackEye())
                     < noEntry * noEntry;
         }
@@ -1733,7 +1783,7 @@ public class GuangxiElytraChaseModule extends Module {
 
         Vec3 approachHeading(Vec3 tp) {
             Vec3 delta = tp.subtract(spearAttackEye());
-            if (!targetGrounded || delta.y >= -2.5) return delta;
+            if (!targetGrounded || delta.y >= -2.5) return groundLane(delta);
             // Establish a shallow approach lane before aiming the weapon. A vertical
             // chase over a grounded target otherwise alternates dive and terrain pull-up.
             Vec3 flat = new Vec3(delta.x, 0.0, delta.z);
@@ -1745,6 +1795,17 @@ public class GuangxiElytraChaseModule extends Module {
                 if (flat.lengthSqr() < 1.0E-6) flat = new Vec3(0.0, 0.0, 1.0);
             } else flat = flat.normalize();
             return flat.add(0.0, -0.18, 0.0).normalize().scale(6.0);
+        }
+
+        private Vec3 groundLane(Vec3 intent) {
+            if (!targetGrounded) return intent;
+            // Aim the weapon at the hitbox separately. Navigating the body to that
+            // same eye point scrapes the floor when armor changes the player's pose.
+            double feetY = target.getBoundingBox().minY + 1.4;
+            double error = feetY - mc.player.getY();
+            double horizontal = intent.horizontalDistance();
+            double vertical = Math.clamp(error * 0.5, -0.08, 0.18) * Math.max(1.0, horizontal);
+            return new Vec3(intent.x, vertical, intent.z);
         }
 
         /** IX.adjustMovementForSpear: sidestep when their charged-spear ray hits us. */
@@ -2231,6 +2292,10 @@ public class GuangxiElytraChaseModule extends Module {
 
     @Override
     public String getDisplayInfo() {
+        if (mc.player == null) return "等待进入世界";
+        if (manualOverride()) return "手动飞行优先";
+        if (!isValid(target)) return "等待目标";
+        if (paused()) return "暂停 / 回拉恢复";
         if (maceDive.isActive()) return "Dive/" + maceDive.phase();
         if (combatAction != AerialCombatPolicy.Action.CHASE) return combatAction.name();
         Behavior b = behavior;

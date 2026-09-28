@@ -286,6 +286,8 @@ public final class ElytraCombatHookTest {
                 "Only a successful local rotation send may consume the arbitration window");
         assertFalseReturn(submit, send + 2, "Rejected local rotation send");
 
+        check(method(rotation, "performSilent").hasCall(FLIGHT, "gzBoostControlsLook"),
+                "Silent actions retain GZBoost look ownership on 1.21.1");
         Trace boundary = null;
         Trace updater = null;
         for (Map.Entry<String, Trace> entry : rotation.entrySet()) {

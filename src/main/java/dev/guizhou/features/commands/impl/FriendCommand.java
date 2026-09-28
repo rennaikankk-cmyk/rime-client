@@ -1,15 +1,20 @@
 package dev.guizhou.features.commands.impl;
 
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.features.commands.Command;
+import dev.guizhou.features.commands.ui.ChatFeed;
+import dev.guizhou.features.commands.ui.ChatPalette;
+import dev.guizhou.features.commands.ui.ChatTone;
 import dev.guizhou.manager.CommandManager;
 import dev.guizhou.manager.FriendManager;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.List;
-import java.util.StringJoiner;
 import java.util.UUID;
 
 import static dev.guizhou.features.commands.argument.FriendArgumentType.friend;
@@ -31,24 +36,37 @@ public class FriendCommand extends Command {
                         .executes((ctx) -> {
                             List<String> friends = GuizhouWare.friendManager.getFriends();
                             if (friends.isEmpty()) {
-                                return success("You have no friends :(");
+                                return replyKeyed("list", ChatTone.MUTED, Component.literal("好友列表为空"));
                             }
-                            StringJoiner joiner = new StringJoiner(", ");
-                            for (String name : friends) {
+                            String prefix = ctx.getSource().getCommandPrefix();
+                            MutableComponent body = Component.empty()
+                                    .append(ChatFeed.text("好友 " + friends.size() + "  ", ChatPalette.TEXT));
+                            for (int i = 0; i < friends.size(); i++) {
+                                if (i > 0) body.append(ChatFeed.text(" · ", ChatPalette.SUBTLE));
+                                String name = friends.get(i);
                                 long expiry = GuizhouWare.friendManager.getExpiry(name);
-                                if (expiry == FriendManager.PERMANENT) {
-                                    joiner.add(name);
-                                } else {
-                                    joiner.add(name + " (" + formatRemaining(expiry) + ")");
-                                }
+                                String label = expiry == FriendManager.PERMANENT
+                                        ? name
+                                        : name + " (" + formatRemaining(expiry) + ")";
+                                body.append(ChatFeed.suggest(label, prefix + "friend remove " + name,
+                                        ChatFeed.text("移除好友 " + name, ChatPalette.MUTED), ChatPalette.SUCCESS));
                             }
-                            return success("Friends (%s): %s", friends.size(), joiner);
+                            return replyKeyed("list", ChatTone.INFO, body);
                         }))
                 .then(literal("clear")
                         .executes((ctx) -> {
                             GuizhouWare.friendManager.clearFriends();
-                            return success("Cleared friends list");
+                            return success("已清空好友列表");
                         }))
+                .then(literal("whisper")
+                        .executes((ctx) -> success("加好友时私聊提醒%s",
+                                GuizhouWare.friendManager.isWhisperOnAdd() ? "{green}已开启" : "{red}已关闭"))
+                        .then(argument("enabled", BoolArgumentType.bool())
+                                .executes((ctx) -> {
+                                    boolean on = BoolArgumentType.getBool(ctx, "enabled");
+                                    GuizhouWare.friendManager.setWhisperOnAdd(on);
+                                    return success("加好友时私聊提醒%s", on ? "{green}已开启" : "{red}已关闭");
+                                })))
                 .then(literal("add")
                         .then(argument("username", onlinePlayer())
                                 .executes((ctx) -> addPlayer(getOnlinePlayer(ctx, "username"), FriendManager.PERMANENT))))
@@ -57,10 +75,10 @@ public class FriendCommand extends Command {
                                 .executes((ctx) -> {
                                     String username = getFriend(ctx, "username");
                                     if (!GuizhouWare.friendManager.isFriend(username)) {
-                                        return success("{green} %s {reset} is not on your friends list.", username);
+                                        return warn("{green} %s {reset} 不在好友列表中", username);
                                     }
                                     GuizhouWare.friendManager.removeFriend(username);
-                                    return success("Removed {green} %s {reset} from your friends list", username);
+                                    return success("已将 {green} %s {reset} 移出好友列表", username);
                                 })))
 
                 .then(literal("radius")
@@ -81,18 +99,18 @@ public class FriendCommand extends Command {
 
     private int addPlayer(String username, long expiry) {
         if (GuizhouWare.friendManager.isFriend(username)) {
-            return success("{green} %s {reset} is already on your friends list.", username);
+            return warn("{green} %s {reset} 已在好友列表中", username);
         }
         GuizhouWare.friendManager.addFriend(username, expiry);
         if (expiry == FriendManager.PERMANENT) {
-            return success("Added {green} %s {reset} to your friends list", username);
+            return success("已将 {green} %s {reset} 加入好友列表", username);
         }
-        return success("Added {green} %s {reset} to your friends list for %s", username, formatRemaining(expiry));
+        return success("已将 {green} %s {reset} 加入好友列表，有效期 %s", username, formatRemaining(expiry));
     }
 
     private int addRadius(int blocks, long expiry) {
         if (nullCheck()) {
-            return fail("You need to be in a world to do that.");
+            return fail("需要在世界中才能这样做");
         }
         double radiusSq = (double) blocks * blocks;
         UUID self = mc.player.getUUID();
@@ -103,16 +121,17 @@ public class FriendCommand extends Command {
             String name = player.getGameProfile().getName();
             if (name == null) continue;
             if (GuizhouWare.friendManager.isFriend(name)) continue;
-            GuizhouWare.friendManager.addFriend(name, expiry);
+            // Batch adds never whisper: one message per player in the same tick is a spam kick.
+            GuizhouWare.friendManager.addFriend(name, expiry, false);
             added++;
         }
         if (added == 0) {
-            return success("No new players within %s blocks.", blocks);
+            return success("半径 %s 格内没有新玩家", blocks);
         }
         if (expiry == FriendManager.PERMANENT) {
-            return success("Added %s player(s) within %s blocks to your friends list", added, blocks);
+            return success("已将半径 %s 格内的 %s 名玩家加入好友列表", blocks, added);
         }
-        return success("Added %s player(s) within %s blocks to your friends list for %s", added, blocks, formatRemaining(expiry));
+        return success("已将半径 %s 格内的 %s 名玩家加入好友列表，有效期 %s", blocks, added, formatRemaining(expiry));
     }
 
     private static long expiryFromDays(int days) {
@@ -125,12 +144,12 @@ public class FriendCommand extends Command {
         long days = hours / 24L;
         hours %= 24L;
         if (days > 0) {
-            return days + "d " + hours + "h";
+            return days + "天 " + hours + "小时";
         }
         long minutes = (ms / (60L * 1000L)) % 60L;
         if (hours > 0) {
-            return hours + "h " + minutes + "m";
+            return hours + "小时 " + minutes + "分钟";
         }
-        return minutes + "m";
+        return minutes + "分钟";
     }
 }

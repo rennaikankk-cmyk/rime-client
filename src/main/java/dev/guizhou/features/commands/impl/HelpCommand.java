@@ -1,84 +1,40 @@
 package dev.guizhou.features.commands.impl;
 
-import com.google.common.collect.Iterables;
-import com.mojang.brigadier.ParseResults;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.tree.CommandNode;
 import dev.guizhou.features.commands.Command;
+import dev.guizhou.features.commands.ui.CommandCategory;
+import dev.guizhou.features.commands.ui.CommandHelp;
 import dev.guizhou.manager.CommandManager;
-
-import java.util.List;
-import java.util.Map;
-import java.util.StringJoiner;
 
 import static dev.guizhou.features.commands.argument.CommandArgumentType.command;
 import static dev.guizhou.features.commands.argument.CommandArgumentType.getCommand;
-import static dev.guizhou.features.commands.argument.NumberArgumentType.get;
-import static dev.guizhou.features.commands.argument.NumberArgumentType.minMax;
-import static dev.guizhou.features.commands.argument.NumberArgumentType.number;
 
 public class HelpCommand extends Command {
-    private static final int ITEMS_PER_PAGE = 5;
-
     public HelpCommand() {
         super("help", "commands", "h", "cmds");
         setDescription("Displays all executable commands and additional information");
+        category(CommandCategory.TOOLS).summary("查看命令列表与用法")
+                .usage("", "分组列出全部命令")
+                .usage("<页码>", "翻页")
+                .usage("<命令>", "查看某条命令或模块的用法");
     }
 
     @Override
     public void createArgumentBuilder(LiteralArgumentBuilder<CommandManager> builder) {
-        builder.then(argument("page", number(Integer.class, minMax(1, Integer.MAX_VALUE)))
-                        .executes((ctx) -> helpCommands(ctx, get(Integer.class, ctx, "page")))
+        builder.executes(ctx -> {
+                    CommandHelp.page(ctx.getSource(), 1);
+                    return NO_OP;
+                })
+                .then(argument("page", IntegerArgumentType.integer(1))
+                        .executes(ctx -> {
+                            CommandHelp.page(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "page"));
+                            return NO_OP;
+                        }))
                 .then(argument("command_name", command())
-                        .executes(this::helpSpecific))
-                .executes((ctx) -> helpCommands(ctx, 1)));
-    }
-
-    private int helpSpecific(CommandContext<CommandManager> ctx) {
-        Command command = getCommand(ctx, "command_name");
-        sendMessage("Usages for %s:", command.getName());
-
-        ParseResults<CommandManager> results = ctx.getSource().getDispatcher()
-                .parse(command.getName(), ctx.getSource());
-        if (results.getContext().getNodes().isEmpty()) {
-            return success("No usages available");
-        }
-
-        Map<CommandNode<CommandManager>, String> smartUsages = ctx.getSource().getDispatcher().getSmartUsage(
-                Iterables.getLast(results.getContext().getNodes()).getNode(), ctx.getSource());
-        for (String usage : smartUsages.values()) {
-            sendMessage(".%s %s", results.getReader().getString(), usage);
-        }
-
-        return success();
-    }
-
-    private int helpCommands(CommandContext<CommandManager> ctx, int page) {
-        List<Command> commands = ctx.getSource().getCommands()
-                .stream().filter(Command::isShown).toList();
-
-        int pageIndex = page;
-        int pages = (int) Math.ceil((double) commands.size() / ITEMS_PER_PAGE);
-        if (pageIndex > pages) {
-            pageIndex = 1;
-        }
-
-        List<Command> paginated = commands.subList((pageIndex - 1) * ITEMS_PER_PAGE,
-                Math.min(commands.size(), pageIndex * ITEMS_PER_PAGE));
-
-        sendMessage("Commands (%s):", commands.size());
-
-        for (Command command : paginated) {
-            StringJoiner joiner = new StringJoiner(", ");
-            for (String alias : command.getAliases()) {
-                joiner.add(alias);
-            }
-
-            sendMessage("{dark_gray} %s: {reset}\n   %s",
-                    joiner, command.getDescription());
-        }
-
-        return success("Page %s/%s", pageIndex, pages);
+                        .executes(ctx -> {
+                            CommandHelp.detail(ctx.getSource(), getCommand(ctx, "command_name"));
+                            return NO_OP;
+                        }));
     }
 }

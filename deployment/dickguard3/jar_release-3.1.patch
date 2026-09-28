@@ -1,0 +1,13 @@
+--- a/jar_release.py
++++ b/jar_release.py
+@@ -133,8 +133,8 @@
+                                     for value in values)
+             guard_version = metadata.get("custom", {}).get("dickguard") if isinstance(metadata.get("custom", {}), dict) else None
+             if guard_version is not None:
+-                if guard_version != "3.0" or entrypoints != {"main": ["d1.G"], "client": ["d1.G"]} or "d1/G.class" not in names:
+-                    raise ReleaseError("Invalid dickguard3.0 entrypoints or guard class")
++                if guard_version not in ("3.0", "3.1") or entrypoints != {"main": ["d1.G"], "client": ["d1.G"]} or "d1/G.class" not in names:
++                    raise ReleaseError("Invalid dickguard3.x entrypoints or guard class")
+                 found = True
+             if not found or "dev/guizhou/GuizhouWare.class" not in names:
+                 raise ReleaseError("GuizhouWare entrypoint or class is missing")

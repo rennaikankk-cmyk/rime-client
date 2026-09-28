@@ -46,8 +46,8 @@ final class PanelStyle extends ShellStyle {
                         boolean descriptionPanel, boolean icons, boolean glassHeader, float radius, int dim) {}
 
     /** Hachimi-style glass: translucent panels, tinted header strip, category icons, enabled left bar. */
-    private static final Look HACHIMI_LOOK = new Look(104, 17, 15, 8.5f, 0xFF8B9AF5, 0x6E10131E, 0x500B0E17, 0x00000000,
-            0x14FFFFFF, false, true, 0xFFEAF0FF, 0xFF8E93A6, true, true, true, true, 5f, 0x66000000);
+    private static final Look HACHIMI_LOOK = new Look(110, 18, 16, 9.5f, 0xFFE08A6C, 0xC01F1E1C, 0xA030302E, 0x00000000,
+            0x14FFFFFF, false, true, 0xFFFAF9F5, 0xFFC2C0B6, true, true, true, true, 5f, 0x66000000);
 
     private static final String DESCRIPTION = "DESCRIPTION";
 

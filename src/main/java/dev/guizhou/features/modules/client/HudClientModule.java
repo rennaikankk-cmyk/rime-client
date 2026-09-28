@@ -8,8 +8,8 @@ import dev.guizhou.features.modules.hud.CoordinatesHudModule;
 import dev.guizhou.features.modules.hud.CountsHudModule;
 import dev.guizhou.features.modules.hud.NotifierHudModule;
 import dev.guizhou.features.modules.hud.PingHudModule;
-import dev.guizhou.features.modules.hud.RadarHudModule;
 import dev.guizhou.features.modules.hud.PlayersHudModule;
+import dev.guizhou.features.modules.hud.RadarHudModule;
 import dev.guizhou.features.modules.hud.SpeedHudModule;
 import dev.guizhou.features.modules.hud.TargetHudModule;
 import dev.guizhou.features.modules.hud.TotemsHudModule;
@@ -45,13 +45,19 @@ public class HudClientModule extends Module {
     private int dragX, dragY;
     private boolean editorOpen;
 
-    public final Setting<Color> radarEnemyColor  = color("Radar Enemy Color",  255, 255, 255, 255).setPage("Colors");
-    public final Setting<Color> radarFriendColor = color("Radar Friend Color",   0, 255, 100, 255).setPage("Colors");
-    public final Setting<Color> radarSelfColor   = color("Radar Self Color",   255, 255, 255, 255).setPage("Colors");
-    public final Setting<Color> activeModuleColor = color("Active Module Color", 175,   0,   0, 255).setPage("Colors");
+    public final Setting<Color> radarEnemyColor  = color("Radar Enemy Color",  0xE3, 0x9A, 0x92, 255).setPage("Colors");
+    public final Setting<Color> radarFriendColor = color("Radar Friend Color", 0x9B, 0xBF, 0xA6, 255).setPage("Colors");
+    public final Setting<Color> radarSelfColor   = color("Radar Self Color",   0xE0, 0x8A, 0x6C, 255).setPage("Colors");
+    public final Setting<Color> activeModuleColor = color("Active Module Color", 0xE0, 0x8A, 0x6C, 255).setPage("Colors");
 
     public Setting<HudPosition> coordinatesPosition;
     public Setting<HudPosition> activeModulesPosition;
+    public Setting<ActiveModulesHudModule.Sort> activeModulesSort;
+    public Setting<ActiveModulesHudModule.Source> activeModulesSource;
+    public Setting<Boolean> activeModulesEdge;
+    public Setting<Boolean> pingShowTps;
+    public Setting<Boolean> pingShowFps;
+    public Setting<NotifierHudModule.Corner> notifierCorner;
 
     public HudClientModule() {
         super("Hud", "Static-position HUD elements", Category.CLIENT);
@@ -61,11 +67,18 @@ public class HudClientModule extends Module {
         register(new CoordinatesHudModule(), true);
         coordinatesPosition = mode("Coordinates Position", HudPosition.BOTTOM_RIGHT).setPage("Elements");
         register(new PingHudModule(), true);
+        pingShowTps = bool("Ping 显示 TPS", true).setPage("Ping");
+        pingShowFps = bool("Ping 显示 FPS", true).setPage("Ping");
         register(new RadarHudModule(), true);
-        register(new PlayersHudModule(), true);
+        register(new PlayersHudModule(), false);
         register(new ActiveModulesHudModule(), true);
         activeModulesPosition = mode("ActiveModules Position", HudPosition.CENTER_RIGHT).setPage("Elements");
+        activeModulesSort = mode("ActiveModules 排序", ActiveModulesHudModule.Sort.ADDED).setPage("ActiveModules");
+        activeModulesSource = mode("ActiveModules 来源", ActiveModulesHudModule.Source.ENABLED).setPage("ActiveModules")
+                .described("ENABLED 自动显示已开启模块；WATCHLIST 显示手动添加的关注列表。");
+        activeModulesEdge = bool("ActiveModules 渐变边条", true).setPage("ActiveModules");
         register(new NotifierHudModule(), true);
+        notifierCorner = mode("Notifier 角落", NotifierHudModule.Corner.TOP_LEFT).setPage("Notifier");
         register(new SpeedHudModule(), false);
         register(new TargetHudModule(), true);
         register(new dev.guizhou.features.modules.hud.DiagnosticsHudModule(), true);
@@ -79,13 +92,9 @@ public class HudClientModule extends Module {
         posY.put(element, num(id + " Y", 0.5, 0.0, 1.0).setPage("Layout"));
         sizes.put(element, num(id + " 大小 (%)", 100.0, 50.0, 200.0).setPage(id));
         opacity.put(element, num(id + " 背景不透明度 (%)", 100.0, 0.0, 100.0).setPage(id));
-        boolean target = element instanceof TargetHudModule;
-        Color bg = new Color(target ? 0x171717 : 0x182338);
-        Color fg = new Color(target ? 0xFAFAFA : 0xE0E6F2);
-        Color acc = new Color(target ? 0xE5E5E5 : 0x72A8D8);
-        backgrounds.put(element, register(new Setting<>(id + " 背景颜色", bg)).setPage(id));
-        foregrounds.put(element, register(new Setting<>(id + " 文字颜色", fg)).setPage(id));
-        accents.put(element, register(new Setting<>(id + " 强调色", acc)).setPage(id));
+        backgrounds.put(element, register(new Setting<>(id + " 背景颜色", new Color(0x30302E))).setPage(id));
+        foregrounds.put(element, register(new Setting<>(id + " 文字颜色", new Color(0xFAF9F5))).setPage(id));
+        accents.put(element, register(new Setting<>(id + " 强调色", new Color(0xE08A6C))).setPage(id));
     }
 
     public float scaleOf(HudModule element) { return sizes.get(element).getValue().floatValue()/100f; }
@@ -96,6 +105,38 @@ public class HudClientModule extends Module {
                 opacity.get(element).getValue().floatValue()/100f);
     }
 
+    // Opaque colours that shipped as defaults before the graphite + iris palette.
+    private static final int[] LEGACY_BG = {0xFF182338, 0xFF171717, 0xFF151820};
+    private static final int[] LEGACY_FG = {0xFFE0E6F2, 0xFFFAFAFA, 0xFFECEEF4};
+    private static final int[] LEGACY_ACCENT = {0xFF72A8D8, 0xFFE5E5E5, 0xFF8B7CFF};
+
+    /**
+     * Settings still holding a previous default follow the new palette; any
+     * customised value (including a changed alpha) is left alone. Per field,
+     * so a user who only recoloured the accent keeps it and still gets the new card.
+     */
+    public void migrateLegacyPalette() {
+        for (HudModule element : elements.keySet()) {
+            migrate(backgrounds.get(element), LEGACY_BG);
+            migrate(foregrounds.get(element), LEGACY_FG);
+            migrate(accents.get(element), LEGACY_ACCENT);
+        }
+        migrate(radarEnemyColor, 0xFFFFFFFF, 0xFFECEEF4);
+        migrate(radarFriendColor, 0xFF00FF64, 0xFF4ADE80);
+        migrate(radarSelfColor, 0xFFFFFFFF, 0xFF8B7CFF);
+        migrate(activeModuleColor, 0xFFAF0000, 0xFF8B7CFF);
+    }
+
+    private static void migrate(Setting<Color> setting, int... legacy) {
+        int argb = setting.getValue().getRGB();
+        for (int old : legacy) {
+            if (argb == old) {
+                setting.setValue(setting.getDefaultValue());
+                return;
+            }
+        }
+    }
+
     public HudPosition positionOf(HudModule element) {
         if (element instanceof CoordinatesHudModule) return coordinatesPosition.getValue();
         if (element instanceof ActiveModulesHudModule) return activeModulesPosition.getValue();
@@ -104,7 +145,7 @@ public class HudClientModule extends Module {
 
     private int lineCount(HudModule element) {
         if (element instanceof RadarHudModule radar) return radar.renderedLineCount();
-        if (element instanceof ActiveModulesHudModule active) return active.getEntries().size();
+        if (element instanceof ActiveModulesHudModule active) return active.renderedLineCount();
         return 1;
     }
 
@@ -115,15 +156,29 @@ public class HudClientModule extends Module {
     public int stackBelowHeight(HudModule element) {
         HudPosition anchor = positionOf(element);
         if (!anchor.isBottom()) return 0;
+        return stackHeight(anchor, element);
+    }
+
+    /** Height of the whole default bottom stack at an anchor, e.g. to sit a toast box above it. */
+    public int stackHeight(HudPosition anchor) {
+        return stackHeight(anchor, null);
+    }
+
+    private int stackHeight(HudPosition anchor, HudModule upTo) {
         int height = 0;
         for (Class<? extends HudModule> type : BOTTOM_STACK) {
-            if (type.isInstance(element)) break;
+            if (upTo != null && type.isInstance(upTo)) break;
             HudModule other = getElement(type);
-            if (other == null || !isElementEnabled(type)) continue;
+            if (other == null || !isElementEnabled(type) || isCustomPosition(other)) continue;
             if (positionOf(other) != anchor) continue;
-            if (other instanceof RadarHudModule radar) height += radar.renderedLineCount() * 15 + 12;
-            else if (other instanceof ActiveModulesHudModule active) height += active.getEntries().size() * 15 + 12;
-            else height += 28;
+            // Stack members draw bottom-up in registration order, so earlier ones are measured this frame.
+            if (other.wasRendered()) height += other.boundH() + 4;
+            else if (other instanceof RadarHudModule radar) height += radar.renderedLineCount() * 12 + 26;
+            else if (other instanceof ActiveModulesHudModule active) {
+                int rows = active.renderedLineCount();
+                if (rows > 0) height += rows * 13 + 16;
+            }
+            else height += 34;
         }
         return height;
     }
@@ -272,6 +327,7 @@ public class HudClientModule extends Module {
             for (HudModule element : elements.keySet()) element.beginFrame();
             return;
         }
+        migrateLegacyPalette();
         dev.guizhou.util.render.font.Fonts.beginHudPass();
         try {
             for(HudModule element:elements.keySet())element.beginFrame();

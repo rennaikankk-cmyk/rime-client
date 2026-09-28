@@ -19,12 +19,15 @@ public record HudAppearance(int background, int foreground, int accent, float ba
         int mapped;
         float opacity = 1;
         switch (rgb) {
-            case 0x171717, 0x182338 -> { mapped = background; opacity = backgroundOpacity; }
-            case 0x262626, 0x25334B -> { mapped = standard() ? 0xFF000000 | rgb : mix(background, foreground, .07f); opacity = backgroundOpacity; }
-            case 0x343434, 0x405471 -> { mapped = standard() ? 0xFF000000 | rgb : mix(background, foreground, .18f); opacity = backgroundOpacity; }
-            case 0xFAFAFA, 0xE0E6F2 -> mapped = foreground;
-            case 0xA1A1A1, 0xADB8D0 -> mapped = standard() ? 0xFF000000 | rgb : mix(background, foreground, .65f);
-            case 0xE5E5E5, 0x72A8D8 -> mapped = accent;
+            case 0x171717, 0x182338, 0x151820, 0x30302E, 0x262624 -> { mapped = background; opacity = backgroundOpacity; }
+            case 0x262626, 0x25334B, 0x1D212C, 0x1F1E1C, 0x3A3935 -> { mapped = standard() ? 0xFF000000 | rgb : mix(background, foreground, .07f); opacity = backgroundOpacity; }
+            case 0x343434, 0x405471, 0x2B3140, 0x45443F -> { mapped = standard() ? 0xFF000000 | rgb : mix(background, foreground, .18f); opacity = backgroundOpacity; }
+            case 0xFAFAFA, 0xE0E6F2, 0xECEEF4, 0xFAF9F5 -> mapped = foreground;
+            case 0xA1A1A1, 0xADB8D0, 0x8A92A6, 0xC2C0B6 -> mapped = standard() ? 0xFF000000 | rgb : mix(background, foreground, .65f);
+            case 0x5D6478, 0x8A887F -> mapped = standard() ? 0xFF000000 | rgb : mix(background, foreground, .42f);
+            case 0xE5E5E5, 0x72A8D8, 0x8B7CFF, 0xE08A6C -> mapped = accent;
+            case 0x5CC8FF, 0xD97757 -> mapped = (accent & 0xFFFFFF) == 0xE08A6C || (accent & 0xFFFFFF) == 0x8B7CFF
+                    ? 0xFF000000 | rgb : mix(accent, 0xFFFFFFFF, .28f);
             case 0xFFFFFF -> {
                 if ((original >>> 24) != 26) return original; // TargetHUD border, never the player skin tint.
                 mapped = 0xFFFFFFFF; opacity = backgroundOpacity;
@@ -37,7 +40,9 @@ public record HudAppearance(int background, int foreground, int accent, float ba
 
     private boolean standard() {
         return background == 0xFF171717 && foreground == 0xFFFAFAFA
-                || background == 0xFF182338 && foreground == 0xFFE0E6F2;
+                || background == 0xFF182338 && foreground == 0xFFE0E6F2
+                || background == 0xFF151820 && foreground == 0xFFECEEF4
+                || background == 0xFF30302E && foreground == 0xFFFAF9F5;
     }
 
     private static int mix(int a, int b, float t) {

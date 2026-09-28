@@ -23,9 +23,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class PopEffectsModule extends Module {
 
     public final Setting<Color> primaryColor =
-            color("Primary", 0xE8, 0xFF, 0x55, 0xFF).setPage("Particles");
+            color("Primary", 0xE0, 0x8A, 0x6C, 0xFF).setPage("Particles");
     public final Setting<Color> accentColor =
-            color("Accent", 0x55, 0xFF, 0x55, 0xFF).setPage("Particles");
+            color("Accent", 0xD9, 0x77, 0x57, 0xFF).setPage("Particles");
     public final Setting<Float> scale =
             num("Scale", 1.0f, 0.1f, 5.0f).setPage("Particles");
     public final Setting<Boolean> throughWalls =
@@ -36,9 +36,9 @@ public class PopEffectsModule extends Module {
     public final Setting<Float> fadeTime =
             num("FadeTime", 2.0f, 0.1f, 15.0f).setPage("Ghosts");
     public final Setting<Color> ghostColor =
-            color("GhostColor", 0xE8, 0xFF, 0x55, 0xFF).setPage("Ghosts");
+            color("GhostColor", 0xE0, 0x8A, 0x6C, 0xFF).setPage("Ghosts");
     public final Setting<Color> ghostSideColor =
-            color("GhostSideColor", 0xE8, 0xFF, 0x55, 0x37).setPage("Ghosts");
+            color("GhostSideColor", 0xE0, 0x8A, 0x6C, 0x37).setPage("Ghosts");
     public final Setting<Float> ghostLineWidth =
             num("GhostLineWidth", 1.5f, 0.5f, 5.0f).setPage("Ghosts");
     public final Setting<Boolean> move =

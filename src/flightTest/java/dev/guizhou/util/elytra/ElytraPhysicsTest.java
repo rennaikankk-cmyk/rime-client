@@ -15,9 +15,24 @@ public final class ElytraPhysicsTest {
         projectionCases();
         preciseIntercept();
         cornerAndVerticalCaps();
+        fireworkSpeedLimit();
         invalidInputs();
         randomizedBounds();
         System.out.println("ElytraPhysicsTest passed: " + assertions + " assertions");
+    }
+
+    private static void fireworkSpeedLimit() {
+        Vec3 fast = new Vec3(3.0, 4.0, 0.0);
+        vectorNear(fast, ElytraPhysics.limitFireworkSpeed(fast, 0.0, 0.0), "disabled limit");
+        vectorNear(new Vec3(0.0, 2.0, 0.0),
+                ElytraPhysics.limitFireworkSpeed(new Vec3(0.0, 3.0, 0.0), 2.0, 2.0), "vertical climb cap");
+        vectorNear(new Vec3(3.0, 0.0, 0.0),
+                ElytraPhysics.limitFireworkSpeed(new Vec3(3.0, 1.0, 0.0), 2.0, 2.0), "climb keeps horizontal");
+        Vec3 dive = ElytraPhysics.limitFireworkSpeed(new Vec3(3.0, -1.0, 0.0), 2.0, 2.0);
+        near(-1.0, dive.y, 1.0E-8, "dive keeps fall speed");
+        near(Math.sqrt(3.0), dive.horizontalDistance(), 1.0E-8, "dive cuts horizontal to the sphere");
+        vectorNear(new Vec3(0.0, -3.0, 0.0),
+                ElytraPhysics.limitFireworkSpeed(new Vec3(0.0, -3.0, 0.0), 2.0, 2.0), "pure dive is unchanged");
     }
 
     private static void yawRoundTrip() {

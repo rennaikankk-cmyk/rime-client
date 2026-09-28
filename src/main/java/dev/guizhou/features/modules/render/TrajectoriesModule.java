@@ -53,10 +53,10 @@ public class TrajectoriesModule extends Module {
     private final Setting<Boolean> alertFriends = bool("AlertFriends", false).setPage("Alert");
 
     private final Setting<Float> lineWidth = num("LineWidth", 1.5f, 0.5f, 4.0f).setPage("Render");
-    private final Setting<Color> selfColor = color("SelfColor", 120, 200, 255, 220).setPage("Render");
-    private final Setting<Color> enemyColor = color("EnemyColor", 255, 80, 80, 220).setPage("Render");
-    private final Setting<Color> otherColor = color("OtherColor", 220, 220, 220, 160).setPage("Render");
-    private final Setting<Color> landColor = color("LandColor", 255, 255, 255, 60).setPage("Render");
+    private final Setting<Color> selfColor = color("SelfColor", 250, 249, 245, 220).setPage("Render");
+    private final Setting<Color> enemyColor = color("EnemyColor", 227, 154, 146, 220).setPage("Render");
+    private final Setting<Color> otherColor = color("OtherColor", 194, 192, 182, 160).setPage("Render");
+    private final Setting<Color> landColor = color("LandColor", 224, 138, 108, 60).setPage("Render");
 
     private final Set<Integer> alerted = new HashSet<>();
 

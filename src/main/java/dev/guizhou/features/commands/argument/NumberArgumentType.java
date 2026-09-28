@@ -10,26 +10,33 @@ public record NumberArgumentType<T extends Number>(Class<T> type, Constraint<T> 
     @SuppressWarnings("unchecked")
     @Override
     public T parse(StringReader reader) throws CommandSyntaxException {
+        int start = reader.getCursor();
         String input = reader.readString();
 
         T value = null;
-        if (type.isAssignableFrom(Integer.class)) {
-            value = (T) Integer.valueOf(input);
-        } else if (type.isAssignableFrom(Double.class)) {
-            value = (T) Double.valueOf(input);
-        } else if (type.isAssignableFrom(Float.class)) {
-            value = (T) Float.valueOf(input);
-        } else if (type.isAssignableFrom(Long.class)) {
-            value = (T) Long.valueOf(input);
+        try {
+            if (type.isAssignableFrom(Integer.class)) {
+                value = (T) Integer.valueOf(input);
+            } else if (type.isAssignableFrom(Double.class)) {
+                value = (T) Double.valueOf(input);
+            } else if (type.isAssignableFrom(Float.class)) {
+                value = (T) Float.valueOf(input);
+            } else if (type.isAssignableFrom(Long.class)) {
+                value = (T) Long.valueOf(input);
+            }
+        } catch (NumberFormatException ignored) {
+            // Reported below as a syntax error; a raw runtime exception would escape Brigadier's parser.
+        }
+
+        if (value == null) {
+            reader.setCursor(start);
+            throw CommandExceptions.invalidArgument(type.isAssignableFrom(Integer.class) || type.isAssignableFrom(Long.class)
+                            ? "需要一个整数，但输入的是 \"%s\"" : "需要一个数字，但输入的是 \"%s\"", input)
+                    .createWithContext(reader);
         }
 
         if (constraint != null) {
             constraint.validate(reader, value);
-        }
-
-        if (value == null) {
-            throw CommandExceptions.invalidArgument("Could not parse \"%s\"", input)
-                    .createWithContext(reader);
         }
 
         return value;
@@ -39,11 +46,11 @@ public record NumberArgumentType<T extends Number>(Class<T> type, Constraint<T> 
         return (reader, input) -> {
             double value = input.doubleValue();
             if (min.doubleValue() > value) {
-                throw CommandExceptions.invalidArgument("Value is less than minimum(%s)", min.toString())
+                throw CommandExceptions.invalidArgument("数值不能小于 %s", min.toString())
                         .createWithContext(reader);
             }
             if (max.doubleValue() < value) {
-                throw CommandExceptions.invalidArgument("Value is more than maximum(%s)", max.toString())
+                throw CommandExceptions.invalidArgument("数值不能大于 %s", max.toString())
                         .createWithContext(reader);
             }
         };

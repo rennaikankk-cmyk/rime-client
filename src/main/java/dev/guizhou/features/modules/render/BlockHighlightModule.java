@@ -14,7 +14,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import java.awt.*;
 
 public class BlockHighlightModule extends Module {
-    public Setting<Color> color = color("Color", 255, 0, 0, 255);
+    public Setting<Color> color = color("Color", 224, 138, 108, 255);
     public Setting<Float> lineWidth = num("LineWidth", 1.0f, 0.1f, 5.0f);
     private static final float ANIM_DURATION = 60f;
 

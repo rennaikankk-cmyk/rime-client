@@ -16,7 +16,6 @@ import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.PacketSendUtil;
 import dev.guizhou.util.combat.AnchorSequence;
 import dev.guizhou.util.combat.AnchorTiming;
-import dev.guizhou.util.PredictUtil;
 import dev.guizhou.features.modules.world.GuangxiMineModule;
 import dev.guizhou.util.combat.BlastStageDiagnostics;
 import dev.guizhou.util.combat.AnchorPlanner;
@@ -92,8 +91,8 @@ public class AutoAnchorModule extends Module {
     private final Setting<Boolean> damageSync    = bool("DamageSync", false).setPage("General");
     private final Setting<Boolean> render        = bool("Render", true).setPage("Render");
     private final Setting<Float>   fadeTime      = num("FadeTime", 1.0f, 0.05f, 2.0f).setPage("Render");
-    private final Setting<Color>   fillColor     = color("FillColor", 130, 80, 255, 45).setPage("Render");
-    private final Setting<Color>   outlineColor  = color("OutlineColor", 130, 80, 255, 255).setPage("Render");
+    private final Setting<Color>   fillColor     = color("FillColor", 224, 138, 108, 45).setPage("Render");
+    private final Setting<Color>   outlineColor  = color("OutlineColor", 224, 138, 108, 255).setPage("Render");
 
     private final CombatPlanningTask<AnchorPlanner.Input, AnchorPlanner.Result> planner = new CombatPlanningTask<>(input -> {
         long timer = ClientDiagnostics.startTimer();
@@ -113,6 +112,7 @@ public class AutoAnchorModule extends Module {
     private int repeatUntil;
     private final AnchorTiming timing = new AnchorTiming();
     private final java.util.Map<Integer, List<AnchorDamageUtil.Target>> targetPredictions = new java.util.HashMap<>();
+    private final java.util.Map<Integer, List<Vec3>> selfPaths = new java.util.HashMap<>();
     private final java.util.Map<Integer, AnchorDamageUtil.Target> selfPredictions = new java.util.HashMap<>();
     private long lifecycleGeneration;
     private boolean reactiveScheduled;
@@ -152,6 +152,7 @@ public class AutoAnchorModule extends Module {
         timing.reset();
         targetPredictions.clear();
         selfPredictions.clear();
+        selfPaths.clear();
         budgetTick = Integer.MIN_VALUE;
         lastActionTick = Integer.MIN_VALUE;
         stageDiagnostics.reset();
@@ -215,6 +216,7 @@ public class AutoAnchorModule extends Module {
         if (actionsThisTick >= 3) return;
         targetPredictions.clear();
         selfPredictions.clear();
+        selfPaths.clear();
         // One observed completion may immediately select its old position, never an unbounded burst.
         for (int advance = 0; advance < 2; advance++) {
             Candidate freshCandidate = null;
@@ -709,12 +711,23 @@ public class AutoAnchorModule extends Module {
                 extrapolationTicks.getValue(), placeDelay.getValue(), chargeDelay.getValue(), detonateDelay.getValue());
     }
 
+    private List<Vec3> predictionPath(AnchorDamageUtil.Target target, int ticks) {
+        var entity = target.entity();
+        Vec3 motion = entity == mc.player ? entity.getDeltaMovement()
+                : entity.position().subtract(entity.xo, entity.yo, entity.zo);
+        if (entity == mc.player && entity.isFallFlying()) {
+            var flight = GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.movement.GuangxiElytraModule.class);
+            Vec3 forecast = flight == null ? null : flight.forecastCombatVelocity();
+            if (forecast != null) motion = forecast;
+        }
+        return dev.guizhou.util.combat.CrystalMotionPrediction.trace(target.pos(), target.box(), motion, ticks,
+                !entity.onGround() && !entity.isFallFlying() && !entity.isNoGravity(),
+                box -> mc.level.noCollision(entity, box));
+    }
+
     private AnchorDamageUtil.Target predict(AnchorDamageUtil.Target target, int ticks) {
         if (ticks <= 0) return target;
-        Vec3 predicted = PredictUtil.predict(target.entity(), ticks, 1.0);
-        if (!Double.isFinite(predicted.x) || !Double.isFinite(predicted.y) || !Double.isFinite(predicted.z)
-                || predicted.distanceToSqr(target.pos()) > 144) return target;
-        return target.at(predicted);
+        return target.at(predictionPath(target, ticks).getLast());
     }
 
     private List<AnchorDamageUtil.Target> predictedTargets(List<AnchorDamageUtil.Target> targets, int ticks) {
@@ -727,8 +740,12 @@ public class AutoAnchorModule extends Module {
         float current = AnchorDamageUtil.damage(self, center, pos);
         int ticks = horizon(pos);
         if (!selfExtrapolate.getValue() || ticks <= 0) return current;
-        var predicted = selfPredictions.computeIfAbsent(ticks, ignored -> predict(self, ticks));
-        return Math.max(current, AnchorDamageUtil.damage(predicted, center, pos));
+        for (Vec3 position : selfPaths.computeIfAbsent(ticks, ignored -> predictionPath(self, ticks))) {
+            current = Math.max(current, AnchorDamageUtil.damage(self.at(position), center, pos));
+            // Rejected candidates need no further exposure work.
+            if (current > maxSelfDamage.getValue() || current > 0 && current + 1.5f >= mc.player.getHealth() + mc.player.getAbsorptionAmount()) break;
+        }
+        return current;
     }
 
     private static String anchorStage(AnchorSequence.Action action) {

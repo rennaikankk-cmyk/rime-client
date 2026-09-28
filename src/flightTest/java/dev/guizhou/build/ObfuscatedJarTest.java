@@ -392,7 +392,9 @@ public final class ObfuscatedJarTest {
                     "Denied tick can branch or schedule new business: " + label);
             if (step.opcode >= Opcodes.INVOKEVIRTUAL && step.opcode <= Opcodes.INVOKEINTERFACE) {
                 boolean notification = member(step, Opcodes.INVOKESTATIC, HEARTBEAT, "notifyDeniedOnce", "()V");
-                boolean ownCleanup = owner.name.equals(step.owner) && cleanup.contains(step.name) && step.descriptor.equals("()V");
+                boolean restoresGlide = owner.name.endsWith("/ArmorFlyModule") && step.name.equals("flushMetadata");
+                boolean ownCleanup = owner.name.equals(step.owner) && (cleanup.contains(step.name) || restoresGlide)
+                        && step.descriptor.equals("()V");
                 boolean clear = step.name.equals("clear") && step.descriptor.equals("()V")
                         && (step.owner.startsWith("java/util/") || step.owner.equals("dev/guizhou/features/modules/combat/MiningBreakTracker")
                         || step.owner.equals("dev/guizhou/util/render/placement/PlacementVisuals"));
@@ -440,10 +442,25 @@ public final class ObfuscatedJarTest {
             String leaseField = obfuscated ? mapping.requiredMember(HEARTBEAT, "LEASE") : "LEASE";
             String leaseAuthorized = obfuscated ? mapping.requiredMember(lease, "authorized()") : "authorized";
             List<Step> gate = executable(authorized);
-            check(gate.size() == 3 && member(gate.get(0), Opcodes.GETSTATIC, heartbeatOwner, leaseField, "L" + leaseOwner + ";")
-                            && member(gate.get(1), Opcodes.INVOKEVIRTUAL, leaseOwner, leaseAuthorized, "()Z")
-                            && gate.get(2).opcode == Opcodes.IRETURN,
-                    "Production authorization must directly return the expiring lease decision");
+            check(member(gate.get(0), Opcodes.GETSTATIC, heartbeatOwner, leaseField, "L" + leaseOwner + ";")
+                            && member(gate.get(1), Opcodes.INVOKEVIRTUAL, leaseOwner, leaseAuthorized, "()Z"),
+                    "Production authorization must first evaluate the expiring lease");
+            String guardStatus = "dev/guizhou/util/license/GuardStatus";
+            String guardOwner = obfuscated ? mapping.requiredClass(guardStatus) : guardStatus;
+            String guardAuthorized = obfuscated ? mapping.requiredMember(guardStatus, "authorized()") : "authorized";
+            int leaseGate = uniqueCall(authorized, leaseOwner, leaseAuthorized, "()Z");
+            int guardGate = uniqueCall(authorized, guardOwner, guardAuthorized, "()Z");
+            int trueValue = -1;
+            for (int i = 0; i < authorized.steps.size(); i++) if (authorized.steps.get(i).opcode == Opcodes.ICONST_1) {
+                check(trueValue == -1, "Authorization has multiple unreviewed success paths");
+                trueValue = i;
+            }
+            check(trueValue >= 0, "Authorization has no success path");
+            for (int predicate : new int[]{leaseGate, guardGate}) {
+                check(!flowReaches(authorized, 0, trueValue, predicate)
+                                && !flowReaches(authorized, rejectedBooleanPath(authorized, predicate), trueValue, -1),
+                        "Production actions must require both the expiring lease and distribution guard");
+            }
 
             MethodInfo beat = retainedMethod(before, classes, mapping, HEARTBEAT, "beat()V", obfuscated);
             String verifyName = obfuscated ? mapping.requiredMember(signed, "verify(byte[],java.security.PublicKey)") : "verify";

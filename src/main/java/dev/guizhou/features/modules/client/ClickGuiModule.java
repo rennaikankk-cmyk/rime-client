@@ -45,8 +45,8 @@ public class ClickGuiModule extends Module {
     private static final Color CAT_CLIENT   = new Color( 90, 105, 135); // 深夜蓝灰
     private static final Color CAT_HUD      = new Color(128, 176, 224); // 雾浅蓝
 
-    private static final Color GUIZHOUWARE_ACCENT = new Color( 80, 128, 176); // IB 深雾蓝 #5080b0
-    private static final Color GUIZHOUWARE_MODULE = new Color(114, 168, 216); // IB 亮雾蓝 #72a8d8
+    private static final Color GUIZHOUWARE_ACCENT = new Color(224, 138, 108); // terracotta #E08A6C
+    private static final Color GUIZHOUWARE_MODULE = new Color(224, 138, 108);
 
     public Color categoryAccent(Module.Category cat) {
         return categoryAccent(cat, 0f);
@@ -103,7 +103,7 @@ public class ClickGuiModule extends Module {
         rainbowSaturation.setVisibility(v -> theme.getValue() == Theme.RAINBOW);
         customColor.setVisibility(v -> theme.getValue() == Theme.CUSTOM);
         // Retain legacy font keys for old config compatibility. Native screens and
-        // the rebuilt HUD share the bundled Geist/CJK chain, so these are not UI controls.
+        // the rebuilt HUD share the Anthropic Serif/CJK chain, so these are not UI controls.
         clickGuiFont.setVisibility(v -> false);
         hudFont.setVisibility(v -> false);
         fontName.setVisibility(v -> false);
@@ -136,7 +136,7 @@ public class ClickGuiModule extends Module {
 
     @Override
     public void onLoad() {
-        Color fixedAccent = new Color(120, 175, 220, 220);
+        Color fixedAccent = new Color(224, 138, 108, 230);
         GuizhouWare.colorManager.register("ui",          () -> fixedAccent);
         GuizhouWare.colorManager.register("chat",        this::chatAccent);
         GuizhouWare.colorManager.register("chatBracket", this::chatAccent);

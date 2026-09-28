@@ -49,18 +49,34 @@ public final class AnchorDamageUtil implements Util {
     public static float damage(Target target, Vec3 explosionPos, BlockPos removedSource, BlockPos removedOther) {
         double distance = target.pos().distanceTo(explosionPos);
         if (distance > DIAMETER || mc.level == null) return 0f;
-        return targetDamage(target, distance, exposure(explosionPos, target.box(), removedSource, removedOther));
+        return targetDamage(target, distance, exposure(explosionPos, target.box(), removedSource, removedOther, null));
     }
 
     public static float selfDamage(Vec3 explosionPos, BlockPos anchorPos) {
         return mc.player == null ? 0f : damage(Target.of(mc.player), explosionPos, anchorPos);
     }
 
+    /** Same exposure model for other blast powers; an end crystal uses {@code diameter = 12}. */
+    public static float explosionDamage(Target target, Vec3 explosionPos, double diameter, BlockPos removedSource) {
+        return explosionDamage(target, explosionPos, diameter, removedSource, null);
+    }
+
+    /** Evaluate a planned obsidian base without mutating the live world. */
+    public static float explosionDamage(Target target, Vec3 explosionPos, double diameter,
+                                        BlockPos removedSource, BlockPos solidBase) {
+        double distance = target.pos().distanceTo(explosionPos);
+        if (distance > diameter || mc.level == null) return 0f;
+        return targetDamage(target, distance, exposure(explosionPos, target.box(), removedSource, null, solidBase), diameter);
+    }
+
     private static float targetDamage(Target target, double distance, double exposure) {
-        if (mc.level == null || distance > DIAMETER || exposure <= 0) return 0f;
-        double impact = (1.0 - distance / DIAMETER) * exposure;
-        if (impact <= 0) return 0f;
-        float raw = (float) ((impact * impact + impact) / 2.0 * 7.0 * DIAMETER + 1.0);
+        return targetDamage(target, distance, exposure, DIAMETER);
+    }
+
+    private static float targetDamage(Target target, double distance, double exposure, double diameter) {
+        if (mc.level == null || distance > diameter) return 0f;
+        double impact = (1.0 - distance / diameter) * exposure;
+        float raw = (float) ((impact * impact + impact) / 2.0 * 7.0 * diameter + 1.0);
         switch (mc.level.getDifficulty()) {
             case PEACEFUL -> { return 0f; }
             case EASY -> raw = Math.min(raw / 2f + 1f, raw);
@@ -71,7 +87,7 @@ public final class AnchorDamageUtil implements Util {
                 target.resistMult(), target.protPoints());
     }
 
-    private static double exposure(Vec3 source, AABB box, BlockPos removedSource, BlockPos removedOther) {
+    private static double exposure(Vec3 source, AABB box, BlockPos removedSource, BlockPos removedOther, BlockPos solidBase) {
         // Vanilla's bounding-box-dependent sampling avoids the old fixed 27-point approximation.
         double stepX = 1.0 / (box.getXsize() * 2.0 + 1.0);
         double stepY = 1.0 / (box.getYsize() * 2.0 + 1.0);
@@ -83,6 +99,7 @@ public final class AnchorDamageUtil implements Util {
         RayContext context = new RayContext(source);
         BiFunction<RayContext, BlockPos, BlockHitResult> tester = (ray, pos) -> {
             if (pos.equals(removedSource) || pos.equals(removedOther)) return null;
+            if (pos.equals(solidBase)) return net.minecraft.world.phys.shapes.Shapes.block().clip(ray.point, ray.source, pos);
             BlockState state = mc.level.getBlockState(pos);
             if (state.isAir()) return null;
             VoxelShape shape = state.getCollisionShape(mc.level, pos);

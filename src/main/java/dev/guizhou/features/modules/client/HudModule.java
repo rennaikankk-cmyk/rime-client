@@ -96,6 +96,11 @@ public abstract class HudModule implements Util {
         return renderedThisFrame;
     }
 
+    /** False for elements whose default anchor must not be nudged around other cards. */
+    protected boolean autoPlace() {
+        return true;
+    }
+
     /** True when a custom editor position is saved for this element. */
     public boolean isCustomBound() {
         HudClientModule hud = GuizhouWare.moduleManager == null
@@ -130,7 +135,7 @@ public abstract class HudModule implements Util {
             } else if (hud.isCustomPosition(this)) {
                 x = Math.round(hud.normalizedX(this) * screenWidth());
                 y = Math.round(hud.normalizedY(this) * screenHeight());
-            } else if (!(this instanceof dev.guizhou.features.modules.hud.TargetHudModule)) {
+            } else if (autoPlace()) {
                 var placed = hud.defaultPlacement(this, x, y, scaledW, scaledH);
                 x = placed.x();
                 y = placed.y();
@@ -139,9 +144,9 @@ public abstract class HudModule implements Util {
         if (w > 0) x = Math.max(0, Math.min(x, Math.max(0, screenWidth() - scaledW)));
         if (h > 0) y = Math.max(0, Math.min(y, Math.max(0, screenHeight() - scaledH)));
         if (drawing != null) {
-            drawing.pose().translate(x, y, 0);
-            drawing.pose().scale(drawScale, drawScale, drawScale);
-            drawing.pose().translate(-x, -y, 0);
+            drawing.pose().translate(x,y, 0);
+            drawing.pose().scale(drawScale,drawScale, 1);
+            drawing.pose().translate(-x,-y, 0);
         }
         return new int[]{x, y};
     }

@@ -6,7 +6,9 @@ import dev.guizhou.features.modules.ModuleNames;
 import dev.guizhou.features.modules.client.HudClientModule;
 import dev.guizhou.features.modules.client.HudModule;
 import dev.guizhou.util.diagnostics.ClientDiagnostics;
+import dev.guizhou.util.render.HudDraw;
 import dev.guizhou.util.render.ShadcnDraw;
+import dev.guizhou.util.render.font.HudFonts;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,8 +22,8 @@ import java.util.stream.Collectors;
 public final class DiagnosticsHudModule extends HudModule {
     private long lastRefresh;
     private List<String> lines = List.of();
-    private String title = "本地诊断";
-    private boolean visible;
+    private String status = "";
+    private boolean visible, active;
     private Set<String> moduleIds = Set.of();
 
     public DiagnosticsHudModule() { super("Diagnostics"); }
@@ -36,15 +38,23 @@ public final class DiagnosticsHudModule extends HudModule {
         }
         if (!visible && !preview) return;
         List<String> rows = visible ? lines : List.of(".diag start 60 开始采样", ".diag export 导出本地报告");
-        String heading = visible ? title : "本地诊断 · 待采样";
-        int w = 250, h = 36 + rows.size() * 14;
+        String state = visible ? status : "待采样";
+        int tone = !visible ? ShadcnDraw.MUTED : active ? ShadcnDraw.SUCCESS : ShadcnDraw.ACCENT_2;
+        var g = event.getContext();
+        int w = 232, h = 30 + rows.size() * 12 + 4;
         int[] origin = origin(screenWidth() - w - 8, 38, w, h);
         int x = origin[0], y = origin[1];
-        ShadcnDraw.panel(event.getContext(), x, y, w, h, 6);
-        ShadcnDraw.text(event.getContext(), heading, x + 9, y + 8, 11, ShadcnDraw.TEXT);
+        HudDraw.card(g, x, y, w, h, HudDraw.RADIUS);
+        HudDraw.textMid(g, "本地诊断", x + 8f, y + 13f, 9f, HudFonts.SEMI, ShadcnDraw.TEXT);
+        HudDraw.textMidRight(g, state, x + w - 8f, y + 13f, 6.5f, HudFonts.SEMI, tone);
+        HudDraw.rule(g, x + 7f, y + 25f, w - 14f);
         for (int i = 0; i < rows.size(); i++) {
-            ShadcnDraw.text(event.getContext(), ShadcnDraw.fit(rows.get(i), w - 18, 10),
-                    x + 9, y + 26 + i * 14, 10, ShadcnDraw.MUTED);
+            String row = rows.get(i);
+            boolean section = row.startsWith("耗时最多");
+            float mid = y + 34f + i * 12f;
+            HudDraw.textMid(g, ShadcnDraw.fit(row, w - 16, section ? 6.5f : 8f), x + 8f, mid,
+                    section ? 6.5f : 8f, section ? HudFonts.SEMI : HudFonts.REGULAR,
+                    section ? ShadcnDraw.SUBTLE : i == 0 ? ShadcnDraw.TEXT : ShadcnDraw.MUTED);
         }
         bounds(x, y, w, h);
     }
@@ -55,8 +65,8 @@ public final class DiagnosticsHudModule extends HudModule {
         visible = snapshot.startedAtEpochMillis() > 0 && (snapshot.active()
                 || System.currentTimeMillis() - snapshot.startedAtEpochMillis() - snapshot.durationMillis() <= 15_000);
         if (!visible) { lines = List.of(); return; }
-        title = snapshot.active() ? "本地诊断 · " + ((snapshot.remainingMillis() + 999) / 1000) + "s"
-                : "本地诊断 · 已结束";
+        active = snapshot.active();
+        status = active ? "采样中 " + ((snapshot.remainingMillis() + 999) / 1000) + "s" : "已结束";
         var out = new ArrayList<String>();
         var frame = snapshot.frameTiming();
         out.add(String.format(Locale.ROOT, "渲染间隔  %.2f ms · P95 ≤ %.2f ms", frame.meanNanos() / 1e6, frame.p95Nanos() / 1e6));

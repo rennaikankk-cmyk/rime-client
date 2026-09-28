@@ -91,7 +91,9 @@ public final class MaceDiveStateTest {
         check(!MaceDiveController.recoverySlotAvailable(-1, 6), "Unknown selection cannot recover");
         check(!MaceDiveController.recoverySlotAvailable(2, -1), "Unknown stored slot cannot recover");
         check(!MaceDiveController.recoverySlotAvailable(9, 6), "A non-hotbar selection cannot recover");
-        check(!MaceDiveController.recoverySlotAvailable(2, 9), "Main inventory is not a recovery swap button");
+        check(MaceDiveController.recoverySlotAvailable(2, 9), "Main inventory uses a cursor exchange for recovery");
+        check(MaceDiveController.recoverySlotAvailable(8, 35), "Last main inventory slot supports recovery");
+        check(!MaceDiveController.recoverySlotAvailable(2, 36), "Menu slot numbers are not inventory indices");
     }
 
     private static void check(boolean condition, String message) {

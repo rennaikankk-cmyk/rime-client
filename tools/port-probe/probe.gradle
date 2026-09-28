@@ -1,0 +1,21 @@
+allprojects { afterEvaluate {
+ if (!plugins.hasPlugin('fabric-loom')) return
+ def lab=project.file('tools/port-probe')
+ sourceSets.create('portProbe') {
+  java.srcDir(new File(lab,'src')); resources.srcDir(new File(lab,'resources'))
+  compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+  runtimeClasspath += output + compileClasspath
+ }
+ tasks.register('portProbeJar', Jar) {
+  dependsOn tasks.named('portProbeClasses'); from sourceSets.portProbe.output
+  archiveFileName='port-probe.jar'; destinationDirectory=lab
+ }
+ loom.runs.client {
+  runDir('tools/port-probe/runs/' + (project.findProperty('portRun') ?: 'flat1'))
+  programArgs('--quickPlaySingleplayer','ProbeWorld','--username','PortProbe','--width','960','--height','540')
+  vmArg('-Dfabric.addMods='+new File(lab,'port-probe.jar').path)
+  vmArg('-Dport.probe='+(project.findProperty('portProbe') ?: 'flat'))
+  vmArg('-Dprobe.mode=MACE'); vmArg('-Dprobe.requireDamage=true')
+ }
+ tasks.named('runClient') { dependsOn tasks.named('portProbeClasses') }
+} }

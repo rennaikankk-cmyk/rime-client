@@ -84,6 +84,13 @@ public class Module extends Feature implements Jsonable, Toggleable {
         this.onDisable();
     }
 
+    public void toggleByUser() { setEnabledByUser(!isEnabled()); }
+    public void setEnabledByUser(boolean on) {
+        if (isEnabled() == on) return;
+        if (on) enable(); else disable();
+        if (isEnabled() == on && !(this instanceof dev.guizhou.features.modules.client.ClickGuiModule))
+            dev.guizhou.util.render.UiSounds.moduleToggle(on);
+    }
     public String getDisplayName() {
         return this.displayName.getValue();
     }

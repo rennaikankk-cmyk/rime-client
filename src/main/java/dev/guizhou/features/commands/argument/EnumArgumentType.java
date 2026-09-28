@@ -7,13 +7,15 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.guizhou.features.commands.CommandExceptions;
+import dev.guizhou.features.commands.ui.FuzzyMatch;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class EnumArgumentType<T extends Enum<?>> implements ArgumentType<T> {
-    private final Map<String, T> enumNameMap = new HashMap<>();
+    private final Map<String, T> enumNameMap = new LinkedHashMap<>();
     private final T defaultValue;
 
     public EnumArgumentType(Class<T> clazz, T defaultValue) {
@@ -26,6 +28,7 @@ public class EnumArgumentType<T extends Enum<?>> implements ArgumentType<T> {
 
     @Override
     public T parse(StringReader reader) throws CommandSyntaxException {
+        int start = reader.getCursor();
         String value = reader.readString();
         for (String name : enumNameMap.keySet()) {
             if (value.equalsIgnoreCase(name)) {
@@ -37,15 +40,17 @@ public class EnumArgumentType<T extends Enum<?>> implements ArgumentType<T> {
             return defaultValue;
         }
 
-        throw CommandExceptions.invalidArgument("Invalid enum type").createWithContext(reader);
+        reader.setCursor(start);
+        throw CommandExceptions.invalidArgument("无效的选项 %s，可选：%s", value,
+                String.join(" / ", enumNameMap.keySet()).toLowerCase(Locale.ROOT)).createWithContext(reader);
     }
 
     @Override
     public <S> CompletableFuture<Suggestions> listSuggestions(CommandContext<S> context, SuggestionsBuilder builder) {
-        String input = builder.getRemainingLowerCase();
+        String input = builder.getRemaining();
         for (String key : enumNameMap.keySet()) {
-            String name = key.toLowerCase();
-            if (name.contains(input)) {
+            String name = key.toLowerCase(Locale.ROOT);
+            if (FuzzyMatch.matches(input, name)) {
                 builder.suggest(name);
             }
         }

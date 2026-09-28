@@ -26,10 +26,8 @@ public final class CoupledCruise {
             climbPitch = bounded(climbPitch, -89.5, 0, -45);
             descentPitch = bounded(descentPitch, 0, 89.5, 30);
             descentFloor = bounded(descentFloor, -20, 0, -1.7);
-            heightWindow = bounded(heightWindow, 1, 256, 60);
+            heightWindow = bounded(heightWindow, 1, 1200, 60);
             speedCap = bounded(speedCap, 0.05, 15, 15);
-            // Level flight can raise this to the speed cap. 5 was below that cap, so a
-            // forward axis died at 1.7 even when the total cap was 15.
             boxCap = bounded(boxCap, 0.01, 15, 1.7);
             inset = bounded(inset, 0, 0.1, 0.002);
             dualClimbAngle = bounded(dualClimbAngle, 0, 89.5, 0);
@@ -43,12 +41,10 @@ public final class CoupledCruise {
                     heightWindow, speedCap, boxCap, inset, 0, 0);
         }
 
-        /** Same sample with a different axis allowance. Level flight uses the speed cap here. */
         public Config withBoxCap(double axisCap) {
             return new Config(cruisePitch, climbPitch, descentPitch, smartClimb, descentFloor, porpoise,
                     heightWindow, speedCap, axisCap, inset, dualClimbAngle, dualDiveAngle);
         }
-
         public static Config defaults() {
             return new Config(15, -45, 30, true, -1.7, false, 60, 15, 1.7, .002);
         }
@@ -111,6 +107,17 @@ public final class CoupledCruise {
     }
 
     public Phase phase() { return phase; }
+
+    /** Preview the next selection without advancing banking or height-cycle state. */
+    public Selection previewSelection(Config config, Intent intent, double headingYaw, double playerY, boolean dualView) {
+        CoupledCruise copy = new CoupledCruise();
+        copy.acceleratedReferenceY = acceleratedReferenceY;
+        copy.bankSide = bankSide;
+        copy.referenceY = referenceY;
+        copy.phase = phase;
+        copy.lastConfig = lastConfig;
+        return copy.select(config, intent, headingYaw, playerY, dualView);
+    }
 
     /** headingYaw is in degrees; NaN means the caller has no heading. */
     public Selection select(Config config, Intent intent, double headingYaw, double playerY) {

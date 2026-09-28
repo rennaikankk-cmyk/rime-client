@@ -4,7 +4,11 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.guizhou.features.commands.Command;
+import dev.guizhou.features.commands.ui.ChatFeed;
+import dev.guizhou.features.commands.ui.ChatTone;
+import dev.guizhou.features.commands.ui.CommandCategory;
 import dev.guizhou.manager.CommandManager;
+import net.minecraft.network.chat.Component;
 import net.minecraft.client.player.RemotePlayer;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.world.entity.Entity;
@@ -19,6 +23,7 @@ import java.util.UUID;
 public class FakePlayerCommand extends Command {
 
     private static final byte TOTEM_POP_EVENT_ID = 35;
+    private static final String NOT_IN_WORLD = "需要先进入世界";
 
     private static final EquipmentSlot[] COPIED_SLOTS = {
             EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND,
@@ -31,6 +36,12 @@ public class FakePlayerCommand extends Command {
     public FakePlayerCommand() {
         super("fakeplayer", "fp");
         setDescription("Spawns a client-side fake player to test on");
+        category(CommandCategory.TOOLS).summary("生成仅本地可见的假人用于测试")
+                .usage("", "在你的位置生成假人")
+                .usage("<名称>", "生成指定名字的假人")
+                .usage("pop", "为假人播放图腾动画")
+                .usage("swim", "切换假人的游泳姿势")
+                .usage("remove", "移除全部假人");
     }
 
     @Override
@@ -48,7 +59,7 @@ public class FakePlayerCommand extends Command {
 
     private int popAll() {
         if (nullCheck() || mc.getConnection() == null) {
-            return fail("You need to be in a world to do that.");
+            return fail(NOT_IN_WORLD);
         }
 
         int popped = 0;
@@ -59,14 +70,14 @@ public class FakePlayerCommand extends Command {
         }
 
         if (popped == 0) {
-            return fail("No fake players to pop. Spawn one first.");
+            return fail("还没有假人，先生成一个");
         }
-        return success("Popped %s fake player(s)", popped);
+        return success("已为 %s 个假人播放图腾动画", popped);
     }
 
     private int toggleSwim() {
         if (nullCheck()) {
-            return fail("You need to be in a world to do that.");
+            return fail(NOT_IN_WORLD);
         }
 
         boolean anyStanding = false;
@@ -77,7 +88,7 @@ public class FakePlayerCommand extends Command {
             if (fake.getPose() != Pose.SWIMMING) anyStanding = true;
         }
         if (found == 0) {
-            return fail("No fake players. Spawn one first.");
+            return fail("还没有假人，先生成一个");
         }
 
         Pose pose = anyStanding ? Pose.SWIMMING : Pose.STANDING;
@@ -87,13 +98,13 @@ public class FakePlayerCommand extends Command {
             fake.refreshDimensions();
         }
         return success(pose == Pose.SWIMMING
-                ? "Fake player(s) now in swim pose."
-                : "Fake player(s) now standing.");
+                ? "假人已切换为游泳姿势"
+                : "假人已恢复站立");
     }
 
     private int spawn(String name) {
         if (nullCheck()) {
-            return fail("You need to be in a world to do that.");
+            return fail(NOT_IN_WORLD);
         }
 
         int despawned = despawnAll();
@@ -110,23 +121,24 @@ public class FakePlayerCommand extends Command {
         }
         mc.level.addEntity(fake);
         spawned.add(fake);
-        Command.sendMessage("本地假人可用于观察追踪与接近动作；它不在服务器上，不会收到真实伤害。伤害/图腾测试请使用服务器训练目标（.fakeplayer pop 仅模拟图腾动画）。");
+        ChatFeed.send(ChatTone.MUTED, Component.literal("本地假人可用于观察追踪与接近动作；它不在服务器上，不会收到真实伤害。伤害/图腾测试请使用服务器训练目标（"
+                + ChatFeed.prefix() + "fakeplayer pop 仅模拟图腾动画）。"));
         if (despawned > 0) {
-            return success("Replaced fake player with {green} %s", name);
+            return success("已替换为假人 {cyan} %s", name);
         }
-        return success("Spawned fake player {green} %s", name);
+        return success("已生成假人 {cyan} %s", name);
     }
 
     private int removeAll() {
         if (nullCheck()) {
             spawned.clear();
-            return fail("You need to be in a world to do that.");
+            return fail(NOT_IN_WORLD);
         }
         int removed = despawnAll();
         if (removed == 0) {
-            return success("No fake players to remove.");
+            return info("没有需要移除的假人");
         }
-        return success("Removed %s fake player(s)", removed);
+        return success("已移除 %s 个假人", removed);
     }
 
     private int despawnAll() {

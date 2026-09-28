@@ -52,7 +52,7 @@ public final class AnchorPlanner {
             if (upper < input.minDamage || upper <= bestDamage) continue;
             float total = 0;
             for (CombatantSnapshot target : targets) {
-                if (distance(target, candidate) >= 10) continue;
+                if (distance(target, candidate) > 10) continue;
                 total += damage(target, candidate, exposure(input.terrain, target, candidate, rays), input.difficulty, input.assumeArmor);
             }
             evaluated++;
@@ -73,8 +73,9 @@ public final class AnchorPlanner {
     }
 
     private static float damage(CombatantSnapshot target, Candidate candidate, double exposure, int difficulty, boolean assume) {
-        double impact = (1 - distance(target, candidate) / 10) * exposure;
-        if (impact <= 0 || difficulty == 0 || !target.alive()) return 0;
+        double distance = distance(target, candidate);
+        if (distance > 10 || difficulty == 0 || !target.alive()) return 0;
+        double impact = (1 - distance / 10) * exposure;
         float raw = (float)((impact * impact + impact) / 2 * 70 + 1);
         if (difficulty == 1) raw = Math.min(raw / 2 + 1, raw);
         if (difficulty == 3) raw *= 1.5f;

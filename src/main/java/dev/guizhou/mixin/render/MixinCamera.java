@@ -3,7 +3,7 @@ package dev.guizhou.mixin.render;
 import dev.guizhou.features.modules.render.FreecamModule;
 import net.minecraft.client.Camera;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.Level;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -21,7 +21,7 @@ public abstract class MixinCamera {
 
     /** Freecam: detached so the local player model renders and the first-person hand does not. */
     @Inject(method = "setup", at = @At("TAIL"))
-    private void guizhouware$freecam(Level level, Entity entity, boolean detached, boolean mirror,
+    private void guizhouware$freecam(BlockGetter level, Entity entity, boolean detached, boolean mirror,
                                      float partialTick, CallbackInfo ci) {
         if (!FreecamModule.active()) return;
         this.detached = true;

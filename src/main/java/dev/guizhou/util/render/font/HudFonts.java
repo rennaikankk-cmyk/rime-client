@@ -3,18 +3,13 @@ package dev.guizhou.util.render.font;
 import net.minecraft.client.gui.GuiGraphics;
 
 import java.awt.Font;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
- * Geist-backed HUD fonts sized in CSS pixels — the shadcn prototype is the
- * design truth. Three static weights; glyphs bake at a 26px ascent so the
- * 22/26px hero numbers stay sharp while smaller sizes downscale. Latin and
- * digits come from Geist, CJK falls through to an installed sans face
- * (Microsoft YaHei on Windows), then the side-download ib_zh face, then the
- * OS logical sans. No drop shadow; fully transparent text is skipped rather
- * than forced opaque by the renderer's legacy alpha floor.
+ * Serif HUD fonts sized in CSS pixels. The night preview is the design truth.
+ * Three static weights share one face chain: local or installed Anthropic Serif,
+ * then Source Serif 4, Noto Serif SC, Palatino, Songti, then the logical serif.
+ * Anthropic Serif is never embedded. No drop shadow; fully transparent text is
+ * skipped rather than forced opaque by the renderer's legacy alpha floor.
  */
 public final class HudFonts {
 
@@ -79,12 +74,9 @@ public final class HudFonts {
         FontRenderer nextRegular = null, nextSemibold = null, nextBold = null;
         boolean published = false;
         try {
-            Font yahei = installedSans();
-            Font zh = zhFace();
-            nextRegular = make("/assets/guizhouware/font/geist-400.ttf", yahei, zh);
-            Font strongCjk = yahei == null ? null : yahei.deriveFont(Font.BOLD);
-            nextSemibold = make("/assets/guizhouware/font/geist-600.ttf", strongCjk, zh);
-            nextBold = make("/assets/guizhouware/font/geist-700.ttf", strongCjk, zh);
+            nextRegular = make(REGULAR);
+            nextSemibold = make(SEMI);
+            nextBold = make(BOLD);
             semibold = nextSemibold;
             bold = nextBold;
             regular = nextRegular; // Publish only after all weights succeed.
@@ -104,51 +96,8 @@ public final class HudFonts {
         catch (Throwable failure) { FontFallback.fail("partial font cleanup", failure); }
     }
 
-    private static FontRenderer make(String geistPath, Font yahei, Font zh) {
-        List<Font> chain = new ArrayList<>(4);
-        Font geist = loadResource(geistPath);
-        if (geist != null) chain.add(geist);
-        if (yahei != null) chain.add(yahei);
-        if (zh != null) chain.add(zh);
-        chain.add(new Font(Font.SANS_SERIF, Font.PLAIN, 1));
-        return new FontRenderer(chain.toArray(new Font[0]), CHARS_PER_PAGE, 4, BAKE_ASCENT);
-    }
-
-    /** Installed CJK sans (Microsoft YaHei on Windows), preferred over the IB face. */
-    private static Font installedSans() {
-        try {
-            for (String family : java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
-                    .getAvailableFontFamilyNames()) {
-                if (family.equalsIgnoreCase("Microsoft YaHei") || family.equals("微软雅黑")) {
-                    return new Font(family, Font.PLAIN, 1);
-                }
-            }
-        } catch (Throwable ignored) {
-            // headless or font lookup failure — fall through
-        }
-        return null;
-    }
-
-    private static Font zhFace() {
-        try {
-            java.nio.file.Path p = java.nio.file.Paths.get("guizhouware", "fonts", "ib_zh.ttf");
-            if (java.nio.file.Files.exists(p)) {
-                return Font.createFont(Font.TRUETYPE_FONT, p.toFile()).deriveFont(1f);
-            }
-        } catch (Exception ignored) {
-            // external font optional
-        }
-        return loadResource("/assets/guizhouware/font/ib_zh.ttf");
-    }
-
-    private static Font loadResource(String path) {
-        try (InputStream is = HudFonts.class.getResourceAsStream(path)) {
-            if (is != null) {
-                return Font.createFont(Font.TRUETYPE_FONT, is).deriveFont(1f);
-            }
-        } catch (Exception ignored) {
-            // optional face — fall through
-        }
-        return null;
+    private static FontRenderer make(int weight) {
+        Font[] chain = FontFaces.resolve(net.minecraft.client.Minecraft.getInstance().gameDirectory.toPath(), weight);
+        return new FontRenderer(chain, CHARS_PER_PAGE, 4, BAKE_ASCENT);
     }
 }
