@@ -18,6 +18,23 @@ public final class SettingText {
         }
     }
 
+    public static String localizedDescription(Setting<?> setting, String raw) {
+        if (dev.guizhou.util.lang.ClientLanguage.isChinese()) return raw;
+        String translated = dev.guizhou.util.lang.ClientLanguage.text(raw);
+        if (!translated.equals(raw)) return translated;
+        // Generic descriptions contain stable setting IDs, so format them here at display time.
+        if (raw.equals(generic(setting))) {
+            String name = setting.getDisplayName();
+            if (setting.isNumberSetting() && setting.hasRestriction()) return "Value for " + name + "; bounds are shown at the slider ends.";
+            if (setting.isEnumSetting()) return "Choose the mode for " + name + ".";
+            if (setting.isColorSetting()) return "Color used by " + name + ".";
+            if (setting.getValue() instanceof Boolean) return "Enable or disable " + name + ".";
+            if (setting.getValue() instanceof Bind) return "Keybind for " + name + ".";
+            return "Adjust " + name + ".";
+        }
+        return translated;
+    }
+
     private static String specific(String type, String name) {
         Map<String, String> table = TABLES.get(type);
         return table == null ? null : table.get(name);

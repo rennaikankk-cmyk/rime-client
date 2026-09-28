@@ -10,22 +10,22 @@ import static dev.guizhou.util.traits.Util.mc;
 public final class UtilityActionGuard {
     private UtilityActionGuard() {}
     public static String pauseReason() {
-        if (mc.player == null || mc.level == null || mc.getConnection() == null || mc.gameMode == null) return "未进入世界";
-        if (mc.player.isDeadOrDying() || mc.player.isSpectator()) return "不可操作";
+        if (mc.player == null || mc.level == null || mc.getConnection() == null || mc.gameMode == null) return dev.guizhou.util.lang.ClientLanguage.text("未进入世界");
+        if (mc.player.isDeadOrDying() || mc.player.isSpectator()) return dev.guizhou.util.lang.ClientLanguage.text("不可操作");
         if (mc.screen != null || mc.player.containerMenu != mc.player.inventoryMenu
-                || !mc.player.containerMenu.getCarried().isEmpty()) return "界面操作中";
-        if (mc.player.isUsingItem() || GuizhouWare.swapManager.isLatched()) return "使用物品中";
+                || !mc.player.containerMenu.getCarried().isEmpty()) return dev.guizhou.util.lang.ClientLanguage.text("界面操作中");
+        if (mc.player.isUsingItem() || GuizhouWare.swapManager.isLatched()) return dev.guizhou.util.lang.ClientLanguage.text("使用物品中");
         var crystal = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
         if (crystal != null && crystal.isEnabled()) {
             var logic = crystal.getSettingByName("Logic");
-            if (logic != null && "RUSHER".equalsIgnoreCase(logic.getValue().toString())) return "Rusher 优先";
+            if (logic != null && "RUSHER".equalsIgnoreCase(logic.getValue().toString())) return dev.guizhou.util.lang.ClientLanguage.text("Rusher 优先");
         }
         var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
-        if (flight != null && flight.gzBoostControlsLook()) return "GZBoost 巡航中";
-        if (GuangxiElytraChaseModule.hasMaceDescentIntent() || GuangxiElytraChaseModule.isMaceDiveActive()) return "重锤下砸中";
+        if (flight != null && flight.gzBoostControlsLook()) return dev.guizhou.util.lang.ClientLanguage.text("GZBoost 巡航中");
+        if (GuangxiElytraChaseModule.hasMaceDescentIntent() || GuangxiElytraChaseModule.isMaceDiveActive()) return dev.guizhou.util.lang.ClientLanguage.text("重锤下砸中");
         var chase = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraChaseModule.class);
-        if (chase != null && (chase.hasHeading() || chase.wantsFlight())) return "空战控制中";
-        if (flight != null && flight.isArmorSwapActive()) return "甲飞换装中";
+        if (chase != null && (chase.hasHeading() || chase.wantsFlight())) return dev.guizhou.util.lang.ClientLanguage.text("空战控制中");
+        if (flight != null && flight.isArmorSwapActive()) return dev.guizhou.util.lang.ClientLanguage.text("甲飞换装中");
         return null;
     }
 }

@@ -2494,7 +2494,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     public String getMeta() {
         long now = System.currentTimeMillis();
         while (!explodeTimes.isEmpty() && now - explodeTimes.peekFirst() > 1000) explodeTimes.removeFirst();
-        return rusherLogic() ? String.valueOf(explodeTimes.size()) : "爆炸 " + explodeTimes.size() + "/s";
+        return rusherLogic() ? String.valueOf(explodeTimes.size()) : dev.guizhou.util.lang.ClientLanguage.text("爆炸 ") + explodeTimes.size() + "/s";
     }
 
     private record PlaceTarget(BlockPos base, float damage, LivingEntity faceEntity) {

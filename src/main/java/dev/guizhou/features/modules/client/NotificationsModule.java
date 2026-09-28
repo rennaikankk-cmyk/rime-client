@@ -73,7 +73,7 @@ public class NotificationsModule extends Module {
         String name = event.getFeature() instanceof Module module ? module.getDisplayName() : id;
         ChatFeed.moduleToggled(id, name, moduleState);
         NotifierHudModule.push("module:" + id, NotifierHudModule.Icon.INFO,
-                name + (moduleState ? " 已开启" : " 已关闭"));
+                name + (moduleState ? dev.guizhou.util.lang.ClientLanguage.text(" 已开启") : dev.guizhou.util.lang.ClientLanguage.text(" 已关闭")));
     }
 
     @Subscribe(priority = 100)
@@ -89,9 +89,9 @@ public class NotificationsModule extends Module {
                     int pops = GuizhouWare.playerInfoManager.getTotemPops(id);
                     String name = player.getGameProfile().name();
                     Component message = Component.empty()
-                            .append(Component.literal(name + " 阵亡，此前爆了 "))
+                            .append(Component.literal(name + dev.guizhou.util.lang.ClientLanguage.text(" 阵亡，此前爆了 ")))
                             .append(Component.literal(String.valueOf(pops)).withColor(ChatPalette.WARNING))
-                            .append(Component.literal(" 个图腾"));
+                            .append(Component.literal(dev.guizhou.util.lang.ClientLanguage.text(" 个图腾")));
                     ChatFeed.send(ChatTone.ERROR, "☠", message);
                     NotifierHudModule.push("death:"+id, NotifierHudModule.Icon.SKULL, message);
                 }
@@ -114,12 +114,12 @@ public class NotificationsModule extends Module {
         UUID id = player.getUUID();
         int pops = GuizhouWare.playerInfoManager.getTotemPops(id);
         boolean self = player == mc.player;
-        String subject = self ? "你" : player.getGameProfile().name();
+        String subject = self ? dev.guizhou.util.lang.ClientLanguage.text("你") : player.getGameProfile().name();
 
         Component body = Component.empty()
-                .append(Component.literal(subject + " 已爆 "))
+                .append(Component.literal(subject + dev.guizhou.util.lang.ClientLanguage.text(" 已爆 ")))
                 .append(Component.literal(String.valueOf(pops)).withColor(ChatPalette.WARNING))
-                .append(Component.literal(" 个图腾"));
+                .append(Component.literal(dev.guizhou.util.lang.ClientLanguage.text(" 个图腾")));
 
         ChatFeed.replace("pops:" + id, ChatTone.WARN, "✦", body);
 

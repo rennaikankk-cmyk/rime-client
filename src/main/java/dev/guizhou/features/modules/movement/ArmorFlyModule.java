@@ -28,7 +28,6 @@ public final class ArmorFlyModule extends Module {
 
     public ArmorFlyModule() {
         super("ArmorFly", "Independent armor/elytra switching while gliding; keeps manual steering.", Category.MOVEMENT);
-        displayName.setValue("甲飞");
         instance = this;
         dev.guizhou.util.PacketSendUtil.addSubmissionListener(packet -> {
             if (mc.isSameThread() && requested() && mc.player != null
@@ -146,8 +145,8 @@ public final class ArmorFlyModule extends Module {
     }
 
     @Override public String getDisplayInfo() {
-        if (yieldsToCruise()) return "巡航优先";
-        if (delayBlocked && glideTrackerDelay.getValue() > 0) return "回拉后已停用延迟";
-        return metadata.pending() ? "等待滑翔同步" : null;
+        if (yieldsToCruise()) return dev.guizhou.util.lang.ClientLanguage.text("巡航优先");
+        if (delayBlocked && glideTrackerDelay.getValue() > 0) return dev.guizhou.util.lang.ClientLanguage.text("回拉后已停用延迟");
+        return metadata.pending() ? dev.guizhou.util.lang.ClientLanguage.text("等待滑翔同步") : null;
     }
 }

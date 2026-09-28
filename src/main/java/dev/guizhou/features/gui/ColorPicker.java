@@ -82,7 +82,7 @@ final class ColorPicker {
         hexX = x + W - 96;
         round(g, hexX, rowY, 82, 26, 8, SURFACE);
         outline(g, hexX, rowY, 82, 26, 8, 1, BORDER);
-        textCentered(g, "输入 HEX", hexX + 41, rowY + 8, 9.5f, HudFonts.SEMI, TEXT);
+        textCentered(g, dev.guizhou.util.lang.ClientLanguage.text("输入 HEX"), hexX + 41, rowY + 8, 9.5f, HudFonts.SEMI, TEXT);
         presetY = rowY + 36;
         float px = svX, gap = (ALPHA_W - 18 * presets().length) / (presets().length - 1);
         for (int preset : presets()) {

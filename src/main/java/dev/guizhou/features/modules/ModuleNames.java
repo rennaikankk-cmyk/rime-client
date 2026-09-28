@@ -18,6 +18,9 @@ public final class ModuleNames {
 
     /** Chinese labels for the utility modules (Map.of above caps at ten pairs). */
     private static final Map<String, String> UTILITY_NAMES = Map.ofEntries(
+            Map.entry("AntiCrystal", "防水晶占位"),
+            Map.entry("AutoThrow", "智能投药"),
+            Map.entry("ArmorFly", "甲飞"),
             Map.entry("AutoReconnect", "自动重连"),
             Map.entry("HoleESP", "安全洞显示"),
             Map.entry("HoleFill", "自动堵洞"),
@@ -37,6 +40,14 @@ public final class ModuleNames {
 
     public static String migrateDisplayName(String stableId, String saved) {
         return saved == null || saved.equals(stableId) ? displayName(stableId) : saved;
+    }
+
+    /** Translate only standard names; never rewrite a user-defined label. */
+    public static String localizedDisplayName(String stableId, String saved) {
+        String canonical = displayName(stableId);
+        if (saved == null || saved.equals(stableId) || saved.equals(canonical))
+            return dev.guizhou.util.lang.ClientLanguage.text(canonical);
+        return saved;
     }
 
     /** Command literals stay fixed even when the user customizes a visible label. */

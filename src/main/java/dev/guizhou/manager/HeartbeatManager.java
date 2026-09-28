@@ -209,8 +209,8 @@ public class HeartbeatManager extends Feature {
             notifiedDenial = status.denialGeneration();
         }
         ChatUtil.sendPersistent("gzwx:license",
-                    Component.literal("§c[Rime] 授权校验未通过（" + status.reason()
-                            + "），功能已停用。账号问题请联系卖家。"));
+                    Component.literal(dev.guizhou.util.lang.ClientLanguage.text("§c[Rime] 授权校验未通过（") + status.reason()
+                            + dev.guizhou.util.lang.ClientLanguage.text("），功能已停用。账号问题请联系卖家。")));
     }
 
     // --------------------------------------------------------------- resources

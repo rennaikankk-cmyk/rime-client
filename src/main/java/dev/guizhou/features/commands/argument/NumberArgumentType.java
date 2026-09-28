@@ -31,7 +31,7 @@ public record NumberArgumentType<T extends Number>(Class<T> type, Constraint<T> 
         if (value == null) {
             reader.setCursor(start);
             throw CommandExceptions.invalidArgument(type.isAssignableFrom(Integer.class) || type.isAssignableFrom(Long.class)
-                            ? "需要一个整数，但输入的是 \"%s\"" : "需要一个数字，但输入的是 \"%s\"", input)
+                            ? dev.guizhou.util.lang.ClientLanguage.text("需要一个整数，但输入的是 \"%s\"") : dev.guizhou.util.lang.ClientLanguage.text("需要一个数字，但输入的是 \"%s\""), input)
                     .createWithContext(reader);
         }
 
@@ -46,11 +46,11 @@ public record NumberArgumentType<T extends Number>(Class<T> type, Constraint<T> 
         return (reader, input) -> {
             double value = input.doubleValue();
             if (min.doubleValue() > value) {
-                throw CommandExceptions.invalidArgument("数值不能小于 %s", min.toString())
+                throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("数值不能小于 %s"), min.toString())
                         .createWithContext(reader);
             }
             if (max.doubleValue() < value) {
-                throw CommandExceptions.invalidArgument("数值不能大于 %s", max.toString())
+                throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("数值不能大于 %s"), max.toString())
                         .createWithContext(reader);
             }
         };

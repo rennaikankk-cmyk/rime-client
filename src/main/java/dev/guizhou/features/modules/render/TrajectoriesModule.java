@@ -91,7 +91,7 @@ public class TrajectoriesModule extends Module {
             double distance = mc.player.position().distanceTo(new Vec3(end[0], end[1], end[2]));
             alerted.add(pearl.getId());
             if (distance > alertRange.getValue()) continue;
-            String text = String.format("%s 的珍珠将落在 %d, %d, %d（距你 %.0f 格，%.1f 秒）", owner.getGameProfile().name(),
+            String text = String.format(dev.guizhou.util.lang.ClientLanguage.text("%s 的珍珠将落在 %d, %d, %d（距你 %.0f 格，%.1f 秒）"), owner.getGameProfile().name(),
                     (int) Math.floor(end[0]), (int) Math.floor(end[1]), (int) Math.floor(end[2]), distance, result.ticks() / 20.0);
             ChatUtil.sendMessage(Component.literal(text));
             NotifierHudModule.push("pearl:" + pearl.getId(), NotifierHudModule.Icon.DANGER, text);

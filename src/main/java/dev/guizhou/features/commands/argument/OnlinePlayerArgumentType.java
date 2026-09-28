@@ -34,7 +34,7 @@ public class OnlinePlayerArgumentType implements ArgumentType<String> {
             if (FuzzyMatch.matches(input, name)) {
                 boolean friend = GuizhouWare.friendManager != null && GuizhouWare.friendManager.isFriend(name);
                 boolean enemy = GuizhouWare.enemyManager != null && GuizhouWare.enemyManager.isEnemy(name);
-                builder.suggest(name, new LiteralMessage(friend ? "在线 · 好友" : enemy ? "在线 · 敌人" : "在线玩家"));
+                builder.suggest(name, new LiteralMessage(friend ? dev.guizhou.util.lang.ClientLanguage.text("在线 · 好友") : enemy ? dev.guizhou.util.lang.ClientLanguage.text("在线 · 敌人") : dev.guizhou.util.lang.ClientLanguage.text("在线玩家")));
             }
         }
 

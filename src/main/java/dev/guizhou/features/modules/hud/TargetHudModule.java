@@ -87,7 +87,7 @@ public class TargetHudModule extends HudModule {
 
     // discrete snapshot — frozen while the target layer fades out
     private String sName = "", sWeapon = "—", sIntent = "OFF", sPing = "—";
-    private String sMotion = "待观察";
+    private String sMotion = dev.guizhou.util.lang.ClientLanguage.text("待观察");
     private float sHp, sAbsorb, sArmor, sMaxHp = 20;
     private int sTotems;
     private long sElapsedMs;
@@ -189,7 +189,7 @@ public class TargetHudModule extends HudModule {
         sName = "";
         sWeapon = "—";
         sIntent = "OFF";
-        sMotion = "待观察";
+        sMotion = dev.guizhou.util.lang.ClientLanguage.text("待观察");
         sPing = "—";
         sHp = 0;
         sAbsorb = 0;
@@ -351,10 +351,10 @@ public class TargetHudModule extends HudModule {
         text(ctx, clip(sName, nickAvail, 15f, HudFonts.SEMI), nickX, 34.3f, 15f, HudFonts.SEMI, c(FG, a), ox, oy, s);
         String distText = String.format("%.1f", dist);
         text(ctx, distText, nickX, 56.7f, 12f, HudFonts.SEMI, c(FG, a), ox, oy, s);
-        text(ctx, "格", nickX + HudFonts.width(distText, 12f, HudFonts.SEMI) + 3f, 57.7f, 11f, HudFonts.REGULAR,
+        text(ctx, dev.guizhou.util.lang.ClientLanguage.text("格"), nickX + HudFonts.width(distText, 12f, HudFonts.SEMI) + 3f, 57.7f, 11f, HudFonts.REGULAR,
                 c(MUTED_FG, a), ox, oy, s);
-        text(ctx, "目标运动", PAD, 78f, 10f, HudFonts.SEMI, c(SUBTLE, a), ox, oy, s);
-        text(ctx, sMotion, PAD + HudFonts.width("目标运动", 10f, HudFonts.SEMI) + 6f, 78f, 10f, HudFonts.REGULAR,
+        text(ctx, dev.guizhou.util.lang.ClientLanguage.text("目标运动"), PAD, 78f, 10f, HudFonts.SEMI, c(SUBTLE, a), ox, oy, s);
+        text(ctx, sMotion, PAD + HudFonts.width(dev.guizhou.util.lang.ClientLanguage.text("目标运动"), 10f, HudFonts.SEMI) + 6f, 78f, 10f, HudFonts.REGULAR,
                 c(MUTED_FG, a), ox, oy, s);
 
         // radar 104x104 at y92 — thin rings + cross on a faint disc
@@ -377,17 +377,17 @@ public class TargetHudModule extends HudModule {
 
         // right column at measured label y: 94 / 141.7 / 193.41 (+bar 213.41)
         float rx = PAD + 120f, rw = 228f;
-        label(ctx, "接近率", "CLOSURE", rx, 94f, a, ox, oy, s);
+        label(ctx, dev.guizhou.util.lang.ClientLanguage.text("接近率"), "CLOSURE", rx, 94f, a, ox, oy, s);
         boolean closing = closure >= 0;
         String bigClosure = String.format("%+.1f", closure);
         text(ctx, bigClosure, rx, 110f, 22f, HudFonts.BOLD, c(closing ? GOOD : DESTR, a), ox, oy, s);
         float afterX = rx + HudFonts.width(bigClosure, 22f, HudFonts.BOLD) + 5f;
         text(ctx, "b/t", afterX, 121f, 11f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
-        String closingText = closing ? "接近中" : "被拉开";
+        String closingText = closing ? dev.guizhou.util.lang.ClientLanguage.text("接近中") : dev.guizhou.util.lang.ClientLanguage.text("被拉开");
         statusText(ctx, ox + afterX + HudFonts.width("b/t", 11f, HudFonts.SEMI) + 6f, oy + 118.5f,
                 closingText, 10f, closing ? GOOD : DESTR, a);
 
-        label(ctx, "拦截解算", "INTERCEPT", rx, 141.7f, a, ox, oy, s);
+        label(ctx, dev.guizhou.util.lang.ClientLanguage.text("拦截解算"), "INTERCEPT", rx, 141.7f, a, ox, oy, s);
         double t = TargetHudMath.interceptTicks(dist, closure, 0.05);
         if (t >= 0) {
             String bigT = "T−" + (int) Math.ceil(t);
@@ -395,12 +395,12 @@ public class TargetHudModule extends HudModule {
             float tickX = rx + HudFonts.width(bigT, 22f, HudFonts.BOLD) + 5f;
             text(ctx, "tick", tickX, 168.7f, 11f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
         } else {
-            text(ctx, "无解 · 平追回退", rx, 159.7f, 15f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
-            float cuX = rx + HudFonts.width("无解 · 平追回退", 15f, HudFonts.SEMI) + 5f;
+            text(ctx, dev.guizhou.util.lang.ClientLanguage.text("无解 · 平追回退"), rx, 159.7f, 15f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
+            float cuX = rx + HudFonts.width(dev.guizhou.util.lang.ClientLanguage.text("无解 · 平追回退"), 15f, HudFonts.SEMI) + 5f;
             text(ctx, "catch-up", cuX, 165.7f, 11f, HudFonts.REGULAR, c(SUBTLE, a), ox, oy, s);
         }
 
-        label(ctx, "能量优势", "E+", rx, 193.4f, a, ox, oy, s);
+        label(ctx, dev.guizhou.util.lang.ClientLanguage.text("能量优势"), "E+", rx, 193.4f, a, ox, oy, s);
         textRight(ctx, String.format("%+d", Math.round(energy)), PAD + CONTENT_W, 191.4f, 14f,
                 HudFonts.BOLD, c(energy >= 0 ? PRIMARY : DESTR, a), ox, oy, s);
         float barY = 213.4f;
@@ -414,8 +414,8 @@ public class TargetHudModule extends HudModule {
 
         // full-width smash + envelope rows at measured y
         float smashY = 225.4f;
-        text(ctx, "砸落窗口", PAD, smashY, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
-        float smashLabelW = HudFonts.width("砸落窗口", 11f, HudFonts.REGULAR) + 8f;
+        text(ctx, dev.guizhou.util.lang.ClientLanguage.text("砸落窗口"), PAD, smashY, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        float smashLabelW = HudFonts.width(dev.guizhou.util.lang.ClientLanguage.text("砸落窗口"), 11f, HudFonts.REGULAR) + 8f;
         boolean ready = smash >= 0.999f;
         float smashValueW = ready ? 44f : 30f;
         float smashBarW = CONTENT_W - smashLabelW - smashValueW - 6f;
@@ -430,9 +430,9 @@ public class TargetHudModule extends HudModule {
         }
 
         float envY = 247.1f;
-        text(ctx, "包络钳制", PAD, envY, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
-        float envLabelW = HudFonts.width("包络钳制", 11f, HudFonts.REGULAR) + 8f;
-        String envText = String.format("请求 %s → 实际 %s",
+        text(ctx, dev.guizhou.util.lang.ClientLanguage.text("包络钳制"), PAD, envY, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        float envLabelW = HudFonts.width(dev.guizhou.util.lang.ClientLanguage.text("包络钳制"), 11f, HudFonts.REGULAR) + 8f;
+        String envText = String.format(dev.guizhou.util.lang.ClientLanguage.text("请求 %s → 实际 %s"),
                 Float.isNaN(envReq) ? "—" : String.format("%.1f", envReq),
                 Float.isNaN(envApl) ? "—" : String.format("%.1f", envApl));
         float envValueW = HudFonts.width(envText, 10f, HudFonts.REGULAR) + 8f;
@@ -460,13 +460,13 @@ public class TargetHudModule extends HudModule {
         rounded(ctx, 40f, 297.3f, 93f * hpFrac, 4f, 1f, c(hpTone, a), ox, oy, s);
         String hpText = sAbsorb > .05f ? String.format("%.1f+%.0f", displayedHp, sAbsorb) : String.format("%.1f", displayedHp);
         textRight(ctx, hpText, 183f, 292.8f, 12f, HudFonts.SEMI, c(FG, a), ox, oy, s);
-        text(ctx, "甲", 197f, 292.8f, 11f, HudFonts.SEMI, c(CYAN, a), ox, oy, s);
+        text(ctx, dev.guizhou.util.lang.ClientLanguage.text("甲"), 197f, 292.8f, 11f, HudFonts.SEMI, c(CYAN, a), ox, oy, s);
         rounded(ctx, 221f, 297.3f, 91f, 4f, 1f, c(TRACK, a), ox, oy, s);
         rounded(ctx, 221f, 297.3f, 91f * Math.max(0f, Math.min(1f, sArmor / 20f)), 4f, 1f, c(CYAN, a), ox, oy, s);
         textRight(ctx, String.valueOf((int) Math.ceil(sArmor)), 364f, 292.8f, 12f, HudFonts.SEMI, c(FG, a), ox, oy, s);
 
-        String speeds = String.format("敌速 %.1f · 我速 %.1f", tgtVel, myVel);
-        String totemsText = "图腾 ×" + sTotems;
+        String speeds = String.format(dev.guizhou.util.lang.ClientLanguage.text("敌速 %.1f · 我速 %.1f"), tgtVel, myVel);
+        String totemsText = dev.guizhou.util.lang.ClientLanguage.text("图腾 ×") + sTotems;
         String clockText = clock(sElapsedMs / 1000L);
         float wS = HudFonts.width(speeds, 11f, HudFonts.REGULAR);
         float wT = HudFonts.width(totemsText, 11f, HudFonts.REGULAR);
@@ -495,11 +495,11 @@ public class TargetHudModule extends HudModule {
         boolean armorFly = flight != null && flight.armorFlyRequested();
         boolean rocket = flight != null && flight.isEnabled() && flight.isBoostAttached();
 
-        text(ctx, "巡航层", PAD, TOP + 2f, 14f, HudFonts.SEMI, c(FG, a), ox, oy, s);
-        text(ctx, "FLIGHT", PAD + HudFonts.width("巡航层", 14f, HudFonts.SEMI) + 6f, TOP + 4.5f, 10f, HudFonts.SEMI,
+        text(ctx, dev.guizhou.util.lang.ClientLanguage.text("巡航层"), PAD, TOP + 2f, 14f, HudFonts.SEMI, c(FG, a), ox, oy, s);
+        text(ctx, "FLIGHT", PAD + HudFonts.width(dev.guizhou.util.lang.ClientLanguage.text("巡航层"), 14f, HudFonts.SEMI) + 6f, TOP + 4.5f, 10f, HudFonts.SEMI,
                 c(SUBTLE, a), ox, oy, s);
-        String b1Text = armorFly ? "甲飞" : gliding ? "滑翔" : "地面";
-        String b2Text = rocket ? "烟花附着" : "烟花待命";
+        String b1Text = armorFly ? dev.guizhou.util.lang.ClientLanguage.text("甲飞") : gliding ? dev.guizhou.util.lang.ClientLanguage.text("滑翔") : dev.guizhou.util.lang.ClientLanguage.text("地面");
+        String b2Text = rocket ? dev.guizhou.util.lang.ClientLanguage.text("烟花附着") : dev.guizhou.util.lang.ClientLanguage.text("烟花待命");
         float b2W = HudFonts.width(b2Text, 11f, HudFonts.SEMI);
         float b1W = HudFonts.width(b1Text, 11f, HudFonts.SEMI);
         statusText(ctx, ox + W - PAD - b2W, oy + TOP + 2f, b2Text, 11f, rocket ? WARN : MUTED_FG, a);
@@ -538,25 +538,25 @@ public class TargetHudModule extends HudModule {
 
         // airspeed + vertical/altitude at measured y (both columns right-aligned to 364)
         float rowY = 137.2f;
-        text(ctx, "空速", PAD, rowY, 11f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
+        text(ctx, dev.guizhou.util.lang.ClientLanguage.text("空速"), PAD, rowY, 11f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
         String bigSpeed = String.format("%.1f", myVel);
         text(ctx, bigSpeed, PAD, 151.2f, 26f, HudFonts.BOLD, c(FG, a), ox, oy, s);
         float speedSuffixX = PAD + HudFonts.width(bigSpeed, 26f, HudFonts.BOLD) + 5f;
         text(ctx, String.format("b/t · %.0f m/s", myVel * 20f), speedSuffixX, 166.2f, 12f, HudFonts.SEMI, c(MUTED_FG, a), ox, oy, s);
         String altitude = String.format("Y %d", Math.round(mc.player.getY()));
-        textRight(ctx, String.format("垂直 %+.1f b/t", vspeed), W - PAD, rowY, 11f, HudFonts.SEMI,
+        textRight(ctx, String.format(dev.guizhou.util.lang.ClientLanguage.text("垂直 %+.1f b/t"), vspeed), W - PAD, rowY, 11f, HudFonts.SEMI,
                 c(vspeed >= 0 ? GOOD : WARN, a), ox, oy, s);
         textRight(ctx, altitude, W - PAD, 151.2f, 26f, HudFonts.BOLD, c(FG, a), ox, oy, s);
 
         // energy reserve at measured y
         float enY = 201.9f;
-        label(ctx, "能量储备", "ENERGY", PAD, enY, a, ox, oy, s);
+        label(ctx, dev.guizhou.util.lang.ClientLanguage.text("能量储备"), "ENERGY", PAD, enY, a, ox, oy, s);
         textRight(ctx, String.format("%+d", Math.round(flightEnergy)), W - PAD, enY - 2f, 14f, HudFonts.BOLD, c(PRIMARY, a), ox, oy, s);
         rounded(ctx, PAD, 222.4f, CONTENT_W, 4f, 1f, c(TRACK, a), ox, oy, s);
         float reserve = Math.max(0f, Math.min(1f, (50f + flightEnergy / 2f) / 100f));
         if (reserve > .005f) rounded(ctx, PAD, 222.4f, CONTENT_W * reserve, 4f, 1f, c(PRIMARY, a), ox, oy, s);
 
-        text(ctx, "未锁定目标 — 显示我方飞行状态；锁定后切换为目标层", PAD, 239.9f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
+        text(ctx, dev.guizhou.util.lang.ClientLanguage.text("未锁定目标 — 显示我方飞行状态；锁定后切换为目标层"), PAD, 239.9f, 11f, HudFonts.REGULAR, c(MUTED_FG, a), ox, oy, s);
     }
 
     // ---------------------------------------------------------------- shared drawing
@@ -728,14 +728,14 @@ public class TargetHudModule extends HudModule {
 
     private static String intentLabel(String intent) {
         return switch (intent) {
-            case "PULL_UP" -> "爬升";
-            case "FOLLOW", "CHASE" -> "追击";
-            case "DIVE" -> "俯冲";
-            case "WAIT" -> "待确认";
-            case "EVADE" -> "规避";
-            case "ENGAGE" -> "缠斗";
-            case "PULL_OVER" -> "脱离";
-            default -> "待机";
+            case "PULL_UP" -> dev.guizhou.util.lang.ClientLanguage.text("爬升");
+            case "FOLLOW", "CHASE" -> dev.guizhou.util.lang.ClientLanguage.text("追击");
+            case "DIVE" -> dev.guizhou.util.lang.ClientLanguage.text("俯冲");
+            case "WAIT" -> dev.guizhou.util.lang.ClientLanguage.text("待确认");
+            case "EVADE" -> dev.guizhou.util.lang.ClientLanguage.text("规避");
+            case "ENGAGE" -> dev.guizhou.util.lang.ClientLanguage.text("缠斗");
+            case "PULL_OVER" -> dev.guizhou.util.lang.ClientLanguage.text("脱离");
+            default -> dev.guizhou.util.lang.ClientLanguage.text("待机");
         };
     }
 

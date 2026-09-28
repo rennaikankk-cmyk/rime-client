@@ -66,10 +66,10 @@ public final class DualViewSupport {
 
     public static String describe(Status status) {
         return switch (status) {
-            case SUPPORTED -> "双视角可用";
-            case NO_VIA -> "未检测到 ViaFabricPlus";
-            case NEW_PROTOCOL -> "当前 Via 目标协议 " + cachedVersionName + " 高于 1.20.7";
-            case OFFLINE -> "未连接服务器";
+            case SUPPORTED -> dev.guizhou.util.lang.ClientLanguage.text("双视角可用");
+            case NO_VIA -> dev.guizhou.util.lang.ClientLanguage.text("未检测到 ViaFabricPlus");
+            case NEW_PROTOCOL -> dev.guizhou.util.lang.ClientLanguage.text("当前 Via 目标协议 ") + cachedVersionName + dev.guizhou.util.lang.ClientLanguage.text(" 高于 1.20.7");
+            case OFFLINE -> dev.guizhou.util.lang.ClientLanguage.text("未连接服务器");
         };
     }
 

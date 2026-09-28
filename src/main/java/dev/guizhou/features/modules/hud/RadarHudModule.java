@@ -78,8 +78,8 @@ public class RadarHudModule extends HudModule {
             if (e.player != mc.player) w += 8f + ShadcnDraw.width(distance(e.dist), META);
             rowW = Math.max(rowW, w);
         }
-        String count = others == 0 ? "仅自己" : others + " 人";
-        float headW = ShadcnDraw.width("附近玩家", META, HudFonts.SEMI) + 10f + ShadcnDraw.width(count, META);
+        String count = others == 0 ? dev.guizhou.util.lang.ClientLanguage.text("仅自己") : others + dev.guizhou.util.lang.ClientLanguage.text(" 人");
+        float headW = ShadcnDraw.width(dev.guizhou.util.lang.ClientLanguage.text("附近玩家"), META, HudFonts.SEMI) + 10f + ShadcnDraw.width(count, META);
         float cardW = PAD * 2 + Math.max(rowW, headW);
         float cardH = HEADER + 3f + entries.size() * ROW + 3f;
 
@@ -91,7 +91,7 @@ public class RadarHudModule extends HudModule {
 
         HudDraw.card(ctx, ox, oy, cardW, cardH, HudDraw.RADIUS);
         float hm = oy + HEADER / 2f + 1.5f;
-        HudDraw.textMid(ctx, "附近玩家", ox + PAD, hm, META, HudFonts.SEMI, ShadcnDraw.MUTED);
+        HudDraw.textMid(ctx, dev.guizhou.util.lang.ClientLanguage.text("附近玩家"), ox + PAD, hm, META, HudFonts.SEMI, ShadcnDraw.MUTED);
         HudDraw.textMidRight(ctx, count, ox + cardW - PAD, hm, META, HudFonts.REGULAR, ShadcnDraw.SUBTLE);
         HudDraw.rule(ctx, ox + PAD, oy + HEADER + 1f, cardW - PAD * 2);
 

@@ -765,18 +765,18 @@ public class GuangxiElytraModule extends Module {
         lastAppliedTick = mc.player.tickCount;
         if (cruise != null && cruiseSpeedLog.getValue() && mc.player.tickCount % 20 == 0) {
             String phase = switch (cruise.phase()) {
-                case LEVEL -> cruise.vertical() > 0 ? "手动拉升" : cruise.vertical() < 0 ? "手动下降" : "巡航";
-                case DESCEND -> "脉动下降";
-                case CLIMB -> "脉动爬升";
+                case LEVEL -> cruise.vertical() > 0 ? dev.guizhou.util.lang.ClientLanguage.text("手动拉升") : cruise.vertical() < 0 ? dev.guizhou.util.lang.ClientLanguage.text("手动下降") : dev.guizhou.util.lang.ClientLanguage.text("巡航");
+                case DESCEND -> dev.guizhou.util.lang.ClientLanguage.text("脉动下降");
+                case CLIMB -> dev.guizhou.util.lang.ClientLanguage.text("脉动爬升");
             };
-            String limit = cruiseResult == null ? " 等待烟花/交接" : !cruiseResult.feasible() ? " 约束冲突，保留滑翔"
-                    : cruiseResult.descentUnmet() ? " 下降目标未达" : cruiseResult.speedLimited() ? " 已限速" : "";
+            String limit = cruiseResult == null ? dev.guizhou.util.lang.ClientLanguage.text(" 等待烟花/交接") : !cruiseResult.feasible() ? dev.guizhou.util.lang.ClientLanguage.text(" 约束冲突，保留滑翔")
+                    : cruiseResult.descentUnmet() ? dev.guizhou.util.lang.ClientLanguage.text(" 下降目标未达") : cruiseResult.speedLimited() ? dev.guizhou.util.lang.ClientLanguage.text(" 已限速") : "";
             if (cruise.dualActive() && cruise.boxLook() != null) {
-                limit += String.format(java.util.Locale.ROOT, " | 双视角β%.0f°",
+                limit += String.format(java.util.Locale.ROOT, dev.guizhou.util.lang.ClientLanguage.text(" | 双视角β%.0f°"),
                         Math.toDegrees(-Math.asin(cruise.boxLook().y)));
             }
             dev.guizhou.features.commands.Command.sendMessage(String.format(java.util.Locale.ROOT,
-                    "[GZBoost] %s | 应用速度 %.2f b/t | 垂直 %.2f b/t%s", phase, applied.length(), applied.y, limit));
+                    dev.guizhou.util.lang.ClientLanguage.text("[GZBoost] %s | 应用速度 %.2f b/t | 垂直 %.2f b/t%s"), phase, applied.length(), applied.y, limit));
         }
         return applied;
     }
@@ -856,9 +856,9 @@ public class GuangxiElytraModule extends Module {
         DualViewSupport.Status status = DualViewSupport.status();
         if (status == DualViewSupport.Status.SUPPORTED || status == DualViewSupport.Status.OFFLINE) return;
         dualViewWarned = true;
-        dev.guizhou.features.commands.Command.sendMessage("[GZBoost] 双视角不可用（"
+        dev.guizhou.features.commands.Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("[GZBoost] 双视角不可用（")
                 + DualViewSupport.describe(status)
-                + "）。请安装 ViaFabricPlus 并通过 Via 连接 1.20.7 及以下版本服务器；已自动回退单视角。");
+                + dev.guizhou.util.lang.ClientLanguage.text("）。请安装 ViaFabricPlus 并通过 Via 连接 1.20.7 及以下版本服务器；已自动回退单视角。"));
     }
 
     /** Same-position rotation packet carrying the box look, sent before the movement packet. */
@@ -1834,14 +1834,14 @@ public class GuangxiElytraModule extends Module {
             case VOID -> "Void";
         };
         if (freezing) return m + "·Freeze";
-        if (mc.player != null && mc.player.tickCount < combatHandoffUntil) return m + "·空战交接";
-        if (mc.player != null && (correctionPending.get() || mc.player.tickCount < boostRetryTick)) return m + "·回拉恢复";
-        if (safetySteering) return m + "·避障";
-        if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()) return m + "·下砸让行";
-        if (chaseActive() || chaseWantsFlight()) return m + "·空战" + (armorSwap.active() ? "·甲飞" : "");
+        if (mc.player != null && mc.player.tickCount < combatHandoffUntil) return m + dev.guizhou.util.lang.ClientLanguage.text("·空战交接");
+        if (mc.player != null && (correctionPending.get() || mc.player.tickCount < boostRetryTick)) return m + dev.guizhou.util.lang.ClientLanguage.text("·回拉恢复");
+        if (safetySteering) return m + dev.guizhou.util.lang.ClientLanguage.text("·避障");
+        if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()) return m + dev.guizhou.util.lang.ClientLanguage.text("·下砸让行");
+        if (chaseActive() || chaseWantsFlight()) return m + dev.guizhou.util.lang.ClientLanguage.text("·空战") + (armorSwap.active() ? dev.guizhou.util.lang.ClientLanguage.text("·甲飞") : "");
         if (gzBoostControlsLook()) m += gzBoostWave.getValue() && gzBoostMode.getValue() == CoupledCruise.BoostMode.Aggressive
-                ? (gzBoostWaveRange.getValue() == WaveRange.Long1000 ? "·往返1000" : "·往返220") : "·GZBoost";
-        if (armorFlyRequested()) return m + (armorSwap.active() ? "·甲飞" : ArmorFlyModule.yieldsToCruise() ? "·甲飞待命" : "·等待换装");
+                ? (gzBoostWaveRange.getValue() == WaveRange.Long1000 ? dev.guizhou.util.lang.ClientLanguage.text("·往返1000") : dev.guizhou.util.lang.ClientLanguage.text("·往返220")) : "·GZBoost";
+        if (armorFlyRequested()) return m + (armorSwap.active() ? dev.guizhou.util.lang.ClientLanguage.text("·甲飞") : ArmorFlyModule.yieldsToCruise() ? dev.guizhou.util.lang.ClientLanguage.text("·甲飞待命") : dev.guizhou.util.lang.ClientLanguage.text("·等待换装"));
         return m;
     }
 }

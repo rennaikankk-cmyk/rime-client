@@ -20,6 +20,7 @@ public class Setting<T> {
     private Predicate<T> visibility;
     private String description;
     private String hoverLine;
+    private boolean hoverChinese;
     private Feature feature;
     private String page = "General";
 
@@ -96,6 +97,8 @@ public class Setting<T> {
     public String getName() {
         return this.name;
     }
+
+    public String getDisplayName() { return dev.guizhou.util.lang.ClientLanguage.settingName(name); }
 
     public T getValue() {
         return this.value;
@@ -229,7 +232,7 @@ public class Setting<T> {
     }
 
     public String getDescription() {
-        return Objects.requireNonNullElse(this.description, "");
+        return SettingText.localizedDescription(this, Objects.requireNonNullElse(this.description, ""));
     }
 
     public Setting<T> described(String text) {
@@ -240,9 +243,10 @@ public class Setting<T> {
 
     /** Built once. Hover text must not concatenate a new string every frame. */
     public String hoverHint() {
-        if (hoverLine == null) {
+        if (hoverLine == null || hoverChinese != dev.guizhou.util.lang.ClientLanguage.isChinese()) {
+            hoverChinese = dev.guizhou.util.lang.ClientLanguage.isChinese();
             String d = getDescription();
-            hoverLine = d.isEmpty() ? name + " · 右键恢复默认" : name + " · " + d + " · 右键恢复默认";
+            hoverLine = getDisplayName() + (d.isEmpty() ? "" : " · " + d) + dev.guizhou.util.lang.ClientLanguage.text(" · 右键恢复默认");
         }
         return hoverLine;
     }

@@ -74,7 +74,7 @@ public class HudEditorScreen extends Screen {
     }
 
     public static String label(HudModule module) {
-        return LABELS.getOrDefault(module.getName(), module.getName());
+        return dev.guizhou.util.lang.ClientLanguage.text(LABELS.getOrDefault(module.getName(), module.getName()));
     }
 
     @Override
@@ -166,7 +166,7 @@ public class HudEditorScreen extends Screen {
             if (!live) {
                 ShadcnDraw.round(g, r[0], r[1], r[2], r[3], 2f, 0xA0151820);
                 ShadcnDraw.outline(g, r[0], r[1], r[2], r[3], 2f, 1f, 0x803A4254);
-                ShadcnDraw.text(g, ShadcnDraw.fit(label(module) + (on ? " · 预览" : " · 已关闭"), r[2] - 12, 8f),
+                ShadcnDraw.text(g, ShadcnDraw.fit(label(module) + (on ? dev.guizhou.util.lang.ClientLanguage.text(" · 预览") : dev.guizhou.util.lang.ClientLanguage.text(" · 已关闭")), r[2] - 12, 8f),
                         r[0] + 6f, r[1] + 4f, 8f, HudFonts.SEMI, ShadcnDraw.SUBTLE);
             }
             boolean active = module == dragging || module == selected;
@@ -177,7 +177,7 @@ public class HudEditorScreen extends Screen {
             int outline = active ? accent : 0x80FFFFFF;
             ShadcnDraw.outline(g, r[0] - 1, r[1] - 1, r[2] + 2, r[3] + 2, 2f, 1f, outline);
             if (active) handles(g, r, accent);
-            String name = label(module) + (module.isCustomBound() ? "" : " · 锚点");
+            String name = label(module) + (module.isCustomBound() ? "" : dev.guizhou.util.lang.ClientLanguage.text(" · 锚点"));
             String meta = module == dragging ? r[0] + ", " + r[1] + "  " + r[2] + "×" + r[3]
                     : Math.round(hud.scaleOf(module) * 100) + "%";
             float nw = ShadcnDraw.width(name, 8f, HudFonts.SEMI), mw = ShadcnDraw.width(meta, 7f);
@@ -224,9 +224,9 @@ public class HudEditorScreen extends Screen {
         ShadcnDraw.outline(g, panelX, panelY, panelW, panelH, 2f, 1f, ShadcnDraw.BORDER);
         int enabled = 0;
         for (HudModule m : hud.elementList()) if (hud.elementToggle(m).getValue()) enabled++;
-        ShadcnDraw.text(g, hud.isEnabled() ? "HUD 布局" : "HUD 已关闭", panelX + PAD, panelY + 8f, 9f,
+        ShadcnDraw.text(g, hud.isEnabled() ? dev.guizhou.util.lang.ClientLanguage.text("HUD 布局") : dev.guizhou.util.lang.ClientLanguage.text("HUD 已关闭"), panelX + PAD, panelY + 8f, 9f,
                 HudFonts.SEMI, ShadcnDraw.TEXT);
-        ShadcnDraw.text(g, enabled + " / " + hud.elementList().size() + " 已启用", panelX + PAD, panelY + 18f, 7f,
+        ShadcnDraw.text(g, enabled + " / " + hud.elementList().size() + dev.guizhou.util.lang.ClientLanguage.text(" 已启用"), panelX + PAD, panelY + 18f, 7f,
                 ShadcnDraw.SUBTLE);
         switchShape(g, panelX + panelW - 27f, panelY + 10.5f, hud.isEnabled(), accent);
         HudDraw.rule(g, panelX + PAD, panelY + HEADER - 3f, panelW - PAD * 2);
@@ -247,13 +247,13 @@ public class HudEditorScreen extends Screen {
 
         ShadcnDraw.round(g, resetX, btnY, btnW, BTN_H, 2f, ShadcnDraw.SURFACE);
         ShadcnDraw.outline(g, resetX, btnY, btnW, BTN_H, 2f, 1f, ShadcnDraw.BORDER);
-        HudDraw.textMidCentered(g, "重置布局", resetX + btnW / 2f, btnY + BTN_H / 2f, 8.5f, HudFonts.SEMI, ShadcnDraw.TEXT);
+        HudDraw.textMidCentered(g, dev.guizhou.util.lang.ClientLanguage.text("重置布局"), resetX + btnW / 2f, btnY + BTN_H / 2f, 8.5f, HudFonts.SEMI, ShadcnDraw.TEXT);
         ShadcnDraw.round(g, doneX, btnY, btnW, BTN_H, 2f, accent);
-        HudDraw.textMidCentered(g, "完成", doneX + btnW / 2f, btnY + BTN_H / 2f, 8.5f, HudFonts.SEMI, 0xFF0B0C10);
+        HudDraw.textMidCentered(g, dev.guizhou.util.lang.ClientLanguage.text("完成"), doneX + btnW / 2f, btnY + BTN_H / 2f, 8.5f, HudFonts.SEMI, 0xFF0B0C10);
         float hint = btnY + BTN_H + 9f;
-        HudDraw.textMid(g, ShadcnDraw.fit("拖动移动 · 滚轮缩放 · 右键外观", panelW - 2 * PAD, 7f), panelX + PAD, hint, 7f,
+        HudDraw.textMid(g, ShadcnDraw.fit(dev.guizhou.util.lang.ClientLanguage.text("拖动移动 · 滚轮缩放 · 右键外观"), panelW - 2 * PAD, 7f), panelX + PAD, hint, 7f,
                 HudFonts.REGULAR, ShadcnDraw.SUBTLE);
-        HudDraw.textMid(g, ShadcnDraw.fit("方向键微调 · R 复位 · Alt 自由放置", panelW - 2 * PAD, 7f), panelX + PAD, hint + 10f, 7f,
+        HudDraw.textMid(g, ShadcnDraw.fit(dev.guizhou.util.lang.ClientLanguage.text("方向键微调 · R 复位 · Alt 自由放置"), panelW - 2 * PAD, 7f), panelX + PAD, hint + 10f, 7f,
                 HudFonts.REGULAR, ShadcnDraw.SUBTLE);
     }
 

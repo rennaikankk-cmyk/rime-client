@@ -30,8 +30,8 @@ public class CommandArgumentType implements ArgumentType<Command>, CommandExcept
         List<String> guesses = FuzzyMatch.didYouMean(value, GuizhouWare.commandManager.getCommandAliases(), 1);
         reader.setCursor(start);
         throw (guesses.isEmpty()
-                ? CommandExceptions.invalidArgument("找不到命令 %s", value)
-                : CommandExceptions.invalidArgument("找不到命令 %s，你是不是想输入 %s？", value, guesses.get(0)))
+                ? CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("找不到命令 %s"), value)
+                : CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("找不到命令 %s，你是不是想输入 %s？"), value, guesses.get(0)))
                 .createWithContext(reader);
     }
 

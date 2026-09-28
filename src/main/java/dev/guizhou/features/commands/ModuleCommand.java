@@ -30,6 +30,9 @@ public class ModuleCommand extends Command {
         this.module = module;
     }
 
+    @Override public String getDescription() { return dev.guizhou.util.lang.ClientLanguage.text("配置模块「") + module.getDisplayName() + dev.guizhou.util.lang.ClientLanguage.text("」的设置"); }
+    @Override public String getSummary() { return getDescription(); }
+
     @SuppressWarnings("unchecked")
     @Override
     public void createArgumentBuilder(LiteralArgumentBuilder<CommandManager> builder) {
@@ -47,6 +50,13 @@ public class ModuleCommand extends Command {
             } else if (Color.class.isAssignableFrom(type)) {
                 registerColorArgument(builder, (Setting<Color>) setting);
             }
+        }
+        // Keep legacy saved/typed setting identifiers accepted in both languages.
+        for (Setting<?> setting : module.getSettings()) {
+            String legacy = setting.getName().toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", "");
+            String canonical = key(setting);
+            var node = builder.build().getChild(canonical);
+            if (!legacy.equals(canonical) && node != null) builder.then(literal(legacy).redirect(node));
         }
     }
 

@@ -51,8 +51,8 @@ public class AutoXPModule extends Module {
         if (!throwing && !autoRepair.getValue()) return null;
         String pause = dev.guizhou.util.combat.UtilityActionGuard.pauseReason();
         if (pause != null) return pause;
-        if (dev.guizhou.util.inventory.ItemUseTracker.waiting("AutoXP")) return "等待动作确认";
-        if (!nullCheck() && isPaused()) return "等待投瓶条件";
+        if (dev.guizhou.util.inventory.ItemUseTracker.waiting("AutoXP")) return dev.guizhou.util.lang.ClientLanguage.text("等待动作确认");
+        if (!nullCheck() && isPaused()) return dev.guizhou.util.lang.ClientLanguage.text("等待投瓶条件");
         return xpNeeded() + " XP";
     }
 

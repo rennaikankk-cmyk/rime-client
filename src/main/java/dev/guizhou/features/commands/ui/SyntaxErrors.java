@@ -23,24 +23,24 @@ public final class SyntaxErrors {
         BuiltInExceptionProvider b = CommandSyntaxException.BUILT_IN_EXCEPTIONS;
         CommandExceptionType type = e.getType();
         String raw = e.getRawMessage() == null ? "" : e.getRawMessage().getString();
-        if (type == b.dispatcherUnknownCommand()) return "命令不完整或不存在";
-        if (type == b.dispatcherUnknownArgument()) return "参数不正确";
-        if (type == b.dispatcherExpectedArgumentSeparator()) return "参数之间需要用空格分隔";
-        if (type == b.dispatcherParseException()) return "无法解析参数";
+        if (type == b.dispatcherUnknownCommand()) return dev.guizhou.util.lang.ClientLanguage.text("命令不完整或不存在");
+        if (type == b.dispatcherUnknownArgument()) return dev.guizhou.util.lang.ClientLanguage.text("参数不正确");
+        if (type == b.dispatcherExpectedArgumentSeparator()) return dev.guizhou.util.lang.ClientLanguage.text("参数之间需要用空格分隔");
+        if (type == b.dispatcherParseException()) return dev.guizhou.util.lang.ClientLanguage.text("无法解析参数");
         if (type == b.readerExpectedInt() || type == b.readerInvalidInt()
-                || type == b.readerExpectedLong() || type == b.readerInvalidLong()) return "这里需要一个整数";
+                || type == b.readerExpectedLong() || type == b.readerInvalidLong()) return dev.guizhou.util.lang.ClientLanguage.text("这里需要一个整数");
         if (type == b.readerExpectedDouble() || type == b.readerInvalidDouble()
-                || type == b.readerExpectedFloat() || type == b.readerInvalidFloat()) return "这里需要一个数字";
-        if (type == b.readerExpectedBool() || type == b.readerInvalidBool()) return "这里需要 true 或 false";
+                || type == b.readerExpectedFloat() || type == b.readerInvalidFloat()) return dev.guizhou.util.lang.ClientLanguage.text("这里需要一个数字");
+        if (type == b.readerExpectedBool() || type == b.readerInvalidBool()) return dev.guizhou.util.lang.ClientLanguage.text("这里需要 true 或 false");
         if (type == b.readerExpectedStartOfQuote() || type == b.readerExpectedEndOfQuote()
-                || type == b.readerInvalidEscape()) return "引号不完整";
-        if (type == b.readerExpectedSymbol()) return "缺少符号";
+                || type == b.readerInvalidEscape()) return dev.guizhou.util.lang.ClientLanguage.text("引号不完整");
+        if (type == b.readerExpectedSymbol()) return dev.guizhou.util.lang.ClientLanguage.text("缺少符号");
         if (type == b.integerTooLow() || type == b.longTooLow()
-                || type == b.doubleTooLow() || type == b.floatTooLow()) return bound("数值不能小于 ", raw);
+                || type == b.doubleTooLow() || type == b.floatTooLow()) return bound(dev.guizhou.util.lang.ClientLanguage.text("数值不能小于 "), raw);
         if (type == b.integerTooHigh() || type == b.longTooHigh()
-                || type == b.doubleTooHigh() || type == b.floatTooHigh()) return bound("数值不能大于 ", raw);
-        if (type == b.literalIncorrect()) return "无法识别的子命令";
-        return raw.isBlank() ? "参数不正确" : raw;
+                || type == b.doubleTooHigh() || type == b.floatTooHigh()) return bound(dev.guizhou.util.lang.ClientLanguage.text("数值不能大于 "), raw);
+        if (type == b.literalIncorrect()) return dev.guizhou.util.lang.ClientLanguage.text("无法识别的子命令");
+        return raw.isBlank() ? dev.guizhou.util.lang.ClientLanguage.text("参数不正确") : raw;
     }
 
     /**

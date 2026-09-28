@@ -19,7 +19,7 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE;
 public final class CloudConfigsScreen extends Screen {
     private final Screen parent;
     private ShadcnTextField name;
-    private String scope = "private", status = "云参数与当前会员账号绑定";
+    private String scope = "private", status = dev.guizhou.util.lang.ClientLanguage.text("云参数与当前会员账号绑定");
     private List<String> names = List.of();
     private final List<Hit> hits = new ArrayList<>();
     private float x, y, w, h, scale = 1;
@@ -31,7 +31,7 @@ public final class CloudConfigsScreen extends Screen {
     }
 
     public CloudConfigsScreen(Screen parent) {
-        super(Component.literal("云参数"));
+        super(Component.literal(dev.guizhou.util.lang.ClientLanguage.text("云参数")));
         this.parent = parent;
     }
 
@@ -46,15 +46,15 @@ public final class CloudConfigsScreen extends Screen {
     private void refresh(String success) {
         int version = ++requestVersion;
         String currentScope = scope;
-        status = "正在读取云参数…";
+        status = dev.guizhou.util.lang.ClientLanguage.text("正在读取云参数…");
         CloudConfigClient.request(currentScope, "list", null, null, reply -> {
             if (version != requestVersion || !currentScope.equals(scope)) return;
             if (!reply.ok()) { status = reply.message(); return; }
             names = reply.names();
             scroll = 0;
             status = success != null ? success : names.isEmpty()
-                    ? "这里还没有参数预设"
-                    : "选择预设，或输入名称后操作";
+                    ? dev.guizhou.util.lang.ClientLanguage.text("这里还没有参数预设")
+                    : dev.guizhou.util.lang.ClientLanguage.text("选择预设，或输入名称后操作");
         });
     }
 
@@ -63,30 +63,30 @@ public final class CloudConfigsScreen extends Screen {
         boolean qualified = publicPreset() && ("load".equals(action) || "delete".equals(action));
         if (!(selected.matches("[A-Za-z0-9_-]{1,40}")
                 || qualified && selected.matches("[^/]{1,48}/[A-Za-z0-9_-]{1,40}"))) {
-            status = "请输入有效的参数名称";
+            status = dev.guizhou.util.lang.ClientLanguage.text("请输入有效的参数名称");
             return;
         }
         String bundle = null;
         if ("save".equals(action)) {
             try { bundle = GuizhouWare.configManager.exportBundle(null, publicPreset()); }
-            catch (Exception failure) { status = "导出当前参数失败"; return; }
+            catch (Exception failure) { status = dev.guizhou.util.lang.ClientLanguage.text("导出当前参数失败"); return; }
         }
         int version = ++requestVersion;
         String currentScope = scope;
-        status = "正在连接云端…";
+        status = dev.guizhou.util.lang.ClientLanguage.text("正在连接云端…");
         CloudConfigClient.request(currentScope, action, selected, bundle, reply -> {
             if (version != requestVersion || !currentScope.equals(scope)) return;
             if (!reply.ok()) { status = reply.message(); return; }
             if ("load".equals(action)) {
                 if (!GuizhouWare.configManager.applyBundle(reply.bundle(), publicPreset())) {
-                    status = "云端参数格式不兼容"; return;
+                    status = dev.guizhou.util.lang.ClientLanguage.text("云端参数格式不兼容"); return;
                 }
                 GuizhouWare.configManager.save();
-                status = "已应用参数：" + selected;
+                status = dev.guizhou.util.lang.ClientLanguage.text("已应用参数：") + selected;
             } else {
                 refresh("save".equals(action)
-                        ? "已保存：" + reply.message()
-                        : "已删除：" + selected);
+                        ? dev.guizhou.util.lang.ClientLanguage.text("已保存：") + reply.message()
+                        : dev.guizhou.util.lang.ClientLanguage.text("已删除：") + selected);
             }
         });
     }
@@ -109,15 +109,15 @@ public final class CloudConfigsScreen extends Screen {
         g.pose().pushMatrix(); g.pose().scale(scale, scale);
         panel(g, x, y, w, h, 9);
         round(g, x + 1, y + 1, w - 2, 3, 2, accent());
-        text(g, "云参数", x + 18, y + 14, 18, 700, TEXT);
-        text(g, "私人同步与公开预设", x + 18, y + 41, 10, MUTED);
-        button(g, "返回", x + w - 66, y + 14, 48, 24, mx, my, this::onClose);
-        button(g, "私人参数", x + 18, y + 68, 92, 26, mx, my, () -> switchScope("private"));
-        button(g, "公开预设", x + 116, y + 68, 92, 26, mx, my, () -> switchScope("public"));
+        text(g, dev.guizhou.util.lang.ClientLanguage.text("云参数"), x + 18, y + 14, 18, 700, TEXT);
+        text(g, dev.guizhou.util.lang.ClientLanguage.text("私人同步与公开预设"), x + 18, y + 41, 10, MUTED);
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("返回"), x + w - 66, y + 14, 48, 24, mx, my, this::onClose);
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("私人参数"), x + 18, y + 68, 92, 26, mx, my, () -> switchScope("private"));
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("公开预设"), x + 116, y + 68, 92, 26, mx, my, () -> switchScope("public"));
         round(g, x + (publicPreset() ? 116 : 18), y + 95, 92, 2, 1, accent());
         text(g, publicPreset()
-                ? "公开预设只分享模块参数，其他会员可以载入"
-                : "私人参数只对当前会员账号可见", x + 18, y + 108, 9, MUTED);
+                ? dev.guizhou.util.lang.ClientLanguage.text("公开预设只分享模块参数，其他会员可以载入")
+                : dev.guizhou.util.lang.ClientLanguage.text("私人参数只对当前会员账号可见"), x + 18, y + 108, 9, MUTED);
         float listTop = y + 128, listBottom = y + h - 107;
         g.enableScissor((int) x + 12, (int) listTop, (int) (x + w - 12), (int) listBottom);
         int visible = Math.max(1, (int) ((listBottom - listTop) / 27));
@@ -132,12 +132,12 @@ public final class CloudConfigsScreen extends Screen {
         }
         g.disableScissor();
         name.bounds(x + 18, y + h - 89, w - 36, 27);
-        name.draw(g, publicPreset() ? "输入名称，载入时可输入 账号/名称" : "输入参数名称");
+        name.draw(g, publicPreset() ? dev.guizhou.util.lang.ClientLanguage.text("输入名称，载入时可输入 账号/名称") : dev.guizhou.util.lang.ClientLanguage.text("输入参数名称"));
         float bw = (w - 54) / 4;
-        button(g, "刷新", x + 18, y + h - 53, bw, 25, mx, my, this::refresh);
-        button(g, publicPreset() ? "公开发布" : "同步当前", x + 24 + bw, y + h - 53, bw, 25, mx, my, () -> request("save"));
-        button(g, "载入", x + 30 + 2 * bw, y + h - 53, bw, 25, mx, my, () -> request("load"));
-        button(g, "删除我的", x + 36 + 3 * bw, y + h - 53, bw, 25, mx, my, () -> request("delete"));
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("刷新"), x + 18, y + h - 53, bw, 25, mx, my, this::refresh);
+        button(g, publicPreset() ? dev.guizhou.util.lang.ClientLanguage.text("公开发布") : dev.guizhou.util.lang.ClientLanguage.text("同步当前"), x + 24 + bw, y + h - 53, bw, 25, mx, my, () -> request("save"));
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("载入"), x + 30 + 2 * bw, y + h - 53, bw, 25, mx, my, () -> request("load"));
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("删除我的"), x + 36 + 3 * bw, y + h - 53, bw, 25, mx, my, () -> request("delete"));
         text(g, fit(status, w - 36, 9), x + 18, y + h - 17, 9, MUTED);
         g.pose().popMatrix();
     }

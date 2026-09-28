@@ -74,7 +74,7 @@ public class AutoReconnectModule extends Module {
         int y = height - 28;
         reconnectButton = Button.builder(Component.literal(label(now)), b -> reconnectNow())
                 .bounds(width / 2 - 152, y, 150, 20).build();
-        cancelButton = Button.builder(Component.literal("取消自动重连"), b -> plan.cancel("user"))
+        cancelButton = Button.builder(Component.literal(dev.guizhou.util.lang.ClientLanguage.text("取消自动重连")), b -> plan.cancel("user"))
                 .bounds(width / 2 + 2, y, 150, 20).build();
         Screens.getButtons(screen).add(reconnectButton);
         Screens.getButtons(screen).add(cancelButton);
@@ -90,10 +90,10 @@ public class AutoReconnectModule extends Module {
 
     private String label(long now) {
         return switch (plan.state()) {
-            case WAITING -> String.format("重连 (%.1fs) · 第%d次", plan.remainingMs(now) / 1000.0, plan.attempts() + 1);
-            case CANCELLED -> "intentional".equals(plan.reason()) ? "AutoLog 断线 · 手动重连" : "已取消 · 手动重连";
-            case EXHAUSTED -> "已达重连上限 · 手动重连";
-            case IDLE -> "立即重连";
+            case WAITING -> String.format(dev.guizhou.util.lang.ClientLanguage.text("重连 (%.1fs) · 第%d次"), plan.remainingMs(now) / 1000.0, plan.attempts() + 1);
+            case CANCELLED -> "intentional".equals(plan.reason()) ? dev.guizhou.util.lang.ClientLanguage.text("AutoLog 断线 · 手动重连") : dev.guizhou.util.lang.ClientLanguage.text("已取消 · 手动重连");
+            case EXHAUSTED -> dev.guizhou.util.lang.ClientLanguage.text("已达重连上限 · 手动重连");
+            case IDLE -> dev.guizhou.util.lang.ClientLanguage.text("立即重连");
         };
     }
 

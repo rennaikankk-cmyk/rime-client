@@ -15,6 +15,7 @@ public final class CommandPresentationTest {
     private static int checks;
 
     public static void main(String[] args) {
+        dev.guizhou.util.lang.ClientLanguage.bind(() -> true);
         legacyTones();
         repeatCollapsing();
         pagination();

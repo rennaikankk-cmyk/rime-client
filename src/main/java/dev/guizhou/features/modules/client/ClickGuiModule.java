@@ -16,6 +16,11 @@ import java.awt.*;
 public class ClickGuiModule extends Module {
     private static ClickGuiModule INSTANCE;
 
+    public final Setting<dev.guizhou.util.lang.ClientLanguage.Language> language =
+            mode("Language", dev.guizhou.util.lang.ClientLanguage.Language.ENGLISH)
+                    .described("Interface language: English or Chinese. Takes effect immediately.");
+    private final Setting<Integer> languageRevision = num("LanguageRevision", 1, 1, 1);
+
     public Setting<String>  prefix           = str("Prefix", "rime");
     public Setting<Boolean> blurBackground   = bool("BlurBackground", true);
     public Setting<Boolean> descriptions     = bool("Descriptions", true);
@@ -116,6 +121,23 @@ public class ClickGuiModule extends Module {
         panelLayout.setVisibility(v -> false);
 
         INSTANCE = this;
+        languageRevision.setVisibility(v -> false);
+        dev.guizhou.util.lang.ClientLanguage.bind(() -> language.getValue()
+                == dev.guizhou.util.lang.ClientLanguage.Language.CHINESE);
+    }
+
+    @Override
+    public void fromJson(com.google.gson.JsonElement element) {
+        super.fromJson(element);
+        if (element != null && element.isJsonObject()) {
+            var object = element.getAsJsonObject();
+            var revision = object.get("LanguageRevision");
+            if (revision == null || !revision.isJsonPrimitive() || !"1".equals(revision.getAsString())) {
+                // One-time migration requested for all existing configurations.
+                language.setValue(dev.guizhou.util.lang.ClientLanguage.Language.ENGLISH);
+            }
+            languageRevision.setValue(1);
+        }
     }
 
     @Subscribe
@@ -124,7 +146,7 @@ public class ClickGuiModule extends Module {
                 && event.getSetting().getFeature().equals(this)) {
             if (event.getSetting().equals(this.prefix)) {
                 GuizhouWare.commandManager.setCommandPrefix(this.prefix.getPlannedValue());
-                Command.sendMessage("命令前缀已改为 {accent} %s",
+                Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("命令前缀已改为 {accent} %s"),
                         GuizhouWare.commandManager.getCommandPrefix());
             }
             if (event.getSetting().equals(this.clickGuiFont)
@@ -174,7 +196,7 @@ public class ClickGuiModule extends Module {
 
         Frame(String label) { this.label = label; }
 
-        @Override public String label() { return label; }
+        @Override public String label() { return dev.guizhou.util.lang.ClientLanguage.text(label); }
     }
 
 }

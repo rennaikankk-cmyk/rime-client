@@ -288,7 +288,7 @@ public class WaypointsModule extends Module {
             Vec3 pos = displayPos(waypoint);
             if (pos == null) continue;
             double distance = pos.distanceTo(eye);
-            String suffix = here.equals(waypoint.dimension) ? "" : " (" + WaypointMath.shortDimension(waypoint.dimension) + "换算)";
+            String suffix = here.equals(waypoint.dimension) ? "" : " (" + WaypointMath.shortDimension(waypoint.dimension) + dev.guizhou.util.lang.ClientLanguage.text("换算)");
             String text = String.format("%s %.0fm%s", waypoint.name, distance, suffix);
             WorldLabel.draw(event.getContext(), pos.x, pos.y + 1.2, pos.z, Math.min(distance, 64.0), text,
                     colorOf(waypoint).getRGB(), background.getValue().getRGB(), scale.getValue(), 0.6f);

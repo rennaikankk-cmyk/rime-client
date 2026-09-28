@@ -374,7 +374,7 @@ public class GuangxiElytraChaseModule extends Module {
         resetRuntime();
         syncFlightControl();
         if ((mode.getValue() == Mode.MACE || mode.getValue() == Mode.MXS) && !autoMaceDive.getValue()) {
-            dev.guizhou.features.commands.Command.sendMessage("重锤自动下砸未开启：滑翔中不会产生重击。可在 Mace 页开启 AutoMaceDive；背包需有胸甲或空槽用于收翼。旧配置保留了关闭状态。");
+            dev.guizhou.features.commands.Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("重锤自动下砸未开启：滑翔中不会产生重击。可在 Mace 页开启 AutoMaceDive；背包需有胸甲或空槽用于收翼。旧配置保留了关闭状态。"));
         }
     }
 
@@ -1155,7 +1155,7 @@ if (nullCheck() || mc.player == null) {
                 }
                 if (mc.player.tickCount - lastDiveWarningTick >= 200) {
                     lastDiveWarningTick = mc.player.tickCount;
-                    dev.guizhou.features.commands.Command.sendMessage("重锤暂时无法收翼：请保留胸甲或背包空槽，并关闭容器界面。");
+                    dev.guizhou.features.commands.Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("重锤暂时无法收翼：请保留胸甲或背包空槽，并关闭容器界面。"));
                 }
             }
             AABB observedBox = observedTargetBox();
@@ -2089,10 +2089,10 @@ if (nullCheck() || mc.player == null) {
 
     @Override
     public String getDisplayInfo() {
-        if (mc.player == null) return "等待进入世界";
-        if (manualOverride()) return "手动飞行优先";
-        if (!isValid(target)) return "等待目标";
-        if (paused()) return "暂停 / 回拉恢复";
+        if (mc.player == null) return dev.guizhou.util.lang.ClientLanguage.text("等待进入世界");
+        if (manualOverride()) return dev.guizhou.util.lang.ClientLanguage.text("手动飞行优先");
+        if (!isValid(target)) return dev.guizhou.util.lang.ClientLanguage.text("等待目标");
+        if (paused()) return dev.guizhou.util.lang.ClientLanguage.text("暂停 / 回拉恢复");
         if (maceDive.isActive()) return "Dive/" + maceDive.phase();
         if (combatAction != AerialCombatPolicy.Action.CHASE) return combatAction.name();
         Behavior b = behavior;

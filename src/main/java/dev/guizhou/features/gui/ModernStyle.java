@@ -199,7 +199,7 @@ final class ModernStyle extends ShellStyle {
         hits.clear();
         modalFrom = -1;
         hoverTarget = null;
-        hint = "左键打开设置 · 右键切换开关 · 中键收藏 · Ctrl+F 搜索 · Esc 返回";
+        hint = dev.guizhou.util.lang.ClientLanguage.text("左键打开设置 · 右键切换开关 · 中键收藏 · Ctrl+F 搜索 · Esc 返回");
         boolean world = mc.level != null;
         int top = world ? 0x9005070C : 0xF60B0D12, bottom = world ? 0xC805070C : 0xF6090A0E;
         RenderUtil.gradient(g, 0, 0, width, height, top, bottom, bottom, top);
@@ -266,7 +266,7 @@ final class ModernStyle extends ShellStyle {
         int items = cats.size() + 4;
         float ih = Math.clamp((statusTop - 12 - first - 44) / items, 24, 34);
         float ny = first;
-        sectionLabel(g, "模块", ny);
+        sectionLabel(g, dev.guizhou.util.lang.ClientLanguage.text("模块"), ny);
         ny += 18;
         for (Module.Category c : cats) {
             List<Module> mods = modulesIn(c);
@@ -283,20 +283,20 @@ final class ModernStyle extends ShellStyle {
             ny += ih;
         }
         ny += 8;
-        sectionLabel(g, "工具", ny);
+        sectionLabel(g, dev.guizhou.util.lang.ClientLanguage.text("工具"), ny);
         ny += 18;
         int favs = favorites().size();
-        navItem(g, Icon.STAR, "收藏", favs == 0 ? null : String.valueOf(favs), view == View.FAVORITES, true, ny, ih, mx, my,
+        navItem(g, Icon.STAR, dev.guizhou.util.lang.ClientLanguage.text("收藏"), favs == 0 ? null : String.valueOf(favs), view == View.FAVORITES, true, ny, ih, mx, my,
                 () -> { view = View.FAVORITES; gridTarget = 0; selected = null; });
         ny += ih;
-        navItem(g, Icon.FOLDER, "配置", null, view == View.CONFIGS, true, ny, ih, mx, my,
+        navItem(g, Icon.FOLDER, dev.guizhou.util.lang.ClientLanguage.text("配置"), null, view == View.CONFIGS, true, ny, ih, mx, my,
                 () -> { view = View.CONFIGS; listTarget = 0; selected = null; });
         ny += ih;
-        navItem(g, Icon.KEYBOARD, "快捷键", null, view == View.BINDS, true, ny, ih, mx, my,
+        navItem(g, Icon.KEYBOARD, dev.guizhou.util.lang.ClientLanguage.text("快捷键"), null, view == View.BINDS, true, ny, ih, mx, my,
                 () -> { view = View.BINDS; listTarget = 0; selected = null; });
         ny += ih;
         boolean inWorld = mc.level != null;
-        navItem(g, Icon.HUD, "编辑 HUD", inWorld ? null : "进入世界后", false, inWorld, ny, ih, mx, my, () -> {
+        navItem(g, Icon.HUD, dev.guizhou.util.lang.ClientLanguage.text("编辑 HUD"), inWorld ? null : dev.guizhou.util.lang.ClientLanguage.text("进入世界后"), false, inWorld, ny, ih, mx, my, () -> {
             save();
             HudClientModule hud = GuizhouWare.moduleManager.getModuleByClass(HudClientModule.class);
             if (hud != null) hud.openEditor(screen);
@@ -307,7 +307,7 @@ final class ModernStyle extends ShellStyle {
         outline(g, x + 12, statusTop, SIDEBAR - 24, 48, 12, 1, BORDER);
         round(g, x + 22, statusTop + 11, 26, 26, 8, alpha(ok ? SUCCESS : WARNING, .14f));
         icon(g, Icon.SHIELD, x + 27, statusTop + 16, 16, ok ? SUCCESS : WARNING);
-        text(g, ok ? "授权有效" : "未授权", x + 56, statusTop + 10, 10, HudFonts.SEMI, TEXT);
+        text(g, ok ? dev.guizhou.util.lang.ClientLanguage.text("授权有效") : dev.guizhou.util.lang.ClientLanguage.text("未授权"), x + 56, statusTop + 10, 10, HudFonts.SEMI, TEXT);
         text(g, fit(mc.getUser().getName(), SIDEBAR - 80, 8.5f), x + 56, statusTop + 26, 8.5f, MUTED);
     }
 
@@ -341,15 +341,15 @@ final class ModernStyle extends ShellStyle {
         float tx = x + SIDEBAR + 24, ty = y + 20;
         List<Module> list = view == View.CATEGORY || view == View.FAVORITES ? visibleModules() : List.of();
         String title = switch (view) {
-            case CATEGORY -> query.isBlank() ? categoryName(category) : "搜索结果";
-            case FAVORITES -> "收藏";
-            case CONFIGS -> "配置";
-            case BINDS -> "快捷键";
+            case CATEGORY -> query.isBlank() ? categoryName(category) : dev.guizhou.util.lang.ClientLanguage.text("搜索结果");
+            case FAVORITES -> dev.guizhou.util.lang.ClientLanguage.text("收藏");
+            case CONFIGS -> dev.guizhou.util.lang.ClientLanguage.text("配置");
+            case BINDS -> dev.guizhou.util.lang.ClientLanguage.text("快捷键");
         };
         String sub = switch (view) {
-            case CATEGORY, FAVORITES -> list.size() + " 个模块 · " + list.stream().filter(Module::isEnabled).count() + " 已启用";
-            case CONFIGS -> "保存、切换或删除整套设置";
-            case BINDS -> "点击按键即可改绑，Delete 清除";
+            case CATEGORY, FAVORITES -> list.size() + dev.guizhou.util.lang.ClientLanguage.text(" 个模块 · ") + list.stream().filter(Module::isEnabled).count() + dev.guizhou.util.lang.ClientLanguage.text(" 已启用");
+            case CONFIGS -> dev.guizhou.util.lang.ClientLanguage.text("保存、切换或删除整套设置");
+            case BINDS -> dev.guizhou.util.lang.ClientLanguage.text("点击按键即可改绑，Delete 清除");
         };
         text(g, title, tx, ty, 18, HudFonts.SEMI, TEXT);
         text(g, sub, tx, ty + 25, 9, MUTED);
@@ -357,28 +357,28 @@ final class ModernStyle extends ShellStyle {
         float closeX = x + w - 46;
         iconButton(g, Icon.CLOSE, closeX, y + 20, 28, 28, mx, my, screen::onClose);
         if (back != null) {
-            button(g, "返回面板", Icon.GRID, closeX - 104, y + 20, 96, 28, mx, my, false, 0, this::goBack);
+            button(g, dev.guizhou.util.lang.ClientLanguage.text("返回面板"), Icon.GRID, closeX - 104, y + 20, 96, 28, mx, my, false, 0, this::goBack);
             closeX -= 106;
         }
         if (view == View.CONFIGS) return;
         float sw = Math.min(240, (w - SIDEBAR) * .32f), sx = closeX - 10 - sw;
         search.bounds(sx, y + 20, sw, 28);
-        search.draw(g, view == View.BINDS ? "搜索快捷键…" : "搜索全部模块…");
+        search.draw(g, view == View.BINDS ? dev.guizhou.util.lang.ClientLanguage.text("搜索快捷键…") : dev.guizhou.util.lang.ClientLanguage.text("搜索全部模块…"));
         icon(g, Icon.SEARCH, sx + 9, y + 27, 14, search.focused ? accent() : SUBTLE);
         hit(sx, y + 20, sw, 28, b -> { if (b == 0) search.focused = true; });
         if (view == View.BINDS) return;
         float segW = 0;
-        for (Filter f : Filter.values()) segW += width(f.label, 9.5f) + 22;
+        for (Filter f : Filter.values()) segW += width(dev.guizhou.util.lang.ClientLanguage.text(f.label), 9.5f) + 22;
         float fx = sx - 10 - segW - 6;
         if (fx < tx + width(title, 18, HudFonts.SEMI) + 20) return;
         round(g, fx, y + 20, segW + 6, 28, 9, SURFACE);
         outline(g, fx, y + 20, segW + 6, 28, 9, 1, BORDER);
         float ox = fx + 3;
         for (Filter f : Filter.values()) {
-            float fw = width(f.label, 9.5f) + 22;
+            float fw = width(dev.guizhou.util.lang.ClientLanguage.text(f.label), 9.5f) + 22;
             float on = ease("filter:" + f, filter == f ? 1 : 0, 18);
             if (on > .01f) round(g, ox, y + 23, fw, 22, 7, alpha(RAISED, on));
-            textCentered(g, f.label, ox + fw / 2, y + 29, 9.5f, filter == f ? HudFonts.SEMI : HudFonts.REGULAR,
+            textCentered(g, dev.guizhou.util.lang.ClientLanguage.text(f.label), ox + fw / 2, y + 29, 9.5f, filter == f ? HudFonts.SEMI : HudFonts.REGULAR,
                     mix(MUTED, TEXT, on));
             final Filter target = f;
             hit(ox, y + 23, fw, 22, b -> { if (b == 0) { filter = target; gridTarget = 0; } });
@@ -413,8 +413,8 @@ final class ModernStyle extends ShellStyle {
         if (list.isEmpty()) {
             float ex = gx + gw / 2;
             icon(g, view == View.FAVORITES ? Icon.STAR : Icon.SEARCH, ex - 14, gy + gh / 2 - 34, 28, SUBTLE);
-            textCentered(g, view == View.FAVORITES ? "还没有收藏的模块" : "没有匹配的模块", ex, gy + gh / 2, 11, HudFonts.SEMI, MUTED);
-            textCentered(g, view == View.FAVORITES ? "在模块卡片上点击星标或按鼠标中键收藏" : "换个关键词或筛选条件试试",
+            textCentered(g, view == View.FAVORITES ? dev.guizhou.util.lang.ClientLanguage.text("还没有收藏的模块") : dev.guizhou.util.lang.ClientLanguage.text("没有匹配的模块"), ex, gy + gh / 2, 11, HudFonts.SEMI, MUTED);
+            textCentered(g, view == View.FAVORITES ? dev.guizhou.util.lang.ClientLanguage.text("在模块卡片上点击星标或按鼠标中键收藏") : dev.guizhou.util.lang.ClientLanguage.text("换个关键词或筛选条件试试"),
                     ex, gy + gh / 2 + 17, 8.5f, HudFonts.REGULAR, SUBTLE);
         }
         scrollbar(g, gx + gw + 5, gy, gh, scroll, gridMax);
@@ -525,10 +525,10 @@ final class ModernStyle extends ShellStyle {
         for (String line : desc) { text(g, line, px, descY, 9, MUTED); descY += 13; }
         float ctlY = Math.max(descY + 6, py + 44);
         toggle(g, px, ctlY + 5, m.enabled, m.isEnabled(), m::toggleByUser);
-        text(g, m.isEnabled() ? "已启用" : "未启用", px + 38, ctlY + 8, 9.5f, HudFonts.SEMI, m.isEnabled() ? accent() : MUTED);
+        text(g, m.isEnabled() ? dev.guizhou.util.lang.ClientLanguage.text("已启用") : dev.guizhou.util.lang.ClientLanguage.text("未启用"), px + 38, ctlY + 8, 9.5f, HudFonts.SEMI, m.isEnabled() ? accent() : MUTED);
         String bind = bindLabel(m.bind.getValue());
         float bindW = 104;
-        button(g, bind == null ? "绑定按键" : bind, Icon.KEYBOARD, dx + dw - 20 - bindW - 34, ctlY, bindW, 26, mx, my, false, 0,
+        button(g, bind == null ? dev.guizhou.util.lang.ClientLanguage.text("绑定按键") : bind, Icon.KEYBOARD, dx + dw - 20 - bindW - 34, ctlY, bindW, 26, mx, my, false, 0,
                 () -> { closePopovers(); binding = m.bind; search.focused = false; });
         iconButton(g, isFavorite(m) ? Icon.STAR_FILL : Icon.STAR, dx + dw - 46, ctlY, 26, 26, mx, my, () -> toggleFavorite(m));
 
@@ -573,7 +573,7 @@ final class ModernStyle extends ShellStyle {
             if (ry + rh > top && ry < bottom) drawSetting(g, m, s, px, ry, pw, rh, mx, my, top, bottom);
             ry += rh;
         }
-        if (rows.isEmpty()) textCentered(g, "这个模块没有可调整的设置", dx + dw / 2, top + 24, 9.5f, HudFonts.REGULAR, SUBTLE);
+        if (rows.isEmpty()) textCentered(g, dev.guizhou.util.lang.ClientLanguage.text("这个模块没有可调整的设置"), dx + dw / 2, top + 24, 9.5f, HudFonts.REGULAR, SUBTLE);
         g.disableScissor();
         scrollbar(g, dx + dw - 8, top, bottom - top, scroll, drawerMax);
         g.disableScissor();
@@ -654,11 +654,11 @@ final class ModernStyle extends ShellStyle {
             icon(g, Icon.CHEVRON, cx + cw - 20, cy + 7, 12, MUTED);
         } else if (v instanceof Bind bind) {
             icon(g, Icon.KEYBOARD, cx + 9, cy + 7, 12, MUTED);
-            String label2 = binding == s ? "按下按键…" : bindLabel(bind) == null ? "未绑定" : bindLabel(bind);
+            String label2 = binding == s ? dev.guizhou.util.lang.ClientLanguage.text("按下按键…") : bindLabel(bind) == null ? dev.guizhou.util.lang.ClientLanguage.text("未绑定") : bindLabel(bind);
             text(g, fit(label2, cw - 36, 9.5f), cx + 27, cy + 8.5f, 9.5f, binding == s ? accent() : TEXT);
         } else {
             String value = v instanceof Vector2f vec ? number(vec.x) + ", " + number(vec.y) : v instanceof Number n ? number(n) : String.valueOf(v);
-            text(g, fit(value.isEmpty() ? "（空）" : value, cw - 20, 9.5f), cx + 10, cy + 8.5f, 9.5f, value.isEmpty() ? SUBTLE : TEXT);
+            text(g, fit(value.isEmpty() ? dev.guizhou.util.lang.ClientLanguage.text("（空）") : value, cw - 20, 9.5f), cx + 10, cy + 8.5f, 9.5f, value.isEmpty() ? SUBTLE : TEXT);
         }
         if (fully) hit(cx, cy, cw, 26, b -> {
             if (b == 1) { s.reset(); return; }
@@ -681,19 +681,19 @@ final class ModernStyle extends ShellStyle {
         float gx = x + SIDEBAR + 20, gy = y + TOPBAR + 16, gw = w - SIDEBAR - 40;
         round(g, gx, gy, gw, 66, 14, SURFACE);
         outline(g, gx, gy, gw, 66, 14, 1, BORDER);
-        text(g, "保存当前设置为新配置", gx + 16, gy + 12, 10.5f, HudFonts.SEMI, TEXT);
-        text(g, validation.isEmpty() ? "名称可用中文、字母、数字、下划线和短横线" : validation, gx + 16, gy + 28, 8.5f,
+        text(g, dev.guizhou.util.lang.ClientLanguage.text("保存当前设置为新配置"), gx + 16, gy + 12, 10.5f, HudFonts.SEMI, TEXT);
+        text(g, validation.isEmpty() ? dev.guizhou.util.lang.ClientLanguage.text("名称可用中文、字母、数字、下划线和短横线") : validation, gx + 16, gy + 28, 8.5f,
                 validation.isEmpty() ? SUBTLE : DANGER);
         float fieldW = Math.min(260, gw * .4f);
         configName.bounds(gx + gw - fieldW - 124, gy + 19, fieldW, 28);
-        configName.draw(g, "配置名称");
+        configName.draw(g, dev.guizhou.util.lang.ClientLanguage.text("配置名称"));
         hit(configName.x, configName.y, configName.w, configName.h, b -> { if (b == 0) configName.focused = true; });
-        button(g, "保存", Icon.SAVE, gx + gw - 110, gy + 19, 94, 28, mx, my, true, 0, this::saveNewConfig);
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("保存"), Icon.SAVE, gx + gw - 110, gy + 19, 94, 28, mx, my, true, 0, this::saveNewConfig);
 
         List<String> names = GuizhouWare.configManager == null ? List.of() : GuizhouWare.configManager.listNamed();
         float ly = gy + 82, lh = y + h - FOOTER - 6 - ly;
-        text(g, "已保存的配置 · " + names.size(), gx + 2, ly, 9, HudFonts.SEMI, SUBTLE);
-        button(g, "云参数", Icon.EXTERNAL, gx + gw - 108, ly - 4, 108, 20, mx, my, false, 0, screen::openCloudConfigs);
+        text(g, dev.guizhou.util.lang.ClientLanguage.text("已保存的配置 · ") + names.size(), gx + 2, ly, 9, HudFonts.SEMI, SUBTLE);
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("云参数"), Icon.EXTERNAL, gx + gw - 108, ly - 4, 108, 20, mx, my, false, 0, screen::openCloudConfigs);
         ly += 18;
         lh -= 18;
         float rowH = 54;
@@ -711,16 +711,16 @@ final class ModernStyle extends ShellStyle {
                 round(g, gx + 14, ry + 13, 28, 28, 8, alpha(accent(), .14f));
                 icon(g, Icon.FOLDER, gx + 20, ry + 19, 16, accent());
                 text(g, fit(name, gw - 360, 11), gx + 54, ry + 13, 11, HudFonts.SEMI, TEXT);
-                text(g, "包含全部模块、HUD 和快捷键", gx + 54, ry + 30, 8.5f, SUBTLE);
+                text(g, dev.guizhou.util.lang.ClientLanguage.text("包含全部模块、HUD 和快捷键"), gx + 54, ry + 30, 8.5f, SUBTLE);
                 if (my >= ly && my < ly + lh) {
                     boolean armed = name.equals(pendingDelete) && System.currentTimeMillis() - pendingDeleteAt < 3000;
                     float bx = gx + gw - 14;
                     bx -= 92;
-                    button(g, armed ? "确认删除" : "删除", Icon.TRASH, bx, ry + 13, 92, 28, mx, my, false, DANGER, () -> deleteConfig(name));
+                    button(g, armed ? dev.guizhou.util.lang.ClientLanguage.text("确认删除") : dev.guizhou.util.lang.ClientLanguage.text("删除"), Icon.TRASH, bx, ry + 13, 92, 28, mx, my, false, DANGER, () -> deleteConfig(name));
                     bx -= 100;
-                    button(g, "覆盖", Icon.SAVE, bx, ry + 13, 92, 28, mx, my, false, 0, () -> overwriteConfig(name));
+                    button(g, dev.guizhou.util.lang.ClientLanguage.text("覆盖"), Icon.SAVE, bx, ry + 13, 92, 28, mx, my, false, 0, () -> overwriteConfig(name));
                     bx -= 100;
-                    button(g, "加载", Icon.PLAY, bx, ry + 13, 92, 28, mx, my, true, 0, () -> loadConfig(name));
+                    button(g, dev.guizhou.util.lang.ClientLanguage.text("加载"), Icon.PLAY, bx, ry + 13, 92, 28, mx, my, true, 0, () -> loadConfig(name));
                 }
             }
             ry += rowH + 8;
@@ -728,8 +728,8 @@ final class ModernStyle extends ShellStyle {
         g.disableScissor();
         if (names.isEmpty()) {
             icon(g, Icon.FOLDER, gx + gw / 2 - 14, ly + lh / 2 - 36, 28, SUBTLE);
-            textCentered(g, "还没有保存的配置", gx + gw / 2, ly + lh / 2, 11, HudFonts.SEMI, MUTED);
-            textCentered(g, "在上方输入名称并保存，就能随时切换整套设置", gx + gw / 2, ly + lh / 2 + 17, 8.5f, HudFonts.REGULAR, SUBTLE);
+            textCentered(g, dev.guizhou.util.lang.ClientLanguage.text("还没有保存的配置"), gx + gw / 2, ly + lh / 2, 11, HudFonts.SEMI, MUTED);
+            textCentered(g, dev.guizhou.util.lang.ClientLanguage.text("在上方输入名称并保存，就能随时切换整套设置"), gx + gw / 2, ly + lh / 2 + 17, 8.5f, HudFonts.REGULAR, SUBTLE);
         }
         scrollbar(g, gx + gw + 5, ly, lh, scroll, listMax);
     }
@@ -758,7 +758,7 @@ final class ModernStyle extends ShellStyle {
                 text(g, fit(m.getDisplayName(), gw * .45f, 10.5f), gx + 40, ry + 10, 10.5f, HudFonts.SEMI, TEXT);
                 text(g, categoryName(m.getCategory()), gx + 40, ry + 25, 8, SUBTLE);
                 if (inside) {
-                    button(g, binding == m.bind ? "按下按键…" : bindLabel(m.bind.getValue()), Icon.KEYBOARD,
+                    button(g, binding == m.bind ? dev.guizhou.util.lang.ClientLanguage.text("按下按键…") : bindLabel(m.bind.getValue()), Icon.KEYBOARD,
                             gx + gw - 176, ry + 9, 124, 26, mx, my, false, 0, () -> { closePopovers(); binding = m.bind; search.focused = false; });
                     iconButton(g, Icon.CLOSE, gx + gw - 44, ry + 9, 26, 26, mx, my, () -> assign(m.bind, Bind.none()));
                 }
@@ -768,32 +768,32 @@ final class ModernStyle extends ShellStyle {
         g.disableScissor();
         if (bound.isEmpty()) {
             icon(g, Icon.KEYBOARD, gx + gw / 2 - 14, gy + gh / 2 - 36, 28, SUBTLE);
-            textCentered(g, q.isEmpty() ? "还没有绑定快捷键" : "没有匹配的快捷键", gx + gw / 2, gy + gh / 2, 11, HudFonts.SEMI, MUTED);
-            textCentered(g, "打开模块设置，点击「绑定按键」即可添加", gx + gw / 2, gy + gh / 2 + 17, 8.5f, HudFonts.REGULAR, SUBTLE);
+            textCentered(g, q.isEmpty() ? dev.guizhou.util.lang.ClientLanguage.text("还没有绑定快捷键") : dev.guizhou.util.lang.ClientLanguage.text("没有匹配的快捷键"), gx + gw / 2, gy + gh / 2, 11, HudFonts.SEMI, MUTED);
+            textCentered(g, dev.guizhou.util.lang.ClientLanguage.text("打开模块设置，点击「绑定按键」即可添加"), gx + gw / 2, gy + gh / 2 + 17, 8.5f, HudFonts.REGULAR, SUBTLE);
         }
         scrollbar(g, gx + gw + 5, gy, gh, scroll, listMax);
     }
 
     private void saveNewConfig() {
         String name = configName.value().trim();
-        if (!name.matches("[\\w\\-\\u4e00-\\u9fa5]{1,32}")) { validation = "名称无效：1–32 个中文、字母、数字、_ 或 -"; return; }
-        if (GuizhouWare.configManager.listNamed().contains(name)) { validation = "已存在同名配置，请在列表中使用「覆盖」"; return; }
+        if (!name.matches("[\\w\\-\\u4e00-\\u9fa5]{1,32}")) { validation = dev.guizhou.util.lang.ClientLanguage.text("名称无效：1–32 个中文、字母、数字、_ 或 -"); return; }
+        if (GuizhouWare.configManager.listNamed().contains(name)) { validation = dev.guizhou.util.lang.ClientLanguage.text("已存在同名配置，请在列表中使用「覆盖」"); return; }
         if (GuizhouWare.configManager.saveNamed(name)) {
-            showToast("已保存配置「" + name + "」");
+            showToast(dev.guizhou.util.lang.ClientLanguage.text("已保存配置「") + name + "」");
             UiSounds.success();
             configName = new ShadcnTextField("", s -> validation = "");
             validation = "";
-        } else { validation = "保存失败，请检查磁盘权限"; UiSounds.error(); }
+        } else { validation = dev.guizhou.util.lang.ClientLanguage.text("保存失败，请检查磁盘权限"); UiSounds.error(); }
     }
 
     private void overwriteConfig(String name) {
-        showToast(GuizhouWare.configManager.saveNamed(name) ? "已覆盖配置「" + name + "」" : "覆盖失败");
+        showToast(GuizhouWare.configManager.saveNamed(name) ? dev.guizhou.util.lang.ClientLanguage.text("已覆盖配置「") + name + "」" : dev.guizhou.util.lang.ClientLanguage.text("覆盖失败"));
     }
 
     private void loadConfig(String name) {
         boolean ok = GuizhouWare.configManager.loadNamed(name);
         if (ok) GuizhouWare.configManager.save();
-        showToast(ok ? "已加载配置「" + name + "」" : "加载失败");
+        showToast(ok ? dev.guizhou.util.lang.ClientLanguage.text("已加载配置「") + name + "」" : dev.guizhou.util.lang.ClientLanguage.text("加载失败"));
         if (ok) UiSounds.success(); else UiSounds.error();
     }
 
@@ -805,7 +805,7 @@ final class ModernStyle extends ShellStyle {
             return;
         }
         pendingDelete = null;
-        showToast(GuizhouWare.configManager.deleteNamed(name) ? "已删除配置「" + name + "」" : "删除失败");
+        showToast(GuizhouWare.configManager.deleteNamed(name) ? dev.guizhou.util.lang.ClientLanguage.text("已删除配置「") + name + "」" : dev.guizhou.util.lang.ClientLanguage.text("删除失败"));
     }
 
     private void showToast(String message) {
@@ -872,14 +872,14 @@ final class ModernStyle extends ShellStyle {
         round(g, ex, ey, ew, eh, 12, RAISED);
         outline(g, ex, ey, ew, eh, 12, 1, 0xFF3A4254);
         hit(ex, ey, ew, eh, b -> { });
-        text(g, fit(editing.getName(), ew - 32, 10.5f), ex + 14, ey + 12, 10.5f, HudFonts.SEMI, TEXT);
-        String help = editing.isColorSetting() ? "#RRGGBB 或 #RRGGBBAA"
-                : editing.hasRestriction() ? "范围 " + editing.getMin() + " – " + editing.getMax() : "Enter 应用 · Esc 取消";
+        text(g, fit(editing.getDisplayName(), ew - 32, 10.5f), ex + 14, ey + 12, 10.5f, HudFonts.SEMI, TEXT);
+        String help = editing.isColorSetting() ? dev.guizhou.util.lang.ClientLanguage.text("#RRGGBB 或 #RRGGBBAA")
+                : editing.hasRestriction() ? dev.guizhou.util.lang.ClientLanguage.text("范围 ") + editing.getMin() + " – " + editing.getMax() : dev.guizhou.util.lang.ClientLanguage.text("Enter 应用 · Esc 取消");
         text(g, fit(validation.isEmpty() ? help : validation, ew - 28, 8.5f), ex + 14, ey + 28, 8.5f, validation.isEmpty() ? SUBTLE : DANGER);
         editor.bounds(ex + 14, ey + 44, ew - 28, 28);
         editor.draw(g, "");
-        button(g, "取消", null, ex + ew - 164, ey + 82, 70, 26, mx, my, false, 0, () -> { editor = null; editing = null; });
-        button(g, "应用", Icon.CHECK, ex + ew - 86, ey + 82, 72, 26, mx, my, true, 0, this::commitEdit);
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("取消"), null, ex + ew - 164, ey + 82, 70, 26, mx, my, false, 0, () -> { editor = null; editing = null; });
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("应用"), Icon.CHECK, ex + ew - 86, ey + 82, 72, 26, mx, my, true, 0, this::commitEdit);
     }
 
     private void commitEdit() {
@@ -900,13 +900,13 @@ final class ModernStyle extends ShellStyle {
             } else next = editor.value();
             if (next instanceof Number n && editing.hasRestriction()) {
                 double min = ((Number) editing.getMin()).doubleValue(), max = ((Number) editing.getMax()).doubleValue();
-                if (n.doubleValue() < min || n.doubleValue() > max) { validation = "超出范围 " + number((Number) editing.getMin()) + " – " + number((Number) editing.getMax()); return; }
+                if (n.doubleValue() < min || n.doubleValue() > max) { validation = dev.guizhou.util.lang.ClientLanguage.text("超出范围 ") + number((Number) editing.getMin()) + " – " + number((Number) editing.getMax()); return; }
             }
             assign(editing, next);
             editor = null;
             editing = null;
         } catch (IllegalArgumentException exception) {
-            validation = "格式无效，请检查输入";
+            validation = dev.guizhou.util.lang.ClientLanguage.text("格式无效，请检查输入");
             UiSounds.error();
         }
     }
@@ -935,9 +935,9 @@ final class ModernStyle extends ShellStyle {
         outline(g, bx, by, bw, bh, 14, 1, 0xFF3A4254);
         round(g, bx + 18, by + 20, 34, 34, 10, alpha(accent(), .16f));
         icon(g, Icon.KEYBOARD, bx + 26, by + 28, 18, accent());
-        text(g, "按下新的快捷键", bx + 64, by + 22, 13, HudFonts.SEMI, TEXT);
+        text(g, dev.guizhou.util.lang.ClientLanguage.text("按下新的快捷键"), bx + 64, by + 22, 13, HudFonts.SEMI, TEXT);
         text(g, fit(binding.getFeature() instanceof Module m ? m.getDisplayName() : binding.getName(), bw - 90, 9), bx + 64, by + 41, 9, MUTED);
-        text(g, "支持鼠标按键 · Delete 清除 · Esc 取消", bx + 18, by + 80, 9, SUBTLE);
+        text(g, dev.guizhou.util.lang.ClientLanguage.text("支持鼠标按键 · Delete 清除 · Esc 取消"), bx + 18, by + 80, 9, SUBTLE);
     }
 
     // ------------------------------------------------------------ helpers
@@ -1003,20 +1003,20 @@ final class ModernStyle extends ShellStyle {
     }
 
     private String settingLabel(Module owner, Setting<?> s) {
-        String label = "CoupledCruise".equals(s.getName()) ? "GZBoost" : s.getName();
+        String label = "CoupledCruise".equals(s.getName()) ? "GZBoost" : s.getDisplayName();
         if (owner instanceof HudClientModule && label.startsWith(page + " ")) label = label.substring(page.length() + 1);
         return label;
     }
 
     private static String pageName(String page) {
         return switch (page) {
-            case "General" -> "常规";
-            case "Tricks" -> "技巧";
-            case "Colors" -> "颜色";
-            case "Elements" -> "元素";
-            case "Layout" -> "布局";
-            case "Render" -> "渲染";
-            case "Advanced" -> "高级";
+            case "General" -> dev.guizhou.util.lang.ClientLanguage.text("常规");
+            case "Tricks" -> dev.guizhou.util.lang.ClientLanguage.text("技巧");
+            case "Colors" -> dev.guizhou.util.lang.ClientLanguage.text("颜色");
+            case "Elements" -> dev.guizhou.util.lang.ClientLanguage.text("元素");
+            case "Layout" -> dev.guizhou.util.lang.ClientLanguage.text("布局");
+            case "Render" -> dev.guizhou.util.lang.ClientLanguage.text("渲染");
+            case "Advanced" -> dev.guizhou.util.lang.ClientLanguage.text("高级");
             default -> page;
         };
     }
@@ -1105,13 +1105,13 @@ final class ModernStyle extends ShellStyle {
 
     private static String categoryName(Module.Category c) {
         return switch (c) {
-            case COMBAT -> "战斗";
-            case MOVEMENT -> "移动";
-            case RENDER -> "渲染";
-            case PLAYER -> "玩家";
-            case WORLD -> "世界";
-            case CLIENT -> "客户端";
-            case FUNNY -> "趣味";
+            case COMBAT -> dev.guizhou.util.lang.ClientLanguage.text("战斗");
+            case MOVEMENT -> dev.guizhou.util.lang.ClientLanguage.text("移动");
+            case RENDER -> dev.guizhou.util.lang.ClientLanguage.text("渲染");
+            case PLAYER -> dev.guizhou.util.lang.ClientLanguage.text("玩家");
+            case WORLD -> dev.guizhou.util.lang.ClientLanguage.text("世界");
+            case CLIENT -> dev.guizhou.util.lang.ClientLanguage.text("客户端");
+            case FUNNY -> dev.guizhou.util.lang.ClientLanguage.text("趣味");
             case HUD -> "HUD";
         };
     }

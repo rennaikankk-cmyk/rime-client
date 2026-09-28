@@ -218,10 +218,10 @@ public class TelemetryManager extends Feature {
         if (mc.player == null || mc.level == null || mc.getConnection() == null) return;
         if (!noticeShown || noticeUpload != canUpload()) {
             String prefix = GuizhouWare.commandManager.getCommandPrefix();
-            Command.sendMessage("[诊断] " + (canUpload() ? "自动上传战斗、移动与纠正诊断。"
-                    : capabilityExpired() ? "自动诊断上传暂不可用：上传凭据已过期。" : "当前 JAR 无有效上传凭据，不能自动上传诊断。")
-                    + "不上传聊天、玩家名、玩家 UUID 或坐标；" + prefix + "telemetry status 查看接收状态。"
-                    + prefix + "diag 报告仍仅保存在本地。");
+            Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("[诊断] ") + (canUpload() ? dev.guizhou.util.lang.ClientLanguage.text("自动上传战斗、移动与纠正诊断。")
+                    : capabilityExpired() ? dev.guizhou.util.lang.ClientLanguage.text("自动诊断上传暂不可用：上传凭据已过期。") : dev.guizhou.util.lang.ClientLanguage.text("当前 JAR 无有效上传凭据，不能自动上传诊断。"))
+                    + dev.guizhou.util.lang.ClientLanguage.text("不上传聊天、玩家名、玩家 UUID 或坐标；") + prefix + dev.guizhou.util.lang.ClientLanguage.text("telemetry status 查看接收状态。")
+                    + prefix + dev.guizhou.util.lang.ClientLanguage.text("diag 报告仍仅保存在本地。"));
             noticeShown = true;
             noticeUpload = canUpload();
         }

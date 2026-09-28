@@ -48,7 +48,7 @@ public class CoordinatesHudModule extends HudModule {
             row1 += ShadcnDraw.width(AXES[i], AXIS, HudFonts.SEMI) + 3f + ShadcnDraw.width(values[i], VALUE, HudFonts.SEMI);
             if (i < 2) row1 += GROUP_GAP;
         }
-        String dim = nether ? "主世界" : "下界";
+        String dim = nether ? dev.guizhou.util.lang.ClientLanguage.text("主世界") : dev.guizhou.util.lang.ClientLanguage.text("下界");
         float row2 = end ? 0f : 9f + ShadcnDraw.width(dim, AXIS, HudFonts.SEMI) + 6f
                 + ShadcnDraw.width("X", AXIS, HudFonts.SEMI) + 3f + ShadcnDraw.width(subX, SUB, HudFonts.REGULAR) + GROUP_GAP
                 + ShadcnDraw.width("Z", AXIS, HudFonts.SEMI) + 3f + ShadcnDraw.width(subZ, SUB, HudFonts.REGULAR);

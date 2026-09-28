@@ -124,7 +124,7 @@ public final class CommandCompleter {
             if (CommandHelp.settingLiteral(candidate).equals(literal)) setting = candidate;
         }
         if (setting == null) return null;
-        return new LiteralMessage("当前 " + CommandHelp.formatValue(setting.getValue()) + " · " + CommandHelp.typeHint(setting));
+        return new LiteralMessage(dev.guizhou.util.lang.ClientLanguage.text("当前 ") + CommandHelp.formatValue(setting.getValue()) + " · " + CommandHelp.typeHint(setting));
     }
 
     private static Message tooltip(Command command, String alias) {

@@ -21,7 +21,7 @@ public final class MenuBackgroundScreen extends Screen {
     private float browseX, browseY, browseW, applyX, resetX, backX, buttonY, buttonW, buttonH;
 
     public MenuBackgroundScreen(Screen parent) {
-        super(Component.literal("主菜单背景"));
+        super(Component.literal(dev.guizhou.util.lang.ClientLanguage.text("主菜单背景")));
         this.parent = parent;
     }
 
@@ -39,11 +39,11 @@ public final class MenuBackgroundScreen extends Screen {
         float y = (height - cardH) / 2f;
         round(g, x, y, cardW, cardH, 3, 0xF00E0E11);
         outline(g, x, y, cardW, cardH, 3, 1, 0x26FFFFFF);
-        text(g, "主菜单背景", x + 14, y + 12, 13, HudFonts.BOLD, 0xFFFFFFFF);
+        text(g, dev.guizhou.util.lang.ClientLanguage.text("主菜单背景"), x + 14, y + 12, 13, HudFonts.BOLD, 0xFFFFFFFF);
         text(g, fit(MenuBackground.statusLine(), cardW - 28, 7.5f), x + 14, y + 32, 7.5f, HudFonts.REGULAR, 0xC8FFFFFF);
-        text(g, "PNG、JPG、GIF 会铺满菜单。MP4 / WEBM 可以记住，但还不能播放。", x + 14, y + 46, 6.5f, HudFonts.REGULAR, 0x88FFFFFF);
+        text(g, dev.guizhou.util.lang.ClientLanguage.text("PNG、JPG、GIF 会铺满菜单。MP4 / WEBM 可以记住，但还不能播放。"), x + 14, y + 46, 6.5f, HudFonts.REGULAR, 0x88FFFFFF);
         field.bounds(x + 14, y + 64, cardW - 28, 22);
-        field.draw(g, "文件路径");
+        field.draw(g, dev.guizhou.util.lang.ClientLanguage.text("文件路径"));
 
         buttonH = 18;
         buttonW = (cardW - 28 - 18) / 4f;
@@ -52,14 +52,14 @@ public final class MenuBackgroundScreen extends Screen {
         resetX = applyX + buttonW + 6;
         backX = resetX + buttonW + 6;
         browseY = buttonY = y + 98;
-        button(g, "浏览", browseX, buttonY, buttonW, buttonH, mouseX, mouseY);
-        button(g, "应用", applyX, buttonY, buttonW, buttonH, mouseX, mouseY);
-        button(g, "默认", resetX, buttonY, buttonW, buttonH, mouseX, mouseY);
-        button(g, "返回", backX, buttonY, buttonW, buttonH, mouseX, mouseY);
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("浏览"), browseX, buttonY, buttonW, buttonH, mouseX, mouseY);
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("应用"), applyX, buttonY, buttonW, buttonH, mouseX, mouseY);
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("默认"), resetX, buttonY, buttonW, buttonH, mouseX, mouseY);
+        button(g, dev.guizhou.util.lang.ClientLanguage.text("返回"), backX, buttonY, buttonW, buttonH, mouseX, mouseY);
         if (!notice.isEmpty()) {
             text(g, fit(notice, cardW - 28, 7.5f), x + 14, y + 128, 7.5f, HudFonts.REGULAR, 0xFFF2C14C);
         }
-        text(g, "不选文件时，仍随机播放风暴或咖啡动画。", x + 14, y + cardH - 22, 6.5f, HudFonts.REGULAR, 0x70FFFFFF);
+        text(g, dev.guizhou.util.lang.ClientLanguage.text("不选文件时，仍随机播放风暴或咖啡动画。"), x + 14, y + cardH - 22, 6.5f, HudFonts.REGULAR, 0x70FFFFFF);
     }
 
     private void button(GuiGraphics g, String label, float x, float y, float w, float h, int mx, int my) {
@@ -84,7 +84,7 @@ public final class MenuBackgroundScreen extends Screen {
         if (contains(mx, my, resetX, buttonY, buttonW, buttonH)) {
             MenuBackground.reset();
             field = new ShadcnTextField("", value -> {});
-            notice = "已恢复默认背景";
+            notice = dev.guizhou.util.lang.ClientLanguage.text("已恢复默认背景");
             return true;
         }
         if (contains(mx, my, backX, buttonY, buttonW, buttonH)) {
@@ -124,12 +124,12 @@ public final class MenuBackgroundScreen extends Screen {
 
     private void browse() {
         if (!MenuBackground.dialogsAvailable()) {
-            notice = "无法打开文件窗口，请把路径粘贴到上方";
+            notice = dev.guizhou.util.lang.ClientLanguage.text("无法打开文件窗口，请把路径粘贴到上方");
             return;
         }
         Path picked = MenuBackground.pickFile();
         if (picked == null) {
-            notice = "未选择文件";
+            notice = dev.guizhou.util.lang.ClientLanguage.text("未选择文件");
             return;
         }
         field = new ShadcnTextField(picked.toAbsolutePath().toString(), value -> {});
@@ -138,6 +138,6 @@ public final class MenuBackgroundScreen extends Screen {
 
     private void applyPath() {
         String error = MenuBackground.use(field.value());
-        notice = error == null ? "已更换背景" : error;
+        notice = error == null ? dev.guizhou.util.lang.ClientLanguage.text("已更换背景") : error;
     }
 }

@@ -103,18 +103,18 @@ public class Module extends Feature implements Jsonable, Toggleable {
     }
 
     public String getDisplayName() {
-        return this.displayName.getValue();
+        return ModuleNames.localizedDisplayName(getName(), this.displayName.getValue());
     }
 
     public void setDisplayName(String name) {
         Module module = GuizhouWare.moduleManager.getModuleByDisplayName(name);
         Module originalModule = GuizhouWare.moduleManager.getModuleByName(name);
         if (module == null && originalModule == null) {
-            Command.sendMessage("已将 {text} %s {} 重命名为 {cyan} %s", getDisplayName(), name);
+            Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("已将 {text} %s {} 重命名为 {cyan} %s"), getDisplayName(), name);
             this.displayName.setValue(name);
             return;
         }
-        Command.sendMessage("{red} 已存在同名模块");
+        Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("{red} 已存在同名模块"));
     }
 
     @Override
@@ -128,7 +128,7 @@ public class Module extends Feature implements Jsonable, Toggleable {
     }
 
     public String getDescription() {
-        return this.description;
+        return dev.guizhou.util.lang.ClientLanguage.text(this.description);
     }
 
     public Category getCategory() {

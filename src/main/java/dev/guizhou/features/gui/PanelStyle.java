@@ -284,7 +284,7 @@ final class PanelStyle extends ShellStyle {
         for (Panel p : panels) drawPanel(g, p, mx, my);
         if (!look.descriptionPanel) drawTooltip(g, mx, my);
         if (!hint.isEmpty()) text(g, fit(hint, vw - 20, 7.5f), 8, vh - 12, 7.5f, SUBTLE);
-        else text(g, "左键开关 · 右键展开设置 · 拖动标题移动 · 单击标题折叠 · 直接输入即可搜索", 8, vh - 12, 7.5f, SUBTLE);
+        else text(g, dev.guizhou.util.lang.ClientLanguage.text("左键开关 · 右键展开设置 · 拖动标题移动 · 单击标题折叠 · 直接输入即可搜索"), 8, vh - 12, 7.5f, SUBTLE);
 
         modalFrom = hits.size();
         if (picker.active()) {
@@ -302,20 +302,20 @@ final class PanelStyle extends ShellStyle {
         hit(sx, sy, sw, sh, b -> { if (b == 0) search.focused = true; });
 
         float bx = vw - 8 - 16;
-        toolButton(g, Icon.CLOSE, bx, sy, "关闭", mx, my, screen::onClose);
+        toolButton(g, Icon.CLOSE, bx, sy, dev.guizhou.util.lang.ClientLanguage.text("关闭"), mx, my, screen::onClose);
         bx -= 19;
         boolean inWorld = mc.level != null;
-        toolButton(g, Icon.HUD, bx, sy, inWorld ? "编辑 HUD" : "进入世界后可编辑 HUD", mx, my, () -> {
+        toolButton(g, Icon.HUD, bx, sy, inWorld ? dev.guizhou.util.lang.ClientLanguage.text("编辑 HUD") : dev.guizhou.util.lang.ClientLanguage.text("进入世界后可编辑 HUD"), mx, my, () -> {
             if (!inWorld) return;
             HudClientModule hud = GuizhouWare.moduleManager.getModuleByClass(HudClientModule.class);
             if (hud != null) { save(); hud.openEditor(screen); }
         });
         bx -= 19;
-        toolButton(g, Icon.FOLDER, bx, sy, "配置管理", mx, my, screen::openConfigs);
+        toolButton(g, Icon.FOLDER, bx, sy, dev.guizhou.util.lang.ClientLanguage.text("配置管理"), mx, my, screen::openConfigs);
         bx -= 19;
-        toolButton(g, Icon.EXTERNAL, bx, sy, "云参数", mx, my, screen::openCloudConfigs);
+        toolButton(g, Icon.EXTERNAL, bx, sy, dev.guizhou.util.lang.ClientLanguage.text("云参数"), mx, my, screen::openCloudConfigs);
         bx -= 19;
-        toolButton(g, Icon.LIST, bx, sy, list() ? "切换为玻璃面板" : "切换为分类列", mx, my, this::toggleFrame);
+        toolButton(g, Icon.LIST, bx, sy, list() ? dev.guizhou.util.lang.ClientLanguage.text("切换为玻璃面板") : dev.guizhou.util.lang.ClientLanguage.text("切换为分类列"), mx, my, this::toggleFrame);
     }
 
     private void drawSearchField(GuiGraphics g, float sx, float sy, float sw, float sh) {
@@ -325,7 +325,7 @@ final class PanelStyle extends ShellStyle {
         icon(g, Icon.SEARCH, sx + 4, sy + 3.5f, 8, focused ? accent(null) : 0x90FFFFFF);
         String value = search.value();
         if (value.isEmpty() && !focused) {
-            text(g, "搜索模块… (Ctrl+F)", sx + 15, sy + 3.5f, 8, 0x80FFFFFF);
+            text(g, dev.guizhou.util.lang.ClientLanguage.text("搜索模块… (Ctrl+F)"), sx + 15, sy + 3.5f, 8, 0x80FFFFFF);
             return;
         }
         text(g, fit(value, sw - 22, 8), sx + 15, sy + 3.5f, 8, 0xFFFFFFFF);
@@ -346,13 +346,15 @@ final class PanelStyle extends ShellStyle {
 
     // ------------------------------------------------------------ panels
 
+    private boolean moduleChinese;
     private String moduleQuery = "\0";
     private final Map<Module.Category, List<Module>> moduleCache = new EnumMap<>(Module.Category.class);
     private final Map<Module, List<Setting<?>>> settingsCache = new IdentityHashMap<>();
 
     private List<Module> modules(Module.Category c) {
         String q = query.toLowerCase(Locale.ROOT).trim();
-        if (!q.equals(moduleQuery)) {
+        if (!q.equals(moduleQuery) || moduleChinese != dev.guizhou.util.lang.ClientLanguage.isChinese()) {
+            moduleChinese = dev.guizhou.util.lang.ClientLanguage.isChinese();
             moduleQuery = q;
             moduleCache.clear();
         }
@@ -413,7 +415,7 @@ final class PanelStyle extends ShellStyle {
             round(g, x, y, W, H, r, accent);
         }
 
-        String title = description ? "描述" : categoryName(p.category);
+        String title = description ? dev.guizhou.util.lang.ClientLanguage.text("描述") : categoryName(p.category);
         float titleX = x + 5;
         if (look.icons && !description) {
             Icon ci = p.category == Module.Category.FUNNY ? Icon.FUN : Icon.valueOf(p.category.name());
@@ -572,7 +574,7 @@ final class PanelStyle extends ShellStyle {
             outline(g, right - cw, cy, cw, ch, 1.5f, 1, 0x60FFFFFF);
         } else {
             String value;
-            if (v instanceof Bind bind) value = binding == s ? "…" : bindLabel(bind) == null ? "无" : bindLabel(bind);
+            if (v instanceof Bind bind) value = binding == s ? "…" : bindLabel(bind) == null ? dev.guizhou.util.lang.ClientLanguage.text("无") : bindLabel(bind);
             else if (v instanceof Enum<?> e) value = labelOf(e);
             else if (v instanceof Vector2f vec) value = number(vec.x) + "," + number(vec.y);
             else if (v instanceof Number n) value = number(n);
@@ -617,19 +619,19 @@ final class PanelStyle extends ShellStyle {
     private float descriptionHeight() {
         Module m = tooltipModule;
         if (m == null) return look.row * 2;
-        return look.row + 4 + wrap(m.getDescription().isBlank() ? "没有描述" : m.getDescription(), look.width - 10, look.text - .5f, 8).size() * (look.text + 3) + 4;
+        return look.row + 4 + wrap(m.getDescription().isBlank() ? dev.guizhou.util.lang.ClientLanguage.text("没有描述") : m.getDescription(), look.width - 10, look.text - .5f, 8).size() * (look.text + 3) + 4;
     }
 
     private void drawDescription(GuiGraphics g, float x, float top, float W) {
         if (hovered != null) tooltipModule = hovered;
         Module m = tooltipModule;
         if (m == null) {
-            text(g, "悬停模块查看描述", x + 5, top + 4, look.text - .5f, 0x90FFFFFF);
+            text(g, dev.guizhou.util.lang.ClientLanguage.text("悬停模块查看描述"), x + 5, top + 4, look.text - .5f, 0x90FFFFFF);
             return;
         }
         text(g, fit(m.getDisplayName(), W - 10, look.text), x + 5, top + 4, look.text, HudFonts.SEMI, 0xFFFFFFFF);
         float ly = top + look.row + 4;
-        for (String line : wrap(m.getDescription().isBlank() ? "没有描述" : m.getDescription(), W - 10, look.text - .5f, 8)) {
+        for (String line : wrap(m.getDescription().isBlank() ? dev.guizhou.util.lang.ClientLanguage.text("没有描述") : m.getDescription(), W - 10, look.text - .5f, 8)) {
             text(g, line, x + 5, ly, look.text - .5f, 0xC8FFFFFF);
             ly += look.text + 3;
         }
@@ -702,7 +704,7 @@ final class PanelStyle extends ShellStyle {
             editor = null;
             editing = null;
         } catch (IllegalArgumentException invalid) {
-            hint = "格式无效或超出范围";
+            hint = dev.guizhou.util.lang.ClientLanguage.text("格式无效或超出范围");
             UiSounds.error();
             editor.selectAll();
         }
@@ -858,7 +860,7 @@ final class PanelStyle extends ShellStyle {
     }
 
     private String settingLabel(Module owner, Setting<?> s) {
-        String label = "CoupledCruise".equals(s.getName()) ? "GZBoost" : s.getName();
+        String label = "CoupledCruise".equals(s.getName()) ? "GZBoost" : s.getDisplayName();
         if (owner instanceof HudClientModule) {
             String page = s.getPage();
             if (label.startsWith(page + " ")) label = label.substring(page.length() + 1);
@@ -916,13 +918,13 @@ final class PanelStyle extends ShellStyle {
 
     private static String categoryName(Module.Category c) {
         return switch (c) {
-            case COMBAT -> "战斗";
-            case MOVEMENT -> "移动";
-            case RENDER -> "渲染";
-            case PLAYER -> "玩家";
-            case WORLD -> "世界";
-            case CLIENT -> "客户端";
-            case FUNNY -> "趣味";
+            case COMBAT -> dev.guizhou.util.lang.ClientLanguage.text("战斗");
+            case MOVEMENT -> dev.guizhou.util.lang.ClientLanguage.text("移动");
+            case RENDER -> dev.guizhou.util.lang.ClientLanguage.text("渲染");
+            case PLAYER -> dev.guizhou.util.lang.ClientLanguage.text("玩家");
+            case WORLD -> dev.guizhou.util.lang.ClientLanguage.text("世界");
+            case CLIENT -> dev.guizhou.util.lang.ClientLanguage.text("客户端");
+            case FUNNY -> dev.guizhou.util.lang.ClientLanguage.text("趣味");
             case HUD -> "HUD";
         };
     }

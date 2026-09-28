@@ -90,8 +90,11 @@ public class NotifierHudModule extends HudModule {
         String text = message == null ? "" : message.getString();
         if (key != null && key.startsWith("module:")) {
             String id = key.substring("module:".length());
-            if (text.endsWith(" 已开启") || text.endsWith(" 已关闭")) {
-                Notifications.moduleToggled(id, text.substring(0, text.length() - 4), text.endsWith(" 已开启"));
+            String on = dev.guizhou.util.lang.ClientLanguage.text(" 已开启");
+            String off = dev.guizhou.util.lang.ClientLanguage.text(" 已关闭");
+            if (text.endsWith(on) || text.endsWith(off)) {
+                boolean enabled = text.endsWith(on);
+                Notifications.moduleToggled(id, text.substring(0, text.length() - (enabled ? on.length() : off.length())), enabled);
                 return;
             }
         }
@@ -103,9 +106,9 @@ public class NotifierHudModule extends HudModule {
         HudIcon glyph = icon == Icon.SKULL ? HudIcon.SKULL : null;
         String title = null;
         if (key != null) {
-            if (key.startsWith("pops:")) { level = Notifications.Level.WARNING; glyph = HudIcon.TOTEM; title = "图腾爆出"; }
-            else if (key.startsWith("death:")) { level = Notifications.Level.ERROR; glyph = HudIcon.SKULL; title = "玩家阵亡"; }
-            else if (key.startsWith("gear:")) { level = Notifications.Level.WARNING; glyph = HudIcon.PACKAGE; title = "物资不足"; }
+            if (key.startsWith("pops:")) { level = Notifications.Level.WARNING; glyph = HudIcon.TOTEM; title = dev.guizhou.util.lang.ClientLanguage.text("图腾爆出"); }
+            else if (key.startsWith("death:")) { level = Notifications.Level.ERROR; glyph = HudIcon.SKULL; title = dev.guizhou.util.lang.ClientLanguage.text("玩家阵亡"); }
+            else if (key.startsWith("gear:")) { level = Notifications.Level.WARNING; glyph = HudIcon.PACKAGE; title = dev.guizhou.util.lang.ClientLanguage.text("物资不足"); }
         }
         if (title == null) Notifications.push(key, level, glyph, text, "", durationMs, false);
         else Notifications.push(key, level, glyph, title, text, durationMs, false);
@@ -154,7 +157,7 @@ public class NotifierHudModule extends HudModule {
             float x = alignLeft ? ox : ox + BOX_W - w;
             float y = fromTop ? oy : oy + BOX_H - H_DOUBLE;
             drawCard(g, x, y, w, H_DOUBLE, .55f, Notifications.Level.INFO.color(),
-                    "通知预览", "拖动此区域调整位置", 1f, 0f);
+                    dev.guizhou.util.lang.ClientLanguage.text("通知预览"), dev.guizhou.util.lang.ClientLanguage.text("拖动此区域调整位置"), 1f, 0f);
             return;
         }
 

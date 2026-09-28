@@ -82,7 +82,7 @@ public final class Notifications {
     /** Module on/off toast; silent because the module toggle already has its own cue. */
     public static void moduleToggled(String id, String displayName, boolean on) {
         push("module:" + id, on ? Level.SUCCESS : Level.INFO, on ? HudIcon.SUCCESS : HudIcon.INFO,
-                displayName, on ? "已开启" : "已关闭", 2200, false);
+                displayName, on ? dev.guizhou.util.lang.ClientLanguage.text("已开启") : dev.guizhou.util.lang.ClientLanguage.text("已关闭"), 2200, false);
     }
 
     /** Render thread: requests still worth showing, oldest first. */

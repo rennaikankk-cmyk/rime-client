@@ -42,13 +42,13 @@ public final class CloudConfigClient {
         if (done == null) return;
         String token = HeartbeatManager.cloudConfigToken();
         if (token == null) {
-            done.accept(Reply.error("请先完成客户端授权校验"));
+            done.accept(Reply.error(dev.guizhou.util.lang.ClientLanguage.text("请先完成客户端授权校验")));
             return;
         }
         if (!("private".equals(scope) || "public".equals(scope))
                 || !("list".equals(action) || "save".equals(action)
                 || "load".equals(action) || "delete".equals(action))) {
-            done.accept(Reply.error("云参数操作无效"));
+            done.accept(Reply.error(dev.guizhou.util.lang.ClientLanguage.text("云参数操作无效")));
             return;
         }
         WORKER.execute(() -> {
@@ -56,7 +56,7 @@ public final class CloudConfigClient {
             try {
                 result = send(scope, action, name, bundle, token);
             } catch (Exception failure) {
-                result = Reply.error("云参数连接失败，请稍后重试");
+                result = Reply.error(dev.guizhou.util.lang.ClientLanguage.text("云参数连接失败，请稍后重试"));
             }
             Reply resolved = result;
             Minecraft.getInstance().execute(() -> done.accept(resolved));
@@ -101,7 +101,7 @@ public final class CloudConfigClient {
                 || !nonce.equals(fields.get("nonce")))
             throw new IllegalArgumentException("Invalid cloud response");
         if (!"true".equals(fields.get("ok")))
-            return Reply.error(fields.getOrDefault("msg", "云参数请求失败（HTTP " + response.statusCode() + "）"));
+            return Reply.error(fields.getOrDefault("msg", dev.guizhou.util.lang.ClientLanguage.text("云参数请求失败（HTTP ") + response.statusCode() + "）"));
         if (response.statusCode() != 200) throw new IllegalArgumentException("Unexpected cloud status");
         List<String> names = new ArrayList<>();
         if (fields.containsKey("names")) {
@@ -114,6 +114,6 @@ public final class CloudConfigClient {
                 : null;
         if (savedBundle != null && savedBundle.length() > 512 * 1024)
             throw new IllegalArgumentException("Oversized cloud preset");
-        return new Reply(true, fields.getOrDefault("name", "完成"), List.copyOf(names), savedBundle);
+        return new Reply(true, fields.getOrDefault("name", dev.guizhou.util.lang.ClientLanguage.text("完成")), List.copyOf(names), savedBundle);
     }
 }

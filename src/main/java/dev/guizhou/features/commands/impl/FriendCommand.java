@@ -36,11 +36,11 @@ public class FriendCommand extends Command {
                         .executes((ctx) -> {
                             List<String> friends = GuizhouWare.friendManager.getFriends();
                             if (friends.isEmpty()) {
-                                return replyKeyed("list", ChatTone.MUTED, Component.literal("好友列表为空"));
+                                return replyKeyed("list", ChatTone.MUTED, Component.literal(dev.guizhou.util.lang.ClientLanguage.text("好友列表为空")));
                             }
                             String prefix = ctx.getSource().getCommandPrefix();
                             MutableComponent body = Component.empty()
-                                    .append(ChatFeed.text("好友 " + friends.size() + "  ", ChatPalette.TEXT));
+                                    .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("好友 ") + friends.size() + "  ", ChatPalette.TEXT));
                             for (int i = 0; i < friends.size(); i++) {
                                 if (i > 0) body.append(ChatFeed.text(" · ", ChatPalette.SUBTLE));
                                 String name = friends.get(i);
@@ -49,23 +49,23 @@ public class FriendCommand extends Command {
                                         ? name
                                         : name + " (" + formatRemaining(expiry) + ")";
                                 body.append(ChatFeed.suggest(label, prefix + "friend remove " + name,
-                                        ChatFeed.text("移除好友 " + name, ChatPalette.MUTED), ChatPalette.SUCCESS));
+                                        ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("移除好友 ") + name, ChatPalette.MUTED), ChatPalette.SUCCESS));
                             }
                             return replyKeyed("list", ChatTone.INFO, body);
                         }))
                 .then(literal("clear")
                         .executes((ctx) -> {
                             GuizhouWare.friendManager.clearFriends();
-                            return success("已清空好友列表");
+                            return success(dev.guizhou.util.lang.ClientLanguage.text("已清空好友列表"));
                         }))
                 .then(literal("whisper")
-                        .executes((ctx) -> success("加好友时私聊提醒%s",
-                                GuizhouWare.friendManager.isWhisperOnAdd() ? "{green}已开启" : "{red}已关闭"))
+                        .executes((ctx) -> success(dev.guizhou.util.lang.ClientLanguage.text("加好友时私聊提醒%s"),
+                                GuizhouWare.friendManager.isWhisperOnAdd() ? dev.guizhou.util.lang.ClientLanguage.text("{green}已开启") : dev.guizhou.util.lang.ClientLanguage.text("{red}已关闭")))
                         .then(argument("enabled", BoolArgumentType.bool())
                                 .executes((ctx) -> {
                                     boolean on = BoolArgumentType.getBool(ctx, "enabled");
                                     GuizhouWare.friendManager.setWhisperOnAdd(on);
-                                    return success("加好友时私聊提醒%s", on ? "{green}已开启" : "{red}已关闭");
+                                    return success(dev.guizhou.util.lang.ClientLanguage.text("加好友时私聊提醒%s"), on ? dev.guizhou.util.lang.ClientLanguage.text("{green}已开启") : dev.guizhou.util.lang.ClientLanguage.text("{red}已关闭"));
                                 })))
                 .then(literal("add")
                         .then(argument("username", onlinePlayer())
@@ -75,10 +75,10 @@ public class FriendCommand extends Command {
                                 .executes((ctx) -> {
                                     String username = getFriend(ctx, "username");
                                     if (!GuizhouWare.friendManager.isFriend(username)) {
-                                        return warn("{green} %s {reset} 不在好友列表中", username);
+                                        return warn(dev.guizhou.util.lang.ClientLanguage.text("{green} %s {reset} 不在好友列表中"), username);
                                     }
                                     GuizhouWare.friendManager.removeFriend(username);
-                                    return success("已将 {green} %s {reset} 移出好友列表", username);
+                                    return success(dev.guizhou.util.lang.ClientLanguage.text("已将 {green} %s {reset} 移出好友列表"), username);
                                 })))
 
                 .then(literal("radius")
@@ -99,18 +99,18 @@ public class FriendCommand extends Command {
 
     private int addPlayer(String username, long expiry) {
         if (GuizhouWare.friendManager.isFriend(username)) {
-            return warn("{green} %s {reset} 已在好友列表中", username);
+            return warn(dev.guizhou.util.lang.ClientLanguage.text("{green} %s {reset} 已在好友列表中"), username);
         }
         GuizhouWare.friendManager.addFriend(username, expiry);
         if (expiry == FriendManager.PERMANENT) {
-            return success("已将 {green} %s {reset} 加入好友列表", username);
+            return success(dev.guizhou.util.lang.ClientLanguage.text("已将 {green} %s {reset} 加入好友列表"), username);
         }
-        return success("已将 {green} %s {reset} 加入好友列表，有效期 %s", username, formatRemaining(expiry));
+        return success(dev.guizhou.util.lang.ClientLanguage.text("已将 {green} %s {reset} 加入好友列表，有效期 %s"), username, formatRemaining(expiry));
     }
 
     private int addRadius(int blocks, long expiry) {
         if (nullCheck()) {
-            return fail("需要在世界中才能这样做");
+            return fail(dev.guizhou.util.lang.ClientLanguage.text("需要在世界中才能这样做"));
         }
         double radiusSq = (double) blocks * blocks;
         UUID self = mc.player.getUUID();
@@ -126,12 +126,12 @@ public class FriendCommand extends Command {
             added++;
         }
         if (added == 0) {
-            return success("半径 %s 格内没有新玩家", blocks);
+            return success(dev.guizhou.util.lang.ClientLanguage.text("半径 %s 格内没有新玩家"), blocks);
         }
         if (expiry == FriendManager.PERMANENT) {
-            return success("已将半径 %s 格内的 %s 名玩家加入好友列表", blocks, added);
+            return success(dev.guizhou.util.lang.ClientLanguage.text("已将半径 %s 格内的 %s 名玩家加入好友列表"), blocks, added);
         }
-        return success("已将半径 %s 格内的 %s 名玩家加入好友列表，有效期 %s", blocks, added, formatRemaining(expiry));
+        return success(dev.guizhou.util.lang.ClientLanguage.text("已将半径 %s 格内的 %s 名玩家加入好友列表，有效期 %s"), blocks, added, formatRemaining(expiry));
     }
 
     private static long expiryFromDays(int days) {
@@ -144,12 +144,12 @@ public class FriendCommand extends Command {
         long days = hours / 24L;
         hours %= 24L;
         if (days > 0) {
-            return days + "天 " + hours + "小时";
+            return days + dev.guizhou.util.lang.ClientLanguage.text("天 ") + hours + dev.guizhou.util.lang.ClientLanguage.text("小时");
         }
         long minutes = (ms / (60L * 1000L)) % 60L;
         if (hours > 0) {
-            return hours + "小时 " + minutes + "分钟";
+            return hours + dev.guizhou.util.lang.ClientLanguage.text("小时 ") + minutes + dev.guizhou.util.lang.ClientLanguage.text("分钟");
         }
-        return minutes + "分钟";
+        return minutes + dev.guizhou.util.lang.ClientLanguage.text("分钟");
     }
 }

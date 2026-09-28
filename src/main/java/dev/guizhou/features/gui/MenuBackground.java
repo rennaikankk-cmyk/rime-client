@@ -76,11 +76,11 @@ public final class MenuBackground {
         imageW = imageH = 0;
         started = System.nanoTime();
         if (selection.kind == Kind.VIDEO) {
-            banner = "已选择视频，暂无法播放";
+            banner = dev.guizhou.util.lang.ClientLanguage.text("已选择视频，暂无法播放");
             return;
         }
         if (selection.kind == Kind.MISSING) {
-            banner = "背景文件不存在";
+            banner = dev.guizhou.util.lang.ClientLanguage.text("背景文件不存在");
             return;
         }
         if (selection.kind == Kind.BUILTIN || selection.file == null) return;
@@ -90,7 +90,7 @@ public final class MenuBackground {
         } catch (Exception e) {
             release(mc);
             kind = Kind.MISSING;
-            banner = "背景无法读取";
+            banner = dev.guizhou.util.lang.ClientLanguage.text("背景无法读取");
         }
     }
 
@@ -120,10 +120,10 @@ public final class MenuBackground {
     public static String statusLine() {
         prepare();
         return switch (kind) {
-            case BUILTIN -> "当前：默认动态背景";
-            case VIDEO -> "当前：" + label + "（视频暂不能播放）";
-            case MISSING -> "当前：" + (label.isEmpty() ? "无法读取" : label);
-            default -> "当前：" + label;
+            case BUILTIN -> dev.guizhou.util.lang.ClientLanguage.text("当前：默认动态背景");
+            case VIDEO -> dev.guizhou.util.lang.ClientLanguage.text("当前：") + label + dev.guizhou.util.lang.ClientLanguage.text("（视频暂不能播放）");
+            case MISSING -> dev.guizhou.util.lang.ClientLanguage.text("当前：") + (label.isEmpty() ? dev.guizhou.util.lang.ClientLanguage.text("无法读取") : label);
+            default -> dev.guizhou.util.lang.ClientLanguage.text("当前：") + label;
         };
     }
 
@@ -147,7 +147,7 @@ public final class MenuBackground {
     public static Path pickFile() {
         if (!dialogsAvailable()) return null;
         try {
-            FileDialog dialog = new FileDialog((Frame) null, "选择主菜单背景", FileDialog.LOAD);
+            FileDialog dialog = new FileDialog((Frame) null, dev.guizhou.util.lang.ClientLanguage.text("选择主菜单背景"), FileDialog.LOAD);
             dialog.setFile("*.png;*.jpg;*.jpeg;*.gif;*.mp4;*.webm");
             dialog.setVisible(true);
             String name = dialog.getFile();
@@ -164,18 +164,18 @@ public final class MenuBackground {
 
     /** Copies an image/GIF into the game folder, or remembers a video path. Null means success. */
     public static String use(String text) {
-        if (text == null || text.isBlank()) return "请先选择文件";
+        if (text == null || text.isBlank()) return dev.guizhou.util.lang.ClientLanguage.text("请先选择文件");
         Path source;
         try {
             source = Path.of(text.trim());
         } catch (Exception e) {
-            return "路径无效";
+            return dev.guizhou.util.lang.ClientLanguage.text("路径无效");
         }
-        if (!Files.isRegularFile(source)) return "找不到该文件";
+        if (!Files.isRegularFile(source)) return dev.guizhou.util.lang.ClientLanguage.text("找不到该文件");
         String ext = extension(source);
-        if (!supported(ext)) return "仅支持 png、jpg、gif、mp4、webm";
+        if (!supported(ext)) return dev.guizhou.util.lang.ClientLanguage.text("仅支持 png、jpg、gif、mp4、webm");
         Minecraft mc = Minecraft.getInstance();
-        if (mc == null) return "游戏目录不可用";
+        if (mc == null) return dev.guizhou.util.lang.ClientLanguage.text("游戏目录不可用");
         Path folder = root(mc);
         try {
             Files.createDirectories(folder);
@@ -194,7 +194,7 @@ public final class MenuBackground {
             token = Long.MIN_VALUE;
             return null;
         } catch (Exception e) {
-            return "无法保存背景";
+            return dev.guizhou.util.lang.ClientLanguage.text("无法保存背景");
         }
     }
 
@@ -262,7 +262,7 @@ public final class MenuBackground {
                 int destW = Math.max(1, Math.round(canvasW * scale));
                 int destH = Math.max(1, Math.round(canvasH * scale));
                 int limit = Math.min(count, MAX_FRAMES);
-                if (count > MAX_FRAMES) banner = "GIF 较长，只播放前 " + MAX_FRAMES + " 帧";
+                if (count > MAX_FRAMES) banner = dev.guizhou.util.lang.ClientLanguage.text("GIF 较长，只播放前 ") + MAX_FRAMES + dev.guizhou.util.lang.ClientLanguage.text(" 帧");
                 frames = new Identifier[limit];
                 delays = new long[limit];
                 BufferedImage canvas = new BufferedImage(destW, destH, BufferedImage.TYPE_INT_ARGB);
@@ -368,7 +368,7 @@ public final class MenuBackground {
                 return fileSelection(file);
             }
         } catch (Exception e) {
-            return new Selection(Kind.MISSING, null, "配置无法读取");
+            return new Selection(Kind.MISSING, null, dev.guizhou.util.lang.ClientLanguage.text("配置无法读取"));
         }
         Path legacy = folder.resolve("background.png");
         if (Files.isRegularFile(legacy)) return fileSelection(legacy);

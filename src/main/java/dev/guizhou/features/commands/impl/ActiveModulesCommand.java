@@ -40,13 +40,13 @@ public class ActiveModulesCommand extends Command {
                                 .executes((ctx) -> {
                                     String name = getString(ctx, "module");
                                     Module module = GuizhouWare.moduleManager.getModuleByName(name);
-                                    if (module == null) return fail("找不到模块 %s", name);
+                                    if (module == null) return fail(dev.guizhou.util.lang.ClientLanguage.text("找不到模块 %s"), name);
                                     ActiveModulesHudModule h = ActiveModulesHudModule.getInstance();
-                                    if (h == null) return fail("未找到 ActiveModules HUD 元素");
+                                    if (h == null) return fail(dev.guizhou.util.lang.ClientLanguage.text("未找到 ActiveModules HUD 元素"));
                                     if (!h.add(name)) {
-                                        return warn("%s 已在列表中", module.getDisplayName());
+                                        return warn(dev.guizhou.util.lang.ClientLanguage.text("%s 已在列表中"), module.getDisplayName());
                                     }
-                                    return success("已将 {text} %s {} 加入关注列表；HUD 来源设为 WATCHLIST 时显示", module.getDisplayName());
+                                    return success(dev.guizhou.util.lang.ClientLanguage.text("已将 {text} %s {} 加入关注列表；HUD 来源设为 WATCHLIST 时显示"), module.getDisplayName());
                                 })))
                 .then(literal("remove")
                         .then(argument("module", word())
@@ -54,35 +54,35 @@ public class ActiveModulesCommand extends Command {
                                 .executes((ctx) -> {
                                     String name = getString(ctx, "module");
                                     ActiveModulesHudModule h = ActiveModulesHudModule.getInstance();
-                                    if (h == null) return fail("未找到 ActiveModules HUD 元素");
+                                    if (h == null) return fail(dev.guizhou.util.lang.ClientLanguage.text("未找到 ActiveModules HUD 元素"));
                                     if (!h.remove(name)) {
-                                        return warn("%s 不在列表中", name);
+                                        return warn(dev.guizhou.util.lang.ClientLanguage.text("%s 不在列表中"), name);
                                     }
-                                    return success("已将 {text} %s {} 移出关注列表", name);
+                                    return success(dev.guizhou.util.lang.ClientLanguage.text("已将 {text} %s {} 移出关注列表"), name);
                                 })))
                 .then(literal("clear")
                         .executes((ctx) -> {
                             ActiveModulesHudModule h = ActiveModulesHudModule.getInstance();
-                            if (h == null) return fail("未找到 ActiveModules HUD 元素");
+                            if (h == null) return fail(dev.guizhou.util.lang.ClientLanguage.text("未找到 ActiveModules HUD 元素"));
                             h.clear();
-                            return success("已清空手动关注列表；自动显示已开启模块不受影响");
+                            return success(dev.guizhou.util.lang.ClientLanguage.text("已清空手动关注列表；自动显示已开启模块不受影响"));
                         }))
                 .then(literal("list")
                         .executes((ctx) -> {
                             ActiveModulesHudModule h = ActiveModulesHudModule.getInstance();
-                            if (h == null) return fail("未找到 ActiveModules HUD 元素");
+                            if (h == null) return fail(dev.guizhou.util.lang.ClientLanguage.text("未找到 ActiveModules HUD 元素"));
                             List<String> entries = h.getEntries();
                             if (entries.isEmpty()) {
-                                return replyKeyed("list", ChatTone.MUTED, Component.literal("手动关注列表为空；默认自动显示已开启模块"));
+                                return replyKeyed("list", ChatTone.MUTED, Component.literal(dev.guizhou.util.lang.ClientLanguage.text("手动关注列表为空；默认自动显示已开启模块")));
                             }
                             String prefix = ctx.getSource().getCommandPrefix();
                             MutableComponent body = Component.empty()
-                                    .append(ChatFeed.text("关注列表 " + entries.size() + "  ", ChatPalette.TEXT));
+                                    .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("关注列表 ") + entries.size() + "  ", ChatPalette.TEXT));
                             for (int i = 0; i < entries.size(); i++) {
                                 if (i > 0) body.append(ChatFeed.text(" · ", ChatPalette.SUBTLE));
                                 String entry = entries.get(i);
                                 body.append(ChatFeed.suggest(entry, prefix + "am remove " + entry,
-                                        ChatFeed.text("移出列表", ChatPalette.MUTED), ChatPalette.ACCENT_2));
+                                        ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("移出列表"), ChatPalette.MUTED), ChatPalette.ACCENT_2));
                             }
                             return replyKeyed("list", ChatTone.INFO, body);
                         }));

@@ -24,7 +24,7 @@ public abstract class Command extends Feature {
 
     private final String[] aliases;
     private final List<CommandUsage> usages = new ArrayList<>();
-    private String description = "暂无说明";
+    private String description = dev.guizhou.util.lang.ClientLanguage.text("暂无说明");
     private String summary;
     private CommandCategory category;
 
@@ -93,7 +93,7 @@ public abstract class Command extends Feature {
     }
 
     public String getDescription() {
-        return description;
+        return dev.guizhou.util.lang.ClientLanguage.text(description);
     }
 
     public Command category(CommandCategory category) {
@@ -119,9 +119,9 @@ public abstract class Command extends Feature {
 
     /** One-line Chinese summary for help and completion tooltips. */
     public String getSummary() {
-        if (summary != null) return summary;
+        if (summary != null) return dev.guizhou.util.lang.ClientLanguage.text(summary);
         CommandCatalog.Entry entry = CommandCatalog.lookup(getName());
-        return entry != null ? entry.summary() : description;
+        return dev.guizhou.util.lang.ClientLanguage.text(entry != null ? entry.summary() : description);
     }
 
     public List<CommandUsage> getUsages() {

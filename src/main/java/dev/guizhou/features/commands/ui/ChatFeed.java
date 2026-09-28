@@ -66,7 +66,7 @@ public final class ChatFeed {
     /** Legacy CatFormat template ("{green} %s {reset} ..."); a single leading colour becomes the tone. */
     public static void legacy(ChatTone fallback, String template, Object... args) {
         if (template == null) return;
-        LegacyMarkup.Parsed parsed = LegacyMarkup.detect(template, fallback);
+        LegacyMarkup.Parsed parsed = LegacyMarkup.detect(dev.guizhou.util.lang.ClientLanguage.text(template), fallback);
         post(null, parsed.tone(), null, TextUtil.text(parsed.body(), args));
     }
 
@@ -91,7 +91,7 @@ public final class ChatFeed {
         MutableComponent body = Component.empty()
                 .append(text(displayName, ChatPalette.TEXT))
                 .append(text("  ·  ", ChatPalette.SUBTLE))
-                .append(text(enabled ? "已开启" : "已关闭", enabled ? ChatPalette.SUCCESS : ChatPalette.MUTED));
+                .append(text(enabled ? dev.guizhou.util.lang.ClientLanguage.text("已开启") : dev.guizhou.util.lang.ClientLanguage.text("已关闭"), enabled ? ChatPalette.SUCCESS : ChatPalette.MUTED));
         post("module:" + stableName, enabled ? ChatTone.SUCCESS : ChatTone.MUTED, enabled ? "●" : "○", body);
     }
 
@@ -100,7 +100,7 @@ public final class ChatFeed {
         MutableComponent body = Component.empty()
                 .append(text(module, ChatPalette.TEXT))
                 .append(text("  ·  ", ChatPalette.SUBTLE))
-                .append(text(setting, ChatPalette.MUTED))
+                .append(text(dev.guizhou.util.lang.ClientLanguage.settingName(setting), ChatPalette.MUTED))
                 .append(text("  →  ", ChatPalette.SUBTLE))
                 .append(text(String.valueOf(value), ChatPalette.ACCENT_2));
         post("setting:" + module + "." + setting, ChatTone.INFO, "◆", body);
@@ -116,7 +116,7 @@ public final class ChatFeed {
     public static MutableComponent suggest(String label, String fill, Component hover, int rgb) {
         MutableComponent tip = Component.empty();
         if (hover != null) tip.append(hover).append("\n");
-        tip.append(text("点击填入  ", ChatPalette.SUBTLE)).append(text(fill, ChatPalette.ACCENT_2));
+        tip.append(text(dev.guizhou.util.lang.ClientLanguage.text("点击填入  "), ChatPalette.SUBTLE)).append(text(fill, ChatPalette.ACCENT_2));
         return Component.literal(label).withStyle(style -> style.withColor(rgb)
                 .withClickEvent(new ClickEvent.SuggestCommand(fill))
                 .withHoverEvent(new HoverEvent.ShowText(tip)));
@@ -137,7 +137,7 @@ public final class ChatFeed {
         int second = ChatPalette.mix(accent, ChatPalette.ACCENT_2, 0.7f);
         MutableComponent tip = Component.empty()
                 .append(text("Rime", accent).withStyle(style -> style.withBold(true)))
-                .append(text("\n客户端消息 · 点击查看命令列表", ChatPalette.MUTED));
+                .append(text(dev.guizhou.util.lang.ClientLanguage.text("\n客户端消息 · 点击查看命令列表"), ChatPalette.MUTED));
         return Component.empty()
                 .append(Component.literal("G").withStyle(style -> style.withColor(accent).withBold(true)))
                 .append(Component.literal("Z").withStyle(style -> style.withColor(second).withBold(true)))
