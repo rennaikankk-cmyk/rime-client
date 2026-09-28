@@ -1,0 +1,75 @@
+{
+  "version": "1.1.2",
+  "minecraft": "1.21.1",
+  "guard": "rimeguard3.1",
+  "sourceCommit": "b9d0c67b2ff9c5b1b7dd22ad35f1f68296d37590",
+  "artifact": "rime-b9d0c67-1.1.2-mc1.21.1-rimeguard3.1-obfuscated.jar",
+  "sha256": "f4c629694df51c71dca16a0ef2d8751ea706d750866ff1082f4b7132c3ff8691",
+  "releasedAt": "2026-09-28",
+  "tag": "rime-v1.1.2-mc1.21.1-rimeguard3.1",
+  "download": "http://62.234.117.226/download.html#updates",
+  "validation": {
+    "candidateSha256": "f4c629694df51c71dca16a0ef2d8751ea706d750866ff1082f4b7132c3ff8691",
+    "signedValidationSha256": "ca3abe33c69d63368cb6f5cf4aff93aa83b8aeeb08f819751310636a578a820d",
+    "bothSignedStartsPassed": true,
+    "originalClassesUnchanged": true,
+    "guard": "rimeguard3.1",
+    "minecraft": "1.21.1",
+    "obfuscatedChecks": 43135,
+    "runs": [
+      {
+        "runtime": "microsoft-21.0.7",
+        "durationSeconds": 44.8,
+        "passed": true,
+        "expectedOfflineIdentityErrorsOnly": true,
+        "stdoutSha256": "8cbcf3622100d34661c2c65d64d2cdefefb424fc3727122e192f04702552326f",
+        "stderrSha256": "82c4ec35254ea09310ee918b4bedcb9abf49292b30c26eb72771fab897154bec",
+        "latestLogSha256": "8cbcf3622100d34661c2c65d64d2cdefefb424fc3727122e192f04702552326f"
+      },
+      {
+        "runtime": "adoptium-21.0.12.1",
+        "durationSeconds": 44.6,
+        "passed": true,
+        "expectedOfflineIdentityErrorsOnly": true,
+        "stdoutSha256": "f0762cf94d29514699d6d907dcc08026e1275534c4e646b30f92ea7483c342e6",
+        "stderrSha256": "60fd807110c9e70532299f5c7db8cba400a4a8e28d8c3b8a2fab132090483a80",
+        "latestLogSha256": "f0762cf94d29514699d6d907dcc08026e1275534c4e646b30f92ea7483c342e6"
+      }
+    ],
+    "integration": {
+      "flatBasePredicted": 19.118443,
+      "flatBaseServerDamage": 19.11847,
+      "maceSmashes": 8,
+      "maceDamage": 261.01025390625,
+      "equipmentRecovered": true,
+      "bedOrientations": 4,
+      "anthropicWeights": [
+        400,
+        600,
+        700
+      ],
+      "activeList": true
+    },
+    "limitations": "Isolated fixed targets and native local server; translated spear adapter regression tested, no new live Via/PvP benchmark."
+  },
+  "publication": {
+    "published": true,
+    "sha256": "f4c629694df51c71dca16a0ef2d8751ea706d750866ff1082f4b7132c3ff8691",
+    "commit": "b9d0c67b2ff9c5b1b7dd22ad35f1f68296d37590",
+    "previousSha256": "229b9549a4c6dddc5d4243e374a08869d1dc17de9dec60cb6bd1ab046c1fe7ee",
+    "releaseDirectory": "/opt/gzwx-releases-1.21.1/releases/f4c629694df51c71dca16a0ef2d8751ea706d750866ff1082f4b7132c3ff8691",
+    "backupDirectory": "/opt/gzwx-releases-1.21.1/site-backups/rime112-f4c629694df5",
+    "aliases": [
+      "/var/www/guizhouware/files/guizhouware-1.21.1.jar",
+      "/opt/gzwx-auth/jars/guizhouware-1.21.1.jar"
+    ],
+    "siteHashes": {
+      "download": "a2af24a5210346b2bd0c495361222d1957ac27348dfd3dbe29a493dffb8afb0c",
+      "index": "681283b073d0424a6761355f97cf96a5f331b30a2acadbeaa3c47e0a390672c9",
+      "elytra": "35fbb7c990abd0dde5d48d3e8cec30bfdda753f856fca4b3ecaa32aab9588666"
+    },
+    "otherMinecraftVersionUnchanged": true,
+    "authServiceActive": true,
+    "time": "2026-09-28T00:48:05.964358+00:00"
+  }
+}
