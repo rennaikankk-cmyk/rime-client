@@ -294,7 +294,8 @@ public final class ObfuscatedJarTest {
         // control flow in the final artifact as well, without relaxing legacy checks.
         Map<String, List<String>> reviewedCallbacks = Map.ofEntries(
                 Map.entry("AutoXPModule", List.of("onTick")),
-                Map.entry("KeyPotionModule", List.of("onEnable")),
+                Map.entry("KeyPotionModule", List.of("onTick")),
+                Map.entry("ItemUseTracker", List.of("useBatch")),
                 Map.entry("PhaseModule", List.of("onTick")),
                 Map.entry("FastPortalModule", List.of("onPreTick")),
                 Map.entry("MiddleClickExtraModule", List.of("onMouse")),
