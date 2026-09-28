@@ -1,0 +1,108 @@
+{
+  "version": "1.1.4",
+  "guard": "rimeguard3.1",
+  "sourceCommit": "2e261d7ba7ab9cf3b07edd4c95e4e14e7130591e",
+  "artifact": "rime-2e261d7-1.1.4-rimeguard3.1-obfuscated.jar",
+  "sha256": "2378ccd7dc33cd0ca3f3b27b2610bdde02d14b7ecf426d8eed12d68c6aefa09a",
+  "startup": {
+    "candidateSha256": "2378ccd7dc33cd0ca3f3b27b2610bdde02d14b7ecf426d8eed12d68c6aefa09a",
+    "signedValidationSha256": "d4c74f1f991b80764a9f120c9669d4c67f24355f8728ba5e50cb865c9f980fc3",
+    "bothSignedStartsPassed": true,
+    "originalClassesUnchanged": true,
+    "runs": [
+      {
+        "runtime": "microsoft-21.0.7",
+        "durationSeconds": 42.5,
+        "passed": true
+      },
+      {
+        "runtime": "adoptium-21.0.12.1",
+        "durationSeconds": 40.4,
+        "passed": true
+      }
+    ]
+  },
+  "publication": {
+    "release": {
+      "mod_version": "1.1.4",
+      "minecraft": "1.21.11",
+      "filename": "rime-2e261d7-1.1.4-rimeguard3.1-obfuscated.jar",
+      "sha256": "2378ccd7dc33cd0ca3f3b27b2610bdde02d14b7ecf426d8eed12d68c6aefa09a",
+      "size": 12891071,
+      "uploaded_by": "authorized-ssh-release",
+      "uploaded_at": "2026-09-28T14:29:52.536118+00:00"
+    },
+    "backup": "/var/backups/guizhouware-rime114/20260928-release",
+    "priorSha256": "d15e34af3a8d19c577916ad81e742bb2f8ebe03dac0300987b082601d994bdbd",
+    "pages": [
+      {
+        "name": "download.html",
+        "before": "e2c519e73a6f192dd46e3282092a4d818291db5266431b9c6cf7123e6bdfaec9",
+        "after": "c6d096decd0c12f231dd66a3856c28009e9e8391c4a7836614825e9b5c1c5a31"
+      },
+      {
+        "name": "index.html",
+        "before": "ae3c2c7a695dc2978587823dda17877807a02e8f5156d041e062f00ae8eba745",
+        "after": "a81a28c90376348785db70dc4c5de4b04848f6755b96e8a369ad1e02fc3dbde1"
+      },
+      {
+        "name": "elytra.html",
+        "before": "cd56207b7ee115dc630b36ec1ea5e3ca6deb9658b8266f8e582440cc27ea179f",
+        "after": "489ddaac9c73c211f0c8139f83e1b98df4774812a9161f884ef414fde212b21e"
+      }
+    ],
+    "archive": "/var/www/guizhouware/files/rime-2e261d7-1.1.4-rimeguard3.1-obfuscated.jar",
+    "sourceCommit": "2e261d7ba7ab9cf3b07edd4c95e4e14e7130591e",
+    "launcherSha256": "e1fdbff696b929603a14ffb58f7091ea965a4d69733970e4489cc3db7cb31178"
+  },
+  "http": [
+    {
+      "path": "download.html",
+      "sha256": "c6d096decd0c12f231dd66a3856c28009e9e8391c4a7836614825e9b5c1c5a31",
+      "http": 200
+    },
+    {
+      "path": "index.html",
+      "sha256": "a81a28c90376348785db70dc4c5de4b04848f6755b96e8a369ad1e02fc3dbde1",
+      "http": 200
+    },
+    {
+      "path": "elytra.html",
+      "sha256": "489ddaac9c73c211f0c8139f83e1b98df4774812a9161f884ef414fde212b21e",
+      "http": 200
+    },
+    {
+      "path": "files/guizhouware-1.21.11.jar",
+      "http": 404,
+      "expected": "raw JAR access stays blocked; use launcher"
+    },
+    {
+      "path": "files/rime-2e261d7-1.1.4-rimeguard3.1-obfuscated.jar",
+      "http": 404,
+      "expected": "raw JAR access stays blocked; use launcher"
+    }
+  ],
+  "live": {
+    "current": {
+      "filename": "rime-2e261d7-1.1.4-rimeguard3.1-obfuscated.jar",
+      "minecraft": "1.21.11",
+      "mod_version": "1.1.4",
+      "sha256": "2378ccd7dc33cd0ca3f3b27b2610bdde02d14b7ecf426d8eed12d68c6aefa09a",
+      "size": 12891071,
+      "uploaded_at": "2026-09-28T14:29:52.536118+00:00",
+      "uploaded_by": "authorized-ssh-release"
+    },
+    "sourceSha256": "2378ccd7dc33cd0ca3f3b27b2610bdde02d14b7ecf426d8eed12d68c6aefa09a",
+    "websiteSha256": "2378ccd7dc33cd0ca3f3b27b2610bdde02d14b7ecf426d8eed12d68c6aefa09a",
+    "launcherSha256": "e1fdbff696b929603a14ffb58f7091ea965a4d69733970e4489cc3db7cb31178",
+    "versions": [
+      "1.21.11",
+      "dickclient"
+    ]
+  },
+  "desktopSha256": "2378ccd7dc33cd0ca3f3b27b2610bdde02d14b7ecf426d8eed12d68c6aefa09a",
+  "validationAccountRevoked": true,
+  "buildTasks": 103,
+  "obfuscatedChecks": 36452,
+  "scope": "Signed production startup on both runtimes; combat trials were development runs on the same combat source before the version-only release change."
+}
