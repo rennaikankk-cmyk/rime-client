@@ -1,0 +1,36 @@
+{
+  "version": "1.1.3",
+  "minecraft": "1.21.11",
+  "guard": "rimeguard3.1",
+  "buildCommit": "9d24eaa",
+  "artifact": "rime-9d24eaa-1.1.3-rimeguard3.1-obfuscated.jar",
+  "sha256": "d15e34af3a8d19c577916ad81e742bb2f8ebe03dac0300987b082601d994bdbd",
+  "launcherVersion": "1.1.1",
+  "launcherCommit": "de84e6a",
+  "launcherSha256": "e1fdbff696b929603a14ffb58f7091ea965a4d69733970e4489cc3db7cb31178",
+  "obfuscatedChecks": 36071,
+  "inGameLanguageChecks": 3618,
+  "launcherReleaseTests": 19,
+  "startup": {
+    "candidateSha256": "d15e34af3a8d19c577916ad81e742bb2f8ebe03dac0300987b082601d994bdbd",
+    "signedValidationSha256": "773f171be9be816c9f43f855154ad95e7b0fdbeb1df521b0cdb8fa795428f08c",
+    "bothSignedStartsPassed": true,
+    "originalClassesUnchanged": true,
+    "runs": [
+      {
+        "runtime": "microsoft-21.0.7",
+        "durationSeconds": 46.5,
+        "passed": true
+      },
+      {
+        "runtime": "adoptium-21.0.12.1",
+        "durationSeconds": 44.5,
+        "passed": true
+      }
+    ]
+  },
+  "removedDownloadVersion": "1.21.1",
+  "validationCredentialRevoked": true,
+  "publicationVerified": true,
+  "startupLogReview": "Both complete stdout/stderr/latest logs reviewed; only expected offline Mojang/Realms errors and OSHI counter warning. Initialized Rime, atlas creation, and stable window passed. No world or PvP test in production smoke."
+}
