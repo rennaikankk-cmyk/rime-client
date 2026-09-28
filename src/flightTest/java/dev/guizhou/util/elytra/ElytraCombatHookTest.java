@@ -57,15 +57,16 @@ public final class ElytraCombatHookTest {
     }
 
     private static void verifyPlanningSpeedWiring() throws IOException {
-        // Reachability must be evaluated against the speed the flight controller is
-        // about to request, not the envelope-clamped instantaneous speed (measured
-        // applied 1.4-2.4 b/t vs the ~2.5 reachable threshold -> climb never commits).
-        Map<String, Trace> mace = read(CHASE + "$MaceBehavior");
-        Trace planning = method(mace, "planningSpeed");
-        check(planning.hasCall("dev/guizhou/features/modules/movement/GuangxiElytraModule", "lastRequestedBpt"),
-                "planningSpeed must consider the requested cruise speed, not just the clamped instantaneous one");
-        check(planning.hasCall("java/lang/Math", "max"),
-                "planningSpeed must take the larger of requested and instantaneous speed");
+        // Terminal braking must not feed a short request back into the next pass budget.
+        Trace planning = method(read(CHASE + "$MaceBehavior"), "planningSpeed");
+        check(planning.hasCall(FLIGHT, "combatPlanningSpeed") && planning.hasCall("java/lang/Math", "max"),
+                "Planning combines configured flight budget and actual motion");
+        Trace budget = method(read(FLIGHT), "combatPlanningSpeed");
+        check(budget.field(FLIGHT, "speed", Opcodes.GETFIELD) >= 0
+                        && budget.hasCall("java/lang/Math", "max")
+                        && budget.steps.stream().noneMatch(step -> step.opcode == Opcodes.GETFIELD
+                        && FLIGHT.equals(step.owner) && "lastRequestedBpt".equals(step.name)),
+                "The next approach keeps configured speed after terminal braking");
     }
 
     private static void verifyCombatRegressionWiring() throws IOException {
@@ -100,7 +101,7 @@ public final class ElytraCombatHookTest {
                 "Spear aim must account for the server eye origin during owned armor flight");
         check(method(chase, "aimSpear").hasCall(FLIGHT, "isArmorSwapActive"),
                 "Standing-eye compensation must depend on an active owned armor cycle");
-        for (String name : List.of("tickFollow", "strikePlan", "tryAttack", "shouldStartDive", "tickDive")) {
+        for (String name : List.of("tickPullUp", "climbPlan", "tickFollow", "strikePlan", "tryAttack", "shouldStartDive", "tickDive")) {
             check(method(mace, name).hasCall(CHASE, "observedTargetBox"),
                     "Mace approach, attack and recovery must agree on the latest received target box: " + name);
         }
@@ -701,17 +702,36 @@ public final class ElytraCombatHookTest {
 
     private static void verifyMaceDescentOwnership() throws IOException {
         Map<String, Trace> chase = read(CHASE);
+        Trace pursuit = method(chase, "isMacePursuitActive");
+        for (String gate : List.of("isEnabled", "paused", "isValid"))
+            check(pursuit.hasCall(CHASE, gate), "Controlled mace climb checks " + gate);
+        check(pursuit.steps.stream().anyMatch(step -> step.opcode == Opcodes.INSTANCEOF
+                        && (CHASE + "$MaceBehavior").equals(step.owner)),
+                "Controlled climb is scoped to the active mace behavior, including MXS");
+        Trace boostMode = method(read(FLIGHT), "combatBoostMode");
+        check(boostMode.hasCall(CHASE, "isMacePursuitActive")
+                        && boostMode.steps.stream().anyMatch(step -> "Gentle".equals(step.name)),
+                "Mace pursuit selects controlled banking without replacing the manual cruise setting");
+        Trace manual = method(read(FLIGHT), "cruiseInput");
+        check(manual.steps.stream().anyMatch(step -> "gzBoostMode".equals(step.name))
+                        && !manual.hasCall(FLIGHT, "combatBoostMode"),
+                "Manual cruise continues to use the configured high-speed profile");
         Trace ownership = method(chase, "preservesMaceDescent");
         check(ownership.steps.stream().anyMatch(step -> "isFallFlying".equals(step.name)),
                 "A powered mace approach must not suppress armor cycling and rocket refresh before glide ends");
         check(ownership.hasCall(CHASE, "hasMaceDescentIntent"),
                 "Natural-fall ownership must also retain every mace intent gate");
+        check(ownership.hasCall(CHASE + "$MaceBehavior", "retainNaturalFall"),
+                "An incidental armor exit must validate its intercept before blocking glide recovery");
+        Trace fall = method(read(CHASE + "$MaceBehavior"), "retainNaturalFall");
+        check(fall.hasCall("dev/guizhou/util/elytra/AerialIntercept", "dropHitTick")
+                        && fall.hasCall(CHASE + "$MaceBehavior", "dropPathClear"),
+                "Natural falls must retain a reachable, unobstructed attack trajectory");
         ownership = method(chase, "hasMaceDescentIntent");
         for (String gate : List.of("isEnabled", "paused", "isValid")) {
             check(ownership.hasCall(CHASE, gate), "Mace descent ownership must check " + gate);
         }
-        check(ownership.steps.stream().anyMatch(step -> step.opcode == Opcodes.GETSTATIC
-                        && "net/minecraft/world/item/Items".equals(step.owner) && "MACE".equals(step.name))
+        check(ownership.hasCall("dev/guizhou/util/elytra/MaceCombat", "isMace")
                         && ownership.steps.stream().anyMatch(step -> step.opcode == Opcodes.INSTANCEOF
                         && (CHASE + "$MaceBehavior").equals(step.owner))
                         && ownership.steps.stream().anyMatch(step -> step.opcode == Opcodes.GETFIELD

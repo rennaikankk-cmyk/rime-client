@@ -51,7 +51,7 @@ public final class MaceDiveController {
                 || player.isInWater() || player.isInLava() || player.isPassenger()
                 || player.getAbilities().flying
                 || (requireDescent && player.getDeltaMovement().y >= -0.05)
-                || !(player.getMainHandItem().getItem() instanceof MaceItem)) return false;
+                || !MaceCombat.isMace(player.getMainHandItem())) return false;
         ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
         if (!usableWings(chest) || !player.inventoryMenu.getSlot(CHEST_MENU_SLOT).mayPickup(player)) return false;
         int candidate = -1;
@@ -102,7 +102,7 @@ public final class MaceDiveController {
         return isActive() && ownsPair() && safeInventory() && !player.isUsingItem()
                 && InventoryUtil.selected() == selectedSlot
                 && !player.onGround() && !player.isInWater() && !player.isInLava() && !player.isPassenger()
-                && player.getMainHandItem().getItem() instanceof MaceItem
+                && MaceCombat.isMace(player.getMainHandItem())
                 && state.canAttack(player.isFallFlying(), player.getDeltaMovement().y < -0.05,
                 MaceItem.canSmashAttack(player));
     }
@@ -131,7 +131,7 @@ public final class MaceDiveController {
             return;
         }
         boolean mustRecover = !safeInventory() || player.isUsingItem() || InventoryUtil.selected() != selectedSlot
-                || !(player.getMainHandItem().getItem() instanceof MaceItem)
+                || !MaceCombat.isMace(player.getMainHandItem())
                 || player.onGround() || player.isInWater() || player.isInLava() || player.isPassenger()
                 || player.getAbilities().flying;
         state.observe(player.tickCount, player.isFallFlying(), mustRecover, player.fallDistance, 1.5);

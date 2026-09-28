@@ -59,10 +59,17 @@ public final class MaceApproach {
      * Fleeing targets get a lower pass; an unreachable pass keeps horizontal pursuit. */
     public static Plan climb(Vec3 self, Vec3 target, Vec3 velocity, double speed,
                              double preferredHeight, double minimumFall, double latency, boolean stable) {
+        return climb(self, target, velocity, speed, preferredHeight, minimumFall, latency, stable, 0);
+    }
+
+    public static Plan climb(Vec3 self, Vec3 target, Vec3 velocity, double speed,
+                             double preferredHeight, double minimumFall, double latency, boolean stable,
+                             double setupHeight) {
         if (!valid(self, target, velocity, speed) || !Double.isFinite(preferredHeight)
-                || !Double.isFinite(minimumFall) || !Double.isFinite(latency)) return invalid(self);
-        double height = chargeHeight(preferredHeight, minimumFall);
-        double floor = Math.max(3.0, minimumFall + 1.5);
+                || !Double.isFinite(minimumFall) || !Double.isFinite(latency)
+                || !Double.isFinite(setupHeight)) return invalid(self);
+        double floor = Math.max(Math.max(3.0, minimumFall + 1.5), Math.clamp(setupHeight, 0, 64));
+        double height = Math.max(chargeHeight(preferredHeight, minimumFall), floor);
         if (height < floor) return invalid(self);
         double delay = Math.clamp(latency * 0.5, 0.0, 1.5);
         Vec3 observed = target.add(velocity.scale(delay));
@@ -95,7 +102,8 @@ public final class MaceApproach {
         // Preserve horizontal closing speed. Follow a rising target only as much as necessary;
         // do not command another full-height climb when the round trip cannot be caught.
         Vec3 shortLead = observed.add(velocity.scale(Math.min(2.0, horizon)));
-        return new Plan(new Vec3(shortLead.x, Math.max(self.y, shortLead.y), shortLead.z), floor, 0.0, false);
+        double rise = setupHeight > 0 && velocity.y > 0.15 && velocity.length() < speed ? floor : 0;
+        return new Plan(new Vec3(shortLead.x, Math.max(self.y, shortLead.y + rise), shortLead.z), floor, 0.0, false);
     }
 
     public static Plan intercept(Vec3 self, Vec3 target, Vec3 velocity, double speed,

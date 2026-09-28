@@ -1,6 +1,7 @@
 package dev.guizhou.features.modules.combat;
 
 import dev.guizhou.GuizhouWare;
+import dev.guizhou.util.elytra.MaceCombat;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.impl.entity.player.UpdateWalkingPlayerEvent;
 import dev.guizhou.event.Stage;
@@ -102,6 +103,9 @@ public class GuangxiElytraChaseModule extends Module {
     private final Setting<Boolean> autoControlElytra = bool("AutoControlElytra", true).setPage("General")
             .described("有目标时由空战接管航向；手动已开启的 GZBoost 在空战让出控制后继续工作。");
     private final Setting<Boolean> autoWeapon = bool("AutoWeapon", true).setPage("General");
+    private final Setting<Boolean> autoArmorFly = bool("AutoArmorFly", true).setPage("General")
+            .described("Enable armor switching while controlling combat flight; preserve an already enabled ArmorFly module.");
+    private boolean armorEnabledByChase;
     private final Setting<Boolean> autoSpearUse = bool("AutoSpearUse", true).setPage("General");
     private final Setting<Boolean> adaptiveCombat = bool("AdaptiveCombat", true).setPage("General");
     private final Setting<Boolean> evadeCommitment = bool("EvadeCommitment", true).setPage("Defense")
@@ -243,14 +247,25 @@ public class GuangxiElytraChaseModule extends Module {
     public static boolean preservesMaceDescent() {
         // FOLLOW starts while powered flight is still braking or approaching.
         // Only an actual unpowered fall owns the no-restart/no-rocket barrier.
-        return hasMaceDescentIntent() && !mc.player.isFallFlying();
+        if (!hasMaceDescentIntent() || mc.player.isFallFlying()) return false;
+        Behavior active = INSTANCE.behavior instanceof MxsBehavior mxs ? mxs.active : INSTANCE.behavior;
+        return active instanceof MaceBehavior mace && mace.retainNaturalFall();
+    }
+
+    /** Close mace pursuit needs controlled lateral banking rather than cruise lift. */
+    public static boolean isMacePursuitActive() {
+        GuangxiElytraChaseModule bot = INSTANCE;
+        if (bot == null || !bot.isEnabled() || bot.paused() || !bot.isValid(bot.target)
+                || bot.combatAction != AerialCombatPolicy.Action.CHASE) return false;
+        Behavior active = bot.behavior instanceof MxsBehavior mxs ? mxs.active : bot.behavior;
+        return active instanceof MaceBehavior;
     }
 
     public static boolean hasMaceDescentIntent() {
         GuangxiElytraChaseModule bot = INSTANCE;
         if (bot == null || !bot.isEnabled() || bot.paused() || !bot.isValid(bot.target)
                 || bot.combatAction != AerialCombatPolicy.Action.CHASE
-                || !mc.player.getMainHandItem().is(Items.MACE)
+                || !MaceCombat.isMace(mc.player.getMainHandItem())
                 || mc.player.onGround() || mc.player.getY() <= bot.target.getY() + 0.5) return false;
         Behavior active = bot.behavior instanceof MxsBehavior mxs ? mxs.active : bot.behavior;
         return active instanceof MaceBehavior mace && mace.state == MaceBehavior.FOLLOW;
@@ -411,6 +426,7 @@ public class GuangxiElytraChaseModule extends Module {
     }
 
     private void resetRuntime() {
+        releaseArmorControl();
         spearCommit.reset();
         clearDiveAim();
         flightRoute.reset();
@@ -449,12 +465,26 @@ public class GuangxiElytraChaseModule extends Module {
 
     private void syncFlightControl() {
         boolean requested = autoControlElytra.getValue();
+        var armor = GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.movement.ArmorFlyModule.class);
+        boolean needsArmor = requested && autoArmorFly.getValue() && mode.getValue() != Mode.FOLLOW
+                && target != null && isValid(target) && !paused();
+        if (needsArmor && armor != null && !armor.isEnabled()) {
+            armor.enable();
+            armorEnabledByChase = true;
+        } else if (!needsArmor) releaseArmorControl();
         if (requested == controllingFlight) return;
         var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
         if (flight == null) return;
         if (requested) flight.enableByChase();
         else flight.releaseByChase();
         controllingFlight = requested;
+    }
+
+    private void releaseArmorControl() {
+        if (!armorEnabledByChase) return;
+        armorEnabledByChase = false;
+        var armor = GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.movement.ArmorFlyModule.class);
+        if (armor != null && armor.isEnabled()) armor.disable();
     }
 
     private boolean parallelPlanningEnabled() {
@@ -474,7 +504,7 @@ public class GuangxiElytraChaseModule extends Module {
     private AerialDuelPredictor.Weapon targetWeapon() {
         if (!(target instanceof LivingEntity living)) return AerialDuelPredictor.Weapon.NONE;
         var stack = living.getMainHandItem();
-        if (stack.is(Items.MACE)) return AerialDuelPredictor.Weapon.MACE;
+        if (MaceCombat.isMace(stack)) return AerialDuelPredictor.Weapon.MACE;
         if (SpearCombat.isSpear(stack)) return AerialDuelPredictor.Weapon.SPEAR;
         return stack.is(ItemTags.SWORDS) || stack.is(ItemTags.AXES)
                 ? AerialDuelPredictor.Weapon.MELEE : AerialDuelPredictor.Weapon.NONE;
@@ -674,18 +704,23 @@ if (nullCheck() || mc.player == null) {
             else if (pearl != null && pearl.urgent())
                 threatKey = new EvadeCommitment.Key(session, threatKey.entity(),
                         threatKey.kind() + ":pearl:" + pearl.pearlId(), threatKey.attack());
-            boolean preserveStrike = (realMaceHitWindow() || spearApproachWindow()) && !urgent;
+            boolean preserveStrike = (realMaceHitWindow() || maceDropWindow() || spearApproachWindow()) && !urgent;
             var threatInput = new AerialCombatPolicy.ThreatInput(mc.player.tickCount,
                     policyVector(target.position().subtract(mc.player.position())),
                     policyVector(mc.player.getDeltaMovement()), policyVector(velocity),
                     spearThreat, maceThreat, mc.player.getHealth(), mc.player.getAbsorptionAmount(),
                     mc.player.getMaxHealth(), false, latencyTicks,
                     threatMode.getValue() == ThreatMode.ALL_PLAYERS && target instanceof Player);
-            next = tactics.evaluate(threatInput, predictedThreat || pearl != null, preserveStrike);
+            // A mace below us and climbing cannot smash us along its incoming path.
+            // Keep explicit weapon/projectile threats; do not turn our own descent
+            // into a four-tick escape merely because relative distance is closing.
+            boolean approachThreat = !(target instanceof Player p && MaceCombat.isMace(p.getMainHandItem()))
+                    || target.getY() > mc.player.getY() + .5 && velocity.y < -.15;
+            next = tactics.evaluate(threatInput, predictedThreat || pearl != null, preserveStrike, approachThreat);
             // The policy's clear-delay is not a new approach event: preserve an existing
             // escape across a brief lost observation instead of snapping back toward the target.
             if (next != AerialCombatPolicy.Action.CHASE && threatKey == null
-                    && AerialCombatPolicy.incomingHighSpeed(threatInput))
+                    && approachThreat && AerialCombatPolicy.incomingHighSpeed(threatInput))
                 threatKey = new EvadeCommitment.Key(session, target.getId(), "approach", 0);
         } else {
             tactics.reset();
@@ -845,6 +880,25 @@ if (nullCheck() || mc.player == null) {
                 && mc.player.hasLineOfSight(target);
     }
 
+    private boolean maceDropWindow() {
+        Behavior active = behavior instanceof MxsBehavior mxs ? mxs.active : behavior;
+        if (!(active instanceof MaceBehavior mace) || mace.state != MaceBehavior.FOLLOW) return false;
+        // A rising opponent entering our proven drop path is not by itself a reason
+        // to discard the attack. Immediate weapon and projectile hazards still win.
+        if (maceDive.isActive() && mace.dropPathClear() || mace.shouldStartDive()) return true;
+        // The glide-exit gate intentionally requires several possible hit ticks.
+        // Do not reuse that strict gate to cancel a descending approach before it
+        // reaches the exit window: a rising enemy otherwise looks like a collision.
+        if (!autoMaceDive.getValue() || !mc.player.isFallFlying()
+                || mc.player.getDeltaMovement().y >= -.15
+                || mc.player.getY() < observedTargetBox().minY + 3
+                || !mc.player.hasLineOfSight(target) || !mace.dropPathClear()) return false;
+        return AerialIntercept.dropHitTick(mc.player.position().add(0,
+                mc.player.getEyeHeight(Pose.STANDING), 0), mc.player.getDeltaMovement(),
+                observedTargetBox(), targetHistory.predictionVelocity(target.getDeltaMovement()),
+                mc.player.entityInteractionRange(), maceMinFallDistance.getValue(), 10) > 0;
+    }
+
     private Vec3 spearAttackEye() {
         var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
         return SpearCombat.attackEye(mc.player, flight != null && flight.isArmorSwapActive());
@@ -867,7 +921,7 @@ if (nullCheck() || mc.player == null) {
     }
 
     private boolean fallingMaceThreat(Vec3 velocity) {
-        if (!(target instanceof Player player) || !(player.getMainHandItem().getItem() instanceof MaceItem)
+        if (!(target instanceof Player player) || !MaceCombat.isMace(player.getMainHandItem())
                 || player.isFallFlying() || player.onGround() || velocity.y >= -0.15
                 || player.getY() <= mc.player.getY() + 0.5 || !mc.player.hasLineOfSight(player)) return false;
         Vec3 offset = player.position().subtract(mc.player.position());
@@ -1182,6 +1236,7 @@ if (nullCheck() || mc.player == null) {
         double passHeight = Double.NaN;
         int glideSince = Integer.MIN_VALUE;
         int lastDiveWarningTick = Integer.MIN_VALUE / 2;
+        int dropSetupTick = Integer.MIN_VALUE / 2;
         final MacePassTracker pass = new MacePassTracker();
 
         @Override
@@ -1195,6 +1250,7 @@ if (nullCheck() || mc.player == null) {
             terminal = false;
             passHeight = Double.NaN;
             glideSince = Integer.MIN_VALUE;
+            dropSetupTick = Integer.MIN_VALUE / 2;
             pass.reset();
         }
 
@@ -1241,6 +1297,26 @@ if (nullCheck() || mc.player == null) {
                     && mc.player.getDeltaMovement().y < -0.05;
         }
 
+        /** An armor-switch exit is not a committed dive. Retain it only while
+         * current momentum can still bring the attack into reach. */
+        boolean retainNaturalFall() {
+            if (maceDive.isActive()) return true;
+            Vec3 motion = mc.player.getDeltaMovement();
+            if (motion.y >= -0.05) return false;
+            // The powered setup already reserved this short glide-exit window.
+            // Do not reopen wings between setup and impact just because the next
+            // interpolated target sample changes its velocity estimate.
+            long setupAge = (long) mc.player.tickCount - dropSetupTick;
+            if (setupAge >= 0 && setupAge <= 2 && dropPathClear()) return true;
+            AABB box = observedTargetBox();
+            double reach = mc.player.entityInteractionRange();
+            if (box.distanceToSqr(mc.player.getEyePosition()) <= reach * reach) return true;
+            Vec3 eye = mc.player.position().add(0, mc.player.getEyeHeight(Pose.STANDING), 0);
+            return AerialIntercept.dropHitTick(eye, motion, box,
+                    targetHistory.predictionVelocity(target.getDeltaMovement()),
+                    reach, maceMinFallDistance.getValue(), 10) > 0 && dropPathClear();
+        }
+
         int tickNone() {
             if (target == null) {
                 heading = Vec3.ZERO;
@@ -1253,6 +1329,22 @@ if (nullCheck() || mc.player == null) {
         int tickPullUp() {
             if (!isValid(target)) return NONE;
             terminal = false;
+            // Adaptive height is a damage preference, not a reason to fly past
+            // an already reachable unpowered strike on a moving opponent.
+            if (maceAdaptive.getValue() && autoMaceDive.getValue() && mc.player.isFallFlying()
+                    && mc.player.getY() >= observedTargetBox().minY + 3.0) {
+                Vec3 setup = AerialIntercept.dropSetupVelocity(
+                        mc.player.position().add(0, mc.player.getEyeHeight(Pose.STANDING), 0),
+                        observedTargetBox(), targetHistory.predictionVelocity(target.getDeltaMovement()),
+                        planningSpeed(), mc.player.entityInteractionRange(), maceMinFallDistance.getValue(), this::achievableSetup);
+                if (setup != null) {
+                    heading = setup;
+                    terminal = true;
+                    dropSetupTick = mc.player.tickCount;
+                    pass.reset();
+                    return FOLLOW;
+                }
+            }
             boolean headBlocked = blockedInDirection(0.0, 0.1, 0.0);
             MaceApproach.Plan plan = climbPlan();
             Vec3 intercept = plan.aim();
@@ -1261,9 +1353,12 @@ if (nullCheck() || mc.player == null) {
             // The led apex is a steering destination, not a moving completion bar.
             // A rising target must not keep extending this climb after we have the
             // chosen relative fall height; the drop gate separately validates impact.
-            boolean reached = mc.player.getY() >= target.getY() + plan.height() - 0.1;
+            boolean reached = mc.player.getY() >= observedTargetBox().minY + plan.height() - 0.1;
             if (!catchingUp && (reached || headBlocked)) {
                 pass.reset();
+                state = FOLLOW;
+                if (reached && !headBlocked && autoMaceDive.getValue() && mc.player.isFallFlying()
+                        && mc.player.getY() >= observedTargetBox().minY + 3.0) return tickFollow(true);
                 heading = strikePlan().aim().subtract(mc.player.getEyePosition());
                 return FOLLOW;
             }
@@ -1314,6 +1409,27 @@ if (nullCheck() || mc.player == null) {
             if (!smashWindow && !targetGrounded && observedBox.minY > mc.player.getY() + 1.5) {
                 return restartPass();
             }
+            if (autoMaceDive.getValue() && mc.player.isFallFlying()
+                    && mc.player.getY() >= observedBox.minY + 3.0) {
+                Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
+                Vec3 setup = AerialIntercept.dropSetupVelocity(
+                        mc.player.position().add(0, mc.player.getEyeHeight(Pose.STANDING), 0),
+                        observedBox, velocity, planningSpeed(), reach, maceMinFallDistance.getValue(), this::achievableSetup);
+                if (setup != null) {
+                    heading = setup;
+                    terminal = true;
+                    dropSetupTick = mc.player.tickCount;
+                    return FOLLOW;
+                }
+                // Match horizontal motion before spending the height advantage.
+                // A direct downward intercept here can leave the armor-exit fall
+                // several blocks to the side with no powered steering left.
+                Vec3 offset = observedBox.getCenter().subtract(mc.player.position());
+                heading = new Vec3(velocity.x + offset.x * .5,
+                        Math.max(0, velocity.y), velocity.z + offset.z * .5);
+                terminal = true;
+                return FOLLOW;
+            }
             MaceApproach.Plan strike = strikePlan();
             if (maceAdaptive.getValue() && !strike.reachable() && !smashWindow) return restartPass();
             heading = strike.aim().subtract(mc.player.getEyePosition());
@@ -1334,13 +1450,17 @@ if (nullCheck() || mc.player == null) {
         }
 
         private double planningSpeed() {
-            // Reachability is judged against the speed the flight controller is about to
-            // request; the envelope-clamped instantaneous speed (measured 1.4-2.4 b/t in
-            // firework duels) sits below the reachable threshold (~2.5) and would keep
-            // every pass in the flat-pursuit fallback.
+            // Use available flight speed, not last tick's deliberate terminal braking.
+            // Feeding the short request back into reachability strands a pass beside
+            // a rising target and progressively removes the descent budget.
             var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
-            double requested = flight != null ? flight.lastRequestedBpt() : 0.0;
-            return Math.clamp(Math.max(mc.player.getDeltaMovement().length(), requested), 0.5, 6.0);
+            double available = flight != null ? flight.combatPlanningSpeed() : 0.0;
+            return Math.clamp(Math.max(mc.player.getDeltaMovement().length(), available), 0.5, 15.0);
+        }
+
+        private Vec3 achievableSetup(Vec3 request) {
+            var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+            return flight == null ? request : flight.previewPrecisionVelocity(request);
         }
 
         private MaceApproach.Plan climbPlan() {
@@ -1348,31 +1468,37 @@ if (nullCheck() || mc.player == null) {
                     && aimKind() != EntityAim.Kind.PLAYER) {
                 Vec3 at = aimKind() == EntityAim.Kind.SLIME ? observedTargetBox().getCenter() : predictedTarget();
                 double height = MaceApproach.chargeHeight(maceHeight.getValue(), maceMinFallDistance.getValue());
-                return new MaceApproach.Plan(new Vec3(at.x, target.getY() + height, at.z), height, 0.0, true);
+                return new MaceApproach.Plan(new Vec3(at.x, observedTargetBox().minY + height, at.z), height, 0.0, true);
             }
             if (aimKind() == EntityAim.Kind.PLAYER && aimChoice().pattern() != EntityAim.Pattern.USE_EXISTING) {
                 Vec3 at = predictedTarget();
                 double height = MaceApproach.chargeHeight(maceHeight.getValue(), maceMinFallDistance.getValue());
-                return new MaceApproach.Plan(new Vec3(at.x, target.getY() + height, at.z), height, 0.0, true);
+                return new MaceApproach.Plan(new Vec3(at.x, observedTargetBox().minY + height, at.z), height, 0.0, true);
             }
             if (aimKind() != EntityAim.Kind.PLAYER) {
                 Vec3 center = observedTargetBox().getCenter();
                 double height = MaceApproach.chargeHeight(maceHeight.getValue(), maceMinFallDistance.getValue());
-                return new MaceApproach.Plan(new Vec3(center.x, target.getY() + height, center.z), height, 0.0, true);
+                return new MaceApproach.Plan(new Vec3(center.x, observedTargetBox().minY + height, center.z), height, 0.0, true);
             }
             if (!maceAdaptive.getValue()) {
                 Vec3 lead = predictedTarget();
                 double height = MaceApproach.chargeHeight(maceHeight.getValue(), maceMinFallDistance.getValue());
-                return new MaceApproach.Plan(new Vec3(lead.x, target.getY() + height, lead.z),
+                return new MaceApproach.Plan(new Vec3(lead.x, observedTargetBox().minY + height, lead.z),
                         height, 0.0, true);
             }
             Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
-            double preferred = Double.isFinite(passHeight) ? Math.min(passHeight, maceHeight.getValue()) : maceHeight.getValue();
-            MaceApproach.Plan plan = MaceApproach.climb(mc.player.position(), target.position(), velocity,
+            double preferred = maceHeight.getValue();
+            double setupHeight = autoMaceDive.getValue() ? AerialIntercept.minimumSetupHeight(observedTargetBox(),
+                    velocity, planningSpeed(), mc.player.entityInteractionRange(), maceMinFallDistance.getValue(),
+                    mc.player.getEyeHeight(Pose.STANDING), this::achievableSetup) : 0;
+            // Commit a height once per pass. Feeding the last reduced height back as
+            // the preferred height repeatedly shrinks it until the attack has no room.
+            if (Double.isFinite(passHeight)) setupHeight = Math.max(setupHeight, Math.min(passHeight, preferred));
+            MaceApproach.Plan plan = MaceApproach.climb(mc.player.position(), target.position().add(targetPacketOffset()), velocity,
                     planningSpeed(), preferred, maceMinFallDistance.getValue(), latencyTicks,
-                    MaceApproach.stable(velocity, targetHistory.previousVelocity(), targetHistory.hasTwoVelocities()));
-            // A moving planning horizon must not buy height back halfway through a pass.
-            // An unreachable estimate does not commit a new height until a pass becomes feasible.
+                    MaceApproach.stable(velocity, targetHistory.previousVelocity(), targetHistory.hasTwoVelocities()), setupHeight);
+            // Only a feasible plan commits; a larger physical drop floor can raise it.
+            // The next pass may adapt afresh after feedback or recovery resets passHeight.
             if (plan.reachable()) passHeight = plan.height();
             return plan;
         }
@@ -1560,7 +1686,9 @@ if (nullCheck() || mc.player == null) {
                 if (maceCustomPullUpAngle.getValue() > 0.1 && state == PULL_UP && !catchingUp) {
                     v = MaceApproach.pullUpIntent(v, maceCustomPullUpAngle.getValue());
                 }
-                if (state == PULL_UP || state == WAIT_ATTACK) {
+                var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+                if ((state == PULL_UP || state == WAIT_ATTACK)
+                        && flight != null && flight.respectsGlideMomentum()) {
                     v = ElytraPhysics.diagonalGzBoost(v, mc.player.getDeltaMovement());
                 }
                 double len = v.length();
@@ -1569,7 +1697,7 @@ if (nullCheck() || mc.player == null) {
                 double budget = terminal ? Math.max(fv.maxVelocity(), planningSpeed()) : fv.maxVelocity();
                 double max = Math.min(len, budget);
                 fv.set(v.normalize().scale(max));
-                if (maceAdaptive.getValue()) fv.preserveDirection();
+                if (state == FOLLOW && maceAdaptive.getValue()) fv.preserveDirection();
                 if (terminal) fv.requestPrecision();
             }
         }
@@ -1979,7 +2107,7 @@ if (nullCheck() || mc.player == null) {
     // ---------------------------------------------------------------
 
     private boolean willUseMaceAttack() {
-        return mc.player.getMainHandItem().is(Items.MACE)
+        return MaceCombat.isMace(mc.player.getMainHandItem())
                 && MaceItem.canSmashAttack(mc.player)
                 && mc.player.fallDistance >= maceMinFallDistance.getValue();
     }
@@ -1987,7 +2115,7 @@ if (nullCheck() || mc.player == null) {
     private boolean attack(Entity entity) {
         if (mc.gameMode == null || mc.getConnection() == null || !isValid(entity) || entity != target || paused()
                 || EatUtil.shouldDefer() || mc.player.isUsingItem()
-                || !mc.player.getMainHandItem().is(Items.MACE)
+                || !MaceCombat.isMace(mc.player.getMainHandItem())
                 || lastAttackTick == mc.player.tickCount) return false;
         double reach = mc.player.entityInteractionRange();
         Vec3 eye = mc.player.getEyePosition();

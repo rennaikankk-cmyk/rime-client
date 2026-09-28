@@ -6,7 +6,6 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.MaceItem;
 
 import java.util.function.IntPredicate;
 
@@ -138,7 +137,7 @@ public final class ElytraWeaponController {
     }
 
     private static boolean matches(ItemStack stack, boolean spear) {
-        return spear ? SpearCombat.isSpear(stack) : stack.getItem() instanceof MaceItem;
+        return spear ? SpearCombat.isSpear(stack) : MaceCombat.isMace(stack);
     }
 
     static int chooseHotbar(int selected, IntPredicate matches) {

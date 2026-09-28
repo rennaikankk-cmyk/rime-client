@@ -8,6 +8,7 @@ public final class AerialCombatPolicyTest {
     private static int checks;
 
     public static void main(String[] args) {
+        weaponAwareApproach();
         relativeEncounters();
         highThreatEncounters();
         pursuitIsNotIncomingThreat();
@@ -18,6 +19,19 @@ public final class AerialCombatPolicyTest {
         targetHysteresis();
         boundedPrediction();
         System.out.println("AerialCombatPolicyTest passed: " + checks + " checks");
+    }
+
+    private static void weaponAwareApproach() {
+        ThreatInput rising = input(0, v(0,-8,0), v(0,-1.7,0), v(0,2,0));
+        expect(Action.EVADE, new AerialCombatPolicy().evaluate(rising), "Geometry alone sees the incoming pass");
+        expect(Action.CHASE, new AerialCombatPolicy().evaluate(rising, false, false, false),
+                "Known unavailable smash does not abort our descending attack");
+        expect(Action.EVADE, new AerialCombatPolicy().evaluate(health(0,20,0,true,false,false), false,false,false),
+                "Disabling geometric approach does not hide a ready spear");
+        expect(Action.EVADE, new AerialCombatPolicy().evaluate(health(0,20,0,false,true,false), false,false,false),
+                "A falling mace remains actionable");
+        expect(Action.EVADE, new AerialCombatPolicy().evaluate(rising, true,false,false),
+                "Predicted projectiles remain actionable");
     }
 
     private static void relativeEncounters() {

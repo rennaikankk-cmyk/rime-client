@@ -70,6 +70,65 @@ public final class AerialIntercept {
         return true;
     }
 
+    /** Find a descending setup velocity for the actual unpowered fall, including the
+     * glide-exit delay. A constant-speed rendezvous can point upward at a rising target
+     * even when we already have enough height for a smash. Null means keep approaching. */
+    public static Vec3 dropSetupVelocity(Vec3 standingEye, AABB target, Vec3 targetVelocity,
+                                         double speed, double reach, double minimumFall) {
+        return dropSetupVelocity(standingEye, target, targetVelocity, speed, reach, minimumFall,
+                java.util.function.UnaryOperator.identity());
+    }
+
+    public static Vec3 dropSetupVelocity(Vec3 standingEye, AABB target, Vec3 targetVelocity,
+                                         double speed, double reach, double minimumFall,
+                                         java.util.function.UnaryOperator<Vec3> achievable) {
+        if (!finite(standingEye) || !finite(target) || !finite(targetVelocity) || achievable == null
+                || !Double.isFinite(speed) || speed <= 0 || speed > 20) return null;
+        Vec3 center = target.getCenter();
+        double horizontalSum = 0, verticalSum = 0, gravityDisplacement = 0;
+        double horizontalFactor = 1, verticalFactor = 1, gravityVelocity = 0;
+        for (int ticks = 1; ticks <= 10; ticks++) {
+            horizontalSum += horizontalFactor;
+            verticalSum += verticalFactor;
+            gravityDisplacement += gravityVelocity;
+            horizontalFactor *= 0.91;
+            verticalFactor *= 0.98;
+            gravityVelocity = (gravityVelocity - 0.08) * 0.98;
+            Vec3 offset = center.add(targetVelocity.scale(ticks)).subtract(standingEye);
+            Vec3 setup = new Vec3(offset.x / horizontalSum,
+                    (offset.y - gravityDisplacement) / verticalSum, offset.z / horizontalSum);
+            if (setup.y >= -0.15 || setup.lengthSqr() > speed * speed) continue;
+            // The setup is applied by powered movement now; equipment is removed on
+            // the NEXT client tick. Reserve that movement tick in addition to exit latency.
+            Vec3 applied = achievable.apply(setup);
+            if (!finite(applied) || applied.y >= -.15) continue;
+            if (canStartDrop(standingEye, applied, target, targetVelocity, reach, minimumFall)
+                    && canStartDrop(standingEye.add(applied), applied, target.move(targetVelocity),
+                    targetVelocity, reach, minimumFall)) return setup;
+        }
+        return null;
+    }
+
+    /** Minimum relative height from which an aligned moving target admits a delayed
+     * glide exit. Use the observed pose, not a standing hitbox for a flying player. */
+    public static double minimumSetupHeight(AABB target, Vec3 targetVelocity, double speed,
+                                            double reach, double minimumFall, double eyeHeight) {
+        return minimumSetupHeight(target, targetVelocity, speed, reach, minimumFall, eyeHeight,
+                java.util.function.UnaryOperator.identity());
+    }
+
+    public static double minimumSetupHeight(AABB target, Vec3 targetVelocity, double speed,
+                                            double reach, double minimumFall, double eyeHeight,
+                                            java.util.function.UnaryOperator<Vec3> achievable) {
+        double floor = MaceApproach.chargeHeight(3, minimumFall);
+        if (!finite(target) || !finite(targetVelocity) || !Double.isFinite(eyeHeight)) return floor;
+        for (double height = floor; height <= 64; height += 1) {
+            Vec3 eye = new Vec3(target.getCenter().x, target.minY + height + eyeHeight, target.getCenter().z);
+            if (dropSetupVelocity(eye, target, targetVelocity, speed, reach, minimumFall, achievable) != null) return height;
+        }
+        return floor;
+    }
+
     /** Leave enough approach distance for the two-tick glide-exit barrier at closing speed. */
     public static double dropApproachRange(Vec3 velocity, Vec3 targetVelocity, double reach) {
         if (!finite(velocity) || !finite(targetVelocity) || !Double.isFinite(reach) || reach <= 0) return 0;

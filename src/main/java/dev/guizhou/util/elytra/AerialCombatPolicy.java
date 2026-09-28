@@ -54,6 +54,11 @@ public final class AerialCombatPolicy {
     }
 
     public Action evaluate(ThreatInput input, boolean predictedThreat, boolean preserveStrike) {
+        return evaluate(input, predictedThreat, preserveStrike, true);
+    }
+
+    /** The caller may exclude a geometrical approach when the observed weapon cannot attack on that path. */
+    public Action evaluate(ThreatInput input, boolean predictedThreat, boolean preserveStrike, boolean approachThreat) {
         if (input == null) {
             reset();
             return action;
@@ -75,7 +80,7 @@ public final class AerialCombatPolicy {
             lastThreatTick = Long.MIN_VALUE;
             return action;
         }
-        if (predictedThreat || input.spearThreat || input.maceThreat || incomingHighSpeed(input)) {
+        if (predictedThreat || input.spearThreat || input.maceThreat || approachThreat && incomingHighSpeed(input)) {
             lastThreatTick = input.tick;
             action = Action.EVADE;
         } else if (action != Action.EVADE || elapsed(input.tick, lastThreatTick) >= EVADE_CLEAR_TICKS) {
