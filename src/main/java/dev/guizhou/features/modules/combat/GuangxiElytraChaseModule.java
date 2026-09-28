@@ -61,6 +61,12 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+import dev.guizhou.util.elytra.EvadeCommitment;
+import dev.guizhou.util.elytra.PearlLandingThreat;
+import dev.guizhou.util.combat.ProjectilePrediction;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl;
 
 /**
  * Elytra pursuit movement and mace attack timing.
@@ -98,6 +104,13 @@ public class GuangxiElytraChaseModule extends Module {
     private final Setting<Boolean> autoWeapon = bool("AutoWeapon", true).setPage("General");
     private final Setting<Boolean> autoSpearUse = bool("AutoSpearUse", true).setPage("General");
     private final Setting<Boolean> adaptiveCombat = bool("AdaptiveCombat", true).setPage("General");
+    private final Setting<Boolean> evadeCommitment = bool("EvadeCommitment", true).setPage("Defense")
+            .described("Briefly keep an escape heading; obstacles and new threats can interrupt it.");
+    private final Setting<Integer> evadeHoldTicks = num("EvadeHoldTicks", 3, 1, 6).setPage("Defense");
+    private final Setting<Boolean> evadeRearm = bool("EvadeRearm", true).setPage("Defense")
+            .described("Debounce repeated heading commitments without ignoring incoming attacks.");
+    private final Setting<Boolean> pearlDefense = bool("PearlDefense", true).setPage("Defense")
+            .described("Avoid imminent hostile pearl arrivals, independent of trajectory rendering.");
     private final Setting<ThreatMode> threatMode = mode("ThreatMode", ThreatMode.ALL_PLAYERS).setPage("General");
     private final Setting<Boolean> avoidObstacles = bool("AvoidObstacles", true).setPage("General");
     private final Setting<Boolean> onlyWhenNoWasd = bool("OnlyWhenNoWasd", false).setPage("General")
@@ -175,6 +188,10 @@ public class GuangxiElytraChaseModule extends Module {
     private long lastTargetSearchTick = Long.MIN_VALUE / 2;
     private long evadeSideUntil;
     private double evadeSide = 1.0;
+    private final EvadeCommitment escapeCommitment = new EvadeCommitment();
+    private boolean observedMaceThreat;
+    private long maceThreatEpisode;
+    private Vec3 lastDefenseDirection = Vec3.ZERO;
 
     private record DuelRequest(long session, long phase, long targetMotionRevision, int tick, int targetId, Pose pose,
                                boolean wings, boolean gliding, AerialDuelPredictor.Input input) {
@@ -314,7 +331,13 @@ public class GuangxiElytraChaseModule extends Module {
         }
         if (m.combatAction != AerialCombatPolicy.Action.CHASE) {
             double speed = Math.min(m.defensiveHeading.length(), fv.maxVelocity());
+            if (speed < 1.0e-6) {
+                fv.requestBraking();
+                return;
+            }
             fv.set(m.defensiveHeading.normalize().scale(speed));
+            // A coupled-cruise preview must not overwrite the chosen escape direction.
+            if (m.evadeCommitment.getValue() || m.pearlDefense.getValue()) fv.preserveDirection();
         } else {
             m.behavior.inject(fv);
             fv.set(m.flankApproachVector(fv.value()));
@@ -416,6 +439,7 @@ public class GuangxiElytraChaseModule extends Module {
         pendingRotation = null;
         sentRotationKnown = false;
         tactics.reset();
+        resetEscape();
         combatAction = AerialCombatPolicy.Action.CHASE;
         defensiveHeading = Vec3.ZERO;
         targetSinceTick = 0;
@@ -550,6 +574,7 @@ if (nullCheck() || mc.player == null) {
             };
             behavior.enter();
             tactics.reset();
+            resetEscape();
             combatAction = AerialCombatPolicy.Action.CHASE;
             defensiveHeading = Vec3.ZERO;
         }
@@ -571,6 +596,10 @@ if (nullCheck() || mc.player == null) {
             invalidatePlanning();
             maceDive.requestRecovery();
             session++;
+            resetEscape();
+            tactics.reset();
+            combatAction = AerialCombatPolicy.Action.CHASE;
+            defensiveHeading = Vec3.ZERO;
             targetSinceTick = tick;
             lastTarget = target;
             targetHistory.clear();
@@ -592,6 +621,7 @@ if (nullCheck() || mc.player == null) {
             defensiveHeading = Vec3.ZERO;
             combatAction = AerialCombatPolicy.Action.CHASE;
             tactics.reset();
+            resetEscape();
             return;
         }
         updateDuelPlanning();
@@ -608,27 +638,58 @@ if (nullCheck() || mc.player == null) {
     private boolean updateDefense() {
         AerialCombatPolicy.Action next = AerialCombatPolicy.Action.CHASE;
         boolean maceThreat = false;
+        boolean spearThreat = false;
+        boolean urgent = false;
+        EvadeCommitment.Key threatKey = null;
+        List<PearlLandingThreat.Threat> pearls = List.of();
+        PearlLandingThreat.Threat pearl = null;
         var prediction = duelPrediction;
         if (adaptiveCombat.getValue() && behaviorMode != Mode.FOLLOW) {
             Vec3 velocity = targetHistory.predictionVelocity(target.getDeltaMovement());
             maceThreat = fallingMaceThreat(velocity);
-            boolean spearThreat = target instanceof Player player
+            spearThreat = target instanceof Player player
                     && SpearCombat.threatens(player, mc.player, spearAntiSpearExtraDistance.getValue(), 0.25);
             boolean predictedThreat = prediction != null && prediction.severity() >= 0.5
                     && mc.player.hasLineOfSight(target);
-            boolean urgent = spearThreat || maceThreat && mc.player.distanceToSqr(target) <= 20.25
+            pearls = pearlDefense.getValue() ? pearlThreats() : List.of();
+            pearl = pearls.stream().min(Comparator.comparingInt(PearlLandingThreat.Threat::arrivalTicks)
+                    .thenComparing(Comparator.comparingDouble(PearlLandingThreat.Threat::severity).reversed())).orElse(null);
+            urgent = spearThreat || maceThreat && mc.player.distanceToSqr(target) <= 20.25
                     || predictedThreat && AerialDuelPredictor.shouldInterruptAttack(prediction, true,
                     mc.player.getHealth(), mc.player.getAbsorptionAmount(), mc.player.getMaxHealth());
+            urgent |= pearl != null && pearl.urgent();
+            if (maceThreat && !observedMaceThreat) maceThreatEpisode++;
+            observedMaceThreat = maceThreat;
+            if (spearThreat) {
+                Player attacker = (Player) target;
+                threatKey = new EvadeCommitment.Key(session, target.getId(), "spear",
+                        attacker.tickCount - attacker.getTicksUsingItem());
+            } else if (maceThreat) {
+                threatKey = new EvadeCommitment.Key(session, target.getId(), "mace", maceThreatEpisode);
+            } else if (predictedThreat) {
+                threatKey = new EvadeCommitment.Key(session, target.getId(), "predicted:" + prediction.threatKind(), 0);
+            }
+            if (pearl != null && (threatKey == null || pearl.urgent() && !spearThreat && !maceThreat))
+                threatKey = new EvadeCommitment.Key(session, pearl.pearlId(), "pearl", pearl.ownerId());
+            else if (pearl != null && pearl.urgent())
+                threatKey = new EvadeCommitment.Key(session, threatKey.entity(),
+                        threatKey.kind() + ":pearl:" + pearl.pearlId(), threatKey.attack());
             boolean preserveStrike = (realMaceHitWindow() || spearApproachWindow()) && !urgent;
-            next = tactics.evaluate(new AerialCombatPolicy.ThreatInput(mc.player.tickCount,
+            var threatInput = new AerialCombatPolicy.ThreatInput(mc.player.tickCount,
                     policyVector(target.position().subtract(mc.player.position())),
                     policyVector(mc.player.getDeltaMovement()), policyVector(velocity),
                     spearThreat, maceThreat, mc.player.getHealth(), mc.player.getAbsorptionAmount(),
                     mc.player.getMaxHealth(), false, latencyTicks,
-                    threatMode.getValue() == ThreatMode.ALL_PLAYERS && target instanceof Player),
-                    predictedThreat, preserveStrike);
+                    threatMode.getValue() == ThreatMode.ALL_PLAYERS && target instanceof Player);
+            next = tactics.evaluate(threatInput, predictedThreat || pearl != null, preserveStrike);
+            // The policy's clear-delay is not a new approach event: preserve an existing
+            // escape across a brief lost observation instead of snapping back toward the target.
+            if (next != AerialCombatPolicy.Action.CHASE && threatKey == null
+                    && AerialCombatPolicy.incomingHighSpeed(threatInput))
+                threatKey = new EvadeCommitment.Key(session, target.getId(), "approach", 0);
         } else {
             tactics.reset();
+            resetEscape();
         }
         if (next != combatAction) {
             invalidatePlanning();
@@ -641,10 +702,15 @@ if (nullCheck() || mc.player == null) {
             combatAction = next;
         }
         defensiveHeading = Vec3.ZERO;
-        if (next == AerialCombatPolicy.Action.CHASE) return false;
+        if (next == AerialCombatPolicy.Action.CHASE) {
+            escapeCommitment.reset();
+            lastDefenseDirection = Vec3.ZERO;
+            return false;
+        }
         clearSpearAim();
         maintainDefensiveSpearUse();
-        Vec3 away = mc.player.position().subtract(target.position()).multiply(1.0, 0.0, 1.0);
+        Vec3 threatOrigin = pearl != null && !spearThreat && !maceThreat ? pearl.landing() : target.position();
+        Vec3 away = mc.player.position().subtract(threatOrigin).multiply(1.0, 0.0, 1.0);
         if (away.lengthSqr() < 1.0E-6) away = mc.player.getLookAngle().multiply(-1.0, 0.0, -1.0);
         if (away.lengthSqr() < 1.0E-6) away = new Vec3(1.0, 0.0, 0.0);
         away = away.normalize();
@@ -660,14 +726,91 @@ if (nullCheck() || mc.player == null) {
                 evadeSideUntil = (long) mc.player.tickCount + 6;
             }
             defensiveHeading = side.scale(evadeSide).add(away.scale(0.35)).normalize().scale(10.0);
-            if (prediction != null && prediction.severity() >= 0.5) {
+            if (pearl == null && prediction != null && prediction.severity() >= 0.5) {
                 Vec3 preferred = prediction.recommendedDirection();
                 if (preferred.lengthSqr() > 1.0E-6 && pathClear(preferred.scale(probe))) {
                     defensiveHeading = preferred.normalize().scale(10.0);
                 }
             }
         }
+        // Score both sides against every observed arrival, not just the nearest pearl.
+        double probe = Math.max(1.0, mc.player.getDeltaMovement().length());
+        Vec3 side = new Vec3(-away.z, 0.0, away.x);
+        Vec3 candidate = defensiveHeading.normalize();
+        if (evadeCommitment.getValue() || !pearls.isEmpty()) {
+            Vec3 best = Vec3.ZERO;
+            double bestScore = -Double.MAX_VALUE;
+            for (Vec3 direction : new Vec3[]{candidate, side.add(away.scale(0.35)).normalize(),
+                    side.scale(-1).add(away.scale(0.35)).normalize(), away}) {
+                if (!pathClear(direction.scale(probe))) continue;
+                double score = direction.dot(candidate) * 0.1;
+                if (!pearls.isEmpty()) {
+                    double worst = Double.POSITIVE_INFINITY;
+                    for (var hazard : pearls) worst = Math.min(worst,
+                            PearlLandingThreat.clearance(mc.player.position(), direction, probe, hazard));
+                    // Also retain distance from an immediate weapon attacker.
+                    if (spearThreat || maceThreat) worst = Math.min(worst,
+                            mc.player.position().add(direction.scale(probe * 2)).distanceTo(target.position()) / 4.0);
+                    score += worst;
+                }
+                if (score > bestScore) { bestScore = score; best = direction; }
+            }
+            candidate = best;
+        }
+        if (evadeCommitment.getValue()) {
+            var choice = escapeCommitment.update(mc.player.tickCount, threatKey, urgent, candidate,
+                    evadeHoldTicks.getValue(), evadeRearm.getValue() ? 2 : 0,
+                    d -> d.lengthSqr() > 1e-9 && pathClear(d.scale(probe)));
+            candidate = choice.direction();
+            ClientDiagnostics.count("air.evade." + choice.reason().name().toLowerCase(java.util.Locale.ROOT), 1);
+        } else escapeCommitment.reset();
+        if (lastDefenseDirection.lengthSqr() > 0 && candidate.dot(lastDefenseDirection) < 0)
+            ClientDiagnostics.count("air.evade.reversal", 1);
+        lastDefenseDirection = candidate;
+        defensiveHeading = candidate.scale(10.0);
         return true;
+    }
+
+    private void resetEscape() {
+        escapeCommitment.reset();
+        observedMaceThreat = false;
+        maceThreatEpisode = 0;
+        lastDefenseDirection = Vec3.ZERO;
+    }
+
+    private List<PearlLandingThreat.Threat> pearlThreats() {
+        long started = ClientDiagnostics.startTimer();
+        try {
+            var candidates = mc.level.getEntitiesOfClass(ThrownEnderpearl.class,
+                    mc.player.getBoundingBox().inflate(48), p -> p.isAlive()
+                            && p.getOwner() instanceof Player owner && owner != mc.player
+                            && owner.isAlive() && !owner.isSpectator()
+                            && !GuizhouWare.friendManager.isFriend(owner)
+                            && (targetRules == null || targetRules.isValidTarget(owner)));
+            candidates.sort(Comparator.comparingDouble(p -> {
+                Vec3 offset = p.position().subtract(mc.player.position());
+                Vec3 relative = p.getDeltaMovement().subtract(mc.player.getDeltaMovement());
+                double t = relative.lengthSqr() < 1e-9 ? 0
+                        : Math.clamp(-offset.dot(relative) / relative.lengthSqr(), 0, 12);
+                return offset.add(relative.scale(t)).lengthSqr();
+            }));
+            List<PearlLandingThreat.Threat> result = new ArrayList<>();
+            for (int i = 0; i < Math.min(4, candidates.size()); i++) {
+                var p = candidates.get(i);
+                Player owner = (Player) p.getOwner();
+                var trajectory = ProjectilePrediction.simulate(p, 12);
+                if (!trajectory.landed()) continue;
+                double[] end = trajectory.end();
+                double reach = SpearCombat.isSpear(owner.getMainHandItem()) ? 8.0 : 3.0;
+                var hazard = PearlLandingThreat.assess(p.getId(), owner.getId(), new Vec3(end[0], end[1], end[2]),
+                        trajectory.ticks(), mc.player.position(), mc.player.getDeltaMovement(), reach, true);
+                if (hazard != null) result.add(hazard);
+            }
+            ClientDiagnostics.count("air.pearl.hazards", result.size());
+            return result;
+        } finally {
+            ClientDiagnostics.endTimer("air.pearl.sample", started);
+        }
     }
 
     private void resetDefenseBehavior() {
@@ -800,6 +943,8 @@ if (nullCheck() || mc.player == null) {
                 flight::clearNavigationPath);
         routeAvoiding = route.avoiding() || route.blocked();
         if (!routeAvoiding) return requested;
+        escapeCommitment.reset();
+        ClientDiagnostics.count("air.evade.terrain_override", 1);
         clearSpearAim();
         if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("ElytraChase_attack");
         if (weapons.isHoldingUse()) {
@@ -2009,6 +2154,7 @@ if (nullCheck() || mc.player == null) {
                 if (!isEnabled() || session != expectedSession || target != expectedTarget
                         || mc.level != expectedLevel || mc.player != expectedPlayer) return;
                 targetHistory.clear();
+                resetEscape();
                 invalidatePlanning();
                 flightRoute.reset();
                 spearCommit.reset();
@@ -2023,6 +2169,7 @@ if (nullCheck() || mc.player == null) {
             long expectedSession = session;
             mc.execute(() -> {
                 if (session != expectedSession || !isEnabled()) return;
+                resetEscape();
                 pendingRotation = null;
                 sentRotationKnown = false;
                 maceFeedback.clear();

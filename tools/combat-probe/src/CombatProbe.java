@@ -34,6 +34,7 @@ public final class CombatProbe implements ClientModInitializer {
  int finishWait,groundTicks,groundStreak,maxGroundStreak;
  boolean finishing; volatile boolean inventoryVerified; volatile Throwable inventoryFailure;
  @Override public void onInitializeClient() {
+  if(MODE.equals("DEFENSE")){new DefenseProbe().init();return;}
   if(MODE.equals("UI")) { new CombatUiProbe().onInitializeClient(); return; }
   ClientTickEvents.END_CLIENT_TICK.register(this::tick);
   ServerTickEvents.END_SERVER_TICK.register(server -> {
@@ -108,7 +109,7 @@ public final class CombatProbe implements ClientModInitializer {
    setting(flight,"SpeedBps",40.0); setting(flight,"ClimbBps",40.0);
    setting(flight,"TerrainGuard",Boolean.parseBoolean(System.getProperty("probe.terrain","true")));
    if(ARMOR) GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.movement.ArmorFlyModule.class).enable();
-   if(!MODE.equals("ARMOR")) setting(chase,"Mode",MODE); setting(chase,"PlayerOnly",false); setting(chase,"AdaptiveCombat",false);
+   if(!MODE.equals("ARMOR")) setting(chase,"Mode",MODE); setting(chase,"PlayerOnly",false); setting(chase,"AdaptiveCombat",Boolean.getBoolean("probe.adaptive"));
    setting(chase,"AutoMaceDive",true); setting(chase,"MaceUseExtraAttack",true);
    setting(chase,"MaceHeight",Double.parseDouble(System.getProperty("probe.height","10"))); setting(chase,"SpearRange",11.0);
    setting(GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.client.TargetsModule.class),"Hostiles",true);

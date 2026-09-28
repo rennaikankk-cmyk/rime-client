@@ -8,26 +8,21 @@ import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.hud.NotifierHudModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.combat.ProjectileSim;
+import dev.guizhou.util.combat.ProjectilePrediction;
 import dev.guizhou.util.player.ChatUtil;
 import dev.guizhou.util.render.RenderUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
-import net.minecraft.world.entity.projectile.arrow.ThrownTrident;
-import net.minecraft.world.entity.projectile.throwableitemprojectile.AbstractThrownPotion;
 import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrowableItemProjectile;
 import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import java.awt.Color;
@@ -125,17 +120,7 @@ public class TrajectoriesModule extends Module {
     }
 
     private ProjectileSim.Result simulate(Projectile projectile) {
-        Vec3 v = projectile.getDeltaMovement();
-        return ProjectileSim.simulate(projectile.getX(), projectile.getY(), projectile.getZ(), v.x, v.y, v.z,
-                profile(projectile), MAX_TICKS, mc.level.getMinY() - 8, collider(projectile));
-    }
-
-    private static ProjectileSim.Profile profile(Projectile projectile) {
-        if (projectile instanceof ThrownTrident) return ProjectileSim.TRIDENT;
-        if (projectile instanceof AbstractArrow) return ProjectileSim.ARROW;
-        if (projectile instanceof AbstractThrownPotion) return ProjectileSim.POTION;
-        if (projectile instanceof ThrowableItemProjectile item && item.getItem().is(Items.EXPERIENCE_BOTTLE)) return ProjectileSim.XP_BOTTLE;
-        return ProjectileSim.THROWABLE;
+        return ProjectilePrediction.simulate(projectile, MAX_TICKS);
     }
 
     private record Shot(ProjectileSim.Profile profile, double speed, float pitchOffset) {}
@@ -172,33 +157,7 @@ public class TrajectoriesModule extends Module {
     }
 
     private ProjectileSim.Collider collider(Entity source) {
-        return new ProjectileSim.Collider() {
-            @Override
-            public double hit(double x0, double y0, double z0, double x1, double y1, double z1) {
-                Vec3 from = new Vec3(x0, y0, z0), to = new Vec3(x1, y1, z1);
-                double length = from.distanceTo(to);
-                if (length < 1.0e-9) return -1;
-                double best = -1;
-                BlockHitResult block = mc.level.clip(new ClipContext(from, to, ClipContext.Block.COLLIDER,
-                        ClipContext.Fluid.NONE, source));
-                if (block.getType() == HitResult.Type.BLOCK) best = block.getLocation().distanceTo(from) / length;
-                AABB swept = new AABB(from, to).inflate(0.3);
-                List<LivingEntity> entities = mc.level.getEntitiesOfClass(LivingEntity.class, swept,
-                        e -> e != mc.player && e != source && e.isAlive() && !e.isSpectator());
-                for (LivingEntity entity : entities) {
-                    var clip = entity.getBoundingBox().inflate(0.3).clip(from, to);
-                    if (clip.isEmpty()) continue;
-                    double fraction = clip.get().distanceTo(from) / length;
-                    if (best < 0 || fraction < best) best = fraction;
-                }
-                return best;
-            }
-
-            @Override
-            public boolean inWater(double x, double y, double z) {
-                return !mc.level.getFluidState(net.minecraft.core.BlockPos.containing(x, y, z)).isEmpty();
-            }
-        };
+        return ProjectilePrediction.collider(mc.level, source);
     }
 
     private void draw(ProjectileSim.Result result, Color color) {

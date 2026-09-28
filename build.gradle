@@ -141,6 +141,8 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        evadeCommitmentTest: 'dev.guizhou.util.elytra.EvadeCommitmentTest',
+        pearlLandingThreatTest: 'dev.guizhou.util.elytra.PearlLandingThreatTest',
         clientLanguageTest: 'dev.guizhou.util.lang.ClientLanguageTest',
         placementGeometryTest: 'dev.guizhou.manager.PlacementGeometryTest',
         licenseLeaseTest: 'dev.guizhou.util.license.LicenseLeaseTest',

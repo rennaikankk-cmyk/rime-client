@@ -884,5 +884,13 @@
   "宋体": "SimSun",
   "末地": "The End",
   "界面语言": "Language",
-  "界面语言：英文或中文。修改后立即生效。": "Interface language: English or Chinese. Takes effect immediately."
+  "界面语言：英文或中文。修改后立即生效。": "Interface language: English or Chinese. Takes effect immediately.",
+  "防御": "Defense",
+  "规避航向保持": "EvadeCommitment",
+  "航向保持刻数": "EvadeHoldTicks",
+  "同次威胁去重": "EvadeRearm",
+  "珍珠落点规避": "PearlDefense",
+  "短暂保持规避方向，遇到障碍或新威胁时立即重新选择。": "Briefly keep an escape heading; obstacles and new threats can interrupt it.",
+  "减少同次威胁反复锁定航向，仍持续检测并规避攻击。": "Debounce repeated heading commitments without ignoring incoming attacks.",
+  "规避即将到达附近的敌方珍珠落点，无需开启轨迹渲染。": "Avoid imminent hostile pearl arrivals, independent of trajectory rendering."
 }

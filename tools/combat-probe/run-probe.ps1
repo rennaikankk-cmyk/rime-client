@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory)][ValidatePattern('^[a-z0-9-]+$')][string]$Name,
     [Parameter(Mandatory)][string]$WorldPath,
-    [ValidateSet('SPEAR','MACE','MXS','ARMOR','UI')][string]$Mode='SPEAR',
+    [ValidateSet('SPEAR','MACE','MXS','ARMOR','UI','DEFENSE')][string]$Mode='SPEAR',
     [ValidateSet('true','false')][string]$Armor='false',
     [ValidateSet('true','false')][string]$Air='false',
     [ValidateSet('true','false')][string]$High='false',
@@ -11,6 +11,7 @@ param(
     [double]$Height=10,
     [ValidateSet('true','false')][string]$Terrain='true',
     [ValidateSet('true','false')][string]$RequireDamage='false',
+    [ValidateSet('true','false')][string]$Adaptive='false',
     [string]$FontDirectory,
     [string]$JavaHome=$env:JAVA_HOME
 )
@@ -36,9 +37,10 @@ Push-Location -LiteralPath $repo
 try {
     & .\gradlew.bat --offline -I "$base\probe.gradle" runtimeProbeJar --console=plain *> "$base\$Name-build.log"
     if($LASTEXITCODE -ne 0){throw "Probe fixture build failed: $base\$Name-build.log"}
-    & .\gradlew.bat --offline -PgzwDevelopmentBuild=true -I "$base\probe.gradle" "-PprobeRun=$Name" "-PprobeMode=$Mode" "-PprobeArmor=$Armor" "-PprobeAir=$Air" "-PprobeHigh=$High" "-PprobeGround=$Ground" "-PprobeTicks=$Ticks" "-PprobeGear=$Gear" "-PprobeHeight=$Height" "-PprobeTerrain=$Terrain" "-PprobeRequireDamage=$RequireDamage" runClient --console=plain *> "$base\$Name.log"
+    & .\gradlew.bat --offline -PgzwDevelopmentBuild=true -I "$base\probe.gradle" "-PprobeRun=$Name" "-PprobeMode=$Mode" "-PprobeArmor=$Armor" "-PprobeAir=$Air" "-PprobeHigh=$High" "-PprobeGround=$Ground" "-PprobeTicks=$Ticks" "-PprobeGear=$Gear" "-PprobeHeight=$Height" "-PprobeTerrain=$Terrain" "-PprobeRequireDamage=$RequireDamage" "-PprobeAdaptive=$Adaptive" runClient --console=plain *> "$base\$Name.log"
     $result=$LASTEXITCODE
 } finally { Pop-Location }
 if($result -ne 0){throw "Probe failed; inspect $base\$Name.log"}
 if($Mode -eq 'UI' -and (!(Test-Path -LiteralPath "$run\ui-complete.txt") -or (Test-Path -LiteralPath "$run\ui-failure.txt"))){throw 'UI verification did not complete'}
+if($Mode -eq 'DEFENSE' -and (!(Test-Path -LiteralPath "$run\defense-complete.txt") -or (Test-Path -LiteralPath "$run\defense-failure.txt"))){throw 'Defense verification did not complete'}
 Select-String -LiteralPath "$base\$Name.log" -Pattern 'PROBE_START|PROBE_DAMAGE|PROBE_ARMOR|PROBE_DONE' | ForEach-Object Line
