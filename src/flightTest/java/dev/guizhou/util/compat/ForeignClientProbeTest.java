@@ -60,18 +60,18 @@ public final class ForeignClientProbeTest {
         Extra.INSTANCE.rocketBoost.value = true;
         check(probe.read(Set.of("slimefunhelper")).blocks(FLIGHT), "SLM boost owns motion");
         Extra.INSTANCE.rocketBoost.value = false;
-        features=List.of(new Feature("ElytraFly",true),new Feature("AutoTotem",true),new Feature("AutoEat",true),new Feature("CrystalAura",true));
+        features=List.of(new Feature("ElytraFly",true),new Feature("AutoTotem",true),new Feature("AutoEat",true),new Feature("CrystalAura",true),new Feature("InvHelper",true));
         state=probe.read(Set.of("rusherhack"));
         for(var domain:ForeignClientProbe.Domain.values())check(state.blocks(domain),"Rusher public toggle: "+domain);
         for(var feature:features)feature.active=false;
         check(probe.read(Set.of("rusherhack")).owners().isEmpty(),"Rusher toggles are read afresh");
         Extra.INSTANCE=null;
-        check(probe.read(Set.of("slimefunhelper")).owners().size()==6,"Initialization failure yields safely");
+        check(probe.read(Set.of("slimefunhelper")).owners().size()==7,"Initialization failure yields safely");
         Extra.INSTANCE=new Extra();
         check(probe.read(Set.of("slimefunhelper")).owners().isEmpty(),"Late initialization recovers");
         var unsupported=new ForeignClientProbe(name->{throw new ClassNotFoundException(name);});
         check(unsupported.read(Set.of()).owners().isEmpty(),"Absent classes are optional");
-        check(unsupported.read(Set.of("rusherhack")).owners().size()==6,"Detected incompatible API yields with a reason");
+        check(unsupported.read(Set.of("rusherhack")).owners().size()==7,"Detected incompatible API yields with a reason");
         Extra.INSTANCE.armorFly.value=true;features=List.of(new Feature("AutoEat",true));
         state=probe.read(Set.of("slimefunhelper","rusherhack"));
         check(state.blocks(ARMOR)&&state.blocks(FOOD)&&!state.blocks(FLIGHT),"Both clients combine independent owners");
@@ -83,6 +83,12 @@ public final class ForeignClientProbeTest {
         owners.clear();
         ForeignClientProbe.classify(owners,"SlimefunHelper","AttackAura");
         check(owners.containsKey(COMBAT) && !owners.containsKey(ARMOR), "Official upstream combat module name");
+        owners.clear();
+        ForeignClientProbe.classify(owners,"SlimefunHelper","InvHelper");
+        check(owners.containsKey(INVENTORY) && !owners.containsKey(FLIGHT) && !owners.containsKey(OFFHAND),
+                "Upstream InvHelper owns the inventory domain only");
+        ForeignClientProbe.classify(owners,"SlimefunHelper","KitReplenish");
+        check(owners.containsKey(INVENTORY), "Upstream KitReplenish owns the inventory domain");
         System.out.println("ForeignClientProbeTest passed: "+checks+" checks");
     }
     private static void check(boolean condition,String reason){checks++;if(!condition)throw new AssertionError(reason);}

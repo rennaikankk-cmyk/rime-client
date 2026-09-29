@@ -90,7 +90,28 @@ public final class LicenseActionHookTest {
         check(!eatCleanup.hasAuthorization() && !eatCleanup.calls("release").isEmpty(),
                 "AutoEat must hand the hotbar back even when revoked");
 
+        String replenish = BASE + "player/ReplenishModule";
+        guarded(replenish, "onTick", null);
+        guarded(replenish, "moveTo", null, "click");
+        guarded(replenish, "mergeInto", null, "click");
+        Code replenishCleanup = method(replenish, "resetState", null);
+        check(!replenishCleanup.hasAuthorization(), "Replenish cleanup survives revocation");
+
+        String kit = BASE + "player/KitReplenishModule";
+        guarded(kit, "onTick", null);
+        guarded(kit, "takeFromOpenContainer", null, "click");
+        guarded(kit, "placeShulker", null, "use");
+        guarded(kit, "breakPlacedShulker", null, "startDestroyBlock", "swing");
+        guarded(kit, "mergeInto", null, "click");
+        Code kitCleanup = method(kit, "finishChain", null);
+        check(!kitCleanup.hasAuthorization(), "KitReplenish cleanup survives revocation");
+
         guarded(BASE + "client/AutoReconnectModule", "reconnect", null, "startConnecting");
+
+        String anti = BASE + "combat/AntiReplenishModule";
+        guarded(anti, "onTick", null);
+        guarded(anti, "mineEnemyBox", null, "startDestroyBlock", "swing");
+        check(!method(anti, "stopMining", null).hasAuthorization(), "AntiReplenish cleanup survives revocation");
     }
 
     private static void crystalActions() throws IOException {

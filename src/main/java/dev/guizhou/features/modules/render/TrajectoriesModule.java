@@ -2,6 +2,7 @@ package dev.guizhou.features.modules.render;
 
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.network.DisconnectEvent;
+import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
@@ -9,9 +10,12 @@ import dev.guizhou.features.modules.hud.NotifierHudModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.combat.ProjectileSim;
 import dev.guizhou.util.combat.ProjectilePrediction;
+import dev.guizhou.util.entity.PearlOwnership;
 import dev.guizhou.util.player.ChatUtil;
 import dev.guizhou.util.render.RenderUtil;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -45,6 +49,7 @@ public class TrajectoriesModule extends Module {
     private final Setting<Boolean> pearlAlert = bool("PearlAlert", true).setPage("Alert");
     private final Setting<Double> alertRange = num("AlertRange", 48.0, 4.0, 128.0).setPage("Alert");
     private final Setting<Boolean> alertFriends = bool("AlertFriends", false).setPage("Alert");
+    private final Setting<Boolean> alertUnknown = bool("AlertUnknown", true).setPage("Alert");
 
     private final Setting<Float> lineWidth = num("LineWidth", 1.5f, 0.5f, 4.0f).setPage("Render");
     private final Setting<Color> selfColor = color("SelfColor", 250, 249, 245, 220).setPage("Render");
@@ -53,6 +58,9 @@ public class TrajectoriesModule extends Module {
     private final Setting<Color> landColor = color("LandColor", 224, 138, 108, 60).setPage("Render");
 
     private final Set<Integer> alerted = new HashSet<>();
+    /** Owner fallback for pearls whose thrower entity the client no longer tracks. */
+    private final PearlOwnership ownership = new PearlOwnership();
+    private net.minecraft.world.level.Level ownershipScope;
 
     public TrajectoriesModule() {
         super("Trajectories", "Draws the landing path of what you are about to throw or shoot and of projectiles "
@@ -62,36 +70,80 @@ public class TrajectoriesModule extends Module {
     @Override
     public void onDisable() {
         alerted.clear();
+        ownership.clear();
     }
 
     @Subscribe
     private void onDisconnect(DisconnectEvent event) {
         alerted.clear();
+        ownership.clear();
+    }
+
+    /** Pearl spawn packets carry the thrower's entity id even after the thrower despawns. */
+    @Subscribe
+    private void onPacketReceive(PacketEvent.Receive event) {
+        if (!pearlAlert.getValue() || mc.player == null) return;
+        if (event.getPacket() instanceof ClientboundAddEntityPacket packet
+                && packet.getType() == EntityType.ENDER_PEARL) {
+            mc.execute(() -> ownership.onPearlSpawn(packet.getId(), packet.getData(), System.currentTimeMillis()));
+        }
     }
 
     @Override
     public void onTick() {
         if (nullCheck() || !pearlAlert.getValue()) return;
+        if (ownershipScope != mc.level) {
+            // another dimension or world: entity ids and bindings no longer mean anything
+            ownershipScope = mc.level;
+            ownership.clear();
+            alerted.clear();
+        }
+        long now = System.currentTimeMillis();
+        for (Player player : mc.level.players()) {
+            ownership.observePlayer(player.getId(), player.getUUID(), player.getGameProfile().name(), now);
+        }
         Set<Integer> alive = new HashSet<>();
         double rangeSq = range.getValue() * range.getValue();
         for (Entity entity : mc.level.entitiesForRendering()) {
             if (!(entity instanceof ThrownEnderpearl pearl) || pearl.distanceToSqr(mc.player) > rangeSq) continue;
             alive.add(pearl.getId());
             if (alerted.contains(pearl.getId())) continue;
-            if (!(pearl.getOwner() instanceof Player owner) || owner == mc.player) continue;
-            if (!alertFriends.getValue() && GuizhouWare.friendManager.isFriend(owner)) continue;
+            Player directOwner = pearl.getOwner() instanceof Player owner ? owner : null;
+            PearlOwnership.Identity identity = directOwner != null
+                    ? new PearlOwnership.Identity(directOwner.getUUID(), directOwner.getGameProfile().name())
+                    : ownership.resolve(pearl.getId()).orElse(null);
+            if (identity == null && directOwner == null) {
+                int ownerEid = ownership.ownerEid(pearl.getId());
+                if (ownerEid > 0 && mc.level.getEntity(ownerEid) instanceof Player player) {
+                    identity = new PearlOwnership.Identity(player.getUUID(), player.getGameProfile().name());
+                }
+            }
+            if (identity != null && identity.uuid().equals(mc.player.getUUID())) continue;
+            if (identity != null && !alertFriends.getValue()
+                    && GuizhouWare.friendManager.isFriend(identity.name())) continue;
+            if (identity == null && !alertUnknown.getValue()) continue;
             ProjectileSim.Result result = simulate(pearl);
             if (!result.landed()) continue;
             double[] end = result.end();
             double distance = mc.player.position().distanceTo(new Vec3(end[0], end[1], end[2]));
             alerted.add(pearl.getId());
             if (distance > alertRange.getValue()) continue;
-            String text = String.format(dev.guizhou.util.lang.ClientLanguage.text("%s 的珍珠将落在 %d, %d, %d（距你 %.0f 格，%.1f 秒）"), owner.getGameProfile().name(),
+            String text = String.format(dev.guizhou.util.lang.ClientLanguage.text("%s 的珍珠将落在 %d, %d, %d（距你 %.0f 格，%.1f 秒）"), describeOwner(directOwner, identity),
                     (int) Math.floor(end[0]), (int) Math.floor(end[1]), (int) Math.floor(end[2]), distance, result.ticks() / 20.0);
             ChatUtil.sendMessage(Component.literal(text));
             NotifierHudModule.push("pearl:" + pearl.getId(), NotifierHudModule.Icon.DANGER, text);
         }
+        ownership.retain(alive, now);
         alerted.retainAll(alive);
+    }
+
+    /** Name plus an online/offline suffix once the owner entity is gone; unknown stays unknown. */
+    private String describeOwner(Player directOwner, PearlOwnership.Identity identity) {
+        if (directOwner != null) return directOwner.getGameProfile().name();
+        if (identity == null) return dev.guizhou.util.lang.ClientLanguage.text("未知归属");
+        boolean online = mc.getConnection() != null && mc.getConnection().getOnlinePlayers().stream()
+                .anyMatch(info -> identity.uuid().equals(info.getProfile().id()));
+        return identity.name() + dev.guizhou.util.lang.ClientLanguage.text(online ? "（在线）" : "（离线）");
     }
 
     @Override

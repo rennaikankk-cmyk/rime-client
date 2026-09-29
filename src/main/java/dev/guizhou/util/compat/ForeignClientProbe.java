@@ -7,7 +7,7 @@ import java.util.Set;
 
 /** Optional, read-only public API adapters. No foreign settings or packets are changed. */
 public final class ForeignClientProbe {
-    public enum Domain { FLIGHT, ARMOR, ROCKET, COMBAT, OFFHAND, FOOD }
+    public enum Domain { FLIGHT, ARMOR, ROCKET, COMBAT, OFFHAND, FOOD, INVENTORY }
     public record Snapshot(Map<Domain, String> owners) {
         public Snapshot { owners = Map.copyOf(owners); }
         public boolean blocks(Domain domain) { return owners.containsKey(domain); }
@@ -81,7 +81,9 @@ public final class ForeignClientProbe {
             case "elytraflight", "elytrafly", "elytracontrol", "elytragrimaccelerate", "elytragrimacc", "elytrajump", "flight", "fly" ->
                     put(owners, owner, Domain.FLIGHT, Domain.ARMOR, Domain.ROCKET, Domain.COMBAT);
             case "elytrabot", "elytrabotv2" -> put(owners, owner, Domain.FLIGHT, Domain.ARMOR, Domain.ROCKET, Domain.COMBAT);
-            case "armorfly", "autoarmor", "elytraswap", "cheststealer", "inventorytweaks", "inventorymanager" -> put(owners, owner, Domain.ARMOR);
+            case "armorfly", "autoarmor", "elytraswap" -> put(owners, owner, Domain.ARMOR);
+            case "cheststealer", "inventorytweaks", "inventorymanager", "invhelper", "kitreplenish", "antireplenish" ->
+                    put(owners, owner, Domain.ARMOR, Domain.INVENTORY);
             case "autorocket", "autofirework" -> put(owners, owner, Domain.ROCKET);
             case "autototem", "offhand" -> put(owners, owner, Domain.OFFHAND);
             case "autoeat", "autogapple" -> put(owners, owner, Domain.FOOD);

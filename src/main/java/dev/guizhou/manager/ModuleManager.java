@@ -115,6 +115,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new LogoutSpotsModule());
         register(new PopEffectsModule());
         register(new ShulkerPreviewModule());
+        register(new dev.guizhou.features.modules.render.ChestHistoryModule());
         register(new QuadSupremeModule());
         register(new ViewModelModule());
         register(new MiddleClickExtraModule());
@@ -136,6 +137,9 @@ public class ModuleManager implements Jsonable, Util {
         register(new ScaffoldModule());
         register(new ReplenishModule());
         register(new InstantRekitModule());
+        register(new dev.guizhou.features.modules.player.KitReplenishModule());
+        register(new dev.guizhou.features.modules.combat.AntiReplenishModule());
+        register(new dev.guizhou.features.modules.hud.ChunkLagModule());
         register(new NoRotateModule());
         register(new dev.guizhou.features.modules.client.AutoReconnectModule());
         register(new dev.guizhou.features.modules.client.VisualRangeModule());

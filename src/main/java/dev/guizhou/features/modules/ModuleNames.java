@@ -31,7 +31,11 @@ public final class ModuleNames {
             Map.entry("VisualRange", "视距警报"),
             Map.entry("AutoArmor", "自动穿甲"),
             Map.entry("AutoEat", "自动进食"),
-            Map.entry("MiddleClickFriend", "中键好友"));
+            Map.entry("MiddleClickFriend", "中键好友"),
+            Map.entry("ChestHistory", "容器历史"),
+            Map.entry("KitReplenish", "套装补给"),
+            Map.entry("AntiReplenish", "反补给"),
+            Map.entry("ChunkLag", "区块延迟预警"));
 
     private ModuleNames() {}
 
