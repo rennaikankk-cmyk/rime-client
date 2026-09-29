@@ -181,6 +181,7 @@ def clientRegressionTests = [
         kitDemandTest: 'dev.guizhou.util.inventory.KitDemandTest',
         pearlOwnershipTest: 'dev.guizhou.util.entity.PearlOwnershipTest',
         signalHysteresisTest: 'dev.guizhou.util.hud.SignalHysteresisTest',
+        bedCandidateWatchTest: 'dev.guizhou.util.combat.BedCandidateWatchTest',
         glideMetadataDelayTest: 'dev.guizhou.util.elytra.GlideMetadataDelayTest',
         fontPageTest: 'dev.guizhou.util.render.font.FontPageTest',
         fontRecoveryTest: 'dev.guizhou.util.render.font.FontRecoveryTest',

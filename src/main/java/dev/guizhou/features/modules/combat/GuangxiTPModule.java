@@ -78,8 +78,9 @@ public class GuangxiTPModule extends Module {
     private final Setting<Boolean> debug = bool("Debug", false);
 
     // ------------------------------------------------------------ TPDiag counters
-    private int dNoTarget, dBaseNull, dOppNull, dObsFail, dSwapFail, dSent, dBreakSent;
-    private int dEntRej, dDmgRej, dSelfRej;
+    private int dNoTarget, dBaseNull, dOppNull, dObsFail;
+    private int dBaseSent, dCrystalSent, dBreakSent, dCrystalObserved;
+    private int dSupplyRej, dCycleSkip, dFeetRej, dEntRej, dDmgRej, dSelfRej;
     private double dLastTargetDist = -1;
     private long dWindow = 0;
 
@@ -88,21 +89,23 @@ public class GuangxiTPModule extends Module {
         if (dWindow == 0) { dWindow = now; return; }
         if (now - dWindow < 1000) return;
         if (debug.getValue()) {
-            int rejects = dNoTarget + dBaseNull + dOppNull + dObsFail + dSwapFail;
-            if (rejects > 0 || dSent > 0 || dBreakSent > 0 || dEntRej > 0 || dDmgRej > 0 || dSelfRej > 0) {
+            int rejects = dNoTarget + dBaseNull + dOppNull + dObsFail + dSupplyRej + dCycleSkip;
+            if (rejects > 0 || dBaseSent > 0 || dCrystalSent > 0 || dBreakSent > 0 || dCrystalObserved > 0
+                    || dFeetRej > 0 || dEntRej > 0 || dDmgRej > 0 || dSelfRej > 0) {
                 GuizhouWare.LOGGER.info(
-                        "[TPDiag] legacy={} tps={} rub={} | sent={} brk={} swapFail={} | noTgt={} noBase={} oppNull={} obsFail={} | reject[ent={} dmg={} self={}] tgtD={}",
+                        "[TPDiag] legacy={} tps={} rub={} | base={} crys={} brk={} obsv={} | noTgt={} noBase={} oppNull={} obsFail={} | rej[supply={} cycle={} feet={} ent={} dmg={} self={}] tgtD={}",
                         useLegacy112(),
                         String.format("%.1f", GuizhouWare.tpsCounterService.getAverageTPS()),
                         GuizhouWare.tpsCounterService.isRubberbandRecent(),
-                        dSent, dBreakSent, dSwapFail,
+                        dBaseSent, dCrystalSent, dBreakSent, dCrystalObserved,
                         dNoTarget, dBaseNull, dOppNull, dObsFail,
-                        dEntRej, dDmgRej, dSelfRej,
+                        dSupplyRej, dCycleSkip, dFeetRej, dEntRej, dDmgRej, dSelfRej,
                         dLastTargetDist < 0 ? "-" : String.format("%.0f", dLastTargetDist));
             }
         }
-        dNoTarget = dBaseNull = dOppNull = dObsFail = dSwapFail = dSent = dBreakSent = 0;
-        dEntRej = dDmgRej = dSelfRej = 0;
+        dNoTarget = dBaseNull = dOppNull = dObsFail = 0;
+        dBaseSent = dCrystalSent = dBreakSent = dCrystalObserved = 0;
+        dSupplyRej = dCycleSkip = dFeetRej = dEntRej = dDmgRej = dSelfRej = 0;
         dLastTargetDist = -1;
         dWindow = now;
     }
@@ -113,6 +116,10 @@ public class GuangxiTPModule extends Module {
     private final Timer placeTimer = new Timer();
     private final Timer breakTimer = new Timer();
     private final Timer baseTimer = new Timer();
+
+    /** Base whose crystal chain was submitted but the crystal was not observed yet. */
+    private BlockPos pendingCycleBase;
+    private long pendingCycleAtMs;
 
     /**
      * Anti ping-pong epsilon: a candidate only displaces the current pick when it beats it by
@@ -139,6 +146,7 @@ public class GuangxiTPModule extends Module {
     public void onEnable() {
         attacks.clear();
         renderPos = null;
+        pendingCycleBase = null;
         placeTimer.reset();
         breakTimer.reset();
         baseTimer.reset();
@@ -148,6 +156,7 @@ public class GuangxiTPModule extends Module {
     public void onDisable() {
         attacks.clear();
         renderPos = null;
+        pendingCycleBase = null;
     }
 
     @Subscribe
@@ -170,9 +179,15 @@ public class GuangxiTPModule extends Module {
         dLastTargetDist = Math.sqrt(mc.player.distanceToSqr(target));
 
         if (place.getValue() && placeTimer.passedMs(tpsMs(placeDelay.getValue()))) {
+            // The break side's own candidate list, reused as "is there a live cycle to finish".
+            EndCrystal live = findCrystalNear(target);
+            if (live != null) dCrystalObserved++;
+            boolean cycleBusy = cycleInProgress(live, System.currentTimeMillis());
             BlockPos base = findBaseNear(target);
             if (base != null) {
-                if (tpPlace(base)) {
+                // Do not burn the placement slot when the crystal path cannot run at all.
+                if (!crystalReady()) dSupplyRej++;
+                else if (tpPlace(base)) {
                     placeTimer.reset();
                     noteRender(base.above(), estimateDamage(target,
                             new Vec3(base.getX() + 0.5, base.getY() + 1, base.getZ() + 0.5)));
@@ -180,15 +195,24 @@ public class GuangxiTPModule extends Module {
             } else {
                 dBaseNull++;
                 if (basePlace.getValue() && baseTimer.passedMs(tpsMs(baseDelay.getValue()))) {
-                    // No natural base: desync-place obsidian next to the target, then chain the
-                    // crystal on top in the same tick — the server processes the packets in order,
-                    // so the base already exists when the crystal use arrives.
-                    BaseOpportunity opp = findBaseOpportunity(target);
-                    if (opp == null) dOppNull++;
-                    else if (tpBasePlaceChain(opp)) {
-                        placeTimer.reset();
-                        noteRender(opp.base().above(), opp.damage());
-                    } else dObsFail++;
+                    if (cycleBusy) {
+                        // An unbroken crystal or an unobserved chain already owns this cycle.
+                        dCycleSkip++;
+                    } else if (!crystalReady()) {
+                        dSupplyRej++;
+                    } else {
+                        // No natural base: desync-place obsidian next to the target, then chain the
+                        // crystal on top in the same tick — the server processes the packets in order,
+                        // so the base already exists when the crystal use arrives.
+                        BaseOpportunity opp = findBaseOpportunity(target);
+                        if (opp == null) dOppNull++;
+                        else if (tpBasePlaceChain(opp)) {
+                            pendingCycleBase = opp.base();
+                            pendingCycleAtMs = System.currentTimeMillis();
+                            placeTimer.reset();
+                            noteRender(opp.base().above(), opp.damage());
+                        } else dObsFail++;
+                    }
                 }
             }
         }
@@ -242,6 +266,7 @@ public class GuangxiTPModule extends Module {
                     if (!safeSelf(center, null)) { dSelfRej++; continue; }
 
                     if (dmg > bestDmg + SELECT_EPSILON) {
+                        if (!detonatableFromSafe(center, airPos)) { dFeetRej++; continue; }
                         bestDmg = dmg;
                         best = cursor.immutable();
                     }
@@ -319,6 +344,7 @@ public class GuangxiTPModule extends Module {
                     if (!safeSelf(crystalCenter, cursor)) continue;
 
                     if (best == null || dmg > best.damage() + SELECT_EPSILON) {
+                        if (!detonatableFromSafe(crystalCenter, air)) continue;
                         best = new BaseOpportunity(cursor.immutable(), neighbor.immutable(), face, dmg);
                     }
                 }
@@ -339,7 +365,7 @@ public class GuangxiTPModule extends Module {
         float[] look = lookAt(fake, Vec3.atCenterOf(base));
         boolean sent = sandwich(fake, look[0], look[1], () -> crystal.placeBaseShared(base, eye));
         if (!sent) return false;
-        dSent++;
+        dBaseSent++;
         baseTimer.reset();
         return tpPlace(base, true);
     }
@@ -362,7 +388,7 @@ public class GuangxiTPModule extends Module {
         Vec3 eye = fake.add(0, mc.player.getEyeHeight(), 0);
         float[] look = lookAt(fake, Vec3.atCenterOf(base.above()));
         boolean sent = sandwich(fake, look[0], look[1], () -> crystal.placeCrystalShared(base, pendingBase, eye));
-        if (sent) dSent++;
+        if (sent) dCrystalSent++;
         return sent;
     }
 
@@ -412,8 +438,40 @@ public class GuangxiTPModule extends Module {
         if (attackLevel != mc.level || attackPlayer != mc.player) {
             attacks.clear(); attackLevel = mc.level; attackPlayer = mc.player;
             renderPos = null;
+            pendingCycleBase = null;
         }
         attacks.expire(System.currentTimeMillis(), 2000);
+    }
+
+    /** Crystal path preflight: without a suppliable crystal and a free weapon controller the
+     *  whole cycle cannot run, so no base material may be spent on it. */
+    private boolean crystalReady() {
+        GuangxiCrystalModule crystal = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
+        return crystal != null && crystal.partnerCanPlaceCrystal();
+    }
+
+    /** A base whose chain was submitted but never observed, or a live breakable crystal, owns
+     *  the cycle: no new bases until it resolves or the observation window expires. */
+    private boolean cycleInProgress(EndCrystal live, long now) {
+        if (pendingCycleBase != null) {
+            if (live != null && live.blockPosition().equals(pendingCycleBase.above())) {
+                pendingCycleBase = null; // observed: the break side owns the cycle from here
+            } else if (now - pendingCycleAtMs >= Math.max(800L, tpsMs(placeDelay.getValue()) * 3)) {
+                pendingCycleBase = null; // observation window expired: stop waiting for it
+            } else {
+                return true;
+            }
+        }
+        return live != null;
+    }
+
+    /** A plan is only worth obsidian when the future crystal can actually be detonated from
+     *  some temporary position — the same filter the break side will apply once it exists. */
+    private boolean detonatableFromSafe(Vec3 crystalCenter, BlockPos airPos) {
+        if (useLegacy112()) return true;
+        var self = AnchorDamageUtil.Target.of(mc.player);
+        return TeleportBlastPosition.find(crystalCenter, new AABB(airPos), 3.0,
+                feet -> safeDamage(AnchorDamageUtil.explosionDamage(self.at(feet), crystalCenter, 12, null))) != null;
     }
 
     private boolean safeDamage(float damage) {

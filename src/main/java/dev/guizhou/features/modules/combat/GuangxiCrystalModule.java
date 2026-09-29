@@ -366,6 +366,10 @@ public class GuangxiCrystalModule extends Module {
 
     private int lastReactorPlaceTick = -1;
     private BlockPos lastPlaceAir = null;
+    /** Final damage of the cycle the lock is waiting on; challengers must beat it by the release margin. */
+    private float lastPlaceDamage = 0f;
+    /** True when the last place search found nothing usable because the locked cycle still owns the tick. */
+    private boolean placeSearchWaiting;
     private int placeDiagCounter = 0;
 
     private final ExposureContext exposureCtx = new ExposureContext();
@@ -437,6 +441,8 @@ public class GuangxiCrystalModule extends Module {
         lastCalcMs = 0;
         lastReactorPlaceTick = -1;
         lastPlaceAir = null;
+        lastPlaceDamage = 0f;
+        placeSearchWaiting = false;
         lastMaxEntityId = -1;
         lastCarriedSlot = -1;
         ownSwapPackets.set(0);
@@ -1006,7 +1012,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     Component.literal(String.format("AutoCrystal calc: %.3f ms", lastCalcMs)));
         }
 
+        // Waiting on the old cycle (placement pending or a live crystal still on the spot) is
+        // not "no valid site": do not spend another base on top of a cycle that may still
+        // complete. Bases are only laid when the search truly found nothing executable.
         boolean baseWins = baseTarget != null
+                && !(crystalTarget == null && placeSearchWaiting)
                 && (crystalTarget == null
                     || (crystalTarget.damage <= baseOverrideMax.getValue()
                         && baseTarget.damage > crystalTarget.damage));
@@ -1506,19 +1516,17 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             }
         }
 
-        // Damage-aware lock release: the same-spot rhythm lock must not blind us to a clearly
-        // better position (upstream behaviour locked onto the old spot even at 6.9 vs 12.8 dmg).
+        // The lock only falls here when the old cycle's spot is no longer even a candidate
+        // (base gone, cell replaced). Otherwise challengers displace it inside the loop by
+        // final evaluated damage plus the margin, not by the optimistic unobstructed bound:
+        // a spot that merely bounds high but cannot actually be executed must not kill a
+        // working cycle.
         if (locked != null && !candidates.isEmpty()) {
-            float lockedBound = -1f;
+            boolean lockedPresent = false;
             for (int i = 0, n = candidates.size(); i < n; i++) {
-                if (candidates.get(i).airPos.equals(locked)) {
-                    lockedBound = candidates.get(i).bound;
-                    break;
-                }
+                if (candidates.get(i).airPos.equals(locked)) { lockedPresent = true; break; }
             }
-            if (lockedBound < 0f || candidates.get(0).bound > lockedBound + LOCK_RELEASE_MARGIN) {
-                locked = null;
-            }
+            if (!lockedPresent) locked = null;
         }
 
         PlaceTarget best = null;
@@ -1532,9 +1540,14 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             if (best != null && c.bound <= best.damage - 1.0f) break;
 
             if (locked != null && !c.airPos.equals(locked)) {
-                if (c.bound > topRejectBound) { topRejectBound = c.bound; topReject = c.airPos + " locked"; }
-                rejLocked++;
-                continue;
+                // Only a candidate whose optimistic bound can beat the remembered final damage
+                // of the in-flight cycle by the margin is worth challenging with; acceptance
+                // below then compares the challenger's evaluated damage, never the bound.
+                if (c.bound <= lastPlaceDamage + LOCK_RELEASE_MARGIN) {
+                    if (c.bound > topRejectBound) { topRejectBound = c.bound; topReject = c.airPos + " locked"; }
+                    rejLocked++;
+                    continue;
+                }
             }
             LivingEntity faceEntity = entityOverlap.getValue() ? faceOverlapAllowed(c.airPos, potentialTargets) : null;
             if (faceEntity == null && isBlocked(c.airPos)) {
@@ -1577,7 +1590,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 rejBal++;
                 continue;
             }
-            boolean higherDamage = best == null || totalDmg > best.damage;
+            boolean higherDamage = best == null
+                    ? locked == null || totalDmg > lastPlaceDamage + LOCK_RELEASE_MARGIN
+                    : totalDmg > best.damage;
             // Spots within 1 damage keep the one closer to the eye. A far crystal that is
             // barely stronger is harder to rotate onto and harder to break.
             boolean closerTie = best != null && totalDmg > best.damage - 1.0f
@@ -1590,6 +1605,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 bestCenter = c.crystalCenter;
             }
         }
+        // A null result with the lock still held means "the old cycle owns this tick", not
+        // "there is no usable site around here"; the base branch must not read it as the latter.
+        placeSearchWaiting = locked != null && best == null;
         logPlacePick(best, topReject, topRejectBound,
                 scanAir, scanPlaceR, scanBreakR, scanLowBound,
                 rejLocked, rejBlocked, rejPending, rejSelf, rejMin, rejBal);
@@ -1987,7 +2005,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (sent) {
             lastReactorPlaceTick = mc.player.tickCount;
             diagPlaceSent++;
-            recordPlace(air);
+            recordPlace(air, target.damage);
             // The spawn for this placement takes the next sequential entity id.
             sendGhostAttacksAfter(lastMaxEntityId);
         }
@@ -2007,6 +2025,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     public boolean placeCrystalShared(BlockPos base, boolean trustBase, LivingEntity faceEntity) {
         return placeCrystalShared(base, trustBase, faceEntity,
                 dev.guizhou.manager.PlacementManager.CrystalOptions.DEFAULT, null);
+    }
+
+    /** Partner modules (GuangxiTP) preflight: crystal supply plus the shared weapon-control pause. */
+    public boolean partnerCanPlaceCrystal() {
+        return canSupplyCrystal() && !weaponControlBusy();
     }
 
     /** Same placement path, from a caller-supplied eye (GuangxiTP desync). */
@@ -2051,10 +2074,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         };
     }
 
-    private void recordPlace(BlockPos airPos) {
+    private void recordPlace(BlockPos airPos, float damage) {
         crystalPlaces.put(airPos.asLong(), System.currentTimeMillis());
         markRender(airPos);
         lastPlaceAir = airPos;
+        lastPlaceDamage = damage;
     }
 
     private boolean hasLiveCrystalAt(BlockPos airPos) {

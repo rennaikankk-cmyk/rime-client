@@ -10,6 +10,7 @@ import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.AnchorDamageUtil;
 import dev.guizhou.util.PacketSendUtil;
+import dev.guizhou.util.combat.BedCandidateWatch;
 import dev.guizhou.util.combat.BedSequence;
 import dev.guizhou.util.combat.BlastStageDiagnostics;
 import dev.guizhou.util.diagnostics.ClientDiagnostics;
@@ -65,6 +66,9 @@ public class GuangxiBedModule extends Module {
     private final Setting<Integer> confirmTicks = num("ConfirmTicks", 8, 2, 40);
     private final Setting<Integer> retries = num("Retries", 2, 1, 5);
     private final Setting<Boolean> assumeBestArmor = bool("AssumeBestArmor", false);
+    /** Patience for a candidate whose actions keep failing locally (never submitted). */
+    private final Setting<Integer> localTimeout = num("LocalTimeoutTicks", 40, 10, 200);
+    private final Setting<Boolean> debug = bool("Debug", false);
 
     private enum AutoSwapMode { NONE, SILENT, INVENTORY }
     private final Setting<AutoSwapMode> autoSwap = mode("AutoSwap", AutoSwapMode.SILENT);
@@ -95,7 +99,26 @@ public class GuangxiBedModule extends Module {
     private float desiredYaw = 0f;
     private Player pendingTarget;
     private final BedSequence sequence = new BedSequence();
+    private final BedCandidateWatch candidateWatch = new BedCandidateWatch();
     private final BlastStageDiagnostics stageDiagnostics = new BlastStageDiagnostics("GuangxiBed");
+
+    /** Per-second scan funnel counters, printed when Debug is on. */
+    private int sTargets, sDimRej, sCellRej, sRangeRej, sDmgRej, sSelfRej, sTpFeetRej;
+    private long sWindow;
+
+    private void dbgFlush() {
+        long now = System.currentTimeMillis();
+        if (sWindow == 0) { sWindow = now; return; }
+        if (now - sWindow < 1000) return;
+        if (debug.getValue() && (sTargets > 0 || sDimRej > 0 || sCellRej > 0 || sRangeRej > 0
+                || sDmgRej > 0 || sSelfRej > 0 || sTpFeetRej > 0)) {
+            GuizhouWare.LOGGER.info(
+                    "[BedDiag] scan: targets={} dim={} cell={} range={} dmg={} self={} tpFeet={}",
+                    sTargets, sDimRej, sCellRej, sRangeRej, sDmgRej, sSelfRej, sTpFeetRej);
+        }
+        sTargets = sDimRej = sCellRej = sRangeRej = sDmgRej = sSelfRej = sTpFeetRej = 0;
+        sWindow = now;
+    }
     private ClientLevel sessionLevel;
     private LocalPlayer sessionPlayer;
     private BlockPos renderHead;
@@ -118,6 +141,7 @@ public class GuangxiBedModule extends Module {
 
     private void resetSession() {
         clearPending();
+        candidateWatch.reset();
         renderPos = null;
         renderHead = null;
         craftPhase = 0;
@@ -139,6 +163,7 @@ public class GuangxiBedModule extends Module {
     @Subscribe
     private void onPreTick(PreTickEvent event) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        dbgFlush();
         if (sessionLevel != mc.level || sessionPlayer != mc.player) resetSession();
         if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (craftPhase != 0) { tickAutoCraft(); return; }
@@ -160,6 +185,8 @@ public class GuangxiBedModule extends Module {
         pendingHead = spot.head();
         pendingTarget = spot.target();
         desiredYaw = cardinalYaw(spot.dir());
+        candidateWatch.purge(mc.player.tickCount);
+        candidateWatch.start(mc.player.tickCount, localTimeout.getValue());
         tickPending(spot);
     }
 
@@ -173,6 +200,16 @@ public class GuangxiBedModule extends Module {
                 confirmTicks.getValue(), retries.getValue());
         stageDiagnostics.decision(action.name(), mc.player.tickCount, confirmTicks.getValue());
         if (action == BedSequence.Action.WAIT) return;
+        // BedSequence only bounds actions that were submitted; a candidate whose local actions
+        // keep failing never reaches it. Drop it after LocalTimeoutTicks and avoid the spot
+        // briefly, so the scan re-picks somewhere usable instead of waiting forever.
+        if (candidateWatch.expired(mc.player.tickCount)) {
+            stageDiagnostics.blocked("localTimeout");
+            candidateWatch.giveUp(pendingFoot.asLong(), mc.player.tickCount, localTimeout.getValue() + 20);
+            clearPending();
+            timer.reset();
+            return;
+        }
         if (action == BedSequence.Action.COMPLETE || action == BedSequence.Action.ABORT) {
             clearPending();
             timer.reset();
@@ -191,12 +228,16 @@ public class GuangxiBedModule extends Module {
         if (action == BedSequence.Action.DETONATE) {
             if (detonate()) {
                 sequence.sent(action, mc.player.tickCount);
+                candidateWatch.progress(mc.player.tickCount);
                 stageDiagnostics.submitted(action.name(), mc.player.tickCount);
+            } else if (tpMode.getValue() && safeTpFeet(pendingFoot, pendingHead) == null) {
+                stageDiagnostics.blocked("noTpFeet");
             } else stageDiagnostics.blocked("actionDeferred");
         } else {
             if (!hasBed()) { stageDiagnostics.blocked("material"); clearPending(); return; }
             if (placeBed()) {
                 sequence.sent(action, mc.player.tickCount);
+                candidateWatch.progress(mc.player.tickCount);
                 stageDiagnostics.submitted(action.name(), mc.player.tickCount);
             } else stageDiagnostics.blocked("actionDeferred");
         }
@@ -411,19 +452,22 @@ public class GuangxiBedModule extends Module {
         Map<Long, Float> selfDamage = new HashMap<>();
         AnchorDamageUtil.Target self = AnchorDamageUtil.Target.of(mc.player);
         boolean canPlace = hasBed();
+        int scanTick = mc.player.tickCount;
         BedSpot best = null;
         for (Player target : mc.level.players()) {
             if (target == mc.player || target.isDeadOrDying()) continue;
             if (targets != null && !targets.isValidPlayerTarget(target)) continue;
             if (mc.player.distanceToSqr(target) > range * range) continue;
+            sTargets++;
             AnchorDamageUtil.Target damageTarget = AnchorDamageUtil.Target.of(target, assumeBestArmor.getValue());
             BlockPos feet = target.blockPosition();
             for (int dx = -2; dx <= 2; dx++) {
                 for (int dz = -2; dz <= 2; dz++) {
                     BlockPos foot = feet.offset(dx, 0, dz);
+                    if (candidateWatch.avoided(foot.asLong(), scanTick)) { sCellRej++; continue; }
                     for (Direction dir : HORIZONTAL) {
                         BlockPos head = foot.relative(dir);
-                        if (!mc.level.environmentAttributes().getValue(EnvironmentAttributes.BED_RULE, head).explodes()) continue;
+                        if (!mc.level.environmentAttributes().getValue(EnvironmentAttributes.BED_RULE, head).explodes()) { sDimRej++; continue; }
                         BlockState footState = mc.level.getBlockState(foot);
                         BlockState headState = mc.level.getBlockState(head);
                         boolean existing = footState.getBlock() instanceof BedBlock
@@ -432,21 +476,22 @@ public class GuangxiBedModule extends Module {
                                 && headState.getBlock() == footState.getBlock()
                                 && headState.getValue(BedBlock.PART) == BedPart.HEAD
                                 && headState.getValue(BedBlock.FACING) == dir;
-                        if (!existing && (!canPlace || restrict != null && dir != restrict)) continue;
+                        if (!existing && (!canPlace || restrict != null && dir != restrict)) { sCellRej++; continue; }
                         if (!existing && (!validCells.computeIfAbsent(foot.asLong(), k -> cellStillValid(foot))
-                                || !validCells.computeIfAbsent(head.asLong(), k -> cellStillValid(head)))) continue;
+                                || !validCells.computeIfAbsent(head.asLong(), k -> cellStillValid(head)))) { sCellRej++; continue; }
                         // Vanilla redirects the foot interaction to the head before exploding.
                         Vec3 center = Vec3.atCenterOf(head);
                         if (!tpMode.getValue() && (mc.player.getEyePosition().distanceToSqr(center) > bedRange.getValue() * bedRange.getValue()
-                                || !existing && mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(foot)) > bedRange.getValue() * bedRange.getValue())) continue;
+                                || !existing && mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(foot)) > bedRange.getValue() * bedRange.getValue())) { sRangeRej++; continue; }
                         float upper = AnchorDamageUtil.maxDamage(damageTarget, center);
-                        if (upper < minDamage.getValue() || best != null && upper <= best.damage()) continue;
+                        if (upper < minDamage.getValue() || best != null && upper <= best.damage()) { sDmgRej++; continue; }
                         float damage = AnchorDamageUtil.damage(damageTarget, center, foot, head);
-                        if (damage <= 0f || damage < minDamage.getValue() || best != null && damage <= best.damage()) continue;
+                        if (damage <= 0f || damage < minDamage.getValue() || best != null && damage <= best.damage()) { sDmgRej++; continue; }
                         // Empty candidates share the same terrain at a head; existing bed pairs need both halves removed.
                         float local = existing ? AnchorDamageUtil.damage(self, center, foot, head)
                                 : selfDamage.computeIfAbsent(head.asLong(), k -> AnchorDamageUtil.damage(self, center, foot, head));
-                        if (!safeSelfDamage(local) || tpMode.getValue() && safeTpFeet(foot, head) == null) continue;
+                        if (!safeSelfDamage(local)) { sSelfRej++; continue; }
+                        if (tpMode.getValue() && safeTpFeet(foot, head) == null) { sTpFeetRej++; continue; }
                         best = new BedSpot(foot, head, dir, center, damage, local, target);
                     }
                 }
