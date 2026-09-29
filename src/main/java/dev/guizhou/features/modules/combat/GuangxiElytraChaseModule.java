@@ -138,6 +138,8 @@ public class GuangxiElytraChaseModule extends Module {
     private final Setting<Double> maceCustomPullUpAngle = num("MaceCustomPullUpAngle", 0.0, 0.0, 89.0).setPage("Advanced");
     private final Setting<Double> spearAttackDistance = num("SpearAttackDistance", 8.0, 1.0, 64.0).setPage("Advanced");
     private final Setting<Double> spearPullOverDistance = num("SpearPullOverDistance", 8.0, 1.0, 64.0).setPage("Advanced");
+    /** Experimental: keep the crossing direction after flying past the target in close range. */
+    private final Setting<Boolean> spearPassThrough = bool("SpearPassThrough", false).setPage("Advanced");
     private final Setting<Double> spearNoEntryDistance = num("SpearNoEntryDistance", 0.0, 0.0, 20.0).setPage("Advanced");
     private final Setting<Boolean> spearAntiSpear = bool("SpearAntiSpear", true).setPage("Advanced");
     private final Setting<Double> spearAntiSpearExtraDistance = num("SpearAntiSpearExtraDistance", 0.0, 0.0, 10.0).setPage("Advanced");
@@ -1718,6 +1720,9 @@ if (nullCheck() || mc.player == null) {
         int pullOverTicks;
         boolean makingChargeRoom;
         boolean preciseApproach;
+        final dev.guizhou.util.elytra.SpearPassThroughHeading passThrough = new dev.guizhou.util.elytra.SpearPassThroughHeading();
+        static final int PASS_THROUGH_HOLD_TICKS = 20;
+        static final double PASS_THROUGH_DEADZONE = 0.2;
 
         @Override
         void enter() {
@@ -1727,6 +1732,7 @@ if (nullCheck() || mc.player == null) {
             pullOverTicks = 0;
             makingChargeRoom = false;
             preciseApproach = false;
+            passThrough.reset();
             spearSweepPhase = 0;
         }
 
@@ -1782,6 +1788,7 @@ if (nullCheck() || mc.player == null) {
             if (nextState != state) {
                 pullOverTicks = 0;
                 pulledAfterHit = false;
+                if (nextState != NEAR_FOLLOW) passThrough.reset();
                 if (nextState == PULL_OVER) heading = escapeHeading(targetPos());
             }
             state = nextState;
@@ -1839,6 +1846,13 @@ if (nullCheck() || mc.player == null) {
                 return FOLLOW;
             }
             heading = toTargetAtLeast(tp, 6.0);
+            if (spearPassThrough.getValue()) {
+                // Ported candidate from SlimefunHelper SpearAura: with the target behind us, keep
+                // the crossing direction instead of flipping back; horizontal only, dead-zoned,
+                // bounded to one pass and one target. Vertical lanes stay with the request.
+                heading = passThrough.apply(target.getId(), heading, mc.player.getDeltaMovement(),
+                        mc.player.tickCount, PASS_THROUGH_HOLD_TICKS, PASS_THROUGH_DEADZONE);
+            }
             if (!tryAntiSpear(tp, false)) limitChargedApproach();
             return NEAR_FOLLOW;
         }
