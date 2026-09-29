@@ -1,0 +1,109 @@
+{
+  "version": "1.1.5",
+  "guard": "rimeguard3.1",
+  "sourceCommit": "4c454192e8a58317d5aabc8b0d937ee6177126b2",
+  "artifact": "rime-4c45419-1.1.5-rimeguard3.1-obfuscated.jar",
+  "sha256": "f336b60ef64e4925befb9d8e9dd27bd33da471c553d7bb7121b181e4415b6ef5",
+  "startup": {
+    "candidateSha256": "f336b60ef64e4925befb9d8e9dd27bd33da471c553d7bb7121b181e4415b6ef5",
+    "signedValidationSha256": "aa43c18fe5adb7c88332aa20908e6338a3c36ba7a223f614589e9ce0878561bc",
+    "bothSignedStartsPassed": true,
+    "originalClassesUnchanged": true,
+    "runs": [
+      {
+        "runtime": "microsoft-21.0.7",
+        "durationSeconds": 44.6,
+        "passed": true
+      },
+      {
+        "runtime": "adoptium-21.0.12.1",
+        "durationSeconds": 42.4,
+        "passed": true
+      }
+    ]
+  },
+  "publication": {
+    "release": {
+      "mod_version": "1.1.5",
+      "minecraft": "1.21.11",
+      "filename": "rime-4c45419-1.1.5-rimeguard3.1-obfuscated.jar",
+      "sha256": "f336b60ef64e4925befb9d8e9dd27bd33da471c553d7bb7121b181e4415b6ef5",
+      "size": 12903271,
+      "uploaded_by": "authorized-ssh-release",
+      "uploaded_at": "2026-09-29T13:05:44.119394+00:00"
+    },
+    "backup": "/var/backups/guizhouware-rime115/20260929-release",
+    "priorSha256": "2378ccd7dc33cd0ca3f3b27b2610bdde02d14b7ecf426d8eed12d68c6aefa09a",
+    "pages": [
+      {
+        "name": "download.html",
+        "before": "c6d096decd0c12f231dd66a3856c28009e9e8391c4a7836614825e9b5c1c5a31",
+        "after": "3c140e1845a431fc1031202e27048723d850d4051e1df600d7324d9b7fe2d3fd"
+      },
+      {
+        "name": "index.html",
+        "before": "a81a28c90376348785db70dc4c5de4b04848f6755b96e8a369ad1e02fc3dbde1",
+        "after": "cf33766110ea3566239b42e0150e79039c189971a55b7d70e290102f57703a6b"
+      },
+      {
+        "name": "elytra.html",
+        "before": "489ddaac9c73c211f0c8139f83e1b98df4774812a9161f884ef414fde212b21e",
+        "after": "4d8fe96566adf6ceae5fe3dfde894cc5b716b68600b12abf562207ccefb154b8"
+      }
+    ],
+    "archive": "/var/www/guizhouware/files/rime-4c45419-1.1.5-rimeguard3.1-obfuscated.jar",
+    "sourceCommit": "4c454192e8a58317d5aabc8b0d937ee6177126b2",
+    "launcherSha256": "e1fdbff696b929603a14ffb58f7091ea965a4d69733970e4489cc3db7cb31178"
+  },
+  "http": [
+    {
+      "path": "download.html",
+      "sha256": "3c140e1845a431fc1031202e27048723d850d4051e1df600d7324d9b7fe2d3fd",
+      "http": 200
+    },
+    {
+      "path": "index.html",
+      "sha256": "cf33766110ea3566239b42e0150e79039c189971a55b7d70e290102f57703a6b",
+      "http": 200
+    },
+    {
+      "path": "elytra.html",
+      "sha256": "4d8fe96566adf6ceae5fe3dfde894cc5b716b68600b12abf562207ccefb154b8",
+      "http": 200
+    },
+    {
+      "path": "files/guizhouware-1.21.11.jar",
+      "http": 404,
+      "expected": "raw JAR access stays blocked; use launcher"
+    },
+    {
+      "path": "files/rime-4c45419-1.1.5-rimeguard3.1-obfuscated.jar",
+      "http": 404,
+      "expected": "raw JAR access stays blocked; use launcher"
+    }
+  ],
+  "live": {
+    "current": {
+      "filename": "rime-4c45419-1.1.5-rimeguard3.1-obfuscated.jar",
+      "minecraft": "1.21.11",
+      "mod_version": "1.1.5",
+      "sha256": "f336b60ef64e4925befb9d8e9dd27bd33da471c553d7bb7121b181e4415b6ef5",
+      "size": 12903271,
+      "uploaded_at": "2026-09-29T13:05:44.119394+00:00",
+      "uploaded_by": "authorized-ssh-release"
+    },
+    "sourceSha256": "f336b60ef64e4925befb9d8e9dd27bd33da471c553d7bb7121b181e4415b6ef5",
+    "websiteSha256": "f336b60ef64e4925befb9d8e9dd27bd33da471c553d7bb7121b181e4415b6ef5",
+    "launcherSha256": "e1fdbff696b929603a14ffb58f7091ea965a4d69733970e4489cc3db7cb31178",
+    "versions": [
+      "1.21.11",
+      "dickclient"
+    ]
+  },
+  "desktopSha256": "f336b60ef64e4925befb9d8e9dd27bd33da471c553d7bb7121b181e4415b6ef5",
+  "validationAccountRevoked": true,
+  "buildTasks": 105,
+  "obfuscatedChecks": 36927,
+  "rusherRuntime": "Not verified; stopped at user request",
+  "functionalTests": "docs/slm-armorfly-verification.json"
+}
