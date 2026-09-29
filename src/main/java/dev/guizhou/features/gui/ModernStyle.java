@@ -1009,16 +1009,9 @@ final class ModernStyle extends ShellStyle {
     }
 
     private static String pageName(String page) {
-        return switch (page) {
-            case "General" -> dev.guizhou.util.lang.ClientLanguage.text("常规");
-            case "Tricks" -> dev.guizhou.util.lang.ClientLanguage.text("技巧");
-            case "Colors" -> dev.guizhou.util.lang.ClientLanguage.text("颜色");
-            case "Elements" -> dev.guizhou.util.lang.ClientLanguage.text("元素");
-            case "Layout" -> dev.guizhou.util.lang.ClientLanguage.text("布局");
-            case "Render" -> dev.guizhou.util.lang.ClientLanguage.text("渲染");
-            case "Advanced" -> dev.guizhou.util.lang.ClientLanguage.text("高级");
-            default -> page;
-        };
+        // Page names are English identifiers; the catalog carries their Chinese labels
+        // (key: Chinese label, value: English page), so both languages resolve through text().
+        return dev.guizhou.util.lang.ClientLanguage.text(page);
     }
 
     private static String bindLabel(Bind bind) {
