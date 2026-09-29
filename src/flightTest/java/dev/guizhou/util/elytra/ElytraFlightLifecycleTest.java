@@ -126,6 +126,9 @@ public final class ElytraFlightLifecycleTest {
         check(!evaluateUsable(usable, false, true, 0, 432), "An ordinary undamaged item is not usable wings");
         check(evaluateUsable(usable, true, false, 432, 432), "Unbreakable wings ignore damage counters");
         check(!evaluateUsable(usable, false, false, 0, 0), "Unbreakable non-wings are still rejected");
+        for (int reserve : new int[]{5, 100}) for (int remaining : new int[]{1, 4, 5, 99, 100, 432})
+            check(evaluateUsable(usable, true, true, 432 - remaining, 432, reserve) == (remaining >= reserve),
+                    "SLM durability reserve=" + reserve + ", remaining=" + remaining);
     }
 
     private static void verifyMaceDivePause(Map<String, Trace> methods) {
@@ -287,11 +290,19 @@ public final class ElytraFlightLifecycleTest {
 
     // Evaluate the compiled predicate against stack facts without bootstrapping Minecraft registries.
     private static boolean evaluateUsable(Trace trace, boolean wings, boolean damageable, int damage, int maxDamage) {
+        return evaluateUsable(trace, wings, damageable, damage, maxDamage, 2);
+    }
+    private static boolean evaluateUsable(Trace trace, boolean wings, boolean damageable, int damage, int maxDamage, int reserve) {
         List<Integer> stack = new ArrayList<>();
         for (int pc = 0, visited = 0; pc < trace.steps.size() && visited++ < 100; pc++) {
             Step step = trace.steps.get(pc);
             switch (step.opcode) {
                 case Opcodes.ALOAD -> stack.add(0);
+                case Opcodes.INVOKESTATIC -> {
+                    check("dev/guizhou/features/modules/movement/SLMArmorFlyModule".equals(step.owner)
+                            && "minimumDurability".equals(step.name), "Only the configured durability reserve is sampled");
+                    stack.add(reserve);
+                }
                 case Opcodes.GETSTATIC -> {
                     check("net/minecraft/world/item/Items".equals(step.owner) && "ELYTRA".equals(step.name),
                             "The wing predicate must test the actual elytra item");

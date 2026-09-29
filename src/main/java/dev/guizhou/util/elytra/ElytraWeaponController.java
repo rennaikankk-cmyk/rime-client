@@ -82,6 +82,7 @@ public final class ElytraWeaponController {
     }
 
     public void release() {
+        if (foreignOwner()) { forget(); return; }
         if (sameSession()) {
             stopOwnedUse();
             boolean safeToRestore = mc.gameMode != null && mc.getConnection() != null
@@ -96,7 +97,7 @@ public final class ElytraWeaponController {
     }
 
     private boolean blocked() {
-        return !sameSession() || mc.gameMode == null || mc.getConnection() == null
+        return foreignOwner() || !sameSession() || mc.gameMode == null || mc.getConnection() == null
                 || player.isDeadOrDying() || player.isSpectator() || mc.screen != null
                 || player.containerMenu != player.inventoryMenu || !player.containerMenu.getCarried().isEmpty()
                 || (GuizhouWare.swapManager != null && GuizhouWare.swapManager.isLatched());
@@ -104,6 +105,12 @@ public final class ElytraWeaponController {
 
     private boolean sameSession() {
         return player != null && level != null && player == mc.player && level == mc.level;
+    }
+
+    private static boolean foreignOwner() {
+        return dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.COMBAT)
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FLIGHT)
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ARMOR);
     }
 
     private boolean usingOwnedStack() {

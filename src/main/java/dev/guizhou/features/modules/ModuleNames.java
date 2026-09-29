@@ -21,6 +21,7 @@ public final class ModuleNames {
             Map.entry("AntiCrystal", "防水晶占位"),
             Map.entry("AutoThrow", "智能投药"),
             Map.entry("ArmorFly", "甲飞"),
+            Map.entry("SLMArmorFly", "SLM ArmorFly"),
             Map.entry("AutoReconnect", "自动重连"),
             Map.entry("HoleESP", "安全洞显示"),
             Map.entry("HoleFill", "自动堵洞"),

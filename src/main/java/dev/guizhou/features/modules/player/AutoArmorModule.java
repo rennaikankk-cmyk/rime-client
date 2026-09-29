@@ -49,6 +49,7 @@ public class AutoArmorModule extends Module {
     @Override
     public void onTick() {
         if (!HeartbeatManager.authorized()) { HeartbeatManager.notifyDeniedOnce(); resetState(); return; }
+        if (dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ARMOR)) return;
         if (nullCheck() || mc.gameMode == null || mc.player.isCreative()) return;
         if (cooldown > 0) {
             cooldown--;
@@ -89,7 +90,8 @@ public class AutoArmorModule extends Module {
     private boolean chestLocked() {
         if (mc.player.isFallFlying()) return true;
         if (keepElytra.getValue() && mc.player.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) return true;
-        return enabled(ArmorFlyModule.class) || enabled(GuangxiElytraModule.class);
+        return enabled(ArmorFlyModule.class) || enabled(dev.guizhou.features.modules.movement.SLMArmorFlyModule.class)
+                || enabled(GuangxiElytraModule.class);
     }
 
     private static boolean enabled(Class<? extends Module> type) {

@@ -254,6 +254,11 @@ public class SwapManager extends Feature {
         if (held != null && held.owner == owner) release();
     }
 
+    /** Another client owns the hand now; forget only this owner without sending a stale slot return. */
+    public void abandon(Object owner) {
+        if (held != null && held.owner == owner) held = null;
+    }
+
     public boolean isLatched(Object owner) {
         return held != null && held.owner == owner && mc.player == held.player && mc.level == held.level;
     }
@@ -350,6 +355,11 @@ public class SwapManager extends Feature {
 
     private void repinLatch() {
         if (held == null) return;
+        if (held.owner instanceof dev.guizhou.features.modules.player.AutoEatModule
+                && dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FOOD)) {
+            held = null;
+            return;
+        }
 
         if (nullCheck() || mc.player != held.player || mc.level != held.level) {
             if (logging) log("latch dropped: no player/world");

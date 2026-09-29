@@ -281,6 +281,7 @@ public final class ObfuscatedJarTest {
                 Map.entry("GuangxiElytraModule", List.of("onPreTick")),
                 Map.entry("AutoUseModule", List.of("onPreTick", "shouldKeepUsing")),
                 Map.entry("ArmorFlyModule", List.of("onPreTick", "onFlightWindow", "requested")),
+                Map.entry("SLMArmorFlyModule", List.of("onPreTick", "onFlightWindow", "requested")),
                 Map.entry("AutoAnchorModule", List.of("onPreTick")),
                 Map.entry("GuangxiPistonModule", List.of("onTick")),
                 Map.entry("NoFallModule", List.of("onPreTick", "protects")),

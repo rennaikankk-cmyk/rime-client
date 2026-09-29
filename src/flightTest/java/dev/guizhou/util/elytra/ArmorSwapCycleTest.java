@@ -8,6 +8,7 @@ public final class ArmorSwapCycleTest {
 
     public static void main(String[] args) {
         continuousExchange();
+        serverPacedWindows();
         earlyReturnAndTailAreIdempotent();
         delayedServerClearKeepsWingsOnEveryMove();
         rocketWaitsForRestartWindow();
@@ -46,6 +47,38 @@ public final class ArmorSwapCycleTest {
         }
         check(player.duplicateStarts == 0, "A repeated START must never toggle an existing glide off");
         check(player.restorations == 0, "An ongoing cycle must not release equipment ownership");
+    }
+
+    private static void serverPacedWindows() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        cycle.beforeMovement(true, true, true, false, true);
+        cycle.afterMovement(true, true, true);
+        check(player.chest == player.armor, "SLM equips armor after the initial wing movement");
+        for (int delay = 0; delay < 12; delay++) {
+            player.newTick(false);
+            cycle.beforeMovement(true, true, true, false, true);
+            cycle.afterMovement(true, true, true);
+            check(player.chest == player.armor && player.events.isEmpty(), "SLM waits for the observed glide end");
+            check(!cycle.rocketWindowOpen(), "A stale glide cannot launch another rocket through armor");
+        }
+        player.newTick(true);
+        cycle.beforeMovement(true, true, true, false, true);
+        check(cycle.rocketWindowOpen(), "The observed end opens a fresh restart window");
+        player.move(); cycle.afterMovement(true, true, true);
+        check(player.events.equals(List.of("SWAP_WINGS", "START", "MOVE_WINGS", "SWAP_ARMOR")), "SLM restart order");
+        player.assertTickBounds();
+        player.newTick(false);
+        cycle.stop(false);
+        check(player.events.isEmpty(), "Open inventory defers cleanup");
+        cycle.stop(true);
+        check(player.chest == player.wings && !cycle.active(), "Disable restores the owned wings safely");
+        check(player.duplicateStarts == 0, "Server-paced mode never restarts an existing glide");
+        cycle = begin(player);
+        player.reserve = new Object();
+        player.newTick(false);
+        cycle.beforeMovement(true, true, true, false, true);
+        check(!cycle.active() && player.events.isEmpty(), "Manual equipment replacement cancels stale SLM swaps");
     }
 
     private static void earlyReturnAndTailAreIdempotent() {

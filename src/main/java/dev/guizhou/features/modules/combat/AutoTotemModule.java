@@ -103,6 +103,7 @@ public class AutoTotemModule extends Module {
 
     private void sync(boolean ignoreDelay) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
+        if (dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.OFFHAND)) return;
         if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (!ScreenGate.allowsInventoryUpkeep(true)) return;
 

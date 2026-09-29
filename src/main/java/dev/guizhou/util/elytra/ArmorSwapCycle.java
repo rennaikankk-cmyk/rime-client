@@ -49,6 +49,12 @@ public final class ArmorSwapCycle {
      * A wings swap performed inside this call is not that window.
      */
     public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide, boolean boostOnWornGlide) {
+        beforeMovement(requested, inventorySafe, canGlide, boostOnWornGlide, false);
+    }
+
+    /** SLM keeps the chestplate until the observed glide ends; restart only then. */
+    public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide,
+                               boolean boostOnWornGlide, boolean serverPaced) {
         returnArmor = false;
         restartedThisWindow = false;
         deferArmorReturn = false;
@@ -60,6 +66,7 @@ public final class ArmorSwapCycle {
             return;
         }
         boolean enteredOnWings = access.wearingWings();
+        if (serverPaced && !enteredOnWings && access.gliding()) return;
         if (!enteredOnWings) {
             // The movement window must observe the owned wings even while an earlier
             // glide flag is still running; a window click never toggles the glide flag.

@@ -301,6 +301,9 @@ public class GuangxiElytraChaseModule extends Module {
 
     private boolean paused() {
         return mc.player == null || mc.player.isDeadOrDying() || mc.screen != null
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FLIGHT)
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ARMOR)
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.COMBAT)
                 || manualOverride() || GuizhouWare.tpsCounterService.isRubberbandRecent();
     }
 
@@ -468,7 +471,8 @@ public class GuangxiElytraChaseModule extends Module {
         var armor = GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.movement.ArmorFlyModule.class);
         boolean needsArmor = requested && autoArmorFly.getValue() && mode.getValue() != Mode.FOLLOW
                 && target != null && isValid(target) && !paused();
-        if (needsArmor && armor != null && !armor.isEnabled()) {
+        if (needsArmor && armor != null && !armor.isEnabled()
+                && !dev.guizhou.features.modules.movement.SLMArmorFlyModule.selected()) {
             armor.enable();
             armorEnabledByChase = true;
         } else if (!needsArmor) releaseArmorControl();
@@ -2364,6 +2368,9 @@ if (nullCheck() || mc.player == null) {
 
     @Override
     public String getDisplayInfo() {
+        String foreign = dev.guizhou.util.compat.ClientCoexistence.flightReason();
+        if (foreign == null) foreign = dev.guizhou.util.compat.ClientCoexistence.reason(dev.guizhou.util.compat.ForeignClientProbe.Domain.COMBAT);
+        if (foreign != null) return dev.guizhou.util.lang.ClientLanguage.text("让行：") + foreign;
         if (mc.player == null) return dev.guizhou.util.lang.ClientLanguage.text("等待进入世界");
         if (manualOverride()) return dev.guizhou.util.lang.ClientLanguage.text("手动飞行优先");
         if (!isValid(target)) return dev.guizhou.util.lang.ClientLanguage.text("等待目标");

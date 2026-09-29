@@ -892,5 +892,12 @@
   "珍珠落点规避": "PearlDefense",
   "短暂保持规避方向，遇到障碍或新威胁时立即重新选择。": "Briefly keep an escape heading; obstacles and new threats can interrupt it.",
   "减少同次威胁反复锁定航向，仍持续检测并规避攻击。": "Debounce repeated heading commitments without ignoring incoming attacks.",
-  "规避即将到达附近的敌方珍珠落点，无需开启轨迹渲染。": "Avoid imminent hostile pearl arrivals, independent of trajectory rendering."
+  "规避即将到达附近的敌方珍珠落点，无需开启轨迹渲染。": "Avoid imminent hostile pearl arrivals, independent of trajectory rendering.",
+  "让行：": "Yield: ",
+  "客户端兼容": "ClientCompatibility",
+  "兼容设置": "Compatibility",
+  "耐久保留": "MinimumDurability",
+  "落地自动关闭": "LandAutoDisable",
+  "按滑翔状态恢复甲飞，支持背包内鞘翅和耐久保留。": "Server-paced armor flight with inventory elytra lookup and durability reserve.",
+  "SlimefunHelper 或 RusherHack 的对应功能开启时，让出飞行、装备和物品控制。": "Yield overlapping flight, armor and item actions to active SlimefunHelper or RusherHack modules."
 }

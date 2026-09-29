@@ -21,6 +21,8 @@ public class ClickGuiModule extends Module {
                     .described("Interface language: English or Chinese. Takes effect immediately.");
     private final Setting<Integer> languageRevision = num("LanguageRevision", 1, 1, 1);
 
+    public final Setting<Boolean> clientCompatibility = bool("ClientCompatibility", true).setPage("Compatibility")
+            .described("Yield overlapping flight, armor and item actions to active SlimefunHelper or RusherHack modules.");
     public Setting<String>  prefix           = str("Prefix", "rime");
     public Setting<Boolean> blurBackground   = bool("BlurBackground", true);
     public Setting<Boolean> descriptions     = bool("Descriptions", true);

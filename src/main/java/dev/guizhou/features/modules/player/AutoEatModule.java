@@ -49,6 +49,7 @@ public class AutoEatModule extends Module {
     public static boolean shouldKeepEating() {
         AutoEatModule module = INSTANCE;
         return module != null && module.isEnabled() && HeartbeatManager.authorized() && !nullCheck()
+                && !dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FOOD)
                 && !mc.options.keyUse.isDown() && module.ownsMeal();
     }
 
@@ -66,6 +67,11 @@ public class AutoEatModule extends Module {
     @Subscribe(priority = 120)
     private void onPreTick(PreTickEvent event) {
         if (!HeartbeatManager.authorized()) { HeartbeatManager.notifyDeniedOnce(); resetState(); return; }
+        if (dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FOOD)) {
+            ownership.forget();
+            if (GuizhouWare.swapManager != null) GuizhouWare.swapManager.abandon(this);
+            return;
+        }
         clock++;
         if (nullCheck() || mc.gameMode == null) {
             ownership.forget();
@@ -159,6 +165,11 @@ public class AutoEatModule extends Module {
     }
 
     private void resetState() {
+        if (dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FOOD)) {
+            ownership.forget();
+            if (GuizhouWare.swapManager != null) GuizhouWare.swapManager.abandon(this);
+            return;
+        }
         boolean ours = !nullCheck() && ownsMeal() && !mc.options.keyUse.isDown();
         ownership.forget();
         if (ours && mc.gameMode != null) mc.gameMode.releaseUsingItem(mc.player);

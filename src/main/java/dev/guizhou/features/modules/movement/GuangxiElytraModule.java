@@ -358,10 +358,16 @@ public class GuangxiElytraModule extends Module {
 
     /** Reuse equipment and rocket safety without owning motion, rotation or packet filtering. */
     public void serviceIndependentArmorFly(boolean rockets) {
+        serviceIndependentArmorFly(rockets, false);
+    }
+
+    public void serviceIndependentArmorFly(boolean rockets, boolean resumeAfterYield) {
+        if (foreignFlight()) { yieldForeignFlight(); return; }
         if (isEnabled() || !ArmorFlyModule.requested()) return;
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
         checkFlightSession();
         if (nullCheck() || mc.player == null || mc.gameMode == null) return;
+        if (SLMArmorFlyModule.autoEquip()) equipElytraIfNeeded();
         if (correctionPending.getAndSet(false)) {
             resetFlightState();
             boostRetryTick = (long) mc.player.tickCount + correctionPauseTicks.getValue();
@@ -369,6 +375,7 @@ public class GuangxiElytraModule extends Module {
         scanAttachedBoosts();
         if (mc.player.tickCount < boostRetryTick) return;
         if (ticksSinceRocket < Integer.MAX_VALUE) ticksSinceRocket++;
+        if (resumeAfterYield && canSwapChest()) resumeGliding();
         if (!mc.player.isFallFlying()) maybeTakeoff();
         else if (rockets) tryRocket(Double.MAX_VALUE);
     }
@@ -517,7 +524,7 @@ public class GuangxiElytraModule extends Module {
         // Observation lifetime: a rocket-gate result is only valid for the tick that produced it.
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
         rocketSentThisTick = false;
-        resyncDualViewRotation();
+        if (!foreignFlight()) resyncDualViewRotation();
         clearFlightRotation();
         checkFlightSession();
         pendingMotion = null;
@@ -532,6 +539,10 @@ public class GuangxiElytraModule extends Module {
         safetySteering = false;
         safetyRocketReady = false;
         boostTickActive = false;
+        if (foreignFlight()) {
+            yieldForeignFlight();
+            return;
+        }
         if (nullCheck() || mc.player == null || mc.gameMode == null) {
             resetCruise();
             invalidatePlanning();
@@ -738,6 +749,7 @@ public class GuangxiElytraModule extends Module {
 
     /** Called after vanilla glide acceleration, immediately before movement. */
     public Vec3 applyFlightVelocity(Vec3 vanillaVelocity, Vec3 incomingVelocity, Vec3 actualLook) {
+        if (foreignFlight()) { pendingMotion = null; return vanillaVelocity; }
         Vec3 request = pendingMotion;
         pendingMotion = null;
         CoupledCruise.Selection cruise = pendingCruise;
@@ -1429,6 +1441,7 @@ public class GuangxiElytraModule extends Module {
     private final class LandingRecovery {
         @Subscribe(priority = -90)
         private void tick(PreTickEvent event) {
+            if (foreignFlight()) { yieldForeignFlight(); return; }
             if (statePlayer != mc.player || stateLevel != mc.level || mc.player == null
                     || mc.player.isDeadOrDying() || isEnabled() || !weEquipped) {
                 cancelLandingRecovery();
@@ -1755,7 +1768,8 @@ public class GuangxiElytraModule extends Module {
     }
 
     private boolean canUseRocket() {
-        return (isEnabled() || ArmorFlyModule.requested()) && mc.player != null && mc.level != null && mc.gameMode != null
+        return !foreignFlight() && !dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ROCKET)
+                && (isEnabled() || ArmorFlyModule.requested()) && mc.player != null && mc.level != null && mc.gameMode != null
                 && mc.getConnection() != null && mc.screen == null
                 && mc.player.containerMenu == mc.player.inventoryMenu
                 && mc.player.containerMenu.getCarried().isEmpty()
@@ -1815,13 +1829,14 @@ public class GuangxiElytraModule extends Module {
     // ---------------------------------------------------------------
 
     private void equipElytraIfNeeded() {
-        if (!autoEquip.getValue()) return;
+        if (foreignFlight() || !autoEquip.getValue() && !SLMArmorFlyModule.autoEquip()) return;
         if (armorSwap.active()) return;
         if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive()) return;
         if (usableElytra(mc.player.getItemBySlot(EquipmentSlot.CHEST))) return;
         if (!canSwapChest()) return;
 
-        Result elytra = InventoryUtil.find(GuangxiElytraModule::usableElytra, FULL_SCOPE);
+        Result elytra = InventoryUtil.find(GuangxiElytraModule::usableElytra,
+                SLMArmorFlyModule.selected() ? InventoryUtil.PLACE_SCOPE : FULL_SCOPE);
         if (!elytra.found()) return;
 
         int slot = containerSlotOf(elytra);
@@ -1836,7 +1851,7 @@ public class GuangxiElytraModule extends Module {
 
     private static boolean usableElytra(ItemStack stack) {
         return stack.is(Items.ELYTRA)
-                && (!stack.isDamageableItem() || stack.getDamageValue() < stack.getMaxDamage() - 1);
+                && (!stack.isDamageableItem() || stack.getMaxDamage() - stack.getDamageValue() >= SLMArmorFlyModule.minimumDurability());
     }
 
     /** Complete deferred module cleanup after the dive controller returns its owned equipment pair. */
@@ -1857,6 +1872,7 @@ public class GuangxiElytraModule extends Module {
     }
 
     private void swapBackChest() {
+        if (foreignFlight()) { yieldForeignFlight(); return; }
         if (!weEquipped || mc.player == null) return;
         if (armorSwap.active()) return;
         if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive()) return;
@@ -1881,7 +1897,7 @@ public class GuangxiElytraModule extends Module {
     }
 
     private boolean canSwapChest() {
-        return mc.player != null && mc.gameMode != null
+        return !foreignFlight() && mc.player != null && mc.gameMode != null
                 && mc.screen == null && !mc.player.isUsingItem()
                 && (GuizhouWare.swapManager == null || !GuizhouWare.swapManager.isLatched())
                 && mc.player.containerMenu == mc.player.inventoryMenu
@@ -1904,6 +1920,19 @@ public class GuangxiElytraModule extends Module {
                 && ItemStack.matches(expectedChest, mc.player.getItemBySlot(EquipmentSlot.CHEST));
     }
 
+    private static boolean foreignFlight() {
+        return dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FLIGHT)
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ARMOR);
+    }
+
+    private void yieldForeignFlight() {
+        resetCruise(); invalidatePlanning(); restoreNoGravity(); endFreeze();
+        lastApplied = null; lastLook = null;
+        // A new equipment owner must never receive a stale return swap from Rime.
+        weEquipped = false; stowedChestSlot = -1; stowedChest = ItemStack.EMPTY;
+        cancelLandingRecovery();
+    }
+
     private int containerSlotOf(Result result) {
         if (result.type() == ResultType.OFFHAND) return OFFHAND_MENU_SLOT;
         int slot = result.slot();
@@ -1912,6 +1941,8 @@ public class GuangxiElytraModule extends Module {
 
     @Override
     public String getDisplayInfo() {
+        String foreign = dev.guizhou.util.compat.ClientCoexistence.flightReason();
+        if (foreign != null) return dev.guizhou.util.lang.ClientLanguage.text("让行：") + foreign;
         String m = switch (motionMode.getValue()) {
             case FIREWORKS -> grimBoost.getValue() && !armorSwap.active() && !terrainGuard.getValue()
                     ? "GrimBoost" : (autoRescale.getValue() ? "Grim" : "Rocket");

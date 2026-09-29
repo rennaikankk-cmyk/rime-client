@@ -76,6 +76,12 @@ public final class LicenseActionHookTest {
         guarded(armor, "onTick", null, "equip");
         guarded(armor, "equip", null, "click");
 
+        String slm = BASE + "movement/SLMArmorFlyModule";
+        guarded(slm, "onPreTick", null, "monitorArmorFly");
+        guarded(slm, "onFlightWindow", null, "serviceIndependentArmorFly");
+        check(method(slm, "requested", null).hasAuthorization(), "SLM equipment requests need authorization");
+        check(!method(slm, "onDisable", null).hasAuthorization(), "SLM cleanup survives revocation");
+
         String eat = BASE + "player/AutoEatModule";
         guarded(eat, "onPreTick", null, "startMeal");
         guarded(eat, "startMeal", null, "latch", "useItem");

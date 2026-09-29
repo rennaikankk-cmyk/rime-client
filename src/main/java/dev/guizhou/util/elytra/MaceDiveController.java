@@ -121,6 +121,10 @@ public final class MaceDiveController {
 
     private void service() {
         if (state.phase() == MaceDiveState.Phase.IDLE) return;
+        if (dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ARMOR)
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FLIGHT)) {
+            forget(); return;
+        }
         if (!sameSession() || player.isDeadOrDying() || player.isSpectator()) {
             forget();
             return;
@@ -171,7 +175,9 @@ public final class MaceDiveController {
     }
 
     private boolean safeInventory() {
-        return sameSession() && mc.gameMode != null && mc.getConnection() != null && mc.screen == null
+        return !dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ARMOR)
+                && !dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FLIGHT)
+                && sameSession() && mc.gameMode != null && mc.getConnection() != null && mc.screen == null
                 && !player.isDeadOrDying() && !player.isSpectator()
                 && player.containerMenu == player.inventoryMenu && player.containerMenu.getCarried().isEmpty()
                 && (GuizhouWare.swapManager == null || !GuizhouWare.swapManager.isLatched());

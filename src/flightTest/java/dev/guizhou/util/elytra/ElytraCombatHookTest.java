@@ -109,7 +109,12 @@ public final class ElytraCombatHookTest {
                 "Final reach and accepted-rotation ray must test the observed box used by the approach");
         check(method(mace, "shouldStartDive").hasCall("dev/guizhou/util/elytra/AerialIntercept", "dropApproachRange"),
                 "Fast opposing passes need a speed-aware glide-exit approach gate");
-        Trace standalone = method(read(FLIGHT), "serviceIndependentArmorFly");
+        var flightMethods = read(FLIGHT);
+        Trace standalone = flightMethods.get("serviceIndependentArmorFly(ZZ)V");
+        check(standalone != null, "Independent armor must expose the explicit handoff-recovery path");
+        Trace legacyStandalone = flightMethods.get("serviceIndependentArmorFly(Z)V");
+        check(legacyStandalone != null && legacyStandalone.hasCall(FLIGHT, "serviceIndependentArmorFly"),
+                "The old independent armor entry must retain the shared service");
         for (String forbidden : List.of("enable", "alignLook", "applyFlightVelocity", "buildSetbackTrigger")) {
             check(!standalone.hasCall(FLIGHT, forbidden), "Independent armor must not take direction or exploit ownership");
         }

@@ -92,6 +92,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new AntiHungerModule());
         register(new GuangxiElytraModule());
         register(new dev.guizhou.features.modules.movement.ArmorFlyModule());
+        register(new dev.guizhou.features.modules.movement.SLMArmorFlyModule());
 
         register(new AutoPortalModule());
         register(new FastPortalModule());

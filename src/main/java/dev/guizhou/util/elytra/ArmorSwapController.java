@@ -57,7 +57,7 @@ public final class ArmorSwapController {
     }
 
     public void stop() {
-        if (GuangxiElytraChaseModule.isMaceDiveActive()) cycle.abandon();
+        if (foreignArmor() || GuangxiElytraChaseModule.isMaceDiveActive()) cycle.abandon();
         else cycle.stop(safeInventory());
         finishMonitoring();
     }
@@ -72,7 +72,7 @@ public final class ArmorSwapController {
             wings = ItemStack.EMPTY;
             armor = ItemStack.EMPTY;
         }
-        if (GuangxiElytraChaseModule.isMaceDiveActive()) {
+        if (foreignArmor() || GuangxiElytraChaseModule.isMaceDiveActive()) {
             cycle.abandon();
             finishMonitoring();
             return;
@@ -81,14 +81,15 @@ public final class ArmorSwapController {
         if (!cycle.active() && requested && canGlide() && safeInventory() && player.isFallFlying()) {
             acquire();
         }
-        cycle.beforeMovement(requested, safeInventory(), canGlide(), flight.holdChestplateForBoost());
+        cycle.beforeMovement(requested, safeInventory(), canGlide(), flight.holdChestplateForBoost(),
+                dev.guizhou.features.modules.movement.SLMArmorFlyModule.requested());
         finishMonitoring();
     }
 
     @Subscribe(priority = -200)
     private void onTick(TickEvent event) {
         // Chase runs after preparation and can take ownership of the same pair for a mace dive.
-        if (GuangxiElytraChaseModule.isMaceDiveActive()) cycle.abandon();
+        if (foreignArmor() || GuangxiElytraChaseModule.isMaceDiveActive()) cycle.abandon();
         else cycle.afterMovement(flight.wantsArmorSwap(), safeInventory(), canGlide(), flight.rocketSentThisTick());
         finishMonitoring();
     }
@@ -98,6 +99,7 @@ public final class ArmorSwapController {
      * An unsafe early opportunity must not turn a deferred return into recovery. */
     @Subscribe(priority = Integer.MAX_VALUE)
     private void onPostMovement(UpdateWalkingPlayerEvent event) {
+        if (foreignArmor()) { cycle.abandon(); return; }
         if (event.getStage() != Stage.POST || !cycle.active()
                 || GuangxiElytraChaseModule.isMaceDiveActive()
                 || !flight.wantsArmorSwap() || !safeInventory() || !canGlide()) return;
@@ -124,13 +126,26 @@ public final class ArmorSwapController {
     private void acquire() {
         ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
         if (!usableWings(chest)) return;
-        for (int slot = 0; slot < 9; slot++) {
+        boolean slm = dev.guizhou.features.modules.movement.SLMArmorFlyModule.requested();
+        int best = -1;
+        double bestScore = -1;
+        for (int slot = 0; slot < (slm ? 36 : 9); slot++) {
             if (slot == InventoryUtil.selected()) continue;
             ItemStack candidate = player.getInventory().getItem(slot);
             if (!chestArmor(candidate)) continue;
-            armorSlot = slot;
+            if (slm && candidate.isDamageableItem() && candidate.getMaxDamage() - candidate.getDamageValue()
+                    < dev.guizhou.features.modules.movement.SLMArmorFlyModule.minimumDurability()) continue;
+            double score = candidate.getOrDefault(DataComponents.ATTRIBUTE_MODIFIERS,
+                    net.minecraft.world.item.component.ItemAttributeModifiers.EMPTY)
+                    .compute(net.minecraft.world.entity.ai.attributes.Attributes.ARMOR, 0, EquipmentSlot.CHEST);
+            if (slm && score <= bestScore) continue;
+            best = slot; bestScore = score;
+            if (!slm) break;
+        }
+        if (best != -1) {
+            armorSlot = best;
             wings = chest.copy();
-            armor = candidate.copy();
+            armor = player.getInventory().getItem(best).copy();
             cycle.begin(new ArmorSwapCycle.Access() {
                 @Override public boolean intact() { return ownsPair(); }
                 @Override public boolean wearingWings() {
@@ -152,7 +167,7 @@ public final class ArmorSwapController {
     }
 
     private boolean ownsPair() {
-        if (!sameSession() || armorSlot < 0 || armorSlot > 8) return false;
+        if (!sameSession() || armorSlot < 0 || armorSlot >= 36) return false;
         ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
         ItemStack stored = player.getInventory().getItem(armorSlot);
         return sameEquipment(wings, chest) && sameEquipment(armor, stored)
@@ -165,12 +180,18 @@ public final class ArmorSwapController {
         var chestSlot = player.inventoryMenu.getSlot(CHEST_MENU_SLOT);
         if (!chestSlot.mayPickup(player) || !chestSlot.mayPlace(stored)) return false;
         ItemStack expected = stored.copy();
-        InventoryUtil.click(CHEST_MENU_SLOT, armorSlot, ClickType.SWAP);
+        if (armorSlot < 9) InventoryUtil.click(CHEST_MENU_SLOT, armorSlot, ClickType.SWAP);
+        else {
+            InventoryUtil.click(armorSlot, 0, ClickType.PICKUP);
+            if (!sameEquipment(expected, player.containerMenu.getCarried())) return false;
+            InventoryUtil.click(CHEST_MENU_SLOT, 0, ClickType.PICKUP);
+            InventoryUtil.click(armorSlot, 0, ClickType.PICKUP);
+        }
         return ownsPair() && sameEquipment(expected, player.getItemBySlot(EquipmentSlot.CHEST));
     }
 
     private boolean safeInventory() {
-        return mc.isSameThread() && sameSession() && mc.gameMode != null && mc.getConnection() != null
+        return !foreignArmor() && mc.isSameThread() && sameSession() && mc.gameMode != null && mc.getConnection() != null
                 && mc.screen == null && !player.isDeadOrDying() && !player.isSpectator()
                 && canSwapWhileUsing() && (!cycle.active() || armorSlot != InventoryUtil.selected())
                 && player.containerMenu == player.inventoryMenu && player.containerMenu.getCarried().isEmpty()
@@ -215,7 +236,8 @@ public final class ArmorSwapController {
 
     private boolean usableWings(ItemStack stack) {
         return wearableChest(stack) && stack.has(DataComponents.GLIDER)
-                && (!stack.isDamageableItem() || stack.getDamageValue() < stack.getMaxDamage() - 1);
+                && (!stack.isDamageableItem() || stack.getMaxDamage() - stack.getDamageValue()
+                    >= dev.guizhou.features.modules.movement.SLMArmorFlyModule.minimumDurability());
     }
 
     private boolean chestArmor(ItemStack stack) {
@@ -237,5 +259,9 @@ public final class ArmorSwapController {
             EVENT_BUS.unregister(this);
             registered = false;
         }
+    }
+
+    private static boolean foreignArmor() {
+        return dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ARMOR);
     }
 }
