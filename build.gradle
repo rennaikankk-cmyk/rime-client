@@ -64,6 +64,8 @@ dependencies {
     include modImplementation("com.github.cattyngmd.catformat:catformat-fabric:${project.catformat_version}")
 
     include implementation("meteordevelopment:discord-ipc:1.1")
+    // pure-Java H.264/MP4 decode for the custom main-menu background (no natives)
+    include implementation('org.jcodec:jcodec:0.2.5')
 
     // licence heartbeat HWID — same OSHI factor chain as the launcher
     // licence heartbeat HWID: use MC-bundled oshi/jna at runtime — bundling clashes with MC's own copy

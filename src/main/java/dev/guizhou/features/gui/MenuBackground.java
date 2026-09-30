@@ -57,6 +57,7 @@ public final class MenuBackground {
     private static int imageW, imageH;
     private static long started;
     private static final List<Identifier> live = new ArrayList<>();
+    private static MenuVideoPlayer video;
 
     private MenuBackground() {}
 
@@ -76,9 +77,17 @@ public final class MenuBackground {
         imageW = imageH = 0;
         started = System.nanoTime();
         if (selection.kind == Kind.VIDEO) {
-            banner = dev.guizhou.util.lang.ClientLanguage.text("已选择视频，暂无法播放");
+            String name = selection.file == null ? "" : selection.file.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+            if (name.endsWith(".webm")) {
+                banner = dev.guizhou.util.lang.ClientLanguage.text("webm 暂不支持，请转换为 mp4");
+                return;
+            }
+            video = new MenuVideoPlayer();
+            MenuVideoPlayer.start(selection.file);
             return;
         }
+        MenuVideoPlayer.stopWorker();
+        video = null;
         if (selection.kind == Kind.MISSING) {
             banner = dev.guizhou.util.lang.ClientLanguage.text("背景文件不存在");
             return;
@@ -94,9 +103,17 @@ public final class MenuBackground {
         }
     }
 
-    /** Cover-fits a custom still or GIF. Built-in clips and video return false. */
+    /** Cover-fits a custom still, GIF or MP4. Built-in clips return false. */
     public static boolean draw(GuiGraphics g, int screenW, int screenH) {
         prepare();
+        if (kind == Kind.VIDEO && video != null) {
+            if (video.draw(g, screenW, screenH)) return true;
+            if (MenuVideoPlayer.failed()) {
+                banner = dev.guizhou.util.lang.ClientLanguage.text("视频无法解码，已回退默认背景");
+                return false;
+            }
+            return false; // first frame still decoding; built-in clip shows through
+        }
         if (frames.length == 0 || imageW <= 0 || imageH <= 0 || screenW <= 0 || screenH <= 0) return false;
         int index = frameIndex();
         float cover = Math.max(screenW / (float) imageW, screenH / (float) imageH);
@@ -121,7 +138,9 @@ public final class MenuBackground {
         prepare();
         return switch (kind) {
             case BUILTIN -> dev.guizhou.util.lang.ClientLanguage.text("当前：默认动态背景");
-            case VIDEO -> dev.guizhou.util.lang.ClientLanguage.text("当前：") + label + dev.guizhou.util.lang.ClientLanguage.text("（视频暂不能播放）");
+            case VIDEO -> dev.guizhou.util.lang.ClientLanguage.text("当前：") + label
+                    + (MenuVideoPlayer.failed() ? dev.guizhou.util.lang.ClientLanguage.text("（视频无法解码）")
+                                                 : dev.guizhou.util.lang.ClientLanguage.text("（视频循环播放中）"));
             case MISSING -> dev.guizhou.util.lang.ClientLanguage.text("当前：") + (label.isEmpty() ? dev.guizhou.util.lang.ClientLanguage.text("无法读取") : label);
             default -> dev.guizhou.util.lang.ClientLanguage.text("当前：") + label;
         };
@@ -338,6 +357,8 @@ public final class MenuBackground {
     }
 
     private static void release(Minecraft mc) {
+        MenuVideoPlayer.stopWorker();
+        video = null;
         for (Identifier id : live) {
             try {
                 mc.getTextureManager().release(id);
