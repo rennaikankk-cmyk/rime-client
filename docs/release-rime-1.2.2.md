@@ -11,10 +11,11 @@
 
 ## 校验记录
 
-- 客户端 `mod_version=1.2.2`；rimeguard 含 bridge/native/LS→leaseMix。
-- 发行候选：见同目录后续 checksum 提交 / GitHub Release。
-- dll 新构建（auth.v2 不变，增 adopt/mix）：FNV 与 SHA256 见 Release 与交接增量。
-- 合并测试 11/11；guard 四套件；壳行为一致性；VerifyMerge 全量回环；rig 覆盖 v1+v2 租约。
+- 客户端源码：`e7b0d7e`（`mod_version=1.2.2`）；rimeguard `2532b1e`。
+- 发行候选：`rime-e7b0d7e-1.2.2-rimeguard3.3-native-shelled.jar`，SHA256 `f4af207af1e147f24c8dce27c0de5ec7dd5e2bd3abd3bea035a086bdcfb1c361`。含 `d1/P.data` + `runtime/dyn/B.data`。
+- dll 新构建：FNV `20b199fccbdf61d8`，SHA256 `71088d10e7fb9908a5784d6ae12cebf410c25a6774d76026aff757c16b70ce6a`（旧 FNV `f1c13f68b7bb4551` 仍在 dllHashes）。
+- 合并测试 11/11；guard 四套件；壳行为一致性；VerifyMerge 2695/2695；rig 覆盖 v1+v2 租约。
+- 生产已切：server.js 双协议 + `nativeVersions` → 1.2.2 + `poolProtocol=2`。
 
 ## 领取说明
 
