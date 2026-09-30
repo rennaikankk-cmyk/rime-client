@@ -11,7 +11,9 @@ import java.util.regex.Pattern;
 public final class ClientLanguageTest {
     private static int checks;
     public static void main(String[] args) throws Exception {
-        check(!ClientLanguage.isChinese(), "English is the boot default");
+        check(ClientLanguage.isChinese(), "Chinese is the boot default");
+        check(ClientLanguage.text("编辑 HUD").equals("编辑 HUD"), "Chinese menu by default");
+        ClientLanguage.bind(() -> false);
         check(ClientLanguage.text("编辑 HUD").equals("Edit HUD"), "English menu");
         check(ClientLanguage.settingName("菜单大小 (%)").equals("Menu scale (%)"), "English setting label");
         check(ClientLanguage.settingName("TargetHud 背景颜色").equals("TargetHud background color"), "Dynamic setting label");

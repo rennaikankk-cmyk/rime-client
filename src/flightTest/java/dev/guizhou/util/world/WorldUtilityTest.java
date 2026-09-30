@@ -28,6 +28,7 @@ public final class WorldUtilityTest {
         check(WaypointMath.serverKey("../../etc/passwd").equals("_.._etc_passwd"), "Path separators cannot escape the folder");
         check(WaypointMath.serverKey("  ").equals("unknown") && WaypointMath.serverKey(null).equals("unknown"), "Blank keys");
         check(WaypointMath.serverKey("a".repeat(200)).length() == 64, "Keys are length-limited");
+        dev.guizhou.util.lang.ClientLanguage.bind(() -> false);
         check(WaypointMath.shortDimension(WaypointMath.NETHER).equals("Nether"), "English dimension label");
         dev.guizhou.util.lang.ClientLanguage.bind(() -> true);
         check(WaypointMath.shortDimension(WaypointMath.NETHER).equals("下界"), "Chinese dimension label");
