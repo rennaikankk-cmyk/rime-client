@@ -10,6 +10,16 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def run_merge(original, guard, output, *extra):
+    subprocess.run(
+        [sys.executable, str(ROOT / "merge.py"), "--original", str(original),
+         "--guard", str(guard), "--output", str(output), *extra],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 class MergeTest(unittest.TestCase):
     def test_preserves_author_classes_and_gates_all_entrypoints(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -18,12 +28,11 @@ class MergeTest(unittest.TestCase):
             guard = base / "guard.jar"
             output = base / "merged.jar"
             metadata = {
-                "id": "guizhouware",
-                "name": "Rime",
                 "version": "1.10.4",
+                "description": "Test client",
                 "entrypoints": {
-                    "client": ["dev.guizhou.GuizhouWare"],
-                    "main": ["dev.guizhou.GuizhouWare"],
+                    "client": ["com.dickclient.DickClient"],
+                    "main": ["com.dickclient.OtherEntrypoint"],
                 },
             }
             with zipfile.ZipFile(original, "w") as jar:
@@ -32,24 +41,87 @@ class MergeTest(unittest.TestCase):
             with zipfile.ZipFile(guard, "w") as jar:
                 jar.writestr("d1/G.class", b"guard bytes")
 
-            subprocess.run(
-                [sys.executable, str(ROOT / "merge.py"), "--original", str(original),
-                 "--guard", str(guard), "--output", str(output)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
+            run_merge(original, guard, output)
 
             with zipfile.ZipFile(output) as jar:
                 self.assertEqual(jar.read("com/dickclient/DickClient.class"), b"original bytes")
                 self.assertEqual(jar.read("d1/G.class"), b"guard bytes")
                 merged = json.loads(jar.read("fabric.mod.json"))
-                self.assertEqual(merged["version"], metadata["version"])
-                self.assertEqual(merged["name"], "Rime")
-                self.assertEqual(merged["custom"]["rimeguard"], "3.1")
-                self.assertNotIn("dickguard", merged["custom"])
                 self.assertEqual(merged["entrypoints"]["client"], ["d1.G"])
+                self.assertNotIn("main", merged["entrypoints"])
+                # neutral edition marker only — no protection-mechanism inventory
+                self.assertIn("Launcher Edition.", merged["description"])
+                self.assertNotIn("水印", merged["description"])
+                self.assertNotIn("心跳", merged["description"])
+
+    def test_rime_profile_rewrites_both_entrypoints(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            original = base / "original.jar"
+            guard = base / "guard.jar"
+            output = base / "merged.jar"
+            metadata = {
+                "id": "guizhouware",
+                "version": "1.1.6",
+                "description": "Rime for Minecraft.",
+                "entrypoints": {
+                    "main": ["dev.guizhou.GuizhouWare"],
+                    "client": ["dev.guizhou.GuizhouWare"],
+                },
+            }
+            with zipfile.ZipFile(original, "w") as jar:
+                jar.writestr("fabric.mod.json", json.dumps(metadata))
+                jar.writestr("dev/guizhou/GuizhouWare.class", b"original bytes")
+            with zipfile.ZipFile(guard, "w") as jar:
+                jar.writestr("d1/G.class", b"guard bytes")
+
+            run_merge(original, guard, output, "--profile", "rime")
+
+            with zipfile.ZipFile(output) as jar:
+                self.assertEqual(jar.read("dev/guizhou/GuizhouWare.class"), b"original bytes")
+                merged = json.loads(jar.read("fabric.mod.json"))
                 self.assertEqual(merged["entrypoints"]["main"], ["d1.G"])
+                self.assertEqual(merged["entrypoints"]["client"], ["d1.G"])
+
+    def test_rime_profile_rejects_unreviewed_entrypoints(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            original = base / "original.jar"
+            guard = base / "guard.jar"
+            output = base / "merged.jar"
+            metadata = {
+                "id": "guizhouware",
+                "entrypoints": {"client": ["someone.else.Entrypoint"], "main": ["dev.guizhou.GuizhouWare"]},
+            }
+            with zipfile.ZipFile(original, "w") as jar:
+                jar.writestr("fabric.mod.json", json.dumps(metadata))
+            with zipfile.ZipFile(guard, "w") as jar:
+                jar.writestr("d1/G.class", b"guard bytes")
+
+            with self.assertRaises(subprocess.CalledProcessError):
+                run_merge(original, guard, output, "--profile", "rime")
+
+    def test_legacy_path_still_merges(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            original = base / "original.jar"
+            guard = base / "guard.jar"
+            output = base / "merged.jar"
+            metadata = {
+                "version": "1.10.4",
+                "description": "Test client",
+                "entrypoints": {"client": ["com.dickclient.DickClient"], "main": ["com.dickclient.X"]},
+            }
+            with zipfile.ZipFile(original, "w") as jar:
+                jar.writestr("fabric.mod.json", json.dumps(metadata))
+            with zipfile.ZipFile(guard, "w") as jar:
+                jar.writestr("d1/G.class", b"guard bytes")
+
+            run_merge(original, guard, output, "--legacy")
+
+            with zipfile.ZipFile(output) as jar:
+                merged = json.loads(jar.read("fabric.mod.json"))
+                self.assertEqual(merged["entrypoints"], {"client": ["d1.G"]})
 
 
 if __name__ == "__main__":

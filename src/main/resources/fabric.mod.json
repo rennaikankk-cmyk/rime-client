@@ -7,8 +7,7 @@
   "authors": [
     "renna"
   ],
-  "contact": {
-  },
+  "contact": {},
   "license": "AGPL-3.0-or-later",
   "icon": "assets/guizhouware/icon.png",
   "environment": "client",
@@ -29,5 +28,8 @@
     "fabricloader": ">=${loader_version}",
     "fabric": "*",
     "minecraft": "${minecraft_version}"
+  },
+  "custom": {
+    "rimeguard": "3.2"
   }
 }

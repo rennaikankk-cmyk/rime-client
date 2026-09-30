@@ -17,21 +17,34 @@ repositories {
     maven { url 'https://maven.fabricmc.net/' }
 }
 
+sourceSets {
+    main.java.srcDirs = ['src']
+    test.java.srcDirs = ['tests']
+    tools.java.srcDirs = ['tools']
+}
+
 dependencies {
     compileOnly 'net.fabricmc:fabric-loader:0.16.14'
     compileOnly 'com.github.oshi:oshi-core:6.6.5'
     testImplementation 'net.fabricmc:fabric-loader:0.16.14'
     testImplementation 'com.github.oshi:oshi-core:6.6.5'
+    toolsImplementation 'org.ow2.asm:asm:9.7.1'
+    toolsImplementation 'org.ow2.asm:asm-commons:9.7.1'
 }
 
-sourceSets {
-    main.java.srcDirs = ['src']
-    test.java.srcDirs = ['tests']
-}
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 21
+}
+
+tasks.register('guardToolsJar', Jar) {
+    archiveFileName = 'guard-tools.jar'
+    destinationDirectory = layout.buildDirectory
+    from sourceSets.tools.output
+    from { configurations.toolsRuntimeClasspath.filter { it.name.startsWith('asm') }.collect { zipTree(it) } }
+    manifest { attributes 'Main-Class': 'GuardMerge' }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 tasks.named('jar') {
