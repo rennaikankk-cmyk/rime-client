@@ -78,6 +78,18 @@ CONFIRMED：按 2026-09-27 线上 `server.js` 快照和 `guard3.js` 代码复核
 
 完整性清单外层使用标准 Base64，条目名使用无填充 base64url；客户端分别按对应格式解码。已签名的 `subject` 和 `license` 头与本地 token、水印账号绑定；每次心跳的抽查覆盖 `d1.G`、`fabric.mod.json` 及随机一个其他 guard 类。CONFIRMED：测试签名 JAR 覆盖这些路径。SUSPECTED：抽查只能提高发现机会，完整保护仍依赖周期性全量校验和服务端策略。
 
+### P1b/P1c 池托管（608b638 起，P1c 租约层 09-30 增补）
+
+native 合并（`--native`）后字符串池 `d1/P` 的密钥流有两层托管：
+
+- **P1b dll 托管**：密文构建期混入 `HMAC(native secret, "rimeguard.pool.v1"|buildNonce)`，与 Rust `custody::derive_pool_seed` 逐字节一致；`P.NS()` 运行时经 bridge 反射向 dll 现取。无 dll 解出乱码（租借 JVM 收割线已死）。
+- **P1c 租约托管**：密文构建期再混入 `--pool-lease`（hex64，不进 jar，只进服务端 `rimeguard.poolLease` 配置）。心跳签名响应 `data.lease` 携带租约：健康账号=真租约；被标记账号（24h 内 native 证词异常/完整性封禁/已封禁）=同形状的确定性毒化值 `HMAC(native secret, "rimeguard.pool.poison.v1"|username)`。`B` 验签后经 `NativeGuard.adoptLease` 采纳，`P.LS()` 解密时混入。
+
+客户端没有任何租约健康分支可定位 NOP——租约只是数据：不打心跳、离线、伪造响应、被标记四种情形的池都解出乱码，而授权侧（ok/reason）可以完全照常，攻方无从二分是哪个信号触发。部署顺序约束：**服务端必须先配 `rimeguard.poolLease` 并部署 rgPoolLease，再发行带 P1c 的 jar**；旧服务端+新 jar 会全量乱码。同一时期并行发行的多个 custody 构建必须共用同一租约（构建个性由 native secret+buildNonce 提供）。
+
+CONFIRMED：`tests/test_merge.py::test_custody_pool_decrypts_only_with_seed_and_lease` 以桩 bridge（复现 dll 种子推导）行为级验证 none/bad/good 三态；rig（work/rg-server-test）端到端验证健康租约、拒绝响应不带租约、异常后确定性毒化与 guard3 透传；`MockHeartbeatTest` 验证采纳/忽略/拒绝路径。SUSPECTED：共享破解构建可由持合法账号者从自身会话提取租约硬编码，逐发行轮换租约可焚毁该路径（会同时废弃旧 jar，属发行决策）。
+
+
 ## 授权态调用点清单（阶段 1 复核锚点）
 
 | 消费位置 | 读取的状态 | 用途 |

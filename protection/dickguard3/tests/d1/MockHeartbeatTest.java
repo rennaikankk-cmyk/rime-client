@@ -27,7 +27,8 @@ public final class MockHeartbeatTest {
         E.entryChallenge = null;
 
         String nonce1 = "11111111111111111111111111111111";
-        String okRequest = roundTrip(okData(session, nonce1, challenge), key, nonce1, session);
+        String lease1 = "a1".repeat(32);
+        String okRequest = roundTrip(okData(session, nonce1, challenge, lease1), key, nonce1, session);
         require("dickguard3.0".equals(E.field(okRequest, "guard")),
                 "request must opt in to the deployed strict handshake");
         require("guizhouware".equals(E.field(okRequest, "client")),
@@ -43,6 +44,8 @@ public final class MockHeartbeatTest {
         require(E.field(okRequest, "challengeProof") == null, "first request has no prior challenge");
         require(E.state == E.OK && "com.dickclient.DickClient".equals(S.g(9)),
                 "signed ok response must unlock entry name");
+        require(java.util.Arrays.equals(dev.rimeguard.bridge.NativeGuard.lease(), E.unhex(lease1)),
+                "signed ok response must adopt the pool lease");
 
         String nonce2 = "22222222222222222222222222222222";
         E.tampered = true;
@@ -51,21 +54,26 @@ public final class MockHeartbeatTest {
         mismatch.put("reason", "integrity_mismatch");
         mismatch.put("nonce", nonce2);
         mismatch.put("session", session);
+        mismatch.put("lease", "b2".repeat(32)); // must be ignored: denial path adopts nothing
         String mismatchRequest = roundTrip(mismatch, key, nonce2, session);
         require("mismatch".equals(E.field(mismatchRequest, "integrity")), "tamper request must report mismatch");
         require(B.challengeProof(challenge, session, nonce2).equals(E.field(mismatchRequest, "challengeProof")),
                 "subsequent request must prove prior signed challenge");
         require(E.state == E.DENIED, "server mismatch decision must be parsed");
+        require(java.util.Arrays.equals(dev.rimeguard.bridge.NativeGuard.lease(), E.unhex(lease1)),
+                "denied response must not touch the adopted lease");
 
         String nonce3 = "33333333333333333333333333333333";
         E.tampered = false;
         E.integrityUnavailable = true;
         E.envNote = "agent:example";
-        String unavailableRequest = roundTrip(okData(session, nonce3, challenge), key, nonce3, session);
+        String unavailableRequest = roundTrip(okData(session, nonce3, challenge, "zz-not-hex"), key, nonce3, session);
         require("unavailable".equals(E.field(unavailableRequest, "integrity")),
                 "unreadable inventory must report unavailable");
         require("agent:example".equals(E.field(unavailableRequest, "env")), "env witness must be reported");
         require(E.state == E.OK && !E.official(), "server ok must not turn an unverifiable copy official");
+        require(java.util.Arrays.equals(dev.rimeguard.bridge.NativeGuard.lease(), E.unhex(lease1)),
+                "malformed lease must be ignored, keeping the last good one");
         E.noteEnv("selfattach");
         E.noteEnv("selfattach");
         require("agent:example;selfattach".equals(E.envNote), "repeated witness must not grow env indefinitely");
@@ -106,7 +114,8 @@ public final class MockHeartbeatTest {
         }
     }
 
-    private static Map<String, String> okData(String session, String nonce, String challenge) throws Exception {
+    private static Map<String, String> okData(String session, String nonce, String challenge, String lease)
+            throws Exception {
         Map<String, String> data = new LinkedHashMap<>();
         data.put("ok", "true");
         data.put("nonce", nonce);
@@ -118,6 +127,7 @@ public final class MockHeartbeatTest {
         byte[] name = "com.dickclient.DickClient".getBytes(StandardCharsets.UTF_8);
         for (int i = 0; i < name.length; i++) name[i] ^= key[i];
         data.put("entryCipher", Base64.getUrlEncoder().withoutPadding().encodeToString(name));
+        if (lease != null) data.put("lease", lease);
         return data;
     }
 

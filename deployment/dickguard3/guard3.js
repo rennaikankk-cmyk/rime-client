@@ -3,10 +3,17 @@ const crypto = require('crypto');
 
 // Process-local challenges; existing signed capabilities remain the source of authorization.
 // A service restart starts a fresh chain. Proof is continuity evidence, not an unforgeable client identity.
-function createGuard3(now = Date.now) {
+// opts.lease(account, q, extra) -> hex64: pool lease (P1c custody) merged into
+// the signed data block. Return null/undefined to omit the field (legacy
+// deployments). The caller decides health — a marked account gets a
+// different-but-equally-shaped value, so the response stream carries no branch
+// the client could learn from. `extra` is the handshake call's 5th argument
+// (the username on gzwx-auth), letting a module-level handshake stay per-account.
+function createGuard3(now = Date.now, opts = {}) {
+  const leaseFor = typeof opts.lease === 'function' ? opts.lease : null;
   const sessions = new Map();
   const ttl = 24 * 3600 * 1000;
-  return function guard3(q, account, subject, rimeAllowed) {
+  return function guard3(q, account, subject, rimeAllowed, extra) {
     const strict = q.guard === 'dickguard3.0';
     if (q.guard !== undefined && !strict) return {error:'unsupported_guard'};
     const client = q.client === undefined ? 'superdickclient' : q.client;
@@ -33,6 +40,10 @@ function createGuard3(now = Date.now) {
     sessions.set(key,{time:timestamp,nonces:[...(old ? old.nonces : []),q.nonce].slice(-32),
       challenges:[challenge,...(old ? old.challenges : [])].slice(0,2)});
     const data = {entryChallenge:challenge,entryCipher:cipher.toString('base64url')};
+    if (leaseFor) {
+      const lease = leaseFor(account, q, extra);
+      if (typeof lease === 'string' && /^[0-9a-f]{64}$/.test(lease)) data.lease = lease;
+    }
     if (strict) {
       const previous = account.guard3 || {};
       const unavailable = q.integrity === 'unavailable';

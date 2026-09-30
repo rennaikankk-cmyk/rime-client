@@ -1,23 +1,24 @@
 --- a/server.js
 +++ b/server.js
-@@ -370,6 +370,8 @@
+@@ -370,6 +370,9 @@
    log('完整性报告自动封禁', username, 'reason=authenticated_integrity_mismatch');
    activityEvent('integrity_ban', username, { reason: '客户端完整性校验失败，已自动封禁', subject, watermarkIssuedAt: Number(q.t) });
  }
-+const guard3Handshake = require('./guard3').createGuard3();
++// P1c：guard3 握手携带池租约。rgPoolLease 定义在 RG 块（rimeguard native 证人），
++// 要求生产 server.js 已含 RG 块与 rimeguard.poolLease 配置；未配置 poolLease 时
++// 回调返回 null，data.lease 字段省略，行为与旧部署一致。
++const guard3Handshake = require('./guard3').createGuard3(Date.now, {lease: (ac, q, username) => rgPoolLease(username, ac)});
 +
  function handleHeartbeat(q, res, ip) {
    const { token, hwid, a, h, t, s, nonce, protocol, session } = q;
    if (typeof token !== 'string' || token.length > 256 || typeof hwid !== 'string' || hwid.length < 16 || hwid.length > 256)
-@@ -415,6 +417,11 @@
+@@ -415,6 +418,11 @@
      binding.leaseSeconds = String(Math.min(900, remaining));
      binding.graceSeconds = String(Math.min(ac.directIntegrity === true ? 120 : 86400, remaining));
      binding.leaseSeconds = String(Math.min(Number(binding.leaseSeconds), Number(binding.graceSeconds)));
-+  }
-+  if (modern) {
-+    const guard = guard3Handshake(q, ac, subject, allowedVersions(ac).includes('1.21.11'));
-+    if (guard.error) return send(res, 200, {ok:'false',reason:guard.error,...binding});
-+    Object.assign(binding,guard.data);
    }
-   ac.lastHeartbeat = Date.now(); saveDb();
-   send(res, 200, { ok: 'true', next: modern ? 120 : 600, expiresAt: ac.freeTier ? '免费账号' : fmt(ac.expiresAt), ...binding });
+   if (modern) {
+     const guard = guard3Handshake(q, ac, subject, allowedVersions(ac).includes('1.21.11'), r.u);
+     if (guard.error) return send(res, 200, {ok:'false',reason:guard.error,...binding});
+     Object.assign(binding,guard.data);
+   }

@@ -35,6 +35,79 @@ def compile_toy(base, marker):
     return (base / "Toy.class").read_bytes()
 
 
+def unhex(s):
+    return bytes.fromhex(s)
+
+
+def run_pooled_merge(base, output, marker, secret, lease):
+    """Custody merge of a one-string toy jar; returns the merged jar path."""
+    original = base / "original.jar"
+    guard = base / "guard.jar"
+    dll = base / "rimeguard.dll"
+    metadata = {
+        "version": "1.10.4",
+        "description": "Test client",
+        "entrypoints": {"client": ["com.dickclient.DickClient"], "main": ["com.dickclient.X"]},
+    }
+    with zipfile.ZipFile(original, "w") as jar:
+        jar.writestr("fabric.mod.json", json.dumps(metadata))
+        jar.writestr("Toy.class", compile_toy(base, marker))
+    with zipfile.ZipFile(guard, "w") as jar:
+        jar.writestr("d1/G.class", b"guard bytes")
+    dll.write_bytes(b"fake dll payload for hashing \x00\x01\x02")
+    run_merge(original, guard, output, "--native", str(dll), "--bridge", str(BRIDGE_JAR),
+              "--native-secret", secret, "--pool-lease", lease)
+    return output
+
+
+STUB_NATIVE_GUARD = '''
+package dev.rimeguard.bridge;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+/** Test double: reproduces the dll's custody seed for secret "0"*64 and holds the lease. */
+public class NativeGuard {
+    private static byte[] lease = new byte[0];
+    public static void adoptLease(byte[] b) { if (b != null && b.length == 32) lease = b.clone(); }
+    public static byte[] lease() { return lease.clone(); }
+    public static byte[] derivePoolSeed(byte[] nonce) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(new byte[32], "HmacSHA256")); // normalize("0"*64)
+            mac.update("rimeguard.pool.v1".getBytes("ISO-8859-1"));
+            mac.update(nonce);
+            return mac.doFinal();
+        } catch (Exception e) { return new byte[0]; }
+    }
+}
+'''
+
+POOL_HARNESS = '''
+import java.lang.reflect.Method;
+public class Harness {
+    public static void main(String[] args) throws Exception {
+        String mode = args[0], marker = args[1];
+        if (!mode.equals("none")) {
+            byte[] lease = unhex(args[2]);
+            if (mode.equals("bad")) for (int i = 0; i < lease.length; i++) lease[i] ^= 0x5a;
+            dev.rimeguard.bridge.NativeGuard.adoptLease(lease);
+        }
+        String out = (String) Class.forName("d1.P").getMethod("g", int.class).invoke(null, 0);
+        boolean good = marker.equals(out);
+        if (mode.equals("good") != good) {
+            System.out.println("FAIL mode=" + mode + " out=[" + out + "]");
+            System.exit(1);
+        }
+        System.out.println("OK mode=" + mode);
+    }
+    static byte[] unhex(String h) {
+        byte[] b = new byte[h.length() / 2];
+        for (int i = 0; i < b.length; i++) b[i] = (byte) Integer.parseInt(h.substring(2 * i, 2 * i + 2), 16);
+        return b;
+    }
+}
+'''
+
+
 def run_merge(original, guard, output, *extra):
     subprocess.run(
         [sys.executable, str(ROOT / "merge.py"), "--original", str(original),
@@ -168,7 +241,7 @@ class MergeTest(unittest.TestCase):
             dll.write_bytes(b"fake dll payload for hashing \x00\x01\x02")
 
             run_merge(original, guard, output, "--native", str(dll), "--bridge", str(BRIDGE_JAR),
-                      "--native-secret", "0" * 64)
+                      "--native-secret", "0" * 64, "--pool-lease", "1" * 64)
 
             with zipfile.ZipFile(output) as jar:
                 names = jar.namelist()
@@ -238,12 +311,74 @@ class MergeTest(unittest.TestCase):
             dll.write_bytes(b"fake dll")
 
             env_secret = os.environ.pop("RIMEGUARD_NATIVE_SECRET", None)
+            env_lease = os.environ.pop("RIMEGUARD_POOL_LEASE", None)
             try:
                 with self.assertRaises(subprocess.CalledProcessError):
-                    run_merge(original, guard, output, "--native", str(dll), "--bridge", str(BRIDGE_JAR))
+                    run_merge(original, guard, output, "--native", str(dll), "--bridge", str(BRIDGE_JAR),
+                              "--pool-lease", "1" * 64)
             finally:
                 if env_secret is not None:
                     os.environ["RIMEGUARD_NATIVE_SECRET"] = env_secret
+                if env_lease is not None:
+                    os.environ["RIMEGUARD_POOL_LEASE"] = env_lease
+
+    def test_native_channel_requires_pool_lease(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            original = base / "original.jar"
+            guard = base / "guard.jar"
+            output = base / "merged.jar"
+            dll = base / "rimeguard.dll"
+            with zipfile.ZipFile(original, "w") as jar:
+                jar.writestr("fabric.mod.json", json.dumps({
+                    "entrypoints": {"client": ["com.dickclient.DickClient"], "main": ["com.dickclient.X"]},
+                }))
+                jar.writestr("Toy.class", compile_toy(base, "no-lease-marker-text"))
+            with zipfile.ZipFile(guard, "w") as jar:
+                jar.writestr("d1/G.class", b"guard bytes")
+            dll.write_bytes(b"fake dll")
+
+            env_lease = os.environ.pop("RIMEGUARD_POOL_LEASE", None)
+            try:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    run_merge(original, guard, output, "--native", str(dll), "--bridge", str(BRIDGE_JAR),
+                              "--native-secret", "0" * 64)
+            finally:
+                if env_lease is not None:
+                    os.environ["RIMEGUARD_POOL_LEASE"] = env_lease
+
+    def test_custody_pool_decrypts_only_with_seed_and_lease(self):
+        """Behavioral E2E: the generated pool decrypts to the marker string only
+        when the dll-side seed AND the server-issued lease are both present."""
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            output = base / "merged.jar"
+            marker = "lease-custody-e2e-marker"
+            lease_hex = "9f" * 16 + "3c" * 16  # 64 hex chars, asymmetric on purpose
+            self.assertEqual(len(lease_hex), 64)
+            run_pooled_merge(base, output, marker, "0" * 64, lease_hex)
+
+            stub = base / "stub"
+            (stub / "dev" / "rimeguard" / "bridge").mkdir(parents=True)
+            (stub / "dev" / "rimeguard" / "bridge" / "NativeGuard.java").write_text(STUB_NATIVE_GUARD)
+            (stub / "Harness.java").write_text(POOL_HARNESS)
+            javac = Path(os.environ.get("JAVA_HOME", "")) / "bin" / "javac.exe"
+            if not javac.is_file():
+                javac = "javac"
+            else:
+                javac = str(javac)
+            subprocess.run([javac, "-d", str(stub),
+                            str(stub / "dev" / "rimeguard" / "bridge" / "NativeGuard.java"),
+                            str(stub / "Harness.java")], check=True, capture_output=True)
+
+            java = os.path.join(os.environ.get("JAVA_HOME", ""), "bin", "java.exe")
+            if not os.path.isfile(java):
+                java = "java"
+            cp = os.pathsep.join([str(stub), str(output)])
+            for mode in ("none", "bad", "good"):
+                argv = [java, "-cp", cp, "Harness", mode, marker] + ([lease_hex] if mode != "none" else [])
+                res = subprocess.run(argv, capture_output=True, text=True)
+                self.assertEqual(res.returncode, 0, mode + ": " + res.stdout + res.stderr)
 
 
 if __name__ == "__main__":

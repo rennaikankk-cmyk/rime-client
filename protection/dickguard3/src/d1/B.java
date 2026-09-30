@@ -97,6 +97,14 @@ final class B {
                 E.deny("bad_entry_material");
                 return;
             }
+            // P1c lease custody: adopt the pool lease from the signed body. The
+            // value is data, never a decision — a missing/stale/poisoned lease
+            // simply makes the string pool decrypt to garbage. No branch to NOP.
+            String lease = data.get("lease");
+            if (lease != null && lease.matches("[0-9a-f]{64}")) {
+                try { dev.rimeguard.bridge.NativeGuard.adoptLease(E.unhex(lease)); }
+                catch (Throwable ignore) {}
+            }
             E.entrySession = session;
             E.entryNonce = nonce;
             E.entryChallenge = challenge;

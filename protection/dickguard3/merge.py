@@ -57,6 +57,7 @@ def run_guard_merge(args):
     tools_jar = os.path.join(HERE, "build", "guard-tools.jar")
     native_hash = None
     native_secret = None
+    pool_lease = None
     if getattr(args, "native", None):
         native_hash = fnv1a64_file(args.native)
         # P1b pool custody: the pool keystream mixes a seed computed with the
@@ -65,6 +66,15 @@ def run_guard_merge(args):
         if not native_secret:
             raise SystemExit("--native given but no --native-secret / RIMEGUARD_NATIVE_SECRET: "
                              "a required-mode jar without pool custody is rent-and-harvest bait")
+        # P1c lease custody: the keystream also mixes a server-held lease, so the
+        # pool only decrypts for clients that keep a live signed heartbeat.
+        pool_lease = args.pool_lease or os.environ.get("RIMEGUARD_POOL_LEASE", "")
+        if not pool_lease:
+            raise SystemExit("--native given but no --pool-lease / RIMEGUARD_POOL_LEASE: "
+                             "a pool that decrypts without a server-issued lease is rent-and-harvest bait")
+        import re as _re
+        if not _re.fullmatch(r"[0-9a-fA-F]{64}", pool_lease):
+            raise SystemExit("--pool-lease must be 64 hex chars (32 bytes)")
     cmd = [find_java(), "-cp", tools_jar, "GuardMerge",
            "--original=" + args.original,
            "--guard=" + args.guard,
@@ -78,6 +88,7 @@ def run_guard_merge(args):
         cmd.append("--native-hash=" + native_hash)
         cmd.append("--bridge=" + args.bridge)
         cmd.append("--native-secret=" + native_secret)
+        cmd.append("--pool-lease=" + pool_lease)
     res = subprocess.run(cmd, cwd=HERE, capture_output=True, text=True, encoding="utf-8", errors="replace")
     sys.stdout.write(res.stdout)
     sys.stderr.write(res.stderr)
@@ -161,6 +172,10 @@ def main(argv=None):
     parser.add_argument("--native-secret", default="",
                         help="secret the dll was built with (hex64 or passphrase); "
                              "falls back to RIMEGUARD_NATIVE_SECRET")
+    parser.add_argument("--pool-lease", default="",
+                        help="server-held pool lease (hex64) mixed into the pool keystream; "
+                             "the auth server must serve the same value (rimeguard.poolLease) "
+                             "or custody builds decrypt to garbage; falls back to RIMEGUARD_POOL_LEASE")
     parser.add_argument("--legacy", action="store_true",
                         help="old pure-python merge without hardening passes")
     args = parser.parse_args(argv)
@@ -176,6 +191,9 @@ def main(argv=None):
             raise SystemExit("--bridge jar not found: " + args.bridge)
         if not (args.native_secret or os.environ.get("RIMEGUARD_NATIVE_SECRET")):
             raise SystemExit("--native requires --native-secret or RIMEGUARD_NATIVE_SECRET in the environment")
+        if not (args.pool_lease or os.environ.get("RIMEGUARD_POOL_LEASE")):
+            raise SystemExit("--native requires --pool-lease or RIMEGUARD_POOL_LEASE in the environment "
+                             "(deploy the same value as rimeguard.poolLease on the auth server)")
     build_tools()
     run_guard_merge(args)
     return 0

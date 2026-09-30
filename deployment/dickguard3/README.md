@@ -8,6 +8,12 @@ node backend-test.cjs <候选server.js> 使用临时签名密钥、内存账号�
 
 发行仍须由管理通道生成水印和完整性签名，绝不把未签名的合并产物当成可用客户副本。部署采用现有发行锁、SHA256 基线检查、原子替换和可恢复备份。
 
+## rimeguard P1c 池租约（09-30）
+
+server.patch 已更新：`createGuard3(Date.now, {lease: (ac, q, username) => rgPoolLease(username, ac)})`，guard3 握手调用带第 5 参 `r.u`。`rgPoolLease` 与 `rimeguard.poolLease` 解析随 RG 块交付（参照 gzwx-auth-server.js 参照副本；未配置 poolLease 时返回 null，data.lease 省略，行为与旧部署一致）。
+
+部署顺序（强制）：1) config.json 的 rimeguard 节加入 `poolLease`（与构建 `--pool-lease` 同值，hex64）；2) 应用 server.patch + RG 块更新并重启；3) 才能发行以该租约合并的 jar。次序颠倒=新客户端全量乱码。同一时期并行发行的 custody 构建必须共用同一租约；轮换租约会同时废弃所有旧 jar，属发行决策，需公告强制更新。
+
 ## dickguard3.1 / Rime 1.1.1
 
 在已经部署的 3.0 发布通道上顺序应用 jar_release-3.1.patch 与 test_jar_release-3.1.patch。它们仅新增对明确版本 3.1 的接受，继续要求双 d1.G 入口、guard 类和原始 Rime 类；未知 guard 版本和缺失类仍拒绝。生产应用前校验基线 SHA256，运行完整发布通道测试，锁定发布流程并备份，原子替换后重启 web-api。本次不覆盖已更新的 gzwx-auth/server.js、guard3.js 或 Dick subject pin 配套。

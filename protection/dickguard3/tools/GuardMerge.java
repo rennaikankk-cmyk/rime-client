@@ -76,7 +76,7 @@ public class GuardMerge {
         String original = null, guard = null, output = null;
         boolean strings = true;
         String names = "cfa";
-        String nativeHash = null, bridge = null, nativeSecret = null;
+        String nativeHash = null, bridge = null, nativeSecret = null, poolLease = null;
         List<String> extraKeep = new ArrayList<>();
         for (String a : args) {
             if (a.startsWith("--original=")) original = a.substring(11);
@@ -88,6 +88,7 @@ public class GuardMerge {
             else if (a.startsWith("--native-hash=")) nativeHash = a.substring(14);
             else if (a.startsWith("--bridge=")) bridge = a.substring(9);
             else if (a.startsWith("--native-secret=")) nativeSecret = a.substring(16);
+            else if (a.startsWith("--pool-lease=")) poolLease = a.substring(13);
             else if (a.startsWith("--profile=")) {
                 String p = a.substring(10);
                 profile = p.equals("rime") ? RIME : p.equals("dick") ? DICK : null;
@@ -95,7 +96,7 @@ public class GuardMerge {
             }
         }
         if (original == null || guard == null || output == null) {
-            System.err.println("usage: GuardMerge --original=.. --guard=.. --output=.. [--profile=rime|dick] [--strings=on|off] [--names=off|cfa|nul] [--keep-prefix=..] [--native-hash=.. --bridge=.. --native-secret=..]");
+            System.err.println("usage: GuardMerge --original=.. --guard=.. --output=.. [--profile=rime|dick] [--strings=on|off] [--names=off|cfa|nul] [--keep-prefix=..] [--native-hash=.. --bridge=.. --native-secret=.. --pool-lease=..]");
             System.exit(2);
         }
         if (!names.equals("off") && !names.equals("cfa") && !names.equals("nul"))
@@ -104,6 +105,18 @@ public class GuardMerge {
             throw new IllegalArgumentException("--native-hash and --bridge must be passed together");
         if (nativeHash != null && nativeSecret == null)
             throw new IllegalArgumentException("pool custody (P1b) requires --native-secret: a required-mode jar whose pool decrypts without the dll is rent-and-harvest bait");
+        if (nativeSecret == null && poolLease != null)
+            throw new IllegalArgumentException("--pool-lease is a custody option and needs --native-secret");
+        if (nativeSecret != null && poolLease == null)
+            throw new IllegalArgumentException("pool custody (P1c) requires --pool-lease: a pool that decrypts without a live server-issued lease is rent-and-harvest bait once the boot gate is patched out");
+        byte[] leaseKey = null;
+        if (poolLease != null) {
+            if (!poolLease.matches("[0-9a-fA-F]{64}"))
+                throw new IllegalArgumentException("--pool-lease must be 64 hex chars (32 bytes)");
+            leaseKey = new byte[32];
+            for (int i = 0; i < 32; i++)
+                leaseKey[i] = (byte) Integer.parseInt(poolLease.substring(2 * i, 2 * i + 2), 16);
+        }
 
         List<String> skips = new ArrayList<>(Arrays.asList(profile.skipPrefixes));
         skips.addAll(extraKeep);
@@ -177,7 +190,7 @@ public class GuardMerge {
                 rnd.nextBytes(nonce);
                 nativeSeed = hmacSha256(normalizeSecret(nativeSecret), concat(POOL_CUSTODY_DOMAIN, nonce));
             }
-            poolClass = compilePoolClass(pool, secret, fragA, fragB, nativeSeed, nonce);
+            poolClass = compilePoolClass(pool, secret, fragA, fragB, nativeSeed, leaseKey, nonce);
         }
         int pooledClasses = 0;
         if (strings) {
@@ -325,10 +338,21 @@ public class GuardMerge {
 
     /** d1/P source compiled in-process (gen_s.py pattern); decrypts to UTF-8 bytes then decodes.
      *  P1b: with a native seed, the keystream additionally mixes
-     *  NativeGuard.derivePoolSeed(N) — without the dll the pool decrypts to garbage. */
+     *  NativeGuard.derivePoolSeed(N) — without the dll the pool decrypts to garbage.
+     *  P1c: the keystream additionally mixes the server-issued lease adopted via
+     *  NativeGuard.adoptLease — without a live signed heartbeat (or once the server
+     *  marks the account) the pool decrypts to garbage. Both are data fetches:
+     *  no Java-side branch on health exists to locate and NOP. */
     static byte[] compilePoolClass(Map<String, Integer> pool, byte[] secret, byte[] fragA, byte[] fragB,
-                                    byte[] nativeSeed, byte[] nonce) throws Exception {
+                                    byte[] nativeSeed, byte[] leaseKey, byte[] nonce) throws Exception {
         MessageDigest md = MessageDigest.getInstance("SHA-256");
+        // build-time custody stream: dll seed and lease are XOR-equivalent to the
+        // runtime's separate positional mixes (both 32 bytes, same i % 32 indexing)
+        byte[] custodyStream = nativeSeed;
+        if (nativeSeed != null && leaseKey != null) {
+            custodyStream = nativeSeed.clone();
+            for (int i = 0; i < 32; i++) custodyStream[i] ^= leaseKey[i];
+        }
         String[] plain = pool.keySet().toArray(new String[0]);
         // split encrypted entries into chunk methods: a single <clinit> array literal
         // blows the 64KB Code limit on large pools (measured on the business jar).
@@ -343,7 +367,7 @@ public class GuardMerge {
                 byte[] key = md.digest(concat(secret, Integer.toString(i).getBytes(StandardCharsets.ISO_8859_1)));
                 byte[] p = plain[i].getBytes(StandardCharsets.UTF_8);
                 if (body.length() > 0) body.append(",\n");
-                body.append("            { ").append(xorDecl(p, key, nativeSeed)).append(" }");
+                body.append("            { ").append(xorDecl(p, key, custodyStream)).append(" }");
             }
             chunkMethods.add("    static byte[][] c" + (c0 / CHUNK) + "() { return new byte[][]{\n"
                     + body + "\n    }; }\n");
@@ -354,10 +378,13 @@ public class GuardMerge {
         String decryptLoop = custody
                 ? "            byte[] ns = NS();\n"
                   + "            int nsl = ns.length;\n"
+                  + "            byte[] ls = LS();\n"
+                  + "            int lsl = ls.length;\n"
                   + "            byte[] out = new byte[d0.length];\n"
                   + "            for (int i = 0; i < d0.length; i++) {\n"
                   + "                int v = (d0[i] ^ key[i % key.length]);\n"
                   + "                if (nsl > 0) v ^= ns[i % nsl];\n"
+                  + "                if (lsl > 0) v ^= ls[i % lsl];\n"
                   + "                out[i] = (byte) v;\n"
                   + "            }\n"
                 : "            byte[] out = new byte[d0.length];\n"
@@ -392,6 +419,18 @@ public class GuardMerge {
                   + "        try {\n"
                   + "            if (NGM == null) return new byte[0];\n"
                   + "            return (byte[]) ((java.lang.reflect.Method) NGM).invoke(null, (Object) N);\n"
+                  + "        } catch (Throwable t) { return new byte[0]; }\n"
+                  + "    }\n"
+                  + "    static final Object LGM = lgm();\n"
+                  + "    static Object lgm() {\n"
+                  + "        try { return Class.forName(\"dev.rimeguard.bridge.NativeGuard\")\n"
+                  + "                .getMethod(\"lease\"); }\n"
+                  + "        catch (Throwable t) { return null; }\n"
+                  + "    }\n"
+                  + "    static byte[] LS() {\n"
+                  + "        try {\n"
+                  + "            if (LGM == null) return new byte[0];\n"
+                  + "            return (byte[]) ((java.lang.reflect.Method) LGM).invoke(null);\n"
                   + "        } catch (Throwable t) { return new byte[0]; }\n"
                   + "    }\n"
                 : "")
