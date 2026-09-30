@@ -18,6 +18,11 @@ public final class ModuleNames {
 
     /** Chinese labels for the utility modules (Map.of above caps at ten pairs). */
     private static final Map<String, String> UTILITY_NAMES = Map.ofEntries(
+            Map.entry("MaceSmash", "重锤坠击"),
+            Map.entry("AutoWeapon", "自动武器"),
+            Map.entry("NewChunks", "区块时间线"),
+            Map.entry("StashFinder", "物资搜索"),
+            Map.entry("Supplies", "物资计数"),
             Map.entry("AntiCrystal", "防水晶占位"),
             Map.entry("AutoThrow", "智能投药"),
             Map.entry("ArmorFly", "甲飞"),

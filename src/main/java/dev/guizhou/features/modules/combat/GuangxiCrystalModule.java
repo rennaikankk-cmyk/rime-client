@@ -675,10 +675,22 @@ public class GuangxiCrystalModule extends Module {
             pendingRotation = null;
             return;
         }
-        if (packet instanceof ClientboundExplodePacket) {
+        if (packet instanceof ClientboundExplodePacket explode) {
             long now = System.currentTimeMillis();
             explodeTimes.addLast(now);
             while (!explodeTimes.isEmpty() && now - explodeTimes.peekFirst() > 1000) explodeTimes.removeFirst();
+            // Explosion-echo placement: when the blast centre matches our last placed
+            // crystal slot (Obelisk uses dist^2 <= 144), the slot is confirmed free —
+            // zero the place cooldown so the next PreTick re-seeds immediately.
+            if (lastPlaceAir != null && explode.center() != null) {
+                double dx = explode.center().x - (lastPlaceAir.getX() + 0.5);
+                double dy = explode.center().y - (lastPlaceAir.getY() + 1.0);
+                double dz = explode.center().z - (lastPlaceAir.getZ() + 0.5);
+                if (dx * dx + dy * dy + dz * dz <= 144.0) {
+                    placeTimer.reset();
+                    crystalPlaces.remove(lastPlaceAir.asLong());
+                }
+            }
             return;
         }
         if (packet instanceof ClientboundEntityEventPacket pkt) {

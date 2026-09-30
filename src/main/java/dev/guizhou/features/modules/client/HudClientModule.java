@@ -62,6 +62,7 @@ public class HudClientModule extends Module {
     public HudClientModule() {
         super("Hud", "Static-position HUD elements", Category.CLIENT);
         register(new TotemsHudModule(), true);
+        register(new dev.guizhou.features.modules.hud.SuppliesHudModule(), true);
         register(new ArmorHudModule(), true);
         register(new CountsHudModule(), true);
         register(new CoordinatesHudModule(), true);
