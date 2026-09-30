@@ -34,12 +34,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class NewChunksModule extends Module {
 
-    private final Setting<Boolean> markFirstSeen = bool("MarkFirstSeen", true);
-    private final Setting<Integer> fadeSeconds = num("FadeSeconds", 10, 1, 120);
-    private final Setting<Boolean> spawners = bool("Spawners", true);
-    private final Setting<Boolean> spawnerBoxes = bool("SpawnerBoxes", true);
-    private final Setting<Integer> renderDistance = num("RenderDistance", 8, 2, 32);
-    private final Setting<Integer> scanInterval = num("ScanIntervalTicks", 40, 10, 200);
+    private final Setting<Boolean> markFirstSeen = bool("MarkFirstSeen", true).described("为首次收到的完整区块数据打渐隐标记。");
+    private final Setting<Integer> fadeSeconds = num("FadeSeconds", 10, 1, 120).described("首次可见标记的持续时长（秒）。");
+    private final Setting<Boolean> spawners = bool("Spawners", true).described("在已加载区块中检测地牢刷怪笼。");
+    private final Setting<Boolean> spawnerBoxes = bool("SpawnerBoxes", true).described("以红色方框渲染刷怪笼位置。");
+    private final Setting<Integer> renderDistance = num("RenderDistance", 8, 2, 32).described("扫描与渲染的区块半径。");
+    private final Setting<Integer> scanInterval = num("ScanIntervalTicks", 40, 10, 200).described("区块扫描的节流间隔（tick）。");
 
     private static final Color FRESH = new Color(80, 220, 120, 70);
     private static final Color SPAWNER = new Color(235, 70, 70, 160);
@@ -52,8 +52,7 @@ public class NewChunksModule extends Module {
     private int tickCounter;
 
     public NewChunksModule() {
-        super("NewChunks", "Timeline of chunks the server streams to you (first-seen markers) plus a hard "
-                + "dungeon-spawner radar. First-seen means new to your session, not newly generated.",
+        super("NewChunks", "记录服务器推送区块的首次可见时间线并提供地牢刷怪笼雷达；首次可见指本会话首次收到，不代表服务器新生成。",
                 Category.WORLD);
     }
 

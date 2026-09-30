@@ -17,17 +17,14 @@ import net.minecraft.world.entity.player.Inventory;
  */
 public class AutoWeaponModule extends Module {
 
-    private final Setting<Double> range = num("Range", 4.5, 1.0, 6.0);
-    private final Setting<Integer> cooldown = num("CooldownMs", 150, 0, 1000);
-    private final Setting<Boolean> crosshairFirst = bool("CrosshairFirst", true);
-    private final Setting<Boolean> idleRestore = bool("IdleRestore", false);
+    private final Setting<Double> range = num("Range", 4.5, 1.0, 6.0).described("搜索目标的有效距离。");
+    private final Setting<Integer> cooldown = num("CooldownMs", 150, 0, 1000).described("两次切换之间的最小间隔。");
+    private final Setting<Boolean> crosshairFirst = bool("CrosshairFirst", true).described("优先以准星实体为目标。");
 
     private long lastSwap;
 
     public AutoWeaponModule() {
-        super("AutoWeapon", "Holds the best melee weapon whenever a living target is in reach, using the "
-                + "shared WeaponSelector scoring (damage + sharpness + mace density). Complements AutoSword "
-                + "without touching its attack logic.",
+        super("AutoWeapon", "范围内存在活体目标时自动持握最优近战武器；评分走共享武器选择器（伤害+锋利+重锤密度），AutoSword 开启时自动让位。",
                 Category.COMBAT);
     }
 

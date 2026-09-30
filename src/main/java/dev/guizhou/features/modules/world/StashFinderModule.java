@@ -27,18 +27,18 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class StashFinderModule extends Module {
 
-    private final Setting<Boolean> shulkers = bool("Shulkers", true);
-    private final Setting<Boolean> chests = bool("Chests", true);
-    private final Setting<Boolean> barrels = bool("Barrels", true);
-    private final Setting<Boolean> hoppers = bool("Hoppers", false);
-    private final Setting<Boolean> dispensers = bool("Dispensers", false);
-    private final Setting<Boolean> brewingStands = bool("BrewingStands", false);
-    private final Setting<Integer> minCluster = num("MinCluster", 4, 2, 30);
-    private final Setting<Double> clusterRange = num("ClusterRange", 8.0, 2.0, 32.0);
-    private final Setting<Double> homeRange = num("HomeRange", 16.0, 4.0, 64.0);
-    private final Setting<Boolean> render = bool("Render", true);
-    private final Setting<Boolean> chatReport = bool("ChatReport", false);
-    private final Setting<Integer> scanInterval = num("ScanIntervalTicks", 100, 20, 600);
+    private final Setting<Boolean> shulkers = bool("Shulkers", true).described("统计潜影盒。");
+    private final Setting<Boolean> chests = bool("Chests", true).described("统计箱子与大型箱子。");
+    private final Setting<Boolean> barrels = bool("Barrels", true).described("统计木桶。");
+    private final Setting<Boolean> hoppers = bool("Hoppers", false).described("统计漏斗（默认关，刷怪塔噪音大）。");
+    private final Setting<Boolean> dispensers = bool("Dispensers", false).described("统计发射器。");
+    private final Setting<Boolean> brewingStands = bool("BrewingStands", false).described("统计酿造台。");
+    private final Setting<Integer> minCluster = num("MinCluster", 4, 2, 30).described("判定为物资簇所需的最少容器数量。");
+    private final Setting<Double> clusterRange = num("ClusterRange", 8.0, 2.0, 32.0).described("容器之间的归簇距离。");
+    private final Setting<Double> homeRange = num("HomeRange", 16.0, 4.0, 64.0).described("忽略以你为中心该半径内的容器（自家基地）。");
+    private final Setting<Boolean> render = bool("Render", true).described("高亮物资簇范围框。");
+    private final Setting<Boolean> chatReport = bool("ChatReport", false).described("发现新簇时发送聊天提示。");
+    private final Setting<Integer> scanInterval = num("ScanIntervalTicks", 100, 20, 600).described("区块扫描的节流间隔（tick）。");
 
     private static final Color STASH = new Color(255, 190, 60, 130);
 
@@ -48,8 +48,7 @@ public class StashFinderModule extends Module {
     private int tickCounter;
 
     public StashFinderModule() {
-        super("StashFinder", "Finds container clusters (shulkers/chests/barrels/...) inside loaded chunks "
-                + "and highlights them. Client-side visibility only — no chunk radar.",
+        super("StashFinder", "在已加载区块中寻找容器簇（潜影盒/箱子/木桶等）并高亮；仅限客户端可见范围，不是区块雷达。",
                 Category.WORLD);
     }
 
@@ -87,7 +86,7 @@ public class StashFinderModule extends Module {
                         reported.put(anchor, now);
                         dev.guizhou.util.player.ChatUtil.sendMessage(
                                 net.minecraft.network.chat.Component.literal(
-                                        String.format("[StashFinder] %d containers @ %s",
+                                        String.format(dev.guizhou.util.lang.ClientLanguage.text("[物资搜索] %d 个容器 @ %s"),
                                         count, anchor.toShortString())));
                     }
                 }

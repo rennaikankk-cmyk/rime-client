@@ -21,15 +21,14 @@ import net.minecraft.world.phys.EntityHitResult;
  */
 public class MaceSmashModule extends Module {
 
-    private final Setting<Boolean> onlyGround = bool("OnlyOnGround", true);
-    private final Setting<Double> yOffset = num("YOffset", 25.0, 0.0, 2000.0);
-    private final Setting<Integer> cooldown = num("CooldownMs", 250, 0, 2000);
+    private final Setting<Boolean> onlyGround = bool("OnlyOnGround", true).described("未离地时才发送偏移包。");
+    private final Setting<Double> yOffset = num("YOffset", 25.0, 0.0, 2000.0).described("伪造的抬升高度，实际发送时上限 512。");
+    private final Setting<Integer> cooldown = num("CooldownMs", 250, 0, 2000).described("两次伪造之间的最小间隔。");
 
     private long lastSpoof;
 
     public MaceSmashModule() {
-        super("MaceSmash", "Spoofs a server-side fall height right before mace melee hits so the vanilla "
-                + "smash bonus applies. Inserts one PositionAndOnGround packet ahead of the attack.",
+        super("MaceSmash", "在重锤攻击命中前发送一条抬升 Y 坐标的移动包，伪造服务端视角的下落高度，让原版重锤猛击加成生效。",
                 Category.COMBAT);
     }
 
