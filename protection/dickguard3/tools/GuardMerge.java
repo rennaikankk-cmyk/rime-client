@@ -76,6 +76,7 @@ public class GuardMerge {
         String original = null, guard = null, output = null;
         boolean strings = true;
         String names = "cfa";
+        String nativeHash = null, bridge = null;
         List<String> extraKeep = new ArrayList<>();
         for (String a : args) {
             if (a.startsWith("--original=")) original = a.substring(11);
@@ -84,6 +85,8 @@ public class GuardMerge {
             else if (a.startsWith("--strings=")) strings = a.endsWith("on");
             else if (a.startsWith("--names=")) names = a.substring(8);
             else if (a.startsWith("--keep-prefix=")) extraKeep.addAll(Arrays.asList(a.substring(14).split(",")));
+            else if (a.startsWith("--native-hash=")) nativeHash = a.substring(14);
+            else if (a.startsWith("--bridge=")) bridge = a.substring(9);
             else if (a.startsWith("--profile=")) {
                 String p = a.substring(10);
                 profile = p.equals("rime") ? RIME : p.equals("dick") ? DICK : null;
@@ -96,6 +99,8 @@ public class GuardMerge {
         }
         if (!names.equals("off") && !names.equals("cfa") && !names.equals("nul"))
             throw new IllegalArgumentException("--names must be off|cfa|nul");
+        if ((nativeHash == null) != (bridge == null))
+            throw new IllegalArgumentException("--native-hash and --bridge must be passed together");
 
         List<String> skips = new ArrayList<>(Arrays.asList(profile.skipPrefixes));
         skips.addAll(extraKeep);
@@ -126,6 +131,27 @@ public class GuardMerge {
         }
         if (!guardClasses.containsKey("d1/G.class"))
             throw new IllegalStateException("guard jar has no d1/G.class entrypoint");
+
+        // ---------- native tier: bridge classes + required-mode stamp ----------
+        Map<String, byte[]> bridgeClasses = new LinkedHashMap<>();
+        if (bridge != null) {
+            try (JarFile jf = new JarFile(bridge)) {
+                Enumeration<JarEntry> en = jf.entries();
+                while (en.hasMoreElements()) {
+                    JarEntry e = en.nextElement();
+                    if (e.isDirectory() || !e.getName().endsWith(".class")) continue;
+                    if (business.containsKey(e.getName()) || resources.containsKey(e.getName())
+                            || guardClasses.containsKey(e.getName()))
+                        throw new IllegalStateException("bridge entry collides: " + e.getName());
+                    bridgeClasses.put(e.getName(), jf.getInputStream(e).readAllBytes());
+                }
+            }
+            if (!bridgeClasses.containsKey("dev/rimeguard/bridge/NativeGuard.class"))
+                throw new IllegalStateException("bridge jar has no NativeGuard class");
+            resources.put("META-INF/rimeguard-native.json",
+                    ("{\"v\": 1, \"h\": \"" + nativeHash + "\", \"mode\": \"required\"}")
+                            .getBytes(StandardCharsets.UTF_8));
+        }
 
         // ---------- Pass A: string pooling ----------
         Map<String, Integer> pool = new LinkedHashMap<>();
@@ -199,8 +225,10 @@ public class GuardMerge {
         } else if (json.contains("\"custom\"")) {
             json = json.replaceFirst("(\"custom\"\\s*:\\s*\\{)", "$1\"" + guardKey + "\": \"3.2\", ");
         } else {
+            // real newlines: "\n" in a replaceFirst replacement is the escape for
+            // literal 'n' and used to emit a broken JSON tail here
             json = json.replaceFirst("\\s*\\}$",
-                    ",\\n  \"custom\": {\\n    \"" + guardKey + "\": \"3.2\"\\n  }\\n}");
+                    ",\n  \"custom\": {\n    \"" + guardKey + "\": \"3.2\"\n  }\n}");
         }
         resources.put("fabric.mod.json", json.getBytes(StandardCharsets.UTF_8));
 
@@ -213,11 +241,12 @@ public class GuardMerge {
             if (poolClass != null) write(zos, "d1/P.class", poolClass);
             for (Map.Entry<String, byte[]> e : resources.entrySet()) write(zos, e.getKey(), e.getValue());
             for (Map.Entry<String, byte[]> e : business.entrySet()) write(zos, e.getKey(), e.getValue());
+            for (Map.Entry<String, byte[]> e : bridgeClasses.entrySet()) write(zos, e.getKey(), e.getValue());
             for (Map.Entry<String, byte[]> e : guardClasses.entrySet()) write(zos, e.getKey(), e.getValue());
         }
-        System.out.printf("GuardMerge ok: entries=%d pooledStrings=%d pooledClasses=%d renamedClasses=%d names=%s%n",
-                resources.size() + business.size() + guardClasses.size() + (poolClass != null ? 1 : 0),
-                pool.size(), pooledClasses, rename.size(), names);
+        System.out.printf("GuardMerge ok: entries=%d pooledStrings=%d pooledClasses=%d renamedClasses=%d names=%s native=%s%n",
+                resources.size() + business.size() + guardClasses.size() + bridgeClasses.size() + (poolClass != null ? 1 : 0),
+                pool.size(), pooledClasses, rename.size(), names, nativeHash != null ? nativeHash : "off");
     }
 
     static boolean skip(String entryName, List<String> skips) {

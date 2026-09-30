@@ -29,8 +29,12 @@ final class W {
     /** One-way latch: report the agent finding once, not every beat. */
     private static volatile boolean agentFound;
 
+    /** One-way latch for the native tier's static facts (version/hash/hwid). */
+    private static volatile boolean ngFactsReported;
+
     /** Probe re-run on every heartbeat — agents can attach at any moment. */
     static void probe() {
+        nativeWitness();
         if (!agentFound) {
             Method flc = null;
             try {
@@ -57,6 +61,44 @@ final class W {
         try {
             if (System.getProperty(S.g(20)) != null) E.noteEnv("selfattach");
         } catch (Throwable ignore) {}
+    }
+
+    /**
+     * Native-tier witness (rimeguard-native dll via the bridge).
+     *
+     * The Java-side probes above read spoofable JVM surfaces (management
+     * properties, class loaders); the dll reads the real process command
+     * line and debugger flags. Same discipline: findings are REPORTED in the
+     * env field only — the auth server correlates ngp=/ngh= tags with the
+     * release-expected dll hash and decides. Absent dll = no tags = older
+     * payload shape, so non-native builds stay byte-identical.
+     */
+    private static void nativeWitness() {
+        try {
+            if (!dev.rimeguard.bridge.NativeGuard.available()) return;
+            if (!ngFactsReported) {
+                ngFactsReported = true;
+                E.noteEnv("ng=" + (dev.rimeguard.bridge.NativeGuard.version() & 0xFF));
+                E.noteEnv("ngh=" + hex(dev.rimeguard.bridge.NativeGuard.selfHash()));
+                E.noteEnv("ngw=" + hex8(dev.rimeguard.bridge.NativeGuard.hwid()));
+            }
+            int p = dev.rimeguard.bridge.NativeGuard.envProbe();
+            if (p > 0) E.noteEnv("ngp=" + p); // noteEnv dedupes; escalating bits append
+        } catch (Throwable ignore) {}
+    }
+
+    private static String hex(byte[] b) {
+        if (b == null) return "";
+        StringBuilder sb = new StringBuilder(b.length * 2);
+        for (byte v : b) sb.append(String.format("%02x", v));
+        return sb.toString();
+    }
+
+    private static String hex8(byte[] b) {
+        if (b == null || b.length < 8) return "";
+        StringBuilder sb = new StringBuilder(16);
+        for (int i = 0; i < 8; i++) sb.append(String.format("%02x", b[i]));
+        return sb.toString();
     }
 
     /** Characteristic agent class names, XOR-split so no single searchable

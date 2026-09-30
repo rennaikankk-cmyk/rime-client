@@ -26,8 +26,10 @@ sourceSets {
 dependencies {
     compileOnly 'net.fabricmc:fabric-loader:0.16.14'
     compileOnly 'com.github.oshi:oshi-core:6.6.5'
+    compileOnly files('libs/rimeguard-bridge.jar') // from the rimeguard-native repo (W/G reference it)
     testImplementation 'net.fabricmc:fabric-loader:0.16.14'
     testImplementation 'com.github.oshi:oshi-core:6.6.5'
+    testImplementation files('libs/rimeguard-bridge.jar')
     toolsImplementation 'org.ow2.asm:asm:9.7.1'
     toolsImplementation 'org.ow2.asm:asm-commons:9.7.1'
 }

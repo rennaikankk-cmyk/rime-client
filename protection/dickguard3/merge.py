@@ -55,6 +55,9 @@ def build_tools():
 
 def run_guard_merge(args):
     tools_jar = os.path.join(HERE, "build", "guard-tools.jar")
+    native_hash = None
+    if getattr(args, "native", None):
+        native_hash = fnv1a64_file(args.native)
     cmd = [find_java(), "-cp", tools_jar, "GuardMerge",
            "--original=" + args.original,
            "--guard=" + args.guard,
@@ -64,11 +67,33 @@ def run_guard_merge(args):
            "--names=" + args.names]
     if args.keep_prefix:
         cmd.append("--keep-prefix=" + args.keep_prefix)
+    if native_hash:
+        cmd.append("--native-hash=" + native_hash)
+        cmd.append("--bridge=" + args.bridge)
     res = subprocess.run(cmd, cwd=HERE, capture_output=True, text=True)
     sys.stdout.write(res.stdout)
     sys.stderr.write(res.stderr)
     if res.returncode != 0:
         raise SystemExit(res.returncode)
+
+
+FNV_OFFSET = 0xCBF29CE484222325
+FNV_PRIME = 0x100000001B3
+_FNV_MASK = 0xFFFFFFFFFFFFFFFF
+
+
+def fnv1a64_file(path):
+    """Same hash the dll reports via nvSelfHash and scripts/fnv1a64.py."""
+    h = FNV_OFFSET
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            for b in chunk:
+                h ^= b
+                h = (h * FNV_PRIME) & _FNV_MASK
+    return format(h, "016x")
 
 
 def legacy_merge(args):
@@ -119,12 +144,25 @@ def main(argv=None):
     parser.add_argument("--names", default="cfa", choices=["off", "cfa", "nul"])
     parser.add_argument("--keep-prefix", default="",
                         help="extra comma-separated class prefixes exempt from both passes")
+    parser.add_argument("--native", default="",
+                        help="path to rimeguard.dll; stamps META-INF/rimeguard-native.json "
+                             "(mode=required: the dll becomes mandatory at boot) and merges "
+                             "the bridge classes alongside the guard")
+    parser.add_argument("--bridge", default=os.path.join(HERE, "libs", "rimeguard-bridge.jar"),
+                        help="path to rimeguard-bridge.jar (from the rimeguard-native repo)")
     parser.add_argument("--legacy", action="store_true",
                         help="old pure-python merge without hardening passes")
     args = parser.parse_args(argv)
     if args.legacy:
+        if args.native:
+            raise SystemExit("--native is not supported on the legacy path")
         legacy_merge(args)
         return 0
+    if args.native:
+        if not os.path.isfile(args.native):
+            raise SystemExit("--native dll not found: " + args.native)
+        if not os.path.isfile(args.bridge):
+            raise SystemExit("--bridge jar not found: " + args.bridge)
     build_tools()
     run_guard_merge(args)
     return 0

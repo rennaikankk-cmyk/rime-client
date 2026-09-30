@@ -31,6 +31,7 @@ public final class G implements net.fabricmc.api.ModInitializer, ClientModInitia
 
     @Override
     public void onInitialize() {
+        nativeGate();
         try {
             E.load();
         } catch (Throwable t) {
@@ -64,6 +65,36 @@ public final class G implements net.fabricmc.api.ModInitializer, ClientModInitia
             c.getMethod("onInitialize").invoke(o);
             original = o;
         } catch (Throwable t) {
+            E.bootFail(t);
+        }
+    }
+
+    /**
+     * Native-tier gate: builds stamped by GuardMerge --native carry
+     * META-INF/rimeguard-native.json with mode "required"; the dll must then
+     * be present and speak protocol >= 1 or the client never starts. Builds
+     * without the stamp (dev, free line) skip the gate entirely.
+     */
+    private static void nativeGate() {
+        byte[] meta;
+        try (java.io.InputStream is = G.class.getClassLoader()
+                .getResourceAsStream("META-INF/rimeguard-native.json")) {
+            meta = is == null ? null : is.readAllBytes();
+        } catch (Throwable t) {
+            E.deny("native_meta");
+            E.bootFail(t);
+            return;
+        }
+        if (meta == null) return;
+        if (!new String(meta, java.nio.charset.StandardCharsets.UTF_8).contains("\"required\"")) return;
+        try {
+            if (!dev.rimeguard.bridge.NativeGuard.available()
+                    || (dev.rimeguard.bridge.NativeGuard.version() & 0xFF) < 1) {
+                E.deny("native_missing");
+                E.bootFail(new IllegalStateException("native_missing"));
+            }
+        } catch (Throwable t) {
+            E.deny("native_missing");
             E.bootFail(t);
         }
     }
