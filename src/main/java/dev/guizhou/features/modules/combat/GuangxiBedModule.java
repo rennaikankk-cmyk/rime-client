@@ -59,7 +59,8 @@ public class GuangxiBedModule extends Module {
     private static final Direction[] HORIZONTAL = {Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
 
     private final Setting<Double>  bedRange  = num("Range", 5.0, 1.0, 6.0);
-    private final Setting<Double>  minDamage = num("MinDamage", 12.0, 0.0, 36.0);
+    /** 6 matches typical bed-aura floors; 12 was filtering every armored / hole target. */
+    private final Setting<Double>  minDamage = num("MinDamage", 6.0, 0.0, 36.0);
     private final Setting<Double>  maxSelf   = num("MaxSelfDamage", 12.0, 0.0, 36.0);
     private final Setting<Integer> cooldown  = num("Cooldown", 500, 0, 5000);
     private final Setting<Boolean> rotate    = bool("Rotate", true);
@@ -586,10 +587,13 @@ public class GuangxiBedModule extends Module {
     private boolean prepareAction(BlockHitResult hit, boolean placing) {
         if (tpMode.getValue()) return mc.player.distanceToSqr(pendingTarget) <= tpRange.getValue() * tpRange.getValue();
         if (mc.player.getEyePosition().distanceToSqr(hit.getLocation()) > bedRange.getValue() * bedRange.getValue()) return false;
-        if (!rotate.getValue()) return !placing || facingFromYaw(GuizhouWare.rotationManager.getServerYaw()) == facingFromYaw(desiredYaw);
+        // Rotate off: place/detonate along current look (spot already restricted in onPreTick).
+        if (!rotate.getValue()) return true;
         float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
-        return GuizhouWare.rotationManager.trySubmit(new RotationRequest("GuangxiBed", 70,
-                placing ? desiredYaw : angles[0], angles[1], RotationRequest.Mode.SILENT));
+        if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest("GuangxiBed", 70,
+                placing ? desiredYaw : angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
+        // Beds face the look yaw; refuse place until the silent look actually lands on the bed axis.
+        return !placing || facingFromYaw(GuizhouWare.rotationManager.getServerYaw()) == facingFromYaw(desiredYaw);
     }
 
     private Vec3 interactionFeet() {

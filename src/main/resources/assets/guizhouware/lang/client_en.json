@@ -943,7 +943,7 @@
   "按一下绑定的按键就朝脚下扔一瓶喷溅药水。": "Throws a splash potion on keybind press.",
   "在 AutoSword 的基础上同时攻击多个附近目标，共用同一条攻击节奏。": "Attacks several nearby targets through AutoSword without a second swing.",
   "预判敌方末影珍珠的飞行轨迹，提前在路径上放黑曜石把落点拦下来。": "Catches enemy pearls by placing obsidian in their flight path.",
-  "朝墙角丢出末影珍珠，把角色卡进方块里，实现穿墙位移。": "Phases into walls",
+  "朝墙角丢出末影珍珠，把角色卡进方块里，实现穿墙位移。穿进墙后会去掉方块遮罩，能看到墙外。": "Phases into walls. After you clip in, the block overlay is cleared so you can see outside.",
   "用黑曜石围住自身抵挡水晶伤害，被反复破坏的位置自动用烟花占位；跳跃、升出洞或传送后会自动关闭。": "Surrounds you in obsidian to prevent crystal damage. Pauses in the air and turns itself off when you jump, climb above the hole or teleport (pearl/chorus).",
   "手持剑按住右键时自动换成附魔金苹果，松开后换回剑。": "Switches from sword to gap while holding right click.",
   "鞘翅飞行模块：Grim 配置下巡航与爬升，NoAC 配置下直接飞行。开启 GZBoost 后进入快速巡航，空格爬升、Shift 下降。": "Grim cruise and climb; NoAC direct flight. GZBoost enables fast cruise, Space climbs, Shift descends.",
