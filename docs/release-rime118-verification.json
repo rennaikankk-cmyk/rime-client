@@ -1,0 +1,105 @@
+{
+  "version": "1.1.8",
+  "guard": "rimeguard3.2",
+  "sourceCommit": "6f374aa4835e2d7841f8ba8167532873c54a68df",
+  "artifact": "rime-6f374aa-1.1.8-rimeguard3.2-obfuscated.jar",
+  "sha256": "6b2060c1348a313d835fb7cb15af4d7e70b9b0bd41cb8ef381e2f09c231d03b0",
+  "startup": {
+    "candidateSha256": "6b2060c1348a313d835fb7cb15af4d7e70b9b0bd41cb8ef381e2f09c231d03b0",
+    "signedValidationSha256": "7939618e16ea35e77878823195ead28f39f62bd842e9993fbef2ec360e0553dd",
+    "bothSignedStartsPassed": true,
+    "guardBusinessHardening": {
+      "candidate": "rime-6f374aa-1.1.8-rimeguard3.2-obfuscated.jar",
+      "verifyOk": true,
+      "pooledStrings": 2689,
+      "leakedPoolPlaintext": 0,
+      "roundTripMismatches": 0,
+      "renamedClasses": 658
+    },
+    "signedCopyAddsOnlyCredentials": true,
+    "runs": [
+      {
+        "runtime": "microsoft-21.0.7",
+        "durationSeconds": 42.6,
+        "passed": true
+      },
+      {
+        "runtime": "adoptium-21.0.12.1",
+        "durationSeconds": 40.5,
+        "passed": true
+      }
+    ]
+  },
+  "publication": {
+    "release": {
+      "mod_version": "1.1.8",
+      "minecraft": "1.21.11",
+      "filename": "rime-6f374aa-1.1.8-rimeguard3.2-obfuscated.jar",
+      "sha256": "6b2060c1348a313d835fb7cb15af4d7e70b9b0bd41cb8ef381e2f09c231d03b0",
+      "size": 13135372,
+      "uploaded_by": "authorized-ssh-release",
+      "uploaded_at": "2026-09-30T02:53:47.709581+00:00"
+    },
+    "backup": "/var/backups/guizhouware-rime118/20260930-release",
+    "priorSha256": "7603a6bda797c0da9e2be0c8a487481fc99fee1b7ddb7af34aa558387e8170c2",
+    "pages": [
+      {
+        "name": "download.html",
+        "before": "3dbd2e8816df9e1a613dab8f6b0943d8dab7cee2bc3e2d0423473750f7bf2af8",
+        "after": "16d667ec7f40ea7723cc83750e21d7503f9fdcfb12833a81f604fa23e2d31d12"
+      },
+      {
+        "name": "index.html",
+        "before": "426007f40efa0c79586b7eea2ef62956da9c990f59f0af8466eddcd491210793",
+        "after": "ba1be9b37d7e56573c6f1267c3e5f86e8145011221ba3ebdd4813844df5f68c4"
+      },
+      {
+        "name": "elytra.html",
+        "before": "57e029d9da9f3e16a121fe09b2a5454b755cb21685942af8d9681eb9d4a01da7",
+        "after": "7fd3548109f65bb515307d15d78a406fe76f3c272024130ebeea95f04dc10fa3"
+      }
+    ],
+    "archive": "/var/www/guizhouware/files/rime-6f374aa-1.1.8-rimeguard3.2-obfuscated.jar",
+    "sourceCommit": "6f374aa4835e2d7841f8ba8167532873c54a68df",
+    "launcherSha256": "e1fdbff696b929603a14ffb58f7091ea965a4d69733970e4489cc3db7cb31178"
+  },
+  "http": [
+    {
+      "path": "download.html",
+      "sha256": "16d667ec7f40ea7723cc83750e21d7503f9fdcfb12833a81f604fa23e2d31d12",
+      "http": 200
+    },
+    {
+      "path": "index.html",
+      "sha256": "ba1be9b37d7e56573c6f1267c3e5f86e8145011221ba3ebdd4813844df5f68c4",
+      "http": 200
+    },
+    {
+      "path": "elytra.html",
+      "sha256": "7fd3548109f65bb515307d15d78a406fe76f3c272024130ebeea95f04dc10fa3",
+      "http": 200
+    },
+    {
+      "path": "files/guizhouware-1.21.11.jar",
+      "http": 404,
+      "expected": "raw JAR access stays blocked; use launcher"
+    },
+    {
+      "path": "files/rime-6f374aa-1.1.8-rimeguard3.2-obfuscated.jar",
+      "http": 404,
+      "expected": "raw JAR access stays blocked; use launcher"
+    }
+  ],
+  "desktopSha256": "6b2060c1348a313d835fb7cb15af4d7e70b9b0bd41cb8ef381e2f09c231d03b0",
+  "validationAccountRevoked": true,
+  "guardBusinessHardening": {
+    "candidate": "rime-6f374aa-1.1.8-rimeguard3.2-obfuscated.jar",
+    "verifyOk": true,
+    "pooledStrings": 2689,
+    "leakedPoolPlaintext": 0,
+    "roundTripMismatches": 0,
+    "renamedClasses": 658
+  },
+  "webApiAcceptList": "guard 3.2 added (jar_release.py, backup kept)",
+  "functionalTests": "startup-only smoke on two Java 21 runtimes; no in-game module testing this release"
+}
