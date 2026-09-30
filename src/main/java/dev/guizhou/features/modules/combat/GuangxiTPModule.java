@@ -170,6 +170,9 @@ public class GuangxiTPModule extends Module {
         ensureAttackSession();
         if (tpsSync.getValue() && GuizhouWare.tpsCounterService.isRubberbandRecent()) return;
 
+        boolean placeReady = place.getValue() && placeTimer.passedMs(tpsMs(placeDelay.getValue()));
+        boolean breakReady = doBreak.getValue() && breakTimer.passedMs(tpsMs(breakDelay.getValue()));
+        if (!placeReady && !breakReady) return;
         Player target = findTarget();
         if (target == null) {
             renderPos = null;
@@ -178,12 +181,17 @@ public class GuangxiTPModule extends Module {
         }
         dLastTargetDist = Math.sqrt(mc.player.distanceToSqr(target));
 
-        if (place.getValue() && placeTimer.passedMs(tpsMs(placeDelay.getValue()))) {
-            // The break side's own candidate list, reused as "is there a live cycle to finish".
-            EndCrystal live = findCrystalNear(target);
+        boolean supplied = placeReady && crystalReady();
+        if (!breakReady && !supplied) { dSupplyRej++; return; }
+
+        AnchorDamageUtil.Calculation calc = new AnchorDamageUtil.Calculation();
+        long scanTimer = dev.guizhou.util.diagnostics.ClientDiagnostics.startTimer();
+        EndCrystal live = findCrystalNear(target, calc);
+        dev.guizhou.util.diagnostics.ClientDiagnostics.endTimer("combat.GuangxiTP.breakScan", scanTimer);
+        if (placeReady) {
             if (live != null) dCrystalObserved++;
             boolean cycleBusy = cycleInProgress(live, System.currentTimeMillis());
-            BlockPos base = findBaseNear(target);
+            BlockPos base = supplied ? findBaseNear(target, calc) : null;
             if (base != null) {
                 // Do not burn the placement slot when the crystal path cannot run at all.
                 if (!crystalReady()) dSupplyRej++;
@@ -204,7 +212,7 @@ public class GuangxiTPModule extends Module {
                         // No natural base: desync-place obsidian next to the target, then chain the
                         // crystal on top in the same tick — the server processes the packets in order,
                         // so the base already exists when the crystal use arrives.
-                        BaseOpportunity opp = findBaseOpportunity(target);
+                        BaseOpportunity opp = findBaseOpportunity(target, calc);
                         if (opp == null) dOppNull++;
                         else if (tpBasePlaceChain(opp)) {
                             pendingCycleBase = opp.base();
@@ -217,8 +225,8 @@ public class GuangxiTPModule extends Module {
             }
         }
 
-        if (doBreak.getValue() && breakTimer.passedMs(tpsMs(breakDelay.getValue()))) {
-            EndCrystal crystal = findCrystalNear(target);
+        if (breakReady) {
+            EndCrystal crystal = live; // final tpBreak checks live state, damage, and retries again
             if (crystal != null && tpBreak(crystal)) {
                 breakTimer.reset();
                 noteRender(crystal.blockPosition(), estimateDamage(target, crystal.position()));
@@ -241,7 +249,7 @@ public class GuangxiTPModule extends Module {
         return best;
     }
 
-    private BlockPos findBaseNear(Player target) {
+    private BlockPos findBaseNear(Player target, AnchorDamageUtil.Calculation calc) {
         BlockPos feet = target.blockPosition();
         int r = (int) Math.ceil(scanRange.getValue());
         BlockPos best = null;
@@ -261,12 +269,14 @@ public class GuangxiTPModule extends Module {
                     if (cellBlocked(airPos)) { dEntRej++; continue; }
 
                     Vec3 center = new Vec3(airPos.getX() + 0.5, airPos.getY(), airPos.getZ() + 0.5);
-                    float dmg = estimateDamage(target, center);
+                    float upper = AnchorDamageUtil.maxDamage(calc.target(target), center, 12);
+                    if (upper < minDamage.getValue() || upper <= bestDmg + SELECT_EPSILON) continue;
+                    float dmg = calc.damage(calc.target(target), center, 12, null, null, null);
                     if (dmg < minDamage.getValue()) { dDmgRej++; continue; }
-                    if (!safeSelf(center, null)) { dSelfRej++; continue; }
+                    if (!safeDamage(calc.damage(calc.target(mc.player), center, 12, null, null, null))) { dSelfRej++; continue; }
 
                     if (dmg > bestDmg + SELECT_EPSILON) {
-                        if (!detonatableFromSafe(center, airPos)) { dFeetRej++; continue; }
+                        if (!detonatableFromSafe(center, airPos, calc)) { dFeetRej++; continue; }
                         bestDmg = dmg;
                         best = cursor.immutable();
                     }
@@ -287,15 +297,17 @@ public class GuangxiTPModule extends Module {
         return false;
     }
 
-    private EndCrystal findCrystalNear(Player target) {
+    private EndCrystal findCrystalNear(Player target, AnchorDamageUtil.Calculation calc) {
         EndCrystal best = null;
         float bestDmg = 0f;
         for (Entity e : mc.level.getEntities(null, target.getBoundingBox().inflate(scanRange.getValue() + 2))) {
             if (!(e instanceof EndCrystal crystal) || !crystal.isAlive()) continue;
             if (!attacks.canAttempt(crystal.getId(), System.currentTimeMillis(), 100, 3, 500)) continue;
-            float dmg = estimateDamage(target, crystal.position());
+            float upper = AnchorDamageUtil.maxDamage(calc.target(target), crystal.position(), 12);
+            if (upper < minDamage.getValue() || upper <= bestDmg) continue;
+            float dmg = calc.damage(calc.target(target), crystal.position(), 12, null, null, null);
             if (dmg < minDamage.getValue()) continue;
-            if (!safeSelf(crystal.position(), null) || !useLegacy112() && breakFeet(crystal) == null) continue;
+            if (!safeDamage(calc.damage(calc.target(mc.player), crystal.position(), 12, null, null, null)) || !useLegacy112() && breakFeet(crystal, calc) == null) continue;
             if (dmg > bestDmg) { bestDmg = dmg; best = crystal; }
         }
         return best;
@@ -309,7 +321,7 @@ public class GuangxiTPModule extends Module {
 
     /** Finds a spot near the target where we can desync-place obsidian (air + air above + a
      *  clickable neighbor) and the future crystal on it clears {@code MinDamage}. */
-    private BaseOpportunity findBaseOpportunity(Player target) {
+    private BaseOpportunity findBaseOpportunity(Player target, AnchorDamageUtil.Calculation calc) {
         BlockPos feet = target.blockPosition();
         int r = (int) Math.ceil(scanRange.getValue());
         BaseOpportunity best = null;
@@ -339,12 +351,14 @@ public class GuangxiTPModule extends Module {
                     if (neighbor == null) continue;
 
                     Vec3 crystalCenter = new Vec3(cursor.getX() + 0.5, cursor.getY() + 1.0, cursor.getZ() + 0.5);
-                    float dmg = AnchorDamageUtil.explosionDamage(AnchorDamageUtil.Target.of(target), crystalCenter, 12, null, cursor);
+                    float upper = AnchorDamageUtil.maxDamage(calc.target(target), crystalCenter, 12);
+                    if (upper < minDamage.getValue() || best != null && upper <= best.damage() + SELECT_EPSILON) continue;
+                    float dmg = calc.damage(calc.target(target), crystalCenter, 12, null, null, cursor);
                     if (dmg < minDamage.getValue()) continue;
-                    if (!safeSelf(crystalCenter, cursor)) continue;
+                    if (!safeDamage(calc.damage(calc.target(mc.player), crystalCenter, 12, null, null, cursor))) continue;
 
                     if (best == null || dmg > best.damage() + SELECT_EPSILON) {
-                        if (!detonatableFromSafe(crystalCenter, air)) continue;
+                        if (!detonatableFromSafe(crystalCenter, air, calc)) continue;
                         best = new BaseOpportunity(cursor.immutable(), neighbor.immutable(), face, dmg);
                     }
                 }
@@ -467,11 +481,11 @@ public class GuangxiTPModule extends Module {
 
     /** A plan is only worth obsidian when the future crystal can actually be detonated from
      *  some temporary position — the same filter the break side will apply once it exists. */
-    private boolean detonatableFromSafe(Vec3 crystalCenter, BlockPos airPos) {
+    private boolean detonatableFromSafe(Vec3 crystalCenter, BlockPos airPos, AnchorDamageUtil.Calculation calc) {
         if (useLegacy112()) return true;
-        var self = AnchorDamageUtil.Target.of(mc.player);
+        var self = calc.target(mc.player);
         return TeleportBlastPosition.find(crystalCenter, new AABB(airPos), 3.0,
-                feet -> safeDamage(AnchorDamageUtil.explosionDamage(self.at(feet), crystalCenter, 12, null))) != null;
+                feet -> safeDamage(calc.damage(self.at(feet), crystalCenter, 12, null, null, null))) != null;
     }
 
     private boolean safeDamage(float damage) {
@@ -484,9 +498,13 @@ public class GuangxiTPModule extends Module {
     }
 
     private Vec3 breakFeet(EndCrystal crystal) {
-        var self = AnchorDamageUtil.Target.of(mc.player);
+        return breakFeet(crystal, new AnchorDamageUtil.Calculation());
+    }
+
+    private Vec3 breakFeet(EndCrystal crystal, AnchorDamageUtil.Calculation calc) {
+        var self = calc.target(mc.player);
         return TeleportBlastPosition.find(crystal.position(), crystal.getBoundingBox(), 3.0,
-                feet -> safeDamage(AnchorDamageUtil.explosionDamage(self.at(feet), crystal.position(), 12, null)));
+                feet -> safeDamage(calc.damage(self.at(feet), crystal.position(), 12, null, null, null)));
     }
 
     private float estimateDamage(LivingEntity target, Vec3 center) {

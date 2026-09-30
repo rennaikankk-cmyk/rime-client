@@ -58,6 +58,8 @@ public class GuangxiBedModule extends Module {
 
     private static final Direction[] HORIZONTAL = {Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
 
+    private final Setting<Integer> verticalScan = num("VerticalScan", 1, 0, 3)
+            .described("围绕目标脚部上下搜索的层数。0 只检查脚部高度。增加层数会增加计算量。");
     private final Setting<Double>  bedRange  = num("Range", 5.0, 1.0, 6.0);
     /** 6 matches typical bed-aura floors; 12 was filtering every armored / hole target. */
     private final Setting<Double>  minDamage = num("MinDamage", 6.0, 0.0, 36.0);
@@ -201,6 +203,12 @@ public class GuangxiBedModule extends Module {
                 confirmTicks.getValue(), retries.getValue());
         stageDiagnostics.decision(action.name(), mc.player.tickCount, confirmTicks.getValue());
         if (action == BedSequence.Action.WAIT) return;
+        // A manual turn between selection and placement changes vanilla's bed facing.
+        if (action == BedSequence.Action.PLACE && !tpMode.getValue() && !rotate.getValue()
+                && facingFromYaw(GuizhouWare.rotationManager.getServerYaw()) != facingFromYaw(desiredYaw)) {
+            clearPending();
+            return;
+        }
         // BedSequence only bounds actions that were submitted; a candidate whose local actions
         // keep failing never reaches it. Drop it after LocalTimeoutTicks and avoid the spot
         // briefly, so the scan re-picks somewhere usable instead of waiting forever.
@@ -450,8 +458,8 @@ public class GuangxiBedModule extends Module {
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
         double range = tpMode.getValue() ? tpRange.getValue() : bedRange.getValue() + AnchorDamageUtil.DIAMETER;
         Map<Long, Boolean> validCells = new HashMap<>();
-        Map<Long, Float> selfDamage = new HashMap<>();
-        AnchorDamageUtil.Target self = AnchorDamageUtil.Target.of(mc.player);
+        AnchorDamageUtil.Calculation calc = new AnchorDamageUtil.Calculation();
+        AnchorDamageUtil.Target self = calc.target(mc.player);
         boolean canPlace = hasBed();
         int scanTick = mc.player.tickCount;
         BedSpot best = null;
@@ -462,38 +470,45 @@ public class GuangxiBedModule extends Module {
             sTargets++;
             AnchorDamageUtil.Target damageTarget = AnchorDamageUtil.Target.of(target, assumeBestArmor.getValue());
             BlockPos feet = target.blockPosition();
-            for (int dx = -2; dx <= 2; dx++) {
-                for (int dz = -2; dz <= 2; dz++) {
-                    BlockPos foot = feet.offset(dx, 0, dz);
-                    if (candidateWatch.avoided(foot.asLong(), scanTick)) { sCellRej++; continue; }
-                    for (Direction dir : HORIZONTAL) {
-                        BlockPos head = foot.relative(dir);
-                        if (!mc.level.environmentAttributes().getValue(EnvironmentAttributes.BED_RULE, head).explodes()) { sDimRej++; continue; }
-                        BlockState footState = mc.level.getBlockState(foot);
-                        BlockState headState = mc.level.getBlockState(head);
-                        boolean existing = footState.getBlock() instanceof BedBlock
-                                && footState.getValue(BedBlock.PART) == BedPart.FOOT
-                                && footState.getValue(BedBlock.FACING) == dir
-                                && headState.getBlock() == footState.getBlock()
-                                && headState.getValue(BedBlock.PART) == BedPart.HEAD
-                                && headState.getValue(BedBlock.FACING) == dir;
-                        if (!existing && (!canPlace || restrict != null && dir != restrict)) { sCellRej++; continue; }
-                        if (!existing && (!validCells.computeIfAbsent(foot.asLong(), k -> cellStillValid(foot))
-                                || !validCells.computeIfAbsent(head.asLong(), k -> cellStillValid(head)))) { sCellRej++; continue; }
-                        // Vanilla redirects the foot interaction to the head before exploding.
-                        Vec3 center = Vec3.atCenterOf(head);
-                        if (!tpMode.getValue() && (mc.player.getEyePosition().distanceToSqr(center) > bedRange.getValue() * bedRange.getValue()
-                                || !existing && mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(foot)) > bedRange.getValue() * bedRange.getValue())) { sRangeRej++; continue; }
-                        float upper = AnchorDamageUtil.maxDamage(damageTarget, center);
-                        if (upper < minDamage.getValue() || best != null && upper <= best.damage()) { sDmgRej++; continue; }
-                        float damage = AnchorDamageUtil.damage(damageTarget, center, foot, head);
-                        if (damage <= 0f || damage < minDamage.getValue() || best != null && damage <= best.damage()) { sDmgRej++; continue; }
-                        // Empty candidates share the same terrain at a head; existing bed pairs need both halves removed.
-                        float local = existing ? AnchorDamageUtil.damage(self, center, foot, head)
-                                : selfDamage.computeIfAbsent(head.asLong(), k -> AnchorDamageUtil.damage(self, center, foot, head));
-                        if (!safeSelfDamage(local)) { sSelfRej++; continue; }
-                        if (tpMode.getValue() && safeTpFeet(foot, head) == null) { sTpFeetRej++; continue; }
-                        best = new BedSpot(foot, head, dir, center, damage, local, target);
+            for (int dy = -verticalScan.getValue(); dy <= verticalScan.getValue(); dy++) {
+                for (int dx = -2; dx <= 2; dx++) {
+                    for (int dz = -2; dz <= 2; dz++) {
+                        BlockPos foot = feet.offset(dx, dy, dz);
+                        if (candidateWatch.avoided(foot.asLong(), scanTick)) { sCellRej++; continue; }
+                        for (Direction dir : HORIZONTAL) {
+                            BlockPos head = foot.relative(dir);
+                            if (!mc.level.environmentAttributes().getValue(EnvironmentAttributes.BED_RULE, head).explodes()) { sDimRej++; continue; }
+                            BlockState footState = mc.level.getBlockState(foot);
+                            BlockState headState = mc.level.getBlockState(head);
+                            boolean existing = footState.getBlock() instanceof BedBlock
+                                    && footState.getValue(BedBlock.PART) == BedPart.FOOT
+                                    && footState.getValue(BedBlock.FACING) == dir
+                                    && headState.getBlock() == footState.getBlock()
+                                    && headState.getValue(BedBlock.PART) == BedPart.HEAD
+                                    && headState.getValue(BedBlock.FACING) == dir;
+                            if (!existing && (!canPlace || restrict != null && dir != restrict)) { sCellRej++; continue; }
+                            if (!existing && (!validCells.computeIfAbsent(foot.asLong(), k -> cellStillValid(foot))
+                                    || !validCells.computeIfAbsent(head.asLong(), k -> cellStillValid(head)))) { sCellRej++; continue; }
+                            // Vanilla redirects the foot interaction to the head before exploding.
+                            Vec3 center = Vec3.atCenterOf(head);
+                            if (!tpMode.getValue() && (mc.player.getEyePosition().distanceToSqr(center) > bedRange.getValue() * bedRange.getValue()
+                                    || !existing && mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(foot)) > bedRange.getValue() * bedRange.getValue())) { sRangeRej++; continue; }
+                            float upper = AnchorDamageUtil.maxDamage(damageTarget, center);
+                            if (upper < minDamage.getValue() || best != null && upper <= best.damage()) { sDmgRej++; continue; }
+                            float damage = calc.damage(damageTarget, center, AnchorDamageUtil.DIAMETER, foot, head, null);
+                            if (damage <= 0f || damage < minDamage.getValue() || best != null && damage <= best.damage()) { sDmgRej++; continue; }
+                            // Both removed halves matter when replacing snow or other collision shapes.
+                            float local = calc.damage(self, center, AnchorDamageUtil.DIAMETER, foot, head, null);
+                            if (!safeSelfDamage(local)) { sSelfRej++; continue; }
+                            if (tpMode.getValue() && safeTpFeet(foot, head, calc) == null) { sTpFeetRej++; continue; }
+                            Vec3 eye = tpMode.getValue()
+                                    ? Vec3.atCenterOf(foot).add(0, 1.5 + mc.player.getEyeHeight(), 0)
+                                    : mc.player.getEyePosition();
+                            double reach = tpMode.getValue() ? 6 : bedRange.getValue();
+                            if (GuizhouWare.placementManager.prepareInteractionHit(existing ? head : foot.below(),
+                                    existing ? null : Direction.UP, eye, reach, reach, false) == null) continue;
+                            best = new BedSpot(foot, head, dir, center, damage, local, target);
+                        }
                     }
                 }
             }
@@ -515,7 +530,7 @@ public class GuangxiBedModule extends Module {
 
     private boolean cellStillValid(BlockPos cell) {
         if (mc.level.isOutsideBuildHeight(cell) || !mc.level.getWorldBorder().isWithinBounds(cell)) return false;
-        if (!mc.level.getBlockState(cell).isAir()) return false;
+        if (!mc.level.getBlockState(cell).canBeReplaced()) return false;
         BlockPos below = cell.below();
         BlockState belowState = mc.level.getBlockState(below);
         if (belowState.isAir() || belowState.getCollisionShape(mc.level, below).isEmpty()) return false;
@@ -559,10 +574,14 @@ public class GuangxiBedModule extends Module {
     private Vec3 tpDetonationFeet;
 
     private Vec3 safeTpFeet(BlockPos foot, BlockPos head) {
+        return safeTpFeet(foot, head, new AnchorDamageUtil.Calculation());
+    }
+
+    private Vec3 safeTpFeet(BlockPos foot, BlockPos head, AnchorDamageUtil.Calculation calc) {
         Vec3 center = Vec3.atCenterOf(head);
-        var self = AnchorDamageUtil.Target.of(mc.player);
+        var self = calc.target(mc.player);
         return dev.guizhou.util.combat.TeleportBlastPosition.find(center, new AABB(head), 6.0,
-                feet -> safeSelfDamage(AnchorDamageUtil.damage(self.at(feet), center, foot, head)));
+                feet -> safeSelfDamage(calc.damage(self.at(feet), center, AnchorDamageUtil.DIAMETER, foot, head, null)));
     }
 
     private boolean detonate() {

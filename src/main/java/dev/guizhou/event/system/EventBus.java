@@ -5,6 +5,7 @@ import dev.guizhou.util.diagnostics.ClientDiagnostics;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -12,10 +13,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 public class EventBus {
-    private final Map<Class<?>, CopyOnWriteArrayList<Listener>> listeners = new ConcurrentHashMap<>();
+    // Immutable arrays are published only when modules change. Packet/render dispatch allocates no iterator.
+    private final Map<Class<?>, Listener[]> listeners = new ConcurrentHashMap<>();
     private final Set<Object> registeredHosts = Collections.newSetFromMap(new IdentityHashMap<>());
 
     public synchronized void register(Object host) {
@@ -27,22 +28,23 @@ public class EventBus {
         List<Subscription> subscriptions = new ArrayList<>();
         collect(host, host.getClass(), stableName, subscriptions);
         for (Subscription subscription : subscriptions) {
-            List<Listener> registry = listeners.computeIfAbsent(subscription.eventType(),
-                    k -> new CopyOnWriteArrayList<>());
-            register(registry, subscription.listener());
+            Listener[] registry = listeners.getOrDefault(subscription.eventType(), new Listener[0]);
+            listeners.put(subscription.eventType(), register(registry, subscription.listener()));
         }
         registeredHosts.add(host);
     }
 
     public synchronized void unregister(Object host) {
-        for (CopyOnWriteArrayList<Listener> list : listeners.values()) {
-            list.removeIf(listener -> listener.host() == host);
+        for (var entry : listeners.entrySet()) {
+            Listener[] remaining = Arrays.stream(entry.getValue()).filter(listener -> listener.host() != host)
+                    .toArray(Listener[]::new);
+            listeners.put(entry.getKey(), remaining);
         }
         registeredHosts.remove(host);
     }
 
     public boolean post(Event event) {
-        List<Listener> list = listeners.get(event.getClass());
+        Listener[] list = listeners.get(event.getClass());
         if (list == null) return event.isCancelled();
 
         for (Listener listener : list) {
@@ -118,12 +120,16 @@ public class EventBus {
             collect(host, klass.getSuperclass(), stableName, subscriptions);
     }
 
-    private void register(List<Listener> registry, Listener target) {
+    private Listener[] register(Listener[] registry, Listener target) {
         int i = 0;
         for (Listener listener : registry) {
             if (target.priority() > listener.priority()) break;
             i++;
         }
-        registry.add(i, target);
+        Listener[] result = new Listener[registry.length + 1];
+        System.arraycopy(registry, 0, result, 0, i);
+        result[i] = target;
+        System.arraycopy(registry, i, result, i + 1, registry.length - i);
+        return result;
     }
 }

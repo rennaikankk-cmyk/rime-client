@@ -2,18 +2,17 @@ package dev.guizhou.util;
 
 import dev.guizhou.util.combat.ExplosionDamageModel;
 import dev.guizhou.util.combat.CombatSnapshotService;
+import dev.guizhou.util.combat.ExplosionExposure;
 import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.traits.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
-import java.util.function.BiFunction;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
 /** Power-five blast model shared by anchors and beds. Call only on the client thread. */
 public final class AnchorDamageUtil implements Util {
@@ -41,6 +40,47 @@ public final class AnchorDamageUtil implements Util {
         return targetDamage(target, target.pos().distanceTo(explosionPos), 1.0);
     }
 
+    public static float maxDamage(Target target, Vec3 explosionPos, double diameter) {
+        return targetDamage(target, target.pos().distanceTo(explosionPos), 1.0, diameter);
+    }
+
+    /** One synchronous search. Discard before sending an action; final safety checks stay fresh. */
+    public static final class Calculation {
+        private final ExplosionExposure exposure = new ExplosionExposure();
+        private final Map<LivingEntity, Target> targets = new IdentityHashMap<>();
+        private final Map<DamageKey, Float> damages = new HashMap<>();
+
+        public Target target(LivingEntity entity) {
+            return targets.computeIfAbsent(entity, Target::of);
+        }
+
+        public float damage(Target target, Vec3 center, double diameter,
+                            BlockPos removed, BlockPos other, BlockPos solidBase) {
+            DamageKey key = new DamageKey(target, center, diameter, immutable(removed), immutable(other), immutable(solidBase));
+            Float cached = damages.get(key);
+            if (cached != null) {
+                ClientDiagnostics.count("combat.blast.damageCache.hit", 1);
+                return cached;
+            }
+            double distance = target.pos().distanceTo(center);
+            if (distance > diameter || mc.level == null) return 0;
+            ClientDiagnostics.count("combat.power5.exposure", 1);
+            double visible = exposure.exposure(center, target.box(), pos -> {
+                if (pos.equals(key.removed()) || pos.equals(key.other())) return net.minecraft.world.phys.shapes.Shapes.empty();
+                if (pos.equals(key.solidBase())) return net.minecraft.world.phys.shapes.Shapes.block();
+                return exposure.shapeAt(pos);
+            }, "combat.power5.rays");
+            float result = targetDamage(target, distance, visible, diameter);
+            if (damages.size() < 4096) damages.put(key, result);
+            ClientDiagnostics.count("combat.blast.damageCache.miss", 1);
+            return result;
+        }
+
+        private static BlockPos immutable(BlockPos pos) { return pos == null ? null : pos.immutable(); }
+        private record DamageKey(Target target, Vec3 center, double diameter,
+                                 BlockPos removed, BlockPos other, BlockPos solidBase) {}
+    }
+
     public static float damage(Target target, Vec3 explosionPos, BlockPos removedSource) {
         return damage(target, explosionPos, removedSource, null);
     }
@@ -49,7 +89,7 @@ public final class AnchorDamageUtil implements Util {
     public static float damage(Target target, Vec3 explosionPos, BlockPos removedSource, BlockPos removedOther) {
         double distance = target.pos().distanceTo(explosionPos);
         if (distance > DIAMETER || mc.level == null) return 0f;
-        return targetDamage(target, distance, exposure(explosionPos, target.box(), removedSource, removedOther, null));
+        return new Calculation().damage(target, explosionPos, DIAMETER, removedSource, removedOther, null);
     }
 
     public static float selfDamage(Vec3 explosionPos, BlockPos anchorPos) {
@@ -66,7 +106,7 @@ public final class AnchorDamageUtil implements Util {
                                         BlockPos removedSource, BlockPos solidBase) {
         double distance = target.pos().distanceTo(explosionPos);
         if (distance > diameter || mc.level == null) return 0f;
-        return targetDamage(target, distance, exposure(explosionPos, target.box(), removedSource, null, solidBase), diameter);
+        return new Calculation().damage(target, explosionPos, diameter, removedSource, null, solidBase);
     }
 
     private static float targetDamage(Target target, double distance, double exposure) {
@@ -87,42 +127,4 @@ public final class AnchorDamageUtil implements Util {
                 target.resistMult(), target.protPoints());
     }
 
-    private static double exposure(Vec3 source, AABB box, BlockPos removedSource, BlockPos removedOther, BlockPos solidBase) {
-        // Vanilla's bounding-box-dependent sampling avoids the old fixed 27-point approximation.
-        double stepX = 1.0 / (box.getXsize() * 2.0 + 1.0);
-        double stepY = 1.0 / (box.getYsize() * 2.0 + 1.0);
-        double stepZ = 1.0 / (box.getZsize() * 2.0 + 1.0);
-        if (stepX <= 0 || stepY <= 0 || stepZ <= 0) return 0;
-        double offsetX = (1.0 - Math.floor(1.0 / stepX) * stepX) / 2.0;
-        double offsetZ = (1.0 - Math.floor(1.0 / stepZ) * stepZ) / 2.0;
-        ClientDiagnostics.count("combat.power5.exposure", 1);
-        RayContext context = new RayContext(source);
-        BiFunction<RayContext, BlockPos, BlockHitResult> tester = (ray, pos) -> {
-            if (pos.equals(removedSource) || pos.equals(removedOther)) return null;
-            if (pos.equals(solidBase)) return net.minecraft.world.phys.shapes.Shapes.block().clip(ray.point, ray.source, pos);
-            BlockState state = mc.level.getBlockState(pos);
-            if (state.isAir()) return null;
-            VoxelShape shape = state.getCollisionShape(mc.level, pos);
-            return shape.isEmpty() ? null : shape.clip(ray.point, ray.source, pos);
-        };
-        int total = 0, unblocked = 0;
-        for (double x = 0; x <= 1.0; x += stepX) {
-            for (double y = 0; y <= 1.0; y += stepY) {
-                for (double z = 0; z <= 1.0; z += stepZ) {
-                    context.point = new Vec3(box.minX + box.getXsize() * x + offsetX,
-                            box.minY + box.getYsize() * y, box.minZ + box.getZsize() * z + offsetZ);
-                    if (BlockGetter.traverseBlocks(context.point, source, context, tester, ray -> null) == null) unblocked++;
-                    total++;
-                }
-            }
-        }
-        ClientDiagnostics.count("combat.power5.rays", total);
-        return total == 0 ? 0 : (double) unblocked / total;
-    }
-
-    private static final class RayContext {
-        private final Vec3 source;
-        private Vec3 point;
-        private RayContext(Vec3 source) { this.source = source; }
-    }
 }

@@ -270,6 +270,7 @@ public final class ObfuscatedJarTest {
         requiredMethod(heartbeat, authorized + "()Z");
         requiredMethod(heartbeat, denied + "()V");
         Map<String, List<String>> checkpoints = Map.ofEntries(
+                Map.entry("UtilityModule", List.of("onTick", "permitted")),
                 Map.entry("GuangxiCrystalModule", List.of("onPreTick", "onCrystalSpawn", "onBlockUpdate",
                         "lambda$onBlockUpdate$", "scanBlockUpdate", "preplaceCrystal", "breakCrystal",
                         "sendCrystalAttack", "sendGhostAttack", "doPlace", "placeCrystalShared")),
@@ -365,7 +366,7 @@ public final class ObfuscatedJarTest {
         check(branch.opcode == Opcodes.IFNE, "Denied tick must take a terminating cleanup path: " + label);
         int allowedWork = labelOrdinal(method, (Label) branch.value);
         boolean returned = false;
-        Set<String> cleanup = Set.of("stopUnauthorizedMining", "resetGlass", "resetState", "restoreSprint");
+        Set<String> cleanup = Set.of("stopUnauthorizedMining", "resetGlass", "resetState", "restoreSprint", "resetSession");
         for (int index = 2; index < allowedWork; index++) {
             Step step = steps.get(index);
             if (step.opcode == Opcodes.RETURN) { returned = true; break; }

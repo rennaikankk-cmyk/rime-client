@@ -40,7 +40,22 @@ public final class ModuleNames {
             Map.entry("ChestHistory", "容器历史"),
             Map.entry("KitReplenish", "套装补给"),
             Map.entry("AntiReplenish", "反补给"),
-            Map.entry("ChunkLag", "区块延迟预警"));
+            Map.entry("ChunkLag", "区块延迟预警"),
+            Map.entry("AntiBot", "假人过滤"),
+            Map.entry("AntiLevitation", "防漂浮"),
+            Map.entry("AutoCenter", "自动居中"),
+            Map.entry("AutoFish", "自动钓鱼"),
+            Map.entry("AutoJump", "自动跳跃"),
+            Map.entry("AutoRespawn", "自动重生"),
+            Map.entry("AutoTool", "自动工具"),
+            Map.entry("AutoWalk", "自动前进"),
+            Map.entry("ChestStealer", "容器拿取"),
+            Map.entry("ItemSaver", "耐久保护"),
+            Map.entry("LagNotifier", "卡顿提示"),
+            Map.entry("NoSoundLag", "声音限流"),
+            Map.entry("SafeWalk", "边缘保护"),
+            Map.entry("ViewLock", "视角锁定"),
+            Map.entry("UnfocusedFps", "后台帧率"));
 
     private ModuleNames() {}
 

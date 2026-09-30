@@ -58,7 +58,9 @@ public class TargetsModule extends Module {
         if (living.isDeadOrDying()) return false;
 
         if (entity instanceof Player player) {
-            return players.getValue() && !GuizhouWare.friendManager.isFriend(player);
+            var antiBot = GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.extra.AntiBotModule.class);
+            return players.getValue() && !GuizhouWare.friendManager.isFriend(player)
+                    && (antiBot == null || !antiBot.bot(player));
         }
 
         // Training dummies are armor stands; none of the hostility tiers match them.

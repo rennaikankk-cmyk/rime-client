@@ -143,6 +143,7 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        explosionSamplingTest: 'dev.guizhou.util.combat.ExplosionSamplingTest',
         maceCombatTest: 'dev.guizhou.util.elytra.MaceCombatTest',
         evadeCommitmentTest: 'dev.guizhou.util.elytra.EvadeCommitmentTest',
         pearlLandingThreatTest: 'dev.guizhou.util.elytra.PearlLandingThreatTest',
@@ -173,6 +174,7 @@ def clientRegressionTests = [
         hudLayoutTest: 'dev.guizhou.features.modules.client.HudLayoutTest',
         shadcnTextFieldTest: 'dev.guizhou.features.gui.ShadcnTextFieldTest',
         eventBusTest: 'dev.guizhou.event.system.EventBusTest',
+        bundleFilterTest: 'dev.guizhou.event.system.BundleFilterTest',
         configFilesTest: 'dev.guizhou.util.ConfigFilesTest',
         armorFlyConfigMigrationTest: 'dev.guizhou.util.ArmorFlyConfigMigrationTest',
         autoUseWhitelistTest: 'dev.guizhou.util.player.AutoUseWhitelistTest',

@@ -8,11 +8,14 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.BundlePacket;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.network.protocol.game.ClientboundBundlePacket;
+import dev.guizhou.event.system.BundleFilter;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import static dev.guizhou.util.traits.Util.EVENT_BUS;
@@ -26,17 +29,21 @@ public class MixinClientConnection {
     @Final
     private PacketFlow receiving;
 
+    /** Bundled children bypass channelRead0 individually; cancellation must filter the actual bundle. */
+    @ModifyVariable(method = "channelRead0(Lio/netty/channel/ChannelHandlerContext;Lnet/minecraft/network/protocol/Packet;)V",
+            at = @At("HEAD"), argsOnly = true, ordinal = 0)
+    private Packet<?> rime$filterBundle(Packet<?> packet) {
+        if (!this.channel.isOpen() || !(packet instanceof ClientboundBundlePacket bundle)) return packet;
+        var kept = BundleFilter.filter(bundle.subPackets(), child -> EVENT_BUS.post(new PacketEvent.Receive(child)));
+        return kept == null ? packet : new ClientboundBundlePacket(kept);
+    }
+
     @Inject(method = "channelRead0", at = @At("HEAD"), cancellable = true)
     public void channelRead0(ChannelHandlerContext chc, Packet<?> packet, CallbackInfo ci) {
         if (this.channel.isOpen() && packet != null) {
             try {
                 if (packet instanceof BundlePacket<?> bundle) {
-                    // Bundled children are dispatched inside packet handling, never through
-                    // channelRead0 — post them here or receive listeners never see them
-                    // (insta-break on crystal spawn was dead because of this).
-                    for (Packet<?> child : bundle.subPackets()) {
-                        EVENT_BUS.post(new PacketEvent.Receive(child));
-                    }
+                    // Children have already been posted and filtered by rime$filterBundle.
                     return;
                 }
                 if (EVENT_BUS.post(new PacketEvent.Receive(packet))) {

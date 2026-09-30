@@ -62,6 +62,13 @@ public final class LicenseActionHookTest {
 
     /** Server-facing actions of the utility modules; their cleanup stays ungated. */
     private static void utilityActions() throws IOException {
+        String extra = BASE + "extra/UtilityModule";
+        Code utilityTick = guarded(extra, "onTick", null, "tick");
+        check(utilityTick.calls("resetSession").stream().anyMatch(call -> utilityTick.reachable(call, false, null)),
+                "Denied utility ticks must clear pending actions and restore owned tools");
+        check(method(extra, "permitted", null).hasAuthorization(), "Input and packet utility hooks require authorization");
+        check(!method(extra, "onDisable", null).hasAuthorization(), "Utility cleanup survives revocation");
+
         String surround = BASE + "combat/SurroundModule";
         guarded(surround, "breakCrystal", null, "trySubmit", "attack", "swing");
         guarded(surround, "centerInput", null, "sin", "cos");

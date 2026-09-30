@@ -73,7 +73,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantments;
 import dev.guizhou.util.EnchantmentUtil;
 import dev.guizhou.util.player.EatUtil;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -85,7 +84,6 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.awt.Color;
 import java.util.ArrayList;
@@ -97,7 +95,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BiFunction;
 
 public class GuangxiCrystalModule extends Module {
 
@@ -372,7 +369,7 @@ public class GuangxiCrystalModule extends Module {
     private boolean placeSearchWaiting;
     private int placeDiagCounter = 0;
 
-    private final ExposureContext exposureCtx = new ExposureContext();
+    private final dev.guizhou.util.combat.ExplosionExposure exposurePass = new dev.guizhou.util.combat.ExplosionExposure();
 
     private final ArrayList<PlaceCandidate> candidates = new ArrayList<>();
     private final OffthreadRank placeRank = new OffthreadRank();
@@ -454,6 +451,7 @@ public class GuangxiCrystalModule extends Module {
         miningSnapshotTick = Integer.MIN_VALUE;
         selfDamageCache.clear();
         targetDamageCache.clear();
+        exposurePass.reset();
         cachedChunk = null;
         cachedChunkX = cachedChunkZ = Integer.MIN_VALUE;
         seeThrough.clear();
@@ -961,8 +959,6 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             lastBestDamage = 0;
             return;
         }
-        ensureSelfCache();
-        refreshEntitySnapshot();
         ownSwapPackets.set(0);
 
         if (weaponControlBusy()) {
@@ -989,6 +985,8 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         boolean canPlace = place.getValue() && placeReady && canSupplyCrystal();
         boolean canBase = basePlace.getValue() && placeReady && canSupplyObsidian();
         if (!canBreak && !canPlace && !canBase && !antiChineseReady) return;
+        ensureSelfCache();
+        refreshEntitySnapshot();
 
         long calculationTimer = ClientDiagnostics.startTimer();
         long calcStart = System.nanoTime();
@@ -2304,6 +2302,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         cachedChunkX = cachedChunkZ = Integer.MIN_VALUE;
         selfDamageCache.clear();
         targetDamageCache.clear();
+        exposurePass.reset();
 
         float health = mc.player.getHealth() + mc.player.getAbsorptionAmount();
         var baseSnapshot = CombatSnapshotService.get(mc.player);
@@ -2412,62 +2411,15 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private double calcExposure(Vec3 source, AABB box, BlockPos phantomObsidianPos, boolean projected) {
-        double dx = box.getXsize();
-        double dy = box.getYsize();
-        double dz = box.getZsize();
-        double stepX = 1.0 / (dx * 2.0 + 1.0);
-        double stepY = 1.0 / (dy * 2.0 + 1.0);
-        double stepZ = 1.0 / (dz * 2.0 + 1.0);
-        if (stepX <= 0 || stepY <= 0 || stepZ <= 0) return 0;
-        double offsetX = (1.0 - Math.floor(1.0 / stepX) * stepX) / 2.0;
-        double offsetZ = (1.0 - Math.floor(1.0 / stepZ) * stepZ) / 2.0;
-        int total = 0;
-        int unblocked = 0;
-
-        ExposureContext ctx = exposureCtx;
-        BiFunction<ExposureContext, BlockPos, BlockHitResult> tester = (c, pos) -> {
-            Vec3 from = c.start, to = c.end;
-            if (phantomObsidianPos != null && pos.equals(phantomObsidianPos)) {
-                return Shapes.block().clip(from, to, pos);
-            }
-
-            if (projected && !seeThrough.isEmpty() && seeThrough.contains(pos)) return null;
-            BlockState state = getStateFast(pos);
-            if (state.isAir()) return null;
-
-            if (projected && blockDestruction.getValue() && state.getBlock().getExplosionResistance() < EXPLODABLE_RESISTANCE) return null;
-
-            VoxelShape shape = state.getCollisionShape(mc.level, pos);
-            if (shape.isEmpty()) return null;
-            return shape.clip(from, to, pos);
-        };
-
-        for (double xi = 0; xi <= 1.0; xi += stepX) {
-            for (double yi = 0; yi <= 1.0; yi += stepY) {
-                for (double zi = 0; zi <= 1.0; zi += stepZ) {
-                    Vec3 point = new Vec3(
-                        box.minX + dx * xi + offsetX,
-                        box.minY + dy * yi,
-                        box.minZ + dz * zi + offsetZ
-                    );
-                    ctx.set(point, source);
-                    if (BlockGetter.traverseBlocks(point, source, ctx, tester, c -> null) == null) unblocked++;
-                    total++;
-                }
-            }
-        }
-        ClientDiagnostics.count("combat.GuangxiCrystal.rays", total);
-        return total == 0 ? 0 : (double) unblocked / total;
-    }
-
-    private static final class ExposureContext {
-        private Vec3 start = Vec3.ZERO;
-        private Vec3 end = Vec3.ZERO;
-
-        void set(Vec3 start, Vec3 end) {
-            this.start = start;
-            this.end = end;
-        }
+        ClientDiagnostics.count("combat.GuangxiCrystal.exposure", 1);
+        return exposurePass.exposure(source, box, pos -> {
+            if (pos.equals(phantomObsidianPos)) return Shapes.block();
+            if (projected && seeThrough.contains(pos)) return Shapes.empty();
+            if (projected && blockDestruction.getValue()
+                    && exposurePass.stateAt(pos).getBlock().getExplosionResistance() < EXPLODABLE_RESISTANCE)
+                return Shapes.empty();
+            return exposurePass.shapeAt(pos);
+        }, "combat.GuangxiCrystal.rays");
     }
 
     private double getDynamicMin(float health, float absorption, boolean armorBroken) {
