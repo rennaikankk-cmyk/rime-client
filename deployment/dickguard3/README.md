@@ -14,6 +14,16 @@ server.patch 已更新：`createGuard3(Date.now, {lease: (ac, q, username) => rg
 
 部署顺序（强制）：1) config.json 的 rimeguard 节加入 `poolLease`（与构建 `--pool-lease` 同值，hex64）；2) 应用 server.patch + RG 块更新并重启；3) 才能发行以该租约合并的 jar。次序颠倒=新客户端全量乱码。同一时期并行发行的 custody 构建必须共用同一租约；轮换租约会同时废弃所有旧 jar，属发行决策，需公告强制更新。
 
+### 已部署（2026-09-30 16:52 +0800）
+
+生产 `62.234.117.226:/opt/gzwx-auth` 已上线：server.js（RG 块 + rgPoolLease + lease 化 guard3 接线 + 换机/管理解绑清 ngHwid）、guard3.js（lease 透传版）、`rg-secret.txt`（600，生产 native secret）、config `rimeguard = {secretFile, dllHashes: [f1c13f68b7bb4551], banThreshold: 3, poolLease}`。备份在服务器 `/root/backup-p1c-20260930/`。
+
+生产 dll：由 rimeguard-native HEAD（c46ae86）以生产 secret 本地构建（`RIMEGUARD_NATIVE_SECRET=… cargo build --release --manifest-path native/Cargo.toml`），FNV-1a64 = `f1c13f68b7bb4551`，已登记 dllHashes。密钥不进仓库：生产 native secret 与 poolLease 存本机 `work/release-secrets/rimeguard-prod.json`（workspace 内、仓库外）+ 服务器 rg-secret.txt / config.json。
+
+验证：换前 `node backend-test.cjs` PASS；换后服务 active，`https://127.0.0.1:8443/api/heartbeat` 畸形 400、伪 token 走到签名响应（旧客户端零影响——lease 字段只在新客户端消费）。链路全证（真混淆 guard + 生产 dll + 生产租约）：dll+租约=明文，无租约/错租约/无 dll 均乱码，4/4。
+
+下一次 custody 发行：`RIMEGUARD_NATIVE_SECRET=<生产 secret> RIMEGUARD_POOL_LEASE=<生产 lease> python merge.py --original … --guard build/guard-obf.jar --native <rimeguard-prod.dll 路径> --bridge libs/rimeguard-bridge.jar`。dll 分发仍走启动器签名通道（bridge 的加载顺序注释）。注意：rimeguard-native 的 GitHub Actions CI 自 09-30 起持续失败（早于 P1c），dll 目前一律本地构建，恢复 CI 后需确认 Actions secret 与本地生产 secret 一致。
+
 ## dickguard3.1 / Rime 1.1.1
 
 在已经部署的 3.0 发布通道上顺序应用 jar_release-3.1.patch 与 test_jar_release-3.1.patch。它们仅新增对明确版本 3.1 的接受，继续要求双 d1.G 入口、guard 类和原始 Rime 类；未知 guard 版本和缺失类仍拒绝。生产应用前校验基线 SHA256，运行完整发布通道测试，锁定发布流程并备份，原子替换后重启 web-api。本次不覆盖已更新的 gzwx-auth/server.js、guard3.js 或 Dick subject pin 配套。
