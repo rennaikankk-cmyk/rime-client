@@ -53,6 +53,8 @@ public class HudEditorScreen extends Screen {
 
     private HudModule dragging;
     private int grabOffX, grabOffY;
+    private int pressX, pressY;
+    private boolean dragMoved;
     private HudModule selected;
     private HudModule hovered;
     private int guideX = Integer.MIN_VALUE, guideY = Integer.MIN_VALUE;
@@ -146,7 +148,8 @@ public class HudEditorScreen extends Screen {
 
         // Live drag with snapping: the world HUD renders before this screen, so the override applies next frame.
         guideX = guideY = Integer.MIN_VALUE;
-        if (dragging != null) {
+        if (dragging != null && (dragMoved || mouseX != pressX || mouseY != pressY)) {
+            dragMoved = true;
             int[] r = elementRect(dragging);
             int x = Math.max(0, Math.min(mouseX - grabOffX, this.width - r[2]));
             int y = Math.max(0, Math.min(mouseY - grabOffY, this.height - r[3]));
@@ -317,8 +320,8 @@ public class HudEditorScreen extends Screen {
         int[] live = hud.livePosition(module);
         if (live != null) return clamped(live[0], live[1], w, h);
         if (hud.isCustomPosition(module)) {
-            return clamped(Math.round(hud.normalizedX(module) * this.width),
-                    Math.round(hud.normalizedY(module) * this.height), w, h);
+            int[] saved = hud.savedPosition(module, w, h, this.width, this.height);
+            return clamped(saved[0], saved[1], w, h);
         }
         if (module.boundW() > 0) return clamped(module.boundX(), module.boundY(), w, h);
         int idx = hud.elementList().indexOf(module);
@@ -403,6 +406,9 @@ public class HudEditorScreen extends Screen {
                 selected = module;
                 grabOffX = (int) Math.round(mx) - r[0];
                 grabOffY = (int) Math.round(my) - r[1];
+                pressX = (int) Math.round(mx);
+                pressY = (int) Math.round(my);
+                dragMoved = false;
                 return true;
             }
         }
@@ -422,7 +428,7 @@ public class HudEditorScreen extends Screen {
         if (dragging != null && hud != null) {
             int[] live = hud.livePosition(dragging);
             int[] r = elementRect(dragging);
-            if (live != null && r != null) {
+            if (dragMoved && live != null && r != null) {
                 hud.savePosition(dragging, live[0], live[1], r[2], r[3]);
             }
             hud.endDrag();

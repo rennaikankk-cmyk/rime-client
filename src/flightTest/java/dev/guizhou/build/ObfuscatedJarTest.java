@@ -179,6 +179,12 @@ public final class ObfuscatedJarTest {
     }
 
     private static void verifyResources(JarFile input, JarFile output) throws IOException {
+        var metadata = com.google.gson.JsonParser.parseString(new String(entry(input, "fabric.mod.json"),
+                java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+        check(metadata.getAsJsonObject("custom").has("rimeguard"), "Release metadata must require the distribution guard");
+        check(!metadata.getAsJsonObject("entrypoints").has("fabric-client-gametest"), "Client tests must not become release entrypoints");
+        check(input.stream().noneMatch(e -> e.getName().startsWith("dev/guizhou/test/")),
+                "Development client fixtures must not be packaged");
         for (String name : List.of("AI_NOTICE.md", "CLAUDE.md", "AGENTS.md", "LLM.txt", "README.md",
                 "fabric.mod.json", "guizhouware.mixins.json", "guizhouware.accesswidener")) {
             byte[] original = entry(input, name);
@@ -271,6 +277,8 @@ public final class ObfuscatedJarTest {
         requiredMethod(heartbeat, denied + "()V");
         Map<String, List<String>> checkpoints = Map.ofEntries(
                 Map.entry("UtilityModule", List.of("onTick", "permitted")),
+                Map.entry("AutoSwordModule", List.of("onPreTick", "prepareAttackTick", "tryAttack", "tryDeflect", "strike", "attackFrom", "sendTeleport", "moveTo")),
+                Map.entry("KillAuraModule", List.of("onPreTick")),
                 Map.entry("GuangxiCrystalModule", List.of("onPreTick", "onCrystalSpawn", "onBlockUpdate",
                         "lambda$onBlockUpdate$", "scanBlockUpdate", "preplaceCrystal", "breakCrystal",
                         "sendCrystalAttack", "sendGhostAttack", "doPlace", "placeCrystalShared")),

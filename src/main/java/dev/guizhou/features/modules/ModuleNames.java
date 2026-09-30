@@ -20,6 +20,7 @@ public final class ModuleNames {
     private static final Map<String, String> UTILITY_NAMES = Map.ofEntries(
             Map.entry("MaceSmash", "重锤坠击"),
             Map.entry("AutoWeapon", "自动武器"),
+            Map.entry("KillAura", "杀戮光环"),
             Map.entry("NewChunks", "区块时间线"),
             Map.entry("StashFinder", "物资搜索"),
             Map.entry("Supplies", "物资计数"),

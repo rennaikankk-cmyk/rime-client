@@ -1281,7 +1281,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (rusherLogic() && !prepareRusherSword()) return false;
         if (rotate.getValue() && !aimBreakNow(crystal)) return false;
         acceptPendingRotation();
-        if ((rusherLogic() || rotate.getValue())
+        if (rotate.getValue()
                 && (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch))) return false;
         return sendCrystalAttack(crystal, false);
     }

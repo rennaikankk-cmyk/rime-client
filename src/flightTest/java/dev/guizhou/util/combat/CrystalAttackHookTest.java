@@ -32,11 +32,15 @@ public final class CrystalAttackHookTest {
         check(submit < accept && accept < breaker.first("field", "sentYaw")
                 && accept < breaker.first("field", "sentPitch") && finalRay < send,
                 "Break must validate accepted outbound rotation after the rotation request");
-        check(breaker.reachable(0, send, finalRay), "DEFAULT no-rotation must have a direct attack path");
-        int rusher = breaker.last("call", "rusherLogic");
-        Step rusherJump = breaker.steps.get(rusher + 1);
-        int rusherPath = rusherJump.opcode == Opcodes.IFNE ? breaker.labels.get(rusherJump.target) : rusher + 2;
-        check(!breaker.reachable(rusherPath, send, finalRay), "Rusher must still validate the final ray");
+        check(breaker.reachable(0, send, finalRay), "Rotate off must have a direct attack path for every preset");
+        check(breaker.last("call", "rusherLogic") < accept,
+                "Rusher weapon preparation must not reintroduce an angle gate after Rotate off");
+        int rotationField = breaker.last("field", "rotate");
+        int rotationJump = rotationField + 1;
+        while (!breaker.steps.get(rotationJump).kind.equals("jump")) rotationJump++;
+        Step enabledJump = breaker.steps.get(rotationJump);
+        int rotatedPath = enabledJump.opcode == Opcodes.IFNE ? breaker.labels.get(enabledJump.target) : rotationJump + 1;
+        check(!breaker.reachable(rotatedPath, send, finalRay), "Rotate on must still validate the final ray");
         Trace aim = method("aimBreakNow");
         int ray = aim.first("call", "canBreakCrystal");
         int look = aim.first("call", "sendLook");

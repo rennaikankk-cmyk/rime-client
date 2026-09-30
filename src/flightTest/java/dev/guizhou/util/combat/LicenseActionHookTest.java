@@ -44,6 +44,9 @@ public final class LicenseActionHookTest {
     private static void swordAttack() throws IOException {
         guarded(SWORD, "onPreTick", null, "tryAttack");
         guarded(SWORD, "tryAttack", null, "withSwap");
+        guarded(SWORD, "prepareAttackTick", null, "restorePosition");
+        guarded(SWORD, "tryDeflect", null, "strike", "trySubmit");
+        guarded(BASE + "combat/KillAuraModule", "onPreTick", null, "tryDeflect", "tryAttack");
         int strikeCallbacks = 0;
         for (Code callback : methods(SWORD, "lambda$tryAttack$")) {
             if (callback.calls("strike").isEmpty()) continue;

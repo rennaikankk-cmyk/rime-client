@@ -1771,5 +1771,15 @@
   "声音限流": "NoSoundLag",
   "边缘保护": "SafeWalk",
   "视角锁定": "ViewLock",
-  "后台帧率": "UnfocusedFps"
+  "后台帧率": "UnfocusedFps",
+  "无反作弊模式": "NoAC",
+  "目标来源": "TargetMode",
+  "全局目标": "GLOBAL",
+  "每刻投掷物上限": "ProjectileLimit",
+  "无反作弊服使用。只检查距离和遮挡，关闭 Rotate 时不等待服务端视角命中。": "For servers without anti-cheat. Check reach and occlusion; with Rotate off, do not wait for a matching server view.",
+  "GLOBAL 使用全局 Targets；CUSTOM 使用杀戮自己的目标开关。好友和假人过滤始终生效。": "GLOBAL uses shared Targets; CUSTOM uses KillAura's own switches. Friends and AntiBot filtering always apply.",
+  "默认拦截附近可反弹的火球、风弹和潜影贝子弹，不等待武器、设置冷却或 TPS 同步。": "Intercept nearby redirectable fireballs, wind charges and shulker bullets without waiting for weapon, configured cooldown or TPS sync.",
+  "NoAC 为无反作弊服直接取消减速，不补发换槽、移动或转头包；其他模式保留原有行为。": "NoAC removes slowdown directly without extra slot, movement or look packets. Other modes retain their existing behaviour.",
+  "NoAC 为无反作弊服直接设置下落移动包的落地标志，不等待转头、TPS 或附近地面；仍遵守重锤暂停设置。": "NoAC sets the ground flag on falling movement packets without waiting for rotation, TPS or nearby ground. The mace pause setting still applies.",
+  "拥有独立目标开关并即时拦截投掷物的近战杀戮。": "Melee aura with an independent target policy and immediate projectile defence."
 }

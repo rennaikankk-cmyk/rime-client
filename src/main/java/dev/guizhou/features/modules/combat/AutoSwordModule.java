@@ -11,6 +11,7 @@ import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.PacketSendUtil;
 import dev.guizhou.util.combat.AuraPath;
 import dev.guizhou.util.combat.AuraTeleport;
+import dev.guizhou.util.combat.AttackCooldown;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
@@ -37,6 +38,8 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.entity.projectile.ShulkerBullet;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.MaceItem;
@@ -53,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 public class AutoSwordModule extends Module {
 
@@ -73,6 +77,8 @@ public class AutoSwordModule extends Module {
     private final Setting<TargetSort> sort = mode("Sort", TargetSort.DISTANCE);
     private final Setting<Integer> targets = num("Targets", 1, 1, 3);
     private final Setting<Boolean> rotate = bool("Rotate", true);
+    private final Setting<Boolean> noAc = bool("NoAC", false)
+            .described("无反作弊服使用。只检查距离和遮挡，关闭 Rotate 时不等待服务端视角命中。");
     private final Setting<Boolean> swordGap = bool("SwordGap", false);
     private final Setting<Boolean> tp = bool("TP", false).setPage("TP");
     private final Setting<Double> tpRange = num("TPRange", 12.0, 4.0, 32.0).setPage("TP").setVisibility(v -> tp.getValue());
@@ -80,7 +86,10 @@ public class AutoSwordModule extends Module {
     private final Setting<Boolean> stopOnSetback = bool("StopOnSetback", true).setPage("TP").setVisibility(v -> tp.getValue());
 
     private Entity currentTarget = null;
-    private float attackCooldownTicks = 0f;
+    private final AttackCooldown attackCooldown = new AttackCooldown();
+    private boolean auraActive;
+    private int projectileTick = Integer.MIN_VALUE;
+    private final java.util.Set<Integer> hitProjectiles = new java.util.HashSet<>();
     private int targetTick = Integer.MIN_VALUE;
     private int weaponTick = Integer.MIN_VALUE;
     private int weaponTargetId = Integer.MIN_VALUE;
@@ -138,17 +147,38 @@ public class AutoSwordModule extends Module {
 
     @Override
     public void onDisable() {
+        releaseSwordGap();
+        if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("AutoSword");
+        if (auraActive) return;
         restorePosition();
         pendingReturn = null;
         tpBlocked = false;
         pathRetry.clear();
         PacketSendUtil.removeSubmissionListener(submissions);
         currentTarget = null;
-        attackCooldownTicks = 0f;
+        attackCooldown.reset();
         targetTick = Integer.MIN_VALUE;
         weaponTick = Integer.MIN_VALUE;
-        releaseSwordGap();
-        if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("AutoSword");
+        hitProjectiles.clear();
+        projectileTick = Integer.MIN_VALUE;
+        if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("AutoSwordProjectiles");
+    }
+
+    /** KillAura owns this service even when the standalone AutoSword module is disabled. */
+    public void setAuraActive(boolean active) {
+        auraActive = active;
+        if (active) PacketSendUtil.addSubmissionListener(submissions);
+        else if (!isEnabled()) onDisable();
+    }
+
+    public boolean prepareAttackTick() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (!mc.isSameThread() || nullCheck() || mc.player.isDeadOrDying()
+                || mc.gameMode == null || mc.getConnection() == null) return false;
+        ensureSession();
+        if (!restorePosition()) return false;
+        attackCooldown.advance(mc.player.tickCount);
+        return true;
     }
 
     @Subscribe
@@ -159,22 +189,9 @@ public class AutoSwordModule extends Module {
             pendingReturn = null;
             return;
         }
-        if (nullCheck() || mc.player.isDeadOrDying()) return;
-        ensureSession();
-        if (!restorePosition()) return;
-
-        float tps;
-        switch (tpsMode.getValue()) {
-            case LATEST -> tps = GuizhouWare.tpsCounterService.getLatestTPS();
-            case AVERAGE -> tps = GuizhouWare.tpsCounterService.getAverageTPS();
-            default -> tps = 20f;
-        }
-
-        if (!Float.isFinite(tps) || tps < 1f) tps = 1f;
-
-        attackCooldownTicks -= (tps / 20f);
-        if (attackCooldownTicks < 0f) attackCooldownTicks = 0f;
+        if (!prepareAttackTick()) return;
         tickSwordGap();
+        if (auraActive) return;
 
         if (GuangxiElytraChaseModule.isWeaponControlActive()) {
             currentTarget = null;
@@ -191,8 +208,8 @@ public class AutoSwordModule extends Module {
 
         java.util.List<Entity> found = selectTargets(sort.getValue(), targets.getValue());
         for (int i = 0; i < found.size(); i++) {
-            if (attackCooldownTicks > 0f) return;
-            if (tryAttack(found.get(i), rotate.getValue())) return;
+            if (attackCooldown.active()) return;
+            if (tryAttack(found.get(i), rotate.getValue(), noAc.getValue())) return;
         }
     }
 
@@ -200,9 +217,9 @@ public class AutoSwordModule extends Module {
      * Shared attack used by AutoSword and KillAura. Silent main-hand swap only,
      * so CombatSync can keep the offhand.
      */
-    public boolean tryAttack(Entity target, boolean rotate) {
+    public boolean tryAttack(Entity target, boolean rotate, boolean noAc) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
-        if (target == null || !target.isAlive() || target.isRemoved() || attackCooldownTicks > 0f) return false;
+        if (target == null || !target.isAlive() || target.isRemoved() || attackCooldown.active()) return false;
         if (nullCheck() || mc.player.isDeadOrDying() || mc.gameMode == null || mc.getConnection() == null) return false;
         ensureSession();
         if (!restorePosition()) return false;
@@ -213,7 +230,7 @@ public class AutoSwordModule extends Module {
         Vec3 origin = mc.player.position();
         Vec3 eyePos = mc.player.getEyePosition(1.0f);
         float[] angles = MathUtil.calcAngle(eyePos, getClosestPointToEye(eyePos, target.getBoundingBox()));
-        boolean inReach = canHit(target, angles[0], angles[1]);
+        boolean inReach = hitAllowed(target, eyePos, angles[0], angles[1], noAc);
         boolean distant = !inReach && tp.getValue() && !tpBlocked;
         final List<Vec3> path = distant ? teleportPath(target) : List.of();
         if (distant) {
@@ -229,12 +246,12 @@ public class AutoSwordModule extends Module {
             return false;
         }
         if (rotate) {
-            GuizhouWare.rotationManager.trySubmit(new RotationRequest(
-                    "AutoSword", 6, angles[0], angles[1], RotationRequest.Mode.SILENT));
+            if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                    "AutoSword", 6, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
         }
         float serverYaw = GuizhouWare.rotationManager.getServerYaw();
         float serverPitch = GuizhouWare.rotationManager.getServerPitch();
-        if (!canHit(target, eyePos, serverYaw, serverPitch)) return false;
+        if (!hitAllowed(target, eyePos, serverYaw, serverPitch, noAc)) return false;
 
         boolean doCrit = shouldCrit(weaponStack) && !distant;
         Vec3 strikeEye = eyePos;
@@ -256,7 +273,7 @@ public class AutoSwordModule extends Module {
                         point -> sendTeleport(point, serverYaw, serverPitch),
                         () -> {
                             if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
-                            if (!attackFrom(target, strikeEye, serverYaw, serverPitch)) return false;
+                            if (!attackFrom(target, strikeEye, serverYaw, serverPitch, noAc)) return false;
                             struck[0] = strike(target);
                             return struck[0];
                         },
@@ -271,12 +288,43 @@ public class AutoSwordModule extends Module {
             default -> 20f;
         };
         if (!Float.isFinite(tps) || tps < 1f) tps = 1f;
-        attackCooldownTicks = getBaseCooldownTicks(weaponStack, tps) * delay.getValue().floatValue();
+        attackCooldown.start(getBaseCooldownTicks(weaponStack), tps, delay.getValue());
         currentTarget = target;
         return true;
     }
 
-    public boolean coolingDown() { return attackCooldownTicks > 0f; }
+    public boolean coolingDown() { return attackCooldown.active(); }
+
+    public static boolean deflectableProjectile(Entity entity) {
+        return entity instanceof Projectile projectile
+                && (entity.getType().is(EntityTypeTags.REDIRECTABLE_PROJECTILE) || entity instanceof ShulkerBullet)
+                && entity.isAlive() && !entity.isRemoved() && entity.isPickable()
+                && projectile.getOwner() != mc.player;
+    }
+
+    /** Projectile damage/deflection has no weapon cooldown. Never swap weapons, TP, or arm the melee timer. */
+    public boolean tryDeflect(Entity target, boolean rotate, boolean noAc) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (nullCheck() || mc.player.isDeadOrDying() || mc.gameMode == null || mc.getConnection() == null
+                || !deflectableProjectile(target) || pendingReturn != null) return false;
+        int tick = mc.player.tickCount;
+        if (projectileTick != tick) { hitProjectiles.clear(); projectileTick = tick; }
+        if (hitProjectiles.contains(target.getId())) return false;
+        Vec3 eye = mc.player.getEyePosition();
+        Vec3 aim = aimPoint(target, eye);
+        if (aim == null) return false;
+        float[] angles = MathUtil.calcAngle(eye, aim);
+        if (rotate && !GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                "AutoSwordProjectiles", 10, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
+        if (!hitAllowed(target, eye, GuizhouWare.rotationManager.getServerYaw(),
+                GuizhouWare.rotationManager.getServerPitch(), noAc) || !strike(target)) return false;
+        hitProjectiles.add(target.getId());
+        return true;
+    }
+
+    private boolean hitAllowed(Entity target, Vec3 eye, float yaw, float pitch, boolean noAc) {
+        return noAc ? aimPoint(target, eye) != null : canHit(target, eye, yaw, pitch);
+    }
 
     /** Final attack entry. A denied licence must not send the swing or the hit. */
     private boolean strike(Entity target) {
@@ -325,7 +373,7 @@ public class AutoSwordModule extends Module {
 
     public boolean isMaceAttackReady() {
         if (!isEnabled() || nullCheck() || mc.player.isDeadOrDying() || mc.gameMode == null
-                || mc.getConnection() == null || attackCooldownTicks > 0.0F
+                || mc.getConnection() == null || attackCooldown.active()
                 || GuangxiElytraChaseModule.isWeaponControlActive()
                 || !MaceItem.canSmashAttack(mc.player)) return false;
         Entity target = findTarget();
@@ -392,28 +440,37 @@ public class AutoSwordModule extends Module {
     private TargetSort cachedSort = TargetSort.DISTANCE;
     private int cachedLimit = 1;
     private boolean cachedAllowTp;
+    private Predicate<Entity> cachedFilter;
+    private final Predicate<Entity> globalFilter = entity -> {
+        TargetsModule policy = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
+        return policy != null && policy.isValidTarget(entity);
+    };
 
     private Entity findTarget() {
-        java.util.List<Entity> found = collectTargets(TargetSort.DISTANCE, 1, false);
+        java.util.List<Entity> found = collectTargets(TargetSort.DISTANCE, 1, false, globalFilter);
         return found.isEmpty() ? null : found.get(0);
     }
 
     public java.util.List<Entity> selectTargets(TargetSort sort, int limit) {
-        return collectTargets(sort, limit, tp.getValue() && !tpBlocked);
+        return collectTargets(sort, limit, tp.getValue() && !tpBlocked, globalFilter);
     }
 
-    private java.util.List<Entity> collectTargets(TargetSort sort, int limit, boolean allowTp) {
+    public List<Entity> selectTargets(TargetSort sort, int limit, Predicate<Entity> filter) {
+        return collectTargets(sort, limit, tp.getValue() && !tpBlocked, filter);
+    }
+
+    private java.util.List<Entity> collectTargets(TargetSort sort, int limit, boolean allowTp, Predicate<Entity> filter) {
         int tick = mc.player.tickCount;
         int capped = Math.max(1, limit);
-        if (tick == targetTick && sort == cachedSort && capped == cachedLimit && allowTp == cachedAllowTp)
+        if (tick == targetTick && sort == cachedSort && capped == cachedLimit && allowTp == cachedAllowTp && filter == cachedFilter)
             return java.util.List.copyOf(targetCache);
         targetTick = tick;
         cachedSort = sort;
         cachedLimit = capped;
         cachedAllowTp = allowTp;
+        cachedFilter = filter;
         targetCache.clear();
-        TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
-        if (targets == null || mc.player == null) {
+        if (filter == null || mc.player == null) {
             currentTarget = null;
             return java.util.List.of();
         }
@@ -421,7 +478,7 @@ public class AutoSwordModule extends Module {
         double search = allowTp ? Math.max(RANGE, tpRange.getValue()) : RANGE;
         double rangeSq = search * search;
         for (Entity entity : mc.level.getEntities(null, mc.player.getBoundingBox().inflate(search + 1))) {
-            if (!targets.isValidTarget(entity) || !entity.isAlive()) continue;
+            if (!filter.test(entity) || !entity.isAlive() || entity.isRemoved()) continue;
             if (allowTp && pathRetry.getOrDefault(entity.getUUID(), 0) > tick) continue;
             if (sqDistToBox(eye, entity.getBoundingBox()) > rangeSq) continue;
             targetCache.add(entity);
@@ -443,15 +500,10 @@ public class AutoSwordModule extends Module {
         return java.util.List.copyOf(targetCache);
     }
 
-    private float getBaseCooldownTicks(ItemStack stack, float tps) {
-        float baseTicks;
-        if (stack.is(ItemTags.SWORDS)) baseTicks = 13f;
-        else if (stack.is(ItemTags.AXES)) baseTicks = 21f;
-        else if (stack.getItem() instanceof TridentItem) baseTicks = 19f;
-        else if (stack.getItem() instanceof MaceItem) baseTicks = 34f;
-        else baseTicks = 20f / 4f;
-
-        return (baseTicks * (20f / tps));
+    private double getBaseCooldownTicks(ItemStack stack) {
+        double speed = stack.getOrDefault(DataComponents.ATTRIBUTE_MODIFIERS, ItemAttributeModifiers.EMPTY)
+                .compute(Attributes.ATTACK_SPEED, mc.player.getAttributeBaseValue(Attributes.ATTACK_SPEED), EquipmentSlot.MAINHAND);
+        return 20 / Math.clamp(Double.isFinite(speed) ? speed : 4, 0.05, 1024);
     }
 
     private int getWeapon(Entity target) {
@@ -601,6 +653,10 @@ public class AutoSwordModule extends Module {
         pendingReturn = null;
         tpBlocked = false;
         pathRetry.clear();
+        attackCooldown.reset();
+        targetTick = weaponTick = Integer.MIN_VALUE;
+        hitProjectiles.clear();
+        projectileTick = Integer.MIN_VALUE;
         sessionPlayer = mc.player;
         sessionLevel = mc.level;
         sessionConnection = mc.getConnection();
@@ -611,11 +667,11 @@ public class AutoSwordModule extends Module {
         return mc.player == sessionPlayer && mc.level == sessionLevel && mc.getConnection() == sessionConnection;
     }
 
-    private boolean attackFrom(Entity target, Vec3 eye, float yaw, float pitch) {
+    private boolean attackFrom(Entity target, Vec3 eye, float yaw, float pitch, boolean noAc) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (pendingReturn != null && (submittedPosition == null
                 || submittedPosition.add(0, mc.player.getEyeHeight(), 0).distanceToSqr(eye) > 1e-8)) return false;
-        return canHit(target, eye, yaw, pitch);
+        return hitAllowed(target, eye, yaw, pitch, noAc);
     }
 
     private List<Vec3> teleportPath(Entity target) {

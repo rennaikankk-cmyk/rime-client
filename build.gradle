@@ -52,6 +52,20 @@ loom {
     accessWidenerPath = file("src/main/resources/guizhouware.accesswidener")
 }
 
+// Real client/world regression tests are separate from the release source set.
+if (providers.gradleProperty('gzwClientTests').map { it.toBoolean() }.getOrElse(false)) {
+    if (!developmentBuild) throw new GradleException('Client regression tests require -PgzwDevelopmentBuild=true.')
+    fabricApi {
+        configureTests {
+            createSourceSet = true
+            modId = 'rime-client-tests'
+            enableGameTests = false
+            enableClientGameTests = true
+            eula = true
+        }
+    }
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings loom.officialMojangMappings()
@@ -92,12 +106,24 @@ processResources {
     inputs.property "version", project.version
     inputs.property "minecraft_version", project.minecraft_version
     inputs.property "loader_version", project.loader_version
+    inputs.property "gzwDevelopmentBuild", developmentBuild
     filteringCharset "UTF-8"
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
                 "minecraft_version": project.minecraft_version,
                 "loader_version": project.loader_version
+    }
+    // The external distribution guard is merged only by rimeguard's release pipeline.
+    // Local development uses the existing compile-time + Loader development gate instead.
+    // All Jar tasks above reject this build, and production resources retain the guard marker.
+    doLast {
+        if (developmentBuild) {
+            def metadataFile = new File(destinationDir, 'fabric.mod.json')
+            def metadata = new groovy.json.JsonSlurper().parse(metadataFile)
+            metadata.custom?.remove('rimeguard')
+            metadataFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(metadata))
+        }
     }
 }
 
@@ -172,6 +198,9 @@ def clientRegressionTests = [
         miningBreakTrackerTest: 'dev.guizhou.features.modules.combat.MiningBreakTrackerTest',
         hudAppearanceTest: 'dev.guizhou.util.render.HudAppearanceTest',
         hudLayoutTest: 'dev.guizhou.features.modules.client.HudLayoutTest',
+        hudCoordinatesTest: 'dev.guizhou.features.modules.client.HudCoordinatesTest',
+        attackCooldownTest: 'dev.guizhou.util.combat.AttackCooldownTest',
+        auraDefenceHookTest: 'dev.guizhou.util.combat.AuraDefenceHookTest',
         shadcnTextFieldTest: 'dev.guizhou.features.gui.ShadcnTextFieldTest',
         eventBusTest: 'dev.guizhou.event.system.EventBusTest',
         bundleFilterTest: 'dev.guizhou.event.system.BundleFilterTest',
