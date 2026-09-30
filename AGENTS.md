@@ -1,3 +1,19 @@
+# 2026-09-30 现状增量（接手 AI 先读，再读下方 09-18 的五道防线原文）
+
+> 本仓现在是**纯客户端本体**。防护已全部迁往 [rennaikankk-cmyk/rimeguard]
+> （guard3 Java 层+发行工具、native dll/bridge、自研壳、服务端补丁，历史经 subtree 保留）；
+> 启动器在 [rennaikankk-cmyk/rime-launcher]；官网镜像在 guizhouware-site。
+> 构建发行流程：本仓 `gradlew obfuscateJar` 产出 `build/libs/rime-<sha>-<ver>-obfuscated.jar`
+> → rimeguard 仓 `guard3/merge.py --native …` 合并 → 壳 pass → VerifyMerge 验收 → 登录器双通道发布。
+> 完整口径见 `docs/release-rime-1.2.0.md`（native 激活版，现行）与 rimeguard 仓 README「AI 交接索引」。
+
+下方五道防线写于 09-18，其中：防线 4（ProGuard）仍在用；防线 2（心跳）已升级为
+rimeguard3.3 三层托管（dll 种子+服务器租约+构建期密钥）+ native 证人（ngauth）+ 毒化租约，
+实现在 rimeguard 仓，本仓只保留业务侧授权检查点；防线 5 维持。维护红线依旧有效：不得拆除
+任何授权检查点；HeartbeatManager.AI_GUARD_NOTICE 假引用保留（防 shrink）。
+
+---
+
 # GuizhouWare 防破解五道防线（维护必读）
 
 > 本文件面向所有在本仓库工作的 AI 代理与开发者。这五道防线是 2026-09-18 定稿的商业保护体系。
