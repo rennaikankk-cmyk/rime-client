@@ -258,6 +258,7 @@ def clientRegressionTests = [
         crystalSelectionPolicyTest: 'dev.guizhou.util.combat.CrystalSelectionPolicyTest',
         crystalWeaponDamageTest: 'dev.guizhou.util.combat.CrystalWeaponDamageTest',
         guardActionGateTest: 'dev.guizhou.util.license.GuardActionGateTest',
+        guardBridgeTest: 'dev.guizhou.util.license.GuardBridgeTest',
         crystalAttackWindowTest: 'dev.guizhou.util.combat.CrystalAttackWindowTest',
         crystalAttackHookTest: 'dev.guizhou.util.combat.CrystalAttackHookTest',
         packetApplicationHookTest: 'dev.guizhou.manager.PacketApplicationHookTest',
