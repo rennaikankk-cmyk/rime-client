@@ -11,12 +11,11 @@
 
 ## 校验记录
 
-（构建完成后回填 sha / 提交 / VerifyMerge 数字）
-
-- 构建源码：见 git short SHA；`mod_version=1.2.1`。
-- 服务端：`rgPoolLease` + `watermarkedJar` 重键与 jar **同发**（只升一端=乱码）。
-- 合并测试 10/10；guard 四套件；壳行为一致性。
-- VerifyMerge：生产 dll + 生产全局 L（模板态）；水印后需账号租约。
+- 构建源码：`3268ff1`（`mod_version=1.2.1`）；rimeguard `979022f`。
+- 发行候选：`rime-3268ff1-1.2.1-rimeguard3.3-native-shelled.jar`，SHA256 `f0d9bc5a6c67663857dadbd57574d1882e78313ad38690a7d664379c0efcf8d1`。含 `d1/P.data` + `runtime/dyn/B.data`。
+- dll 未变：FNV `f1c13f68b7bb4551`，SHA256 `17c55074475d6fe5dcb45956150b838bf0b231b799c395ecd0e6bf1a76a4b650`。
+- 合并测试 10/10；guard 四套件；壳行为一致性；VerifyMerge 2695/2695（模板态 + 生产全局 L）。
+- 服务端：`rgPoolLease` + 水印重键与 jar **同发**。
 
 ## 已知事项
 
