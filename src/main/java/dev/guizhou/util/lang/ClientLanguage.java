@@ -14,7 +14,7 @@ public final class ClientLanguage {
         ENGLISH, CHINESE;
         @Override public String label() { return this == ENGLISH ? "English" : "中文"; }
     }
-    private static BooleanSupplier chinese = () -> false;
+    private static BooleanSupplier chinese = () -> true; // default audience language until ClickGui binds the saved preference
     private static final Map<String, String> ENGLISH = load();
     private static final Map<String, String> CHINESE = reverse();
     private ClientLanguage() {}

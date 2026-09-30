@@ -17,9 +17,9 @@ public class ClickGuiModule extends Module {
     private static ClickGuiModule INSTANCE;
 
     public final Setting<dev.guizhou.util.lang.ClientLanguage.Language> language =
-            mode("Language", dev.guizhou.util.lang.ClientLanguage.Language.ENGLISH)
-                    .described("Interface language: English or Chinese. Takes effect immediately.");
-    private final Setting<Integer> languageRevision = num("LanguageRevision", 1, 1, 1);
+            mode("Language", dev.guizhou.util.lang.ClientLanguage.Language.CHINESE)
+                    .described("界面语言：中文或 English，即时生效。");
+    private final Setting<Integer> languageRevision = num("LanguageRevision", 2, 2, 2);
 
     public final Setting<Boolean> clientCompatibility = bool("ClientCompatibility", true).setPage("Compatibility")
             .described("Yield overlapping flight, armor and item actions to active SlimefunHelper or RusherHack modules.");
@@ -134,11 +134,13 @@ public class ClickGuiModule extends Module {
         if (element != null && element.isJsonObject()) {
             var object = element.getAsJsonObject();
             var revision = object.get("LanguageRevision");
-            if (revision == null || !revision.isJsonPrimitive() || !"1".equals(revision.getAsString())) {
-                // One-time migration requested for all existing configurations.
-                language.setValue(dev.guizhou.util.lang.ClientLanguage.Language.ENGLISH);
+            if (revision == null || !revision.isJsonPrimitive() || !"2".equals(revision.getAsString())) {
+                // Revision 2: Chinese is now the default audience language. Existing configs were
+                // force-migrated to English back in revision 1 without an explicit user choice,
+                // so they migrate back to Chinese; users who genuinely prefer English switch once.
+                language.setValue(dev.guizhou.util.lang.ClientLanguage.Language.CHINESE);
             }
-            languageRevision.setValue(1);
+            languageRevision.setValue(2);
         }
     }
 
