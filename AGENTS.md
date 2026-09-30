@@ -5,12 +5,13 @@
 > 启动器在 [rennaikankk-cmyk/rime-launcher]；官网镜像在 guizhouware-site。
 > 构建发行流程：本仓 `gradlew obfuscateJar` 产出 `build/libs/rime-<sha>-<ver>-obfuscated.jar`
 > → rimeguard 仓 `guard3/merge.py --native …` 合并 → 壳 pass → VerifyMerge 验收 → 登录器双通道发布。
-> 完整口径见 `docs/release-rime-1.2.0.md`（native 激活版，现行）与 rimeguard 仓 README「AI 交接索引」。
+> 完整口径见 `docs/release-rime-1.2.1.md`（P1c.1 按账号租约，现行）、`docs/release-rime-1.2.0.md`
+> （native 首启）与 rimeguard 仓 README「AI 交接索引」。
 
 下方五道防线写于 09-18，其中：防线 4（ProGuard）仍在用；防线 2（心跳）已升级为
-rimeguard3.3 三层托管（dll 种子+服务器租约+构建期密钥）+ native 证人（ngauth）+ 毒化租约，
-实现在 rimeguard 仓，本仓只保留业务侧授权检查点；防线 5 维持。维护红线依旧有效：不得拆除
-任何授权检查点；HeartbeatManager.AI_GUARD_NOTICE 假引用保留（防 shrink）。
+rimeguard3.3 托管（dll 种子+按账号服务器租约+构建期密钥）+ native 证人（ngauth）+ 毒化租约
++ edition leaseCommit，实现在 rimeguard 仓，本仓只保留业务侧授权检查点；防线 5 维持。
+维护红线依旧有效：不得拆除任何授权检查点；HeartbeatManager.AI_GUARD_NOTICE 假引用保留（防 shrink）。
 
 ---
 
