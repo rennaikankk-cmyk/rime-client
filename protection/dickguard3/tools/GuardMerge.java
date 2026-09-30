@@ -76,7 +76,7 @@ public class GuardMerge {
         String original = null, guard = null, output = null;
         boolean strings = true;
         String names = "cfa";
-        String nativeHash = null, bridge = null;
+        String nativeHash = null, bridge = null, nativeSecret = null;
         List<String> extraKeep = new ArrayList<>();
         for (String a : args) {
             if (a.startsWith("--original=")) original = a.substring(11);
@@ -87,6 +87,7 @@ public class GuardMerge {
             else if (a.startsWith("--keep-prefix=")) extraKeep.addAll(Arrays.asList(a.substring(14).split(",")));
             else if (a.startsWith("--native-hash=")) nativeHash = a.substring(14);
             else if (a.startsWith("--bridge=")) bridge = a.substring(9);
+            else if (a.startsWith("--native-secret=")) nativeSecret = a.substring(16);
             else if (a.startsWith("--profile=")) {
                 String p = a.substring(10);
                 profile = p.equals("rime") ? RIME : p.equals("dick") ? DICK : null;
@@ -94,13 +95,15 @@ public class GuardMerge {
             }
         }
         if (original == null || guard == null || output == null) {
-            System.err.println("usage: GuardMerge --original=.. --guard=.. --output=.. [--profile=rime|dick] [--strings=on|off] [--names=off|cfa|nul] [--keep-prefix=..]");
+            System.err.println("usage: GuardMerge --original=.. --guard=.. --output=.. [--profile=rime|dick] [--strings=on|off] [--names=off|cfa|nul] [--keep-prefix=..] [--native-hash=.. --bridge=.. --native-secret=..]");
             System.exit(2);
         }
         if (!names.equals("off") && !names.equals("cfa") && !names.equals("nul"))
             throw new IllegalArgumentException("--names must be off|cfa|nul");
         if ((nativeHash == null) != (bridge == null))
             throw new IllegalArgumentException("--native-hash and --bridge must be passed together");
+        if (nativeHash != null && nativeSecret == null)
+            throw new IllegalArgumentException("pool custody (P1b) requires --native-secret: a required-mode jar whose pool decrypts without the dll is rent-and-harvest bait");
 
         List<String> skips = new ArrayList<>(Arrays.asList(profile.skipPrefixes));
         skips.addAll(extraKeep);
@@ -165,7 +168,16 @@ public class GuardMerge {
             rnd.nextBytes(secret);
             rnd.nextBytes(fragA);
             for (int i = 0; i < 32; i++) fragB[i] = (byte) (secret[i] ^ fragA[i]);
-            poolClass = compilePoolClass(pool, secret, fragA, fragB);
+            byte[] nativeSeed = null, nonce = null;
+            if (nativeSecret != null) {
+                // P1b pool custody: mix an HMAC seed (same key material the dll
+                // embeds) into the pool keystream — byte-identical to Rust
+                // custody::derive_pool_seed(nonce), so decryption requires the dll
+                nonce = new byte[16];
+                rnd.nextBytes(nonce);
+                nativeSeed = hmacSha256(normalizeSecret(nativeSecret), concat(POOL_CUSTODY_DOMAIN, nonce));
+            }
+            poolClass = compilePoolClass(pool, secret, fragA, fragB, nativeSeed, nonce);
         }
         int pooledClasses = 0;
         if (strings) {
@@ -311,8 +323,11 @@ public class GuardMerge {
         else mv.visitIntInsn(Opcodes.SIPUSH, v);
     }
 
-    /** d1/P source compiled in-process (gen_s.py pattern); decrypts to UTF-8 bytes then decodes. */
-    static byte[] compilePoolClass(Map<String, Integer> pool, byte[] secret, byte[] fragA, byte[] fragB) throws Exception {
+    /** d1/P source compiled in-process (gen_s.py pattern); decrypts to UTF-8 bytes then decodes.
+     *  P1b: with a native seed, the keystream additionally mixes
+     *  NativeGuard.derivePoolSeed(N) — without the dll the pool decrypts to garbage. */
+    static byte[] compilePoolClass(Map<String, Integer> pool, byte[] secret, byte[] fragA, byte[] fragB,
+                                    byte[] nativeSeed, byte[] nonce) throws Exception {
         MessageDigest md = MessageDigest.getInstance("SHA-256");
         String[] plain = pool.keySet().toArray(new String[0]);
         // split encrypted entries into chunk methods: a single <clinit> array literal
@@ -328,13 +343,25 @@ public class GuardMerge {
                 byte[] key = md.digest(concat(secret, Integer.toString(i).getBytes(StandardCharsets.ISO_8859_1)));
                 byte[] p = plain[i].getBytes(StandardCharsets.UTF_8);
                 if (body.length() > 0) body.append(",\n");
-                body.append("            { ").append(xorDecl(p, key)).append(" }");
+                body.append("            { ").append(xorDecl(p, key, nativeSeed)).append(" }");
             }
             chunkMethods.add("    static byte[][] c" + (c0 / CHUNK) + "() { return new byte[][]{\n"
                     + body + "\n    }; }\n");
             initD.append(c0 == 0 ? "            D = c0();\n"
                                  : "            D = cat(D, c" + (c0 / CHUNK) + "());\n");
         }
+        boolean custody = nativeSeed != null;
+        String decryptLoop = custody
+                ? "            byte[] ns = NS();\n"
+                  + "            int nsl = ns.length;\n"
+                  + "            byte[] out = new byte[d0.length];\n"
+                  + "            for (int i = 0; i < d0.length; i++) {\n"
+                  + "                int v = (d0[i] ^ key[i % key.length]);\n"
+                  + "                if (nsl > 0) v ^= ns[i % nsl];\n"
+                  + "                out[i] = (byte) v;\n"
+                  + "            }\n"
+                : "            byte[] out = new byte[d0.length];\n"
+                  + "            for (int i = 0; i < d0.length; i++) out[i] = (byte) (d0[i] ^ key[i % key.length]);\n";
         String src = "package d1;\n"
                 + "/** Business string pool (generated by GuardMerge; plaintext never ships as LDC). */\n"
                 + "public final class P {\n"
@@ -347,13 +374,27 @@ public class GuardMerge {
                 + "            java.security.MessageDigest md = java.security.MessageDigest.getInstance(\"SHA-256\");\n"
                 + "            byte[] key = md.digest((new String(sec, java.nio.charset.StandardCharsets.ISO_8859_1) + id)\n"
                 + "                    .getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));\n"
-                + "            byte[] out = new byte[d0.length];\n"
-                + "            for (int i = 0; i < d0.length; i++) out[i] = (byte) (d0[i] ^ key[i % key.length]);\n"
+                + decryptLoop
                 + "            return new String(out, java.nio.charset.StandardCharsets.UTF_8);\n"
                 + "        } catch (Throwable t) {\n"
                 + "            return \"\";\n"
                 + "        }\n"
                 + "    }\n"
+                + (custody
+                ? "    static final byte[] N = { " + bytesDecl(nonce) + " };\n"
+                  + "    static final Object NGM = ngm();\n"
+                  + "    static Object ngm() {\n"
+                  + "        try { return Class.forName(\"dev.rimeguard.bridge.NativeGuard\")\n"
+                  + "                .getMethod(\"derivePoolSeed\", byte[].class); }\n"
+                  + "        catch (Throwable t) { return null; }\n"
+                  + "    }\n"
+                  + "    static byte[] NS() {\n"
+                  + "        try {\n"
+                  + "            if (NGM == null) return new byte[0];\n"
+                  + "            return (byte[]) ((java.lang.reflect.Method) NGM).invoke(null, (Object) N);\n"
+                  + "        } catch (Throwable t) { return new byte[0]; }\n"
+                  + "    }\n"
+                : "")
                 + "    static final byte[] A = { " + bytesDecl(fragA) + " };\n"
                 + "    static final byte[] K = { " + bytesDecl(fragB) + " };\n"
                 + "    static byte[][] D;\n"
@@ -396,6 +437,42 @@ public class GuardMerge {
         System.arraycopy(a, 0, r, 0, a.length);
         System.arraycopy(b, 0, r, a.length, b.length);
         return r;
+    }
+
+    /** Byte-identical to Rust custody::derive_pool_seed's domain split. */
+    static final byte[] POOL_CUSTODY_DOMAIN = "rimeguard.pool.v1".getBytes(StandardCharsets.ISO_8859_1);
+
+    /** Byte-identical to the dll build's normalize(): 64-hex -> key, else
+     *  SHA-256("rimeguard.native.secret.v1" || passphrase). */
+    static byte[] normalizeSecret(String secret) throws Exception {
+        if (secret.length() == 64) {
+            try {
+                byte[] out = new byte[32];
+                for (int i = 0; i < 32; i++) out[i] = (byte) Integer.parseInt(secret.substring(2 * i, 2 * i + 2), 16);
+                return out;
+            } catch (NumberFormatException ignore) { /* fall through to passphrase */ }
+        }
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        md.update("rimeguard.native.secret.v1".getBytes(StandardCharsets.ISO_8859_1));
+        md.update(secret.getBytes(StandardCharsets.ISO_8859_1));
+        return md.digest();
+    }
+
+    static byte[] hmacSha256(byte[] key, byte[] data) throws Exception {
+        javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+        mac.init(new javax.crypto.spec.SecretKeySpec(key, "HmacSHA256"));
+        return mac.doFinal(data);
+    }
+
+    static String xorDecl(byte[] plain, byte[] key, byte[] seed) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < plain.length; i++) {
+            if (i > 0) sb.append(", ");
+            int v = plain[i] ^ key[i % key.length];
+            if (seed != null) v ^= seed[i % seed.length];
+            sb.append("(byte) 0x").append(String.format("%02x", v));
+        }
+        return sb.toString();
     }
 
     static String xorDecl(byte[] plain, byte[] key) {

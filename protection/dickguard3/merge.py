@@ -47,7 +47,7 @@ def build_tools():
     jar = os.path.join(HERE, "build", "guard-tools.jar")
     gradlew = os.path.join(HERE, "gradlew.bat") if os.name == "nt" else os.path.join(HERE, "gradlew")
     subprocess.run([gradlew, "guardToolsJar", "-q"], cwd=HERE, check=True,
-                   capture_output=True, text=True)
+                   capture_output=True, text=True, encoding="utf-8", errors="replace")
     if not os.path.isfile(jar):
         raise SystemExit("guard-tools.jar missing after build")
     return jar
@@ -56,8 +56,15 @@ def build_tools():
 def run_guard_merge(args):
     tools_jar = os.path.join(HERE, "build", "guard-tools.jar")
     native_hash = None
+    native_secret = None
     if getattr(args, "native", None):
         native_hash = fnv1a64_file(args.native)
+        # P1b pool custody: the pool keystream mixes a seed computed with the
+        # SAME secret the dll embeds (RIMEGUARD_NATIVE_SECRET of its build).
+        native_secret = args.native_secret or os.environ.get("RIMEGUARD_NATIVE_SECRET", "")
+        if not native_secret:
+            raise SystemExit("--native given but no --native-secret / RIMEGUARD_NATIVE_SECRET: "
+                             "a required-mode jar without pool custody is rent-and-harvest bait")
     cmd = [find_java(), "-cp", tools_jar, "GuardMerge",
            "--original=" + args.original,
            "--guard=" + args.guard,
@@ -70,7 +77,8 @@ def run_guard_merge(args):
     if native_hash:
         cmd.append("--native-hash=" + native_hash)
         cmd.append("--bridge=" + args.bridge)
-    res = subprocess.run(cmd, cwd=HERE, capture_output=True, text=True)
+        cmd.append("--native-secret=" + native_secret)
+    res = subprocess.run(cmd, cwd=HERE, capture_output=True, text=True, encoding="utf-8", errors="replace")
     sys.stdout.write(res.stdout)
     sys.stderr.write(res.stderr)
     if res.returncode != 0:
@@ -150,6 +158,9 @@ def main(argv=None):
                              "the bridge classes alongside the guard")
     parser.add_argument("--bridge", default=os.path.join(HERE, "libs", "rimeguard-bridge.jar"),
                         help="path to rimeguard-bridge.jar (from the rimeguard-native repo)")
+    parser.add_argument("--native-secret", default="",
+                        help="secret the dll was built with (hex64 or passphrase); "
+                             "falls back to RIMEGUARD_NATIVE_SECRET")
     parser.add_argument("--legacy", action="store_true",
                         help="old pure-python merge without hardening passes")
     args = parser.parse_args(argv)
@@ -163,6 +174,8 @@ def main(argv=None):
             raise SystemExit("--native dll not found: " + args.native)
         if not os.path.isfile(args.bridge):
             raise SystemExit("--bridge jar not found: " + args.bridge)
+        if not (args.native_secret or os.environ.get("RIMEGUARD_NATIVE_SECRET")):
+            raise SystemExit("--native requires --native-secret or RIMEGUARD_NATIVE_SECRET in the environment")
     build_tools()
     run_guard_merge(args)
     return 0

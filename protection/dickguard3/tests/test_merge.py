@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -18,6 +19,20 @@ def fnv1a64_bytes(data):
         h ^= b
         h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
     return format(h, "016x")
+
+
+def compile_toy(base, marker):
+    """Real class with LDC strings so Pass A generates d1/P."""
+    src = base / "Toy.java"
+    src.write_text("public class Toy { public static String m() { return \"" + marker + "\"; } }\n",
+                   encoding="utf-8")
+    javac = Path(os.environ.get("JAVA_HOME", "")) / "bin" / "javac.exe"
+    if not javac.is_file():
+        javac = "javac"
+    else:
+        javac = str(javac)
+    subprocess.run([javac, "-d", str(base), str(src)], check=True, capture_output=True)
+    return (base / "Toy.class").read_bytes()
 
 
 def run_merge(original, guard, output, *extra):
@@ -147,11 +162,13 @@ class MergeTest(unittest.TestCase):
             }
             with zipfile.ZipFile(original, "w") as jar:
                 jar.writestr("fabric.mod.json", json.dumps(metadata))
+                jar.writestr("Toy.class", compile_toy(base, "pool-custody-marker-text"))
             with zipfile.ZipFile(guard, "w") as jar:
                 jar.writestr("d1/G.class", b"guard bytes")
             dll.write_bytes(b"fake dll payload for hashing \x00\x01\x02")
 
-            run_merge(original, guard, output, "--native", str(dll), "--bridge", str(BRIDGE_JAR))
+            run_merge(original, guard, output, "--native", str(dll), "--bridge", str(BRIDGE_JAR),
+                      "--native-secret", "0" * 64)
 
             with zipfile.ZipFile(output) as jar:
                 names = jar.namelist()
@@ -161,6 +178,32 @@ class MergeTest(unittest.TestCase):
                 self.assertEqual(stamp["v"], 1)
                 self.assertEqual(stamp["mode"], "required")
                 self.assertEqual(stamp["h"], fnv1a64_bytes(dll.read_bytes()))
+                # P1b: the pool must consult the dll for its seed
+                self.assertIn("d1/P.class", names)
+                self.assertIn(b"dev.rimeguard.bridge.NativeGuard", jar.read("d1/P.class"))
+
+    def test_pool_without_native_has_no_bridge_reference(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            original = base / "original.jar"
+            guard = base / "guard.jar"
+            output = base / "merged.jar"
+            metadata = {
+                "version": "1.10.4",
+                "description": "Test client",
+                "entrypoints": {"client": ["com.dickclient.DickClient"], "main": ["com.dickclient.X"]},
+            }
+            with zipfile.ZipFile(original, "w") as jar:
+                jar.writestr("fabric.mod.json", json.dumps(metadata))
+                jar.writestr("Toy.class", compile_toy(base, "plain-pool-marker-text"))
+            with zipfile.ZipFile(guard, "w") as jar:
+                jar.writestr("d1/G.class", b"guard bytes")
+
+            run_merge(original, guard, output)
+
+            with zipfile.ZipFile(output) as jar:
+                self.assertIn("d1/P.class", jar.namelist())
+                self.assertNotIn(b"dev.rimeguard.bridge.NativeGuard", jar.read("d1/P.class"))
 
     def test_native_channel_rejects_missing_dll(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -176,7 +219,31 @@ class MergeTest(unittest.TestCase):
                 jar.writestr("d1/G.class", b"guard bytes")
 
             with self.assertRaises(subprocess.CalledProcessError):
-                run_merge(original, guard, output, "--native", str(base / "nope.dll"))
+                run_merge(original, guard, output, "--native", str(base / "nope.dll"),
+                          "--native-secret", "0" * 64)
+
+    def test_native_channel_requires_secret(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            original = base / "original.jar"
+            guard = base / "guard.jar"
+            output = base / "merged.jar"
+            dll = base / "rimeguard.dll"
+            with zipfile.ZipFile(original, "w") as jar:
+                jar.writestr("fabric.mod.json", json.dumps({
+                    "entrypoints": {"client": ["com.dickclient.DickClient"], "main": ["com.dickclient.X"]},
+                }))
+            with zipfile.ZipFile(guard, "w") as jar:
+                jar.writestr("d1/G.class", b"guard bytes")
+            dll.write_bytes(b"fake dll")
+
+            env_secret = os.environ.pop("RIMEGUARD_NATIVE_SECRET", None)
+            try:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    run_merge(original, guard, output, "--native", str(dll), "--bridge", str(BRIDGE_JAR))
+            finally:
+                if env_secret is not None:
+                    os.environ["RIMEGUARD_NATIVE_SECRET"] = env_secret
 
 
 if __name__ == "__main__":
