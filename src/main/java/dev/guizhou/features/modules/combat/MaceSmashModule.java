@@ -40,6 +40,8 @@ public class MaceSmashModule extends Module {
         if (!mc.options.keyAttack.isDown()) return;
         if (!mc.player.getMainHandItem().is(Items.MACE)) return;
         if (onlyGround.getValue() && !mc.player.onGround()) return;
+        // Vanilla smash ignores submerged attackers; a spoof there is a free movement flag.
+        if (mc.player.isInWater()) return;
         long now = System.currentTimeMillis();
         if (now - lastSpoof < cooldown.getValue()) return;
         if (!(mc.hitResult instanceof EntityHitResult hit)

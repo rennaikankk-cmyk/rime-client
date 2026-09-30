@@ -668,6 +668,14 @@ public class GuangxiCrystalModule extends Module {
             entitySnapshotTick = -1;
             entitySnapshot = List.of();
             for (int id : removed.getEntityIds()) attackRetries.removed(id);
+            // Obelisk-style entity-destroy echo: if the crystal on our placed slot is
+            // gone after an entity-remove packet (broken without an explosion echo,
+            // suppressed blast, or server cleanup), the slot is free again — zero the
+            // place cooldown so the next PreTick re-seeds immediately.
+            if (lastPlaceAir != null && !hasLiveCrystalAt(lastPlaceAir)) {
+                placeTimer.reset();
+                crystalPlaces.remove(lastPlaceAir.asLong());
+            }
             return;
         }
         if (packet instanceof ClientboundPlayerPositionPacket) {
