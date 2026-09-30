@@ -233,14 +233,14 @@ public class GuardMerge {
         // guard version marker (release tooling and smoke checks read it)
         String guardKey = profile == RIME ? "rimeguard" : "dickguard";
         if (json.contains("\"" + guardKey + "\"")) {
-            json = json.replaceFirst("(\"" + guardKey + "\"\\s*:\\s*\")[^\"]*(\")", "$13.2$2");
+            json = json.replaceFirst("(\"" + guardKey + "\"\\s*:\\s*\")[^\"]*(\")", "$13.3$2");
         } else if (json.contains("\"custom\"")) {
-            json = json.replaceFirst("(\"custom\"\\s*:\\s*\\{)", "$1\"" + guardKey + "\": \"3.2\", ");
+            json = json.replaceFirst("(\"custom\"\\s*:\\s*\\{)", "$1\"" + guardKey + "\": \"3.3\", ");
         } else {
             // real newlines: "\n" in a replaceFirst replacement is the escape for
             // literal 'n' and used to emit a broken JSON tail here
             json = json.replaceFirst("\\s*\\}$",
-                    ",\n  \"custom\": {\n    \"" + guardKey + "\": \"3.2\"\n  }\n}");
+                    ",\n  \"custom\": {\n    \"" + guardKey + "\": \"3.3\"\n  }\n}");
         }
         resources.put("fabric.mod.json", json.getBytes(StandardCharsets.UTF_8));
 

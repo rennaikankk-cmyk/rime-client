@@ -30,6 +30,6 @@
     "minecraft": "${minecraft_version}"
   },
   "custom": {
-    "rimeguard": "3.2"
+    "rimeguard": "3.3"
   }
 }
