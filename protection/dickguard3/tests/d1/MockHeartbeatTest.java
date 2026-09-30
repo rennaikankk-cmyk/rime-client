@@ -34,6 +34,12 @@ public final class MockHeartbeatTest {
                 "server must know which entrypoint it is issuing");
         require(E.field(okRequest, "integrity") == null, "normal request must omit integrity");
         require(E.field(okRequest, "env") == null, "clean request must omit env");
+        // Native witness fields appear only when the dll is loaded; without it
+        // the payload must stay byte-identical to the pre-native shape.
+        require(E.field(okRequest, "ngw") == null && E.field(okRequest, "ngauth") == null,
+                "native-absent request must omit ngw/ngauth (legacy payload shape)");
+        require(W.authMaterial(nonce1) == null && W.nativeHwidHex() == null,
+                "native-absent witness helpers must return null, never throw");
         require(E.field(okRequest, "challengeProof") == null, "first request has no prior challenge");
         require(E.state == E.OK && "com.dickclient.DickClient".equals(S.g(9)),
                 "signed ok response must unlock entry name");

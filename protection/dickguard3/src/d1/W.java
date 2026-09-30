@@ -87,6 +87,37 @@ final class W {
         } catch (Throwable ignore) {}
     }
 
+    /**
+     * Native hwid (hex), null when the native tier is absent. Sent as a
+     * first-class heartbeat field on every beat — not an env note — so the
+     * server can bind and then verify the auth material against a payload
+     * shape it expects of native builds; the strippable env copy above stays
+     * as telemetry only.
+     */
+    static String nativeHwidHex() {
+        try {
+            if (!dev.rimeguard.bridge.NativeGuard.available()) return null;
+            byte[] w = dev.rimeguard.bridge.NativeGuard.hwid();
+            return w != null && w.length == 32 ? hex(w) : null;
+        } catch (Throwable t) { return null; }
+    }
+
+    /**
+     * Per-beat authorization material over this heartbeat's nonce (Future
+     * form): the environment state is sampled inside the dll at call time and
+     * woven into the digest — no Java-side branch on any probe result exists
+     * to locate and NOP, and the server answers a mismatch with an ordinary
+     * hwid rejection rather than naming a detection. Null when the native
+     * tier is absent (legacy payloads stay byte-identical).
+     */
+    static String authMaterial(String nonceHex) {
+        try {
+            if (!dev.rimeguard.bridge.NativeGuard.available()) return null;
+            byte[] m = dev.rimeguard.bridge.NativeGuard.authMaterial(E.unhex(nonceHex));
+            return m != null && m.length == 32 ? hex(m) : null;
+        } catch (Throwable t) { return null; }
+    }
+
     private static String hex(byte[] b) {
         if (b == null) return "";
         StringBuilder sb = new StringBuilder(b.length * 2);

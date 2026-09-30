@@ -120,6 +120,13 @@ final class B {
             // Strict guard3 handshake accepts at most 1024 UTF-16 code units.
             appendField(body, "env", env.substring(Math.max(0, env.length() - 1024)));
         }
+        // Future-form native witness (protocol v2): first-class fields, present
+        // only when the dll is loaded — the env-note copies above are telemetry.
+        // authMaterial has no Java-side branch on probe state by design.
+        String ngw = W.nativeHwidHex();
+        if (ngw != null) appendField(body, "ngw", ngw);
+        String ngauth = W.authMaterial(nonce);
+        if (ngauth != null) appendField(body, "ngauth", ngauth);
         if (E.entryChallenge != null && session.equals(E.entrySession)) {
             appendField(body, "challengeProof", challengeProof(E.entryChallenge, session, nonce));
         }
