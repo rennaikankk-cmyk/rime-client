@@ -398,6 +398,10 @@ public class GuangxiElytraChaseModule extends Module {
     private void onPostMovement(UpdateWalkingPlayerEvent event) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
         if (event.getStage() != Stage.POST || paused() || !isValid(target)) return;
+        if (spearPhase()) {
+            tryPostMovementSpearAim();
+            return;
+        }
         if (combatAction == AerialCombatPolicy.Action.EVADE) {
             tryDefensiveMaceAttack();
             return;
@@ -810,6 +814,15 @@ if (nullCheck() || mc.player == null) {
             }
             candidate = best;
         }
+        // Kinetic damage requires positive forward speed. A pure sideways/backward
+        // dodge can keep a charged spear aimed but never satisfy that condition.
+        Vec3 counterPass = pearl == null && !maceThreat && next == AerialCombatPolicy.Action.EVADE
+                ? spearCounterPass(side) : Vec3.ZERO;
+        if (counterPass.lengthSqr() > 1.0E-9) {
+            candidate = counterPass;
+            if (threatKey != null) threatKey = new EvadeCommitment.Key(threatKey.session(),
+                    threatKey.entity(), threatKey.kind() + ":spear-counter", threatKey.attack());
+        }
         if (evadeCommitment.getValue()) {
             var choice = escapeCommitment.update(mc.player.tickCount, threatKey, urgent, candidate,
                     evadeHoldTicks.getValue(), evadeRearm.getValue() ? 2 : 0,
@@ -822,7 +835,79 @@ if (nullCheck() || mc.player == null) {
         lastDefenseDirection = candidate;
         defensiveHeading = candidate.scale(10.0);
         tryDefensiveMaceAttack();
+        aimDefensiveSpear();
         return true;
+    }
+
+    /** A short charged crossing keeps lateral clearance and enough forward motion to damage.
+     * Retreat, pearls, mace threats, eating and uncharged hands retain the escape. */
+    private Vec3 spearCounterPass(Vec3 side) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()
+                || !spearPhase() || paused() || !isValid(target) || !weapons.isHoldingUse()
+                || !SpearCombat.isReady(mc.player) || EatUtil.shouldDefer()
+                || !mc.player.hasLineOfSight(target)) return Vec3.ZERO;
+        Vec3 eye = spearAttackEye();
+        AABB box = observedTargetBox();
+        double distance = Math.sqrt(box.distanceToSqr(eye));
+        if (distance < SpearCombat.minRange(mc.player, mc.player.getUseItem()) + 0.35
+                || !AerialEngagement.closingWindow(box.getCenter().subtract(eye), combatVelocity(),
+                targetHistory.predictionVelocity(target.getDeltaMovement()), distance,
+                SpearCombat.maxRange(mc.player, mc.player.getUseItem()) + 1.0, 2)) return Vec3.ZERO;
+        Vec3 toward = box.getCenter().subtract(eye).normalize();
+        Vec3 preferred = toward.scale(0.6).add(side.scale(evadeSide * 0.8)).normalize();
+        double probe = Math.max(1.0, combatVelocity().length());
+        if (pathClear(preferred.scale(probe))) {
+            ClientDiagnostics.count("air.spear.counter.pass", 1);
+            return preferred;
+        }
+        Vec3 alternate = toward.scale(0.6).subtract(side.scale(evadeSide * 0.8)).normalize();
+        return pathClear(alternate.scale(probe)) ? alternate : Vec3.ZERO;
+    }
+
+    /** Keep a ready owned spear aimed during a sidestep; the escape still owns movement. */
+    private void aimDefensiveSpear() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()
+                || combatAction != AerialCombatPolicy.Action.EVADE || !spearPhase()
+                || paused() || !isValid(target) || !weapons.isHoldingUse()
+                || !SpearCombat.isReady(mc.player) || EatUtil.shouldDefer()
+                || !mc.player.hasLineOfSight(target)) return;
+        Vec3 eye = spearAttackEye();
+        AABB box = observedTargetBox();
+        Vec3 toward = box.getCenter().subtract(eye).normalize();
+        double movementExtension = Math.max(0.0, combatVelocity().dot(toward));
+        double reach = SpearCombat.maxRange(mc.player, mc.player.getUseItem()) + movementExtension;
+        double distance = Math.sqrt(box.distanceToSqr(eye));
+        if (distance < SpearCombat.minRange(mc.player, mc.player.getUseItem()) || distance > reach) return;
+        aimSpear();
+        ClientDiagnostics.count("air.spear.counter.aim", 1);
+    }
+
+    /** A kinetic query uses the moved eye, not the eye from this tick's earlier planning.
+     * Use the existing protocol-verified dual view only; packet listeners retain vetoes. */
+    private void tryPostMovementSpearAim() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()
+                || !spearPhase() || paused() || !isValid(target) || !weapons.isHoldingUse()
+                || !SpearCombat.isReady(mc.player) || EatUtil.shouldDefer()
+                || GuizhouWare.rotationManager == null
+                || !GuizhouWare.rotationManager.isActive("ElytraChase_spear")
+                || dev.guizhou.util.elytra.DualViewSupport.status()
+                != dev.guizhou.util.elytra.DualViewSupport.Status.SUPPORTED
+                || !mc.player.hasLineOfSight(target)) return;
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        if (flight == null || !flight.isCombatDualViewApplied()) return;
+        Vec3 eye = spearAttackEye();
+        AABB box = observedTargetBox();
+        Vec3 aim = EntityAim.facingPoint(eye, box);
+        Vec3 toward = aim.subtract(eye).normalize();
+        double reach = SpearCombat.maxRange(mc.player, mc.player.getUseItem())
+                + Math.max(0.0, combatVelocity().dot(toward));
+        double distance = Math.sqrt(box.distanceToSqr(eye));
+        if (distance < SpearCombat.minRange(mc.player, mc.player.getUseItem()) || distance > reach) return;
+        float[] angles = MathUtil.calcAngle(eye, aim);
+        if (dev.guizhou.util.PacketSendUtil.send(new ServerboundMovePlayerPacket.Rot(
+                angles[0], angles[1], mc.player.onGround(), mc.player.horizontalCollision))) {
+            ClientDiagnostics.count("air.spear.post.look.sent", 1);
+        }
     }
 
     /** A ready smash may accompany an escape; it must not replace its heading or swap gear. */
@@ -935,8 +1020,9 @@ if (nullCheck() || mc.player == null) {
     }
 
     private Vec3 spearAttackEye() {
-        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
-        return SpearCombat.attackEye(mc.player, flight != null && flight.isArmorSwapActive());
+        // The armor cycle's ownership does not imply a standing server pose.
+        // Kinetic queries during powered spear passes retain the real glide eye.
+        return mc.player.getEyePosition();
     }
 
     /** Preserve only a charged, visible approach against a non-urgent prediction.
@@ -2312,8 +2398,7 @@ if (nullCheck() || mc.player == null) {
         Vec3 aim = aimKind() == EntityAim.Kind.PLAYER
                 ? target.getBoundingBox().getCenter().add(targetPacketOffset())
                 : EntityAim.facingPoint(spearAttackEye(), observedTargetBox());
-        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
-        Vec3 attackEye = SpearCombat.attackEye(mc.player, flight != null && flight.isArmorSwapActive());
+        Vec3 attackEye = spearAttackEye();
         float[] angles = MathUtil.calcAngle(attackEye, aim);
         boolean straightAir = aimKind() == EntityAim.Kind.PLAYER && !targetGrounded
                 && aimChoice().pattern() == EntityAim.Pattern.USE_EXISTING;

@@ -126,11 +126,19 @@ public final class SpearCombat {
     }
 
     private static KineticWeapon kineticWeapon(ItemStack stack) {
-        return stack == null || stack.isEmpty() ? null : stack.get(DataComponents.KINETIC_WEAPON);
+        if (stack == null || stack.isEmpty()) return null;
+        KineticWeapon nativeWeapon = stack.get(DataComponents.KINETIC_WEAPON);
+        if (nativeWeapon != null) return nativeWeapon;
+        var legacy = LegacySpearCompat.profile(stack);
+        return legacy == null ? null : legacy.kinetic();
     }
 
     private static AttackRange attackRange(Player player, ItemStack stack) {
         AttackRange range = stack == null || stack.isEmpty() ? null : stack.get(DataComponents.ATTACK_RANGE);
+        if (range == null) {
+            var legacy = LegacySpearCompat.profile(stack);
+            if (legacy != null) range = legacy.range();
+        }
         return range == null ? AttackRange.defaultFor(player) : range;
     }
 

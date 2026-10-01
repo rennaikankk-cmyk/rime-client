@@ -121,10 +121,13 @@ public final class ElytraCombatHookTest {
         }
         check(method(chase, "aimSpear").hasCall(CHASE, "targetPacketOffset"),
                 "Spear aim must include the same packet position as navigation");
-        check(method(chase, "aimSpear").hasCall("dev/guizhou/util/elytra/SpearCombat", "attackEye"),
-                "Spear aim must account for the server eye origin during owned armor flight");
-        check(method(chase, "aimSpear").hasCall(FLIGHT, "isArmorSwapActive"),
-                "Standing-eye compensation must depend on an active owned armor cycle");
+        check(method(chase, "aimSpear").hasCall(CHASE, "spearAttackEye")
+                        && method(chase, "tryPostMovementSpearAim").hasCall(CHASE, "spearAttackEye"),
+                "Pre and post movement spear aim must share the same pose-aware attack origin");
+        Trace spearEye = method(chase, "spearAttackEye");
+        check(spearEye.hasCall("net/minecraft/client/player/LocalPlayer", "getEyePosition")
+                        && !spearEye.hasCall(FLIGHT, "isArmorSwapActive"),
+                "Armor ownership must not substitute standing height while the real pose is still gliding");
         for (String name : List.of("tickPullUp", "climbPlan", "tickFollow", "strikePlan", "tryAttack", "shouldStartDive", "tickDive")) {
             check(method(mace, name).hasCall(CHASE, "observedTargetBox"),
                     "Mace approach, attack and recovery must agree on the latest received target box: " + name);

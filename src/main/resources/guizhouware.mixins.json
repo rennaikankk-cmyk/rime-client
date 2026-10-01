@@ -35,6 +35,8 @@
     "entity.MixinLivingEntityJump",
     "entity.MixinLivingEntityTravel",
     "entity.MixinLocalPlayerRotation",
+    "entity.MixinLegacySpearItem",
+    "entity.MixinLegacySpearUseEffects",
     "input.MixinKeyboard",
     "input.MixinMouse",
     "network.MixinClientCommonPacketListenerImpl",
