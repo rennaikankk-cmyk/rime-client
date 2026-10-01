@@ -55,6 +55,12 @@ public final class ArmorSwapCycle {
     /** SLM keeps the chestplate until the observed glide ends; restart only then. */
     public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide,
                                boolean boostOnWornGlide, boolean serverPaced) {
+        beforeMovement(requested, inventorySafe, canGlide, boostOnWornGlide, serverPaced, false);
+    }
+
+    /** Keep the owned chestplate during a validated natural strike; resume the same pair afterward. */
+    public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide,
+                               boolean boostOnWornGlide, boolean serverPaced, boolean preserveChestplate) {
         returnArmor = false;
         restartedThisWindow = false;
         deferArmorReturn = false;
@@ -63,6 +69,10 @@ public final class ArmorSwapCycle {
         if (!requested || !inventorySafe || !canGlide) recovering = true;
         if (recovering) {
             recover(inventorySafe);
+            return;
+        }
+        if (preserveChestplate) {
+            swapTo(false);
             return;
         }
         boolean enteredOnWings = access.wearingWings();

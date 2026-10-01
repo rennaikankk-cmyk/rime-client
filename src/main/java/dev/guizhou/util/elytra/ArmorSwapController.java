@@ -77,12 +77,13 @@ public final class ArmorSwapController {
             finishMonitoring();
             return;
         }
-        boolean requested = flight.wantsArmorSwap();
+        boolean preserve = preservesOwnedMaceChestplate();
+        boolean requested = flight.wantsArmorSwap() || preserve;
         if (!cycle.active() && requested && canGlide() && safeInventory() && player.isFallFlying()) {
             acquire();
         }
         cycle.beforeMovement(requested, safeInventory(), canGlide(), flight.holdChestplateForBoost(),
-                dev.guizhou.features.modules.movement.SLMArmorFlyModule.requested());
+                dev.guizhou.features.modules.movement.SLMArmorFlyModule.requested(), preserve);
         finishMonitoring();
     }
 
@@ -90,7 +91,8 @@ public final class ArmorSwapController {
     private void onTick(TickEvent event) {
         // Chase runs after preparation and can take ownership of the same pair for a mace dive.
         if (foreignArmor() || GuangxiElytraChaseModule.isMaceDiveActive()) cycle.abandon();
-        else cycle.afterMovement(flight.wantsArmorSwap(), safeInventory(), canGlide(), flight.rocketSentThisTick());
+        else cycle.afterMovement(flight.wantsArmorSwap() || preservesOwnedMaceChestplate(),
+                safeInventory(), canGlide(), flight.rocketSentThisTick());
         finishMonitoring();
     }
 
@@ -225,6 +227,11 @@ public final class ArmorSwapController {
 
     private boolean sameSession() {
         return player != null && level != null && player == mc.player && level == mc.level;
+    }
+
+    private boolean preservesOwnedMaceChestplate() {
+        return cycle.active() && flight.armorFlyRequested()
+                && GuangxiElytraChaseModule.preservesMaceDescent();
     }
 
     private boolean wearableChest(ItemStack stack) {

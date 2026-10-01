@@ -225,6 +225,7 @@ def clientRegressionTests = [
         aerialEngagementTest: 'dev.guizhou.util.elytra.AerialEngagementTest',
         aerialInterceptTest: 'dev.guizhou.util.elytra.AerialInterceptTest',
         maceApproachTest: 'dev.guizhou.util.elytra.MaceApproachTest',
+        maceStrikeTimingTest: 'dev.guizhou.util.elytra.MaceStrikeTimingTest',
         aerialDuelPredictorTest: 'dev.guizhou.util.elytra.AerialDuelPredictorTest',
         flightPlanningTaskTest: 'dev.guizhou.util.elytra.FlightPlanningTaskTest',
         flightCollisionSnapshotTest: 'dev.guizhou.util.elytra.FlightCollisionSnapshotTest',

@@ -1,6 +1,7 @@
 package dev.guizhou.util.elytra;
 
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.AABB;
 
 /** Short movement windows for steering, never an extension of a weapon's attack range. */
 public final class AerialEngagement {
@@ -42,13 +43,28 @@ public final class AerialEngagement {
         return offset.add(relative.scale(ticks)).length() <= setupRange + radius;
     }
 
-    /** Near a moving apex, close the remaining error while retaining the target's drift. */
+    /** Near a level/falling apex, close the error while retaining the target's drift.
+     * A rising opponent still needs climb thrust: braking before buying the height
+     * advantage can lock both players into the same endless upward pursuit. */
     public static Step climbStep(Vec3 offset, Vec3 targetVelocity, double speed) {
         if (!finite(offset) || !motion(targetVelocity) || !Double.isFinite(speed) || speed <= 0 || speed > 20
+                || targetVelocity.y > .15 && offset.y > 0
                 || offset.length() > Math.max(3, speed * 2)) return new Step(offset, false);
         Vec3 request = targetVelocity.add(offset.scale(.5));
         if (request.length() > speed) request = request.normalize().scale(speed);
         return new Step(request, true);
+    }
+
+    /** A falling mace can reach upward too; compare its standing eye with the victim's box.
+     * The short margin predicts danger only and never authorizes an attack. */
+    public static boolean maceThreatWindow(Vec3 attackerEye, Vec3 attackerVelocity,
+                                            AABB victimBox, Vec3 victimVelocity,
+                                            double reach, int responseTicks) {
+        if (!finite(attackerEye) || !motion(attackerVelocity) || attackerVelocity.y >= -.15
+                || victimBox == null || !Double.isFinite(reach) || reach <= 0 || reach > 16) return false;
+        return closingWindow(victimBox.getCenter().subtract(attackerEye), attackerVelocity,
+                victimVelocity, Math.sqrt(victimBox.distanceToSqr(attackerEye)),
+                reach + .5, responseTicks);
     }
 
     /** Anticipate a powered step that would cross the spear band before a second query. */

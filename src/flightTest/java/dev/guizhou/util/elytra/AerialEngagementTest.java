@@ -1,6 +1,7 @@
 package dev.guizhou.util.elytra;
 
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.AABB;
 import java.util.Random;
 
 public final class AerialEngagementTest {
@@ -38,6 +39,19 @@ public final class AerialEngagementTest {
         var climb = AerialEngagement.climbStep(new Vec3(0,4,0), new Vec3(3,0,0),15);
         check(climb.precision() && climb.velocity().equals(new Vec3(3,2,0)), "Keep target drift at the apex");
         check(!AerialEngagement.climbStep(new Vec3(0,40,0),Vec3.ZERO,15).precision(), "Far climb retains boost");
+        check(!AerialEngagement.climbStep(new Vec3(0,10,0),new Vec3(0,2.5,0),15).precision(),
+                "Buying height over a rising opponent must keep powered climb thrust");
+        check(AerialEngagement.climbStep(new Vec3(0,4,0),new Vec3(0,-1,0),15).precision(),
+                "Falling apex still permits terminal control");
+        AABB victim = new AABB(-.3, 0, -.3, .3, 1.8, .3);
+        check(AerialEngagement.maceThreatWindow(new Vec3(0,-2.18,0),new Vec3(0,-.8,0),victim,Vec3.ZERO,3,1),
+                "A falling attacker below the victim can still reach upward from its standing eye");
+        check(!AerialEngagement.maceThreatWindow(new Vec3(0,-5,0),new Vec3(0,-.8,0),victim,Vec3.ZERO,3,1),
+                "A distant attacker falling away is not an upward threat");
+        check(AerialEngagement.maceThreatWindow(new Vec3(0,6,0),new Vec3(0,-2,0),victim,Vec3.ZERO,3,1),
+                "One-tick descending entry remains a threat");
+        check(!AerialEngagement.maceThreatWindow(new Vec3(0,3,0),new Vec3(0,.8,0),victim,Vec3.ZERO,3,1),
+                "A climbing mace cannot create a falling smash window");
         Random random = new Random(20261001);
         for (int i=0;i<1000;i++) {
             double angle = random.nextDouble()*Math.PI*2;

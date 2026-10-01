@@ -83,6 +83,13 @@ public final class ElytraCombatHookTest {
             check(method(spear,name).hasCall(CHASE+"$SpearBehavior","limitChargedApproach"), "Approach gate runs before fixed range entry: "+name);
         check(method(spear,"limitChargedApproach").hasCall(engagement,"spearStep"), "Actual pass uses precision decision");
         check(method(read(CHASE+"$MaceBehavior"),"inject").hasCall(engagement,"climbStep"), "Mace aligns at the moving apex");
+        Trace attack = method(chase, "attack");
+        check(attack.hasCall("dev/guizhou/util/elytra/MaceStrikeTiming", "reserveOneTick")
+                        && attack.field(CHASE + "$MaceBehavior", "chargeDeferredTick", Opcodes.GETFIELD) >= 0
+                        && attack.field(CHASE + "$MaceBehavior", "chargeDeferredForPass", Opcodes.GETFIELD) >= 0,
+                "A charge reservation must remain bounded across both attack callbacks in one tick");
+        check(method(chase, "hasMaceDescentIntent").hasCall(CHASE, "realMaceHitWindow"),
+                "A genuine close smash may retain its natural fall even below the target's feet");
         check(method(read(FLIGHT),"observedCombatVelocity").hasCall(engagement,"observedVelocity"), "Motion freshness gate is on the live path");
     }
 
@@ -545,6 +552,19 @@ public final class ElytraCombatHookTest {
                         && defense.hasCall(CHASE, "maintainDefensiveSpearUse")
                         && defense.hasCall(CHASE, "clearSpearAim"),
                 "The real defense path must preserve use while discarding offensive rotation");
+        Trace counter = method(methods, "tryDefensiveMaceAttack");
+        check(counter.hasCall("dev/guizhou/manager/HeartbeatManager", "authorized")
+                        && counter.hasCall(CHASE, "willUseMaceAttack")
+                        && counter.hasCall("dev/guizhou/util/elytra/CombatHitWindow", "pending")
+                        && counter.hasCall(CHASE, "attack"),
+                "An evasive counter requires authorization, genuine smash readiness and the shared range/angle gate");
+        check(!counter.hasCall(CHASE + "$MaceBehavior", "tickWaitAttack")
+                        && !counter.hasCall(CHASE + "$MaceBehavior", "resumeAfterPass")
+                        && !counter.hasCall(FLIGHT, "finishDiveRecovery"),
+                "A counter must retain defensive flight rather than impose an offensive recovery");
+        check(defense.hasCall(CHASE, "tryDefensiveMaceAttack")
+                        && method(methods, "onPostMovement").hasCall(CHASE, "tryDefensiveMaceAttack"),
+                "Defense must retain both the pre-recovery and post-movement smash windows");
     }
 
     private static void verifyDefenseIntegration() throws IOException {
@@ -753,6 +773,16 @@ public final class ElytraCombatHookTest {
         check(fall.hasCall("dev/guizhou/util/elytra/AerialIntercept", "dropHitTick")
                         && fall.hasCall(CHASE + "$MaceBehavior", "dropPathClear"),
                 "Natural falls must retain a reachable, unobstructed attack trajectory");
+        String armorController = "dev/guizhou/util/elytra/ArmorSwapController";
+        Map<String, Trace> armorMethods = read(armorController);
+        Trace protectedPair = method(armorMethods, "preservesOwnedMaceChestplate");
+        check(protectedPair.hasCall(CHASE, "preservesMaceDescent")
+                        && protectedPair.hasCall("dev/guizhou/util/elytra/ArmorSwapCycle", "active")
+                        && protectedPair.hasCall(FLIGHT, "armorFlyRequested"),
+                "Natural strike protection requires the current owned pair and the validated descent");
+        check(method(armorMethods, "onPreTick").hasCall(armorController, "preservesOwnedMaceChestplate")
+                        && method(armorMethods, "onTick").hasCall(armorController, "preservesOwnedMaceChestplate"),
+                "Preparation and the fallback movement tail must both preserve the natural strike's pair");
         ownership = method(chase, "hasMaceDescentIntent");
         for (String gate : List.of("isEnabled", "paused", "isValid")) {
             check(ownership.hasCall(CHASE, gate), "Mace descent ownership must check " + gate);
