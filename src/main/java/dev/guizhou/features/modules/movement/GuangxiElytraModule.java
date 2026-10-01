@@ -386,7 +386,26 @@ public class GuangxiElytraModule extends Module {
 
     /** A terminal braking request must not reduce the next attack's planning budget. */
     public double combatPlanningSpeed() {
-        return Math.max(speed.getValue(), motionMode.getValue() == MotionMode.FIREWORKS ? lastAppliedBpt : 0);
+        Vec3 applied = recentAppliedVelocity();
+        return Math.max(speed.getValue(), motionMode.getValue() == MotionMode.FIREWORKS && applied != null ? applied.length() : 0);
+    }
+
+    public boolean combatBoostConfigured() {
+        return isEnabled() && flightProfile.getValue() == Mode.Grim && gzBoost.getValue();
+    }
+
+    /** One consistent motion sample for pursuit, charge timing and threat estimates. */
+    public Vec3 observedCombatVelocity() {
+        if (mc.player == null) return Vec3.ZERO;
+        boolean uninterrupted = combatBoostConfigured() && mc.player.isFallFlying()
+                && statePlayer == mc.player && stateLevel == mc.level
+                && !mc.player.hasEffect(net.minecraft.world.effect.MobEffects.SLOW_FALLING)
+                && !mc.player.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION)
+                && !correctionPending.get() && !externalImpulsePending.get()
+                && mc.player.tickCount >= boostRetryTick && !safetySteering
+                && !mc.player.horizontalCollision && !mc.player.verticalCollision;
+        return dev.guizhou.util.elytra.AerialEngagement.observedVelocity(mc.player.getDeltaMovement(), lastApplied,
+                (long) mc.player.tickCount - lastAppliedTick, uninterrupted);
     }
 
     /** Read-only estimate of the precision path used by the next powered setup tick. */
@@ -1036,7 +1055,11 @@ public class GuangxiElytraModule extends Module {
 
     /** Read-only combat forecast input: coupled movement can exceed vanilla deltaMovement. */
     private Vec3 recentAppliedVelocity() {
-        if (!isEnabled() || mc.player == null || !mc.player.isFallFlying()) return null;
+        if (!isEnabled() || mc.player == null || !mc.player.isFallFlying()
+                || statePlayer != mc.player || stateLevel != mc.level
+                || correctionPending.get() || externalImpulsePending.get()
+                || mc.player.tickCount < boostRetryTick || safetySteering
+                || mc.player.horizontalCollision || mc.player.verticalCollision) return null;
         long age = (long)mc.player.tickCount - lastAppliedTick;
         return age >= 0 && age <= 1 ? lastApplied : null;
     }

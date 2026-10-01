@@ -14,10 +14,15 @@ public final class SpearApproach {
      */
     public static Vec3 limitStep(Vec3 requested, Vec3 toTarget, Vec3 targetVelocity,
                                  double boxDistance, double minRange, double maxRange) {
+        return limitStep(requested, toTarget, targetVelocity, boxDistance, minRange, maxRange, false);
+    }
+
+    static Vec3 limitStep(Vec3 requested, Vec3 toTarget, Vec3 targetVelocity,
+                          double boxDistance, double minRange, double maxRange, boolean approachingWindow) {
         if (!finite(requested) || !finite(toTarget) || !finite(targetVelocity)
                 || !Double.isFinite(boxDistance) || !Double.isFinite(minRange)
                 || !Double.isFinite(maxRange) || minRange < 0 || maxRange <= minRange
-                || boxDistance < minRange + 0.35 || boxDistance > maxRange + 3.0
+                || boxDistance < minRange + 0.35 || !approachingWindow && boxDistance > maxRange + 3.0
                 || targetVelocity.lengthSqr() > 400.0) return requested;
         double speed = requested.length();
         if (speed < 0.65 || toTarget.lengthSqr() < 1.0E-9) return requested;

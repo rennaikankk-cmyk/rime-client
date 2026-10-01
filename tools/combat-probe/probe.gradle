@@ -30,6 +30,8 @@ allprojects {
     vmArg('-Dprobe.terrain=' + (project.findProperty('probeTerrain') ?: 'true'))
     vmArg('-Dprobe.requireDamage=' + (project.findProperty('probeRequireDamage') ?: 'false'))
     vmArg('-Dprobe.adaptive=' + (project.findProperty('probeAdaptive') ?: 'false'))
+    vmArg('-Dprobe.flight=' + (project.findProperty('probeFlight') ?: 'Grim'))
+    vmArg('-Dprobe.boost=' + (project.findProperty('probeBoost') ?: 'false'))
    }
    // Build the fixture separately: development builds intentionally forbid Jar tasks.
   }

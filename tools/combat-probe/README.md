@@ -14,6 +14,8 @@ tools/combat-probe/run-probe.ps1 -Name spear-air -WorldPath 'C:\test-world' -Mod
 tools/combat-probe/run-probe.ps1 -Name spear-high -WorldPath 'C:\test-world' -Mode SPEAR -High true
 tools/combat-probe/run-probe.ps1 -Name armor-lifecycle -WorldPath 'C:\test-world' -Mode ARMOR
 tools/combat-probe/run-probe.ps1 -Name defense-world -WorldPath 'C:\test-world' -Mode DEFENSE
+
+tools/combat-probe/run-probe.ps1 -Name gz-mace-air -WorldPath 'C:\test-world' -Mode MACE -Air true -Armor true -Boost true -Flight Grim -Fps 60 -Ticks 600 -RequireDamage true
 ```
 
 每次只运行一个实例，使用新的 Name。脚本复制整个世界到本目录的 runs，**不修改原世界**。运行约 800 个客户端 tick 后自动退出。测试实例不带上传凭据，无账号凭据写入。若环境尚未完成 Minecraft 首次引导，需要先在测试窗口完成引导。先单独构建仅含测试代码的 fixture Jar，再以显式开发参数启动，遵守开发构建禁止 Jar 打包的保护规则。
@@ -29,6 +31,8 @@ ARMOR 场景关闭追人和方向控制，单独启用 ArmorFly，模拟一次�
 DEFENSE 场景逐 tick 比较原版珍珠与共享预测器的干燥地面轨迹，并在真实 ClientLevel 中注入测试玩家/珍珠，验证渲染关闭时的落点威胁、航向保持、障碍打断、自己/未知所有者/好友排除、预测自己已远离、功能开关和停用清理。完成标志为 `defense-complete.txt`，失败文件会使启动脚本失败。客户端注入实体只证明功能接线，不代表真人 PvP、服务端伤害或真实网络延迟；检测耗时包含反射调用，仅供该场景参考。
 
 ## 结果
+
+`-Flight Grim/NoAC`、`-Boost true/false` 和 `-Fps 60` 可明确记录空战飞行环境；默认仍是 Grim、GZBoost 关闭、90 FPS。GZBoost 的单视角回退与双视角数学回归需分开记录，原生 1.21.11 集成服不验证 Via 双视角。旧版与候选用相同复制世界、参数及固定 tick 数比较；服务端僵尸压力场景的扣血不能换算为真人胜率。
 
 - 日志：本目录 `<Name>.log`，服务器实际扣血为 `PROBE_DAMAGE`，区分 `mace_smash` 和 `spear`。
 - 每 5 tick 采样：`runs/<Name>/combat-trace.csv`。

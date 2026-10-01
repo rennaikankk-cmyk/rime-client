@@ -12,6 +12,9 @@ param(
     [ValidateSet('true','false')][string]$Terrain='true',
     [ValidateSet('true','false')][string]$RequireDamage='false',
     [ValidateSet('true','false')][string]$Adaptive='false',
+    [ValidateSet('Grim','NoAC')][string]$Flight='Grim',
+    [ValidateSet('true','false')][string]$Boost='false',
+    [ValidateRange(30,240)][int]$Fps=90,
     [string]$FontDirectory,
     [string]$JavaHome=$env:JAVA_HOME
 )
@@ -30,14 +33,14 @@ if($FontDirectory){
     New-Item -ItemType Directory -Force -Path "$run\guizhouware\fonts" | Out-Null
     Get-ChildItem -LiteralPath $fontSource -File -Filter '*.ttf' | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination "$run\guizhouware\fonts" }
 }
-[IO.File]::WriteAllText("$run\options.txt","onboardAccessibility:false`nrenderDistance:4`nsimulationDistance:5`npauseOnLostFocus:false`nguiScale:2`ntutorialStep:none`nmaxFps:90`n")
+[IO.File]::WriteAllText("$run\options.txt","onboardAccessibility:false`nrenderDistance:4`nsimulationDistance:5`npauseOnLostFocus:false`nguiScale:2`ntutorialStep:none`nmaxFps:$Fps`n")
 # This development probe has no launcher capability, so automatic telemetry cannot upload.
 $env:JAVA_HOME=$JavaHome
 Push-Location -LiteralPath $repo
 try {
     & .\gradlew.bat --offline -I "$base\probe.gradle" runtimeProbeJar --console=plain *> "$base\$Name-build.log"
     if($LASTEXITCODE -ne 0){throw "Probe fixture build failed: $base\$Name-build.log"}
-    & .\gradlew.bat --offline -PgzwDevelopmentBuild=true -I "$base\probe.gradle" "-PprobeRun=$Name" "-PprobeMode=$Mode" "-PprobeArmor=$Armor" "-PprobeAir=$Air" "-PprobeHigh=$High" "-PprobeGround=$Ground" "-PprobeTicks=$Ticks" "-PprobeGear=$Gear" "-PprobeHeight=$Height" "-PprobeTerrain=$Terrain" "-PprobeRequireDamage=$RequireDamage" "-PprobeAdaptive=$Adaptive" runClient --console=plain *> "$base\$Name.log"
+    & .\gradlew.bat --offline -PgzwDevelopmentBuild=true -I "$base\probe.gradle" "-PprobeRun=$Name" "-PprobeMode=$Mode" "-PprobeArmor=$Armor" "-PprobeAir=$Air" "-PprobeHigh=$High" "-PprobeGround=$Ground" "-PprobeTicks=$Ticks" "-PprobeGear=$Gear" "-PprobeHeight=$Height" "-PprobeTerrain=$Terrain" "-PprobeRequireDamage=$RequireDamage" "-PprobeAdaptive=$Adaptive" "-PprobeFlight=$Flight" "-PprobeBoost=$Boost" runClient --console=plain *> "$base\$Name.log"
     $result=$LASTEXITCODE
 } finally { Pop-Location }
 if($result -ne 0){throw "Probe failed; inspect $base\$Name.log"}

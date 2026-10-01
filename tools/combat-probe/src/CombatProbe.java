@@ -107,6 +107,8 @@ public final class CombatProbe implements ClientModInitializer {
    var flight=GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
    var chase=GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraChaseModule.class);
    setting(flight,"SpeedBps",40.0); setting(flight,"ClimbBps",40.0);
+   setting(flight,"Mode",System.getProperty("probe.flight","Grim"));
+   setting(flight,"GZBoost",Boolean.getBoolean("probe.boost"));
    setting(flight,"TerrainGuard",Boolean.parseBoolean(System.getProperty("probe.terrain","true")));
    if(ARMOR) GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.movement.ArmorFlyModule.class).enable();
    if(!MODE.equals("ARMOR")) setting(chase,"Mode",MODE); setting(chase,"PlayerOnly",false); setting(chase,"AdaptiveCombat",Boolean.getBoolean("probe.adaptive"));
@@ -121,7 +123,7 @@ public final class CombatProbe implements ClientModInitializer {
     chase.enable();
    }
    started=true; running=0;
-   System.out.println("PROBE_START mode="+MODE+" armor="+ARMOR);
+   System.out.println("PROBE_START mode="+MODE+" armor="+ARMOR+" flight="+System.getProperty("probe.flight","Grim")+" boost="+Boolean.getBoolean("probe.boost"));
   }
   if(!started)return;
   running++;

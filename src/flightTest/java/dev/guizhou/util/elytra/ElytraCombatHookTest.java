@@ -53,6 +53,7 @@ public final class ElytraCombatHookTest {
         verifyMaceDescentOwnership();
         verifyCombatRegressionWiring();
         verifyPlanningSpeedWiring();
+        verifyEngagementWiring();
         System.out.println("ElytraCombatHookTest passed: " + checks + " checks");
     }
 
@@ -67,6 +68,22 @@ public final class ElytraCombatHookTest {
                         && budget.steps.stream().noneMatch(step -> step.opcode == Opcodes.GETFIELD
                         && FLIGHT.equals(step.owner) && "lastRequestedBpt".equals(step.name)),
                 "The next approach keeps configured speed after terminal braking");
+    }
+
+    private static void verifyEngagementWiring() throws IOException {
+        Map<String, Trace> chase = read(CHASE);
+        Map<String, Trace> spear = read(CHASE + "$SpearBehavior");
+        String engagement = "dev/guizhou/util/elytra/AerialEngagement";
+        check(method(chase,"combatVelocity").hasCall(FLIGHT,"observedCombatVelocity"), "Chase uses fresh applied GZ motion");
+        for (String name : List.of("updateDuelPlanning","updateDefense","predictedTarget","fallingMaceThreat"))
+            check(method(chase,name).hasCall(CHASE,"combatVelocity"), "Planning and defense share the observed motion: "+name);
+        check(method(spear,"tick").hasCall(engagement,"chargeRange"), "Charge reserves opposing movement time");
+        check(method(spear,"nearPass").hasCall(engagement,"closingWindow"), "Near phase anticipates a fast pass");
+        for (String name : List.of("tickFollow","tickNearFollow"))
+            check(method(spear,name).hasCall(CHASE+"$SpearBehavior","limitChargedApproach"), "Approach gate runs before fixed range entry: "+name);
+        check(method(spear,"limitChargedApproach").hasCall(engagement,"spearStep"), "Actual pass uses precision decision");
+        check(method(read(CHASE+"$MaceBehavior"),"inject").hasCall(engagement,"climbStep"), "Mace aligns at the moving apex");
+        check(method(read(FLIGHT),"observedCombatVelocity").hasCall(engagement,"observedVelocity"), "Motion freshness gate is on the live path");
     }
 
     private static void verifyCombatRegressionWiring() throws IOException {
@@ -500,6 +517,10 @@ public final class ElytraCombatHookTest {
                 "Movement state must not disqualify an otherwise valid spear charge");
         check(tick.call(FLIGHT, "needsSpearBoostRefresh") < prepare,
                 "Required firework refresh must retain its charge-release opportunity");
+        check(tick.call("dev/guizhou/util/elytra/SpearApproach$CommitWindow", "admit") < prepare,
+                "Rocket refresh may preserve only a bounded imminent charged pass");
+        check(method(read(spear), "enter").hasCall("dev/guizhou/util/elytra/SpearApproach$CommitWindow", "reset"),
+                "Target, world, mode and disable clear the rocket commitment");
 
         Trace reset = method(methods, "resetDefenseBehavior");
         int phase = reset.call(CHASE, "spearPhase");

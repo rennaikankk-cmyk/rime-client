@@ -222,6 +222,7 @@ def clientRegressionTests = [
         fontFacesTest: 'dev.guizhou.util.render.font.FontFacesTest',
         targetMotionTrackerTest: 'dev.guizhou.util.elytra.TargetMotionTrackerTest',
         aerialCombatPolicyTest: 'dev.guizhou.util.elytra.AerialCombatPolicyTest',
+        aerialEngagementTest: 'dev.guizhou.util.elytra.AerialEngagementTest',
         aerialInterceptTest: 'dev.guizhou.util.elytra.AerialInterceptTest',
         maceApproachTest: 'dev.guizhou.util.elytra.MaceApproachTest',
         aerialDuelPredictorTest: 'dev.guizhou.util.elytra.AerialDuelPredictorTest',
