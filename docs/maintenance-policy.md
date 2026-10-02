@@ -1,7 +1,9 @@
 # Supported versions
 
-As of 2026-09-28, active Rime client development targets **Minecraft 1.21.11** only.
+As of 2026-10-02, routine Rime development and releases target **Minecraft 1.21.11** on `main`.
 
-Minecraft **1.21.1 / Rime 1.1.2 / Rimeguard 3.1** is the last archived release. It has been removed from the website and launcher download lists. No further feature parity, bug fixes or new-version releases are planned for that branch.
+Minecraft **1.21.1** is an opt-in compatibility port on `codex/minecraft-1.21.1`, available to members through the launcher. Synchronize the latest 1.21.11 changes only when the owner explicitly requests **“更新 1.21.1”** (or an equivalent explicit instruction). Do not automatically build, synchronize, or publish 1.21.1 during routine 1.21.11 releases. Its publication must preserve the active 1.21.11 artifact and keep 1.21.11 selected first in the launcher.
 
-The Windows launcher now has its own repository, `rennaikankk-cmyk/rime-launcher`. This maintenance decision does not change existing account authorization or retroactively revoke installed clients.
+Each requested port needs its own compatibility checks, production obfuscation, protection merge, signed startup checks, and download verification. Native 1.21.1 has no spear item; spear support depends on a compatible Via translation retaining the original item metadata.
+
+The Windows launcher is maintained in `rennaikankk-cmyk/rime-launcher`; protection is maintained in `rennaikankk-cmyk/rimeguard`. This policy does not change existing account authorization.

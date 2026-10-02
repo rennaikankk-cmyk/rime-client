@@ -1,4 +1,4 @@
-> Active maintenance: Minecraft **1.21.11** only. Minecraft 1.21.1 is archived at Rime 1.1.2. See [maintenance policy](docs/maintenance-policy.md).
+> Daily maintenance targets Minecraft **1.21.11**. The member **1.21.1** port is synchronized only when the owner explicitly requests it. See [maintenance policy](docs/maintenance-policy.md).
 
 <p align="center">
   <img src="src/main/resources/assets/guizhouware/icon.png" alt="Rime" width="180" />
