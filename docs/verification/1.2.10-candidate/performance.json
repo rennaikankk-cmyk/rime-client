@@ -1,0 +1,63 @@
+{
+  "scope": "Real integrated client world, fixed synthetic combat calculation workload; no live server duel or general FPS claim",
+  "baseline": "381cad8 with the same local ClickGUI changes",
+  "validation": {
+    "checks": 3924,
+    "passed": true
+  },
+  "runs": {
+    "baseline": {
+      "samples": 100,
+      "crystal_ns": 514616500,
+      "path_ns": 149456800,
+      "capture_ns": 47051700,
+      "decisionsSha256": "67bb106962481be59257652d77ee9030338e71b7ffe5cd0fa64db0ba409e142e",
+      "rays": 5400000,
+      "frameTiming": {
+        "count": 6733,
+        "total_ns": 9779348500,
+        "mean_ns": 1452450.394,
+        "max_ns": 57996800,
+        "p95_ns": 3424806
+      },
+      "gcMillis": 84
+    },
+    "optimized": {
+      "samples": 100,
+      "crystal_ns": 148325500,
+      "path_ns": 43012800,
+      "capture_ns": 28121600,
+      "decisionsSha256": "67bb106962481be59257652d77ee9030338e71b7ffe5cd0fa64db0ba409e142e",
+      "rays": 1512000,
+      "frameTiming": {
+        "count": 8154,
+        "total_ns": 9912679500,
+        "mean_ns": 1215683.039,
+        "max_ns": 27540800,
+        "p95_ns": 2739845
+      },
+      "gcMillis": 46
+    },
+    "verified": {
+      "samples": 100,
+      "crystal_ns": 167508200,
+      "path_ns": 42039000,
+      "capture_ns": 21911700,
+      "decisionsSha256": "67bb106962481be59257652d77ee9030338e71b7ffe5cd0fa64db0ba409e142e",
+      "rays": 1512000,
+      "frameTiming": {
+        "count": 8773,
+        "total_ns": 9906664500,
+        "mean_ns": 1129221.988,
+        "max_ns": 25943400,
+        "p95_ns": 2739845
+      },
+      "gcMillis": 33
+    }
+  },
+  "sources": {
+    "src/main/java/dev/guizhou/features/modules/combat/GuangxiCrystalModule.java": "b881c278fb39a4d6b7c547a4cd03e87cffbdf2c125a6417e5abd58e460eb32c1",
+    "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java": "b63a309c63d77005476715853519c7c4456d37618c1a290407188bf7e3cca95a",
+    "src/main/java/dev/guizhou/util/elytra/FlightCollisionSnapshot.java": "e3c5869f334fbfdcf043a09f9a6bbbda2356f14b6a8b8a67ea5e0e185a00b0c0"
+  }
+}

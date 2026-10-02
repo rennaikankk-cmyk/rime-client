@@ -31,6 +31,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
@@ -1343,6 +1344,19 @@ public class GuangxiElytraModule extends Module {
         Vec3 step = delta.scale(1.0 / steps);
         AABB body = mc.player.getBoundingBox().inflate(0.06, 0.02, 0.06)
                 .move(from.subtract(mc.player.position()));
+        // Empty broad phase proves every short segment clear; occupied diagonal envelopes
+        // still use the original narrow checks. Bound the query volume on long diagonals.
+        AABB envelope = body.expandTowards(delta);
+        if (steps >= 4 && envelope.getXsize() * envelope.getYsize() * envelope.getZsize() <= 4096
+                && mc.level.getWorldBorder().isWithinBounds(envelope)) {
+            boolean loaded = true;
+            for (int x = Mth.floor(envelope.minX) >> 4; x <= (Mth.floor(envelope.maxX) >> 4) && loaded; x++) {
+                for (int z = Mth.floor(envelope.minZ) >> 4; z <= (Mth.floor(envelope.maxZ) >> 4); z++) {
+                    if (!mc.level.hasChunk(x, z)) { loaded = false; break; }
+                }
+            }
+            if (loaded && !mc.level.getBlockCollisions(mc.player, envelope).iterator().hasNext()) return true;
+        }
         for (int index = 0; index < steps; index++) {
             AABB swept = body.expandTowards(step);
             if (!mc.level.hasChunkAt(BlockPos.containing(swept.minX, swept.minY, swept.minZ))

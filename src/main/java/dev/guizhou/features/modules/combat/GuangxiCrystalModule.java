@@ -2253,6 +2253,12 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private float calcDamageSelf(Vec3 explosionPos, BlockPos phantomObsidianPos) {
+        return calcDamageSelf(explosionPos, phantomObsidianPos, Double.POSITIVE_INFINITY, Float.POSITIVE_INFINITY, 0);
+    }
+
+    /** A rejected partial maximum is never stored as an exact damage value. */
+    private float calcDamageSelf(Vec3 explosionPos, BlockPos phantomObsidianPos,
+                                 double maximum, float health, double reserve) {
         SelfCache sc = selfNow();
         SelfDamageKey key = new SelfDamageKey(explosionPos,
                 phantomObsidianPos == null ? null : phantomObsidianPos.immutable());
@@ -2261,11 +2267,22 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         float damage = selfDamageAt(sc, sc.currentPos(), sc.currentBox(), explosionPos, phantomObsidianPos);
         if (!rusherLogic()) {
             for (int i = 1; i < selfPath.size(); i++) {
+                if (damage > maximum || damage + reserve >= health) {
+                    ClientDiagnostics.count("combat.GuangxiCrystal.selfEarlyReject", 1);
+                    return damage;
+                }
                 Vec3 point = selfPath.get(i);
+                double distance = point.distanceTo(explosionPos);
+                // Exposure is at most one. This pose cannot increase the exact maximum.
+                if (distance > 12.0 || selfDamage(distance, 1.0, sc) <= damage) {
+                    ClientDiagnostics.count("combat.GuangxiCrystal.selfBoundSkip", 1);
+                    continue;
+                }
                 damage = Math.max(damage, selfDamageAt(sc, point,
                         sc.currentBox().move(point.subtract(sc.currentPos())), explosionPos, phantomObsidianPos));
             }
         } else if (!sc.pos().equals(sc.currentPos())) {
+            if (damage > maximum || damage + reserve >= health) return damage;
             damage = Math.max(damage, selfDamageAt(sc, sc.pos(), sc.box(), explosionPos, phantomObsidianPos));
         }
         selfDamageCache.put(key, damage);
@@ -2416,7 +2433,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         float optimistic = maxDamageSelf(crystalCenter);
         if (CrystalSelectionPolicy.isSelfDamageSafe(optimistic, maxSelf, playerHealth, reserve)) return true;
 
-        float real = calcDamageSelf(crystalCenter, phantomObsidianPos);
+        float real = calcDamageSelf(crystalCenter, phantomObsidianPos, maxSelf, playerHealth, reserve);
         return CrystalSelectionPolicy.isSelfDamageSafe(real, maxSelf, playerHealth, reserve);
     }
 

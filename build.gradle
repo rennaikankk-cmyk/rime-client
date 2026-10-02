@@ -202,6 +202,8 @@ def clientRegressionTests = [
         miningBreakTrackerTest: 'dev.guizhou.features.modules.combat.MiningBreakTrackerTest',
         hudAppearanceTest: 'dev.guizhou.util.render.HudAppearanceTest',
         hudLayoutTest: 'dev.guizhou.features.modules.client.HudLayoutTest',
+        clickGuiLayoutTest: 'dev.guizhou.features.gui.ClickGuiLayoutTest',
+        guiMeshWindingTest: 'dev.guizhou.util.render.GuiMeshWindingTest',
         hudCoordinatesTest: 'dev.guizhou.features.modules.client.HudCoordinatesTest',
         attackCooldownTest: 'dev.guizhou.util.combat.AttackCooldownTest',
         auraDefenceHookTest: 'dev.guizhou.util.combat.AuraDefenceHookTest',

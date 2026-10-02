@@ -188,17 +188,31 @@ public final class ShadcnDraw {
 
         void quad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3,
                   int left, int right, float origin, float width) {
-            add(x0, y0, at(left, right, x0, origin, width));
-            add(x1, y1, at(left, right, x1, origin, width));
-            add(x2, y2, at(left, right, x2, origin, width));
-            add(x3, y3, at(left, right, x3, origin, width));
+            putQuad(x0, y0, x1, y1, x2, y2, x3, y3,
+                    at(left, right, x0, origin, width), at(left, right, x1, origin, width),
+                    at(left, right, x2, origin, width), at(left, right, x3, origin, width));
         }
 
         void solid(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3, int c0, int c1) {
+            putQuad(x0, y0, x1, y1, x2, y2, x3, y3, c0, c1, c1, c0);
+        }
+
+        private void putQuad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3,
+                             int c0, int c1, int c2, int c3) {
+            // GUI uses the same facing as TL -> BL -> BR -> TR. Ring edges and
+            // corner fans can arrive in the opposite order; preserve each vertex's colour.
+            float area = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0)
+                    + (x2 - x0) * (y3 - y0) - (y2 - y0) * (x3 - x0);
             add(x0, y0, c0);
-            add(x1, y1, c1);
-            add(x2, y2, c1);
-            add(x3, y3, c0);
+            if (area > 0) {
+                add(x3, y3, c3);
+                add(x2, y2, c2);
+                add(x1, y1, c1);
+            } else {
+                add(x1, y1, c1);
+                add(x2, y2, c2);
+                add(x3, y3, c3);
+            }
         }
 
         private static int at(int left, int right, float px, float origin, float width) {
@@ -286,14 +300,18 @@ public final class ShadcnDraw {
     public static float width(String text, float size, int weight) { return HudFonts.width(text, size, weight); }
 
     public static String fit(String text, float maxWidth, float size) {
+        return fit(text, maxWidth, size, HudFonts.REGULAR);
+    }
+
+    public static String fit(String text, float maxWidth, float size, int weight) {
         if (text == null || maxWidth <= 0) return "";
-        if (width(text, size) <= maxWidth) return text;
+        if (width(text, size, weight) <= maxWidth) return text;
         String suffix = "…";
-        if (width(suffix, size) > maxWidth) return "";
+        if (width(suffix, size, weight) > maxWidth) return "";
         int end = text.length();
         while (end > 0) {
             end = text.offsetByCodePoints(end, -1);
-            if (width(text.substring(0, end) + suffix, size) <= maxWidth) return text.substring(0, end) + suffix;
+            if (width(text.substring(0, end) + suffix, size, weight) <= maxWidth) return text.substring(0, end) + suffix;
         }
         return suffix;
     }
