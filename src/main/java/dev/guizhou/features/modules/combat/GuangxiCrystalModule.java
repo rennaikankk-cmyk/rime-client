@@ -1,7 +1,6 @@
 package dev.guizhou.features.modules.combat;
 
 import dev.guizhou.GuizhouWare;
-import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.impl.render.Render2DEvent;
@@ -20,6 +19,7 @@ import dev.guizhou.util.combat.CrystalWeaponDamage;
 import dev.guizhou.util.inventory.SwapPriority;
 import dev.guizhou.util.combat.CrystalRetryTracker;
 import dev.guizhou.util.combat.ExplosionDamageModel;
+import dev.guizhou.util.combat.OffthreadRank;
 import dev.guizhou.util.combat.CombatSnapshotService;
 import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.MathUtil;
@@ -27,7 +27,6 @@ import dev.guizhou.util.PlaceUtil;
 import dev.guizhou.util.PredictUtil;
 import dev.guizhou.util.render.MatrixCapture;
 import dev.guizhou.util.render.RenderUtil;
-import dev.guizhou.util.render.placement.*;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
@@ -54,6 +53,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
@@ -73,7 +73,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantments;
 import dev.guizhou.util.EnchantmentUtil;
 import dev.guizhou.util.player.EatUtil;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -85,19 +84,17 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.awt.Color;
 import java.util.ArrayList;
-import java.util.Locale;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BiFunction;
 
 public class GuangxiCrystalModule extends Module {
 
@@ -128,13 +125,12 @@ public class GuangxiCrystalModule extends Module {
 
     /** WallPlace (Mio): attempt placement on bases without line of sight within a reduced range —
      *  servers that don't validate placement LOS (vanilla, most legacy) accept it. */
-    private final Setting<Boolean> wallPlace  = bool("WallPlace", false).setPage("General");
+    private final Setting<Boolean> wallPlace  = bool("WallPlace", true).setPage("General");
     private final Setting<Double>  wallRange  = num("WallRange", 4.5, 0.5, 6.0).setPage("General");
 
     private enum AutoSwapMode { NONE, SILENT, INVENTORY }
     private final Setting<AutoSwapMode> autoSwap = mode("AutoSwap", AutoSwapMode.SILENT).setPage("General");
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
-    private final dev.guizhou.manager.RotationOptions rotationOptions = new dev.guizhou.manager.RotationOptions(this, rotate);
 
     /** Default keeps same-tick break and place. Rusher spends the tick on a break when one exists. */
     private enum CrystalLogic { DEFAULT, RUSHER }
@@ -168,7 +164,7 @@ public class GuangxiCrystalModule extends Module {
 
     private final Setting<Boolean> antiChinese   = bool("AntiChinese", false).setPage("AntiChinese");
 
-    private final Setting<Double>  antiChineseRange = num("Range", 5.0, 1.0, 5.14).setPage("AntiChinese");
+    private final Setting<Double>  antiChineseRange = num("Range", 5.0, 1.0, 6.0).setPage("AntiChinese");
 
     private final Setting<Double>  antiChineseEnemyRange = num("EnemyRange", 8.0, 1.0, 30.0).setPage("AntiChinese");
     private final Setting<Boolean> basePlace          = bool("BasePlace", true).setPage("BasePlace");
@@ -196,18 +192,17 @@ public class GuangxiCrystalModule extends Module {
     private final Setting<Color>   damageColor  = color("DamageColor", 250, 249, 245, 255).setPage("Render")
             .setVisibility(v -> renderMode.getValue() != RenderMode.NONE && damageText.getValue());
 
-    private BlockPos damageAnchor;
-    private long damageShownAt;
-    private float damageShown;
+    private BlockPos renderPos = null;
+    private long     renderStartMs = 0L;
+    private float    renderDamage = 0f;
+    private AABB     smoothBox = null;
 
-    private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, true);
-    private final PlacementVisuals visuals = new PlacementVisuals("水晶");
     private enum RenderMode { NONE, GRADIENT, GRADIENT_SMOOTH, BOX_SMOOTH, PULSE }
 
     private enum RangePreset { B2B2T, VANILLA, CUSTOM }
 
-    private final Setting<RangePreset> rangePreset = mode("RangePreset", RangePreset.VANILLA).setPage("General");
-    private final Setting<Double> placeRange = num("PlaceRange", 4.5, 0.0, 6.0).setPage("General");
+    private final Setting<RangePreset> rangePreset = mode("RangePreset", RangePreset.B2B2T).setPage("General");
+    private final Setting<Double> placeRange = num("PlaceRange", 6.0, 0.0, 6.0).setPage("General");
     private final Setting<Double> breakRange = num("BreakRange", 3.0, 0.0, 6.0).setPage("General");
     private static final double  ARMOR_BALANCE  = 0.20;
     private static final boolean NO_SELF_POP    = true; // retained for config compatibility; Reserve now drives the margin
@@ -368,11 +363,16 @@ public class GuangxiCrystalModule extends Module {
 
     private int lastReactorPlaceTick = -1;
     private BlockPos lastPlaceAir = null;
+    /** Final damage of the cycle the lock is waiting on; challengers must beat it by the release margin. */
+    private float lastPlaceDamage = 0f;
+    /** True when the last place search found nothing usable because the locked cycle still owns the tick. */
+    private boolean placeSearchWaiting;
     private int placeDiagCounter = 0;
 
-    private final ExposureContext exposureCtx = new ExposureContext();
+    private final dev.guizhou.util.combat.ExplosionExposure exposurePass = new dev.guizhou.util.combat.ExplosionExposure();
 
     private final ArrayList<PlaceCandidate> candidates = new ArrayList<>();
+    private final OffthreadRank placeRank = new OffthreadRank();
 
     private final Set<Integer> deadIds = ConcurrentHashMap.newKeySet();
 
@@ -438,6 +438,8 @@ public class GuangxiCrystalModule extends Module {
         lastCalcMs = 0;
         lastReactorPlaceTick = -1;
         lastPlaceAir = null;
+        lastPlaceDamage = 0f;
+        placeSearchWaiting = false;
         lastMaxEntityId = -1;
         lastCarriedSlot = -1;
         ownSwapPackets.set(0);
@@ -445,17 +447,20 @@ public class GuangxiCrystalModule extends Module {
         selfPath = List.of();
         entitySnapshot = List.of();
         entitySnapshotTick = -1;
+        reachEyeTick = Integer.MIN_VALUE;
+        miningSnapshotTick = Integer.MIN_VALUE;
         selfDamageCache.clear();
         targetDamageCache.clear();
+        exposurePass.reset();
         cachedChunk = null;
         cachedChunkX = cachedChunkZ = Integer.MIN_VALUE;
         seeThrough.clear();
         miningCheck.clear();
         candidates.clear();
         explodeTimes.clear();
-        visuals.clear();
-        damageAnchor = null;
-        damageShown = 0f;
+        renderPos = null;
+        renderDamage = 0f;
+        smoothBox = null;
         resetDiag();
     }
 
@@ -475,34 +480,49 @@ public class GuangxiCrystalModule extends Module {
         sessionPlayer = null;
     }
 
+    private void markRender(BlockPos crystalPos) {
+        if (renderMode.getValue() == RenderMode.NONE) return;
+        renderPos = crystalPos;
+        renderStartMs = System.currentTimeMillis();
+        renderDamage = lastBestDamage;
+    }
+
     @Override
     public void onRender3D(Render3DEvent event) {
-        if (nullCheck() || renderMode.getValue() == RenderMode.NONE) { visuals.clear(); return; }
-        PlacementVisualOptions.Style style = switch(renderMode.getValue()) {
-            case GRADIENT, GRADIENT_SMOOTH -> PlacementVisualOptions.Style.GRADIENT;
-            case PULSE -> PlacementVisualOptions.Style.PULSE;
-            default -> PlacementVisualOptions.Style.BOX;
-        };
-        double smoothing = renderMode.getValue() == RenderMode.BOX_SMOOTH
-                || renderMode.getValue() == RenderMode.GRADIENT_SMOOTH ? smoothness.getValue() : 1;
-        visuals.render(event, visualOptions, sideColor.getValue(), lineColor.getValue(), lineWidth.getValue(),
-                renderTime.getValue() * .05, style, smoothing, gradientHeight.getValue(),
-                pulseColor.getValue(), pulseSpeed.getValue(), pulseExpand.getValue());
+        if (nullCheck() || renderMode.getValue() == RenderMode.NONE || renderPos == null) return;
+
+        long elapsed = System.currentTimeMillis() - renderStartMs;
+        long life = renderTime.getValue() * 50L;
+        if (elapsed > life) {
+            renderPos = null;
+            renderDamage = 0f;
+            smoothBox = null;
+            return;
+        }
+
+        switch (renderMode.getValue()) {
+            case GRADIENT        -> drawGradient(event, false);
+            case GRADIENT_SMOOTH -> drawGradient(event, true);
+            case BOX_SMOOTH      -> drawBoxSmooth(event);
+            case PULSE           -> drawPulse(event, elapsed, life);
+            default -> { }
+        }
     }
 
     @Override
     public void onRender2D(Render2DEvent event) {
         if (nullCheck() || !damageText.getValue() || renderMode.getValue() == RenderMode.NONE
-                || damageAnchor == null || damageShown <= 0f) return;
-        if (System.currentTimeMillis() - damageShownAt > renderTime.getValue() * 50L) return;
-        drawDamageNumber(event.getContext(),
-                damageAnchor.getX() + 0.5, damageAnchor.getY() + 0.5, damageAnchor.getZ() + 0.5,
-                String.format(Locale.US, "%.2f", damageShown), damageColor.getValue().getRGB());
+                || renderPos == null || renderDamage <= 0f) return;
+        long life = renderTime.getValue() * 50L;
+        if (System.currentTimeMillis() - renderStartMs > life) return;
+
+        BlockPos base = renderPos.below();
+        drawDamageNumber(event.getContext(), base.getX() + 0.5, base.getY() + 0.5, base.getZ() + 0.5,
+                String.format(Locale.US, "%.2f", renderDamage), damageColor.getValue().getRGB());
     }
 
-    /** Billboard number at the base-block center: vanilla font, 0.025 block per pixel, dark offset shadow. */
-    private void drawDamageNumber(net.minecraft.client.gui.GuiGraphics graphics,
-                                  double x, double y, double z, String text, int color) {
+    /** Billboard number at the place-block center: vanilla font, 0.025 block per pixel, dark offset shadow. */
+    private void drawDamageNumber(GuiGraphics graphics, double x, double y, double z, String text, int color) {
         float[] screen = MatrixCapture.worldToScreen(x, y, z);
         if (screen == null) return;
         float scale = damagePixelScale(x, y, z);
@@ -512,8 +532,7 @@ public class GuangxiCrystalModule extends Module {
         var pose = graphics.pose();
         pose.pushPose();
         pose.translate(screen[0], screen[1], 0);
-        pose.scale(scale, scale, 1f);
-
+        pose.scale(scale, scale, 1);
         dev.guizhou.util.render.font.Fonts.drawString(graphics, text, -half, 0, color);
         pose.popPose();
     }
@@ -540,11 +559,82 @@ public class GuangxiCrystalModule extends Module {
         return (float) Math.hypot(stepped[0] - origin[0], stepped[1] - origin[1]);
     }
 
-    private void markDamage(BlockPos airPos) {
-        if (renderMode.getValue() == RenderMode.NONE) return;
-        damageAnchor = airPos.below();
-        damageShownAt = System.currentTimeMillis();
-        damageShown = lastBestDamage;
+    private void updateSmoothBox(AABB target) {
+        if (smoothBox == null) {
+            smoothBox = target;
+        } else {
+            double f = 1.0 / smoothness.getValue();
+            smoothBox = new AABB(
+                    lerp(smoothBox.minX, target.minX, f), lerp(smoothBox.minY, target.minY, f), lerp(smoothBox.minZ, target.minZ, f),
+                    lerp(smoothBox.maxX, target.maxX, f), lerp(smoothBox.maxY, target.maxY, f), lerp(smoothBox.maxZ, target.maxZ, f));
+        }
+    }
+
+    private void drawBoxSmooth(Render3DEvent event) {
+        updateSmoothBox(new AABB(renderPos.below()));
+        RenderUtil.drawBoxFilled(event.getMatrix(), smoothBox, sideColor.getValue());
+        RenderUtil.drawBox(event.getMatrix(), smoothBox, lineColor.getValue(), lineWidth.getValue());
+    }
+
+    private void drawGradient(Render3DEvent event, boolean smooth) {
+        Color side = sideColor.getValue();
+        Color line = lineColor.getValue();
+        Color clear = new Color(side.getRed(), side.getGreen(), side.getBlue(), 0);
+        double height = gradientHeight.getValue();
+        float lw = lineWidth.getValue();
+
+        BlockPos basePos = renderPos.below();
+
+        double x1, z1, x2, z2, yTop;
+        if (smooth) {
+            updateSmoothBox(new AABB(basePos));
+            x1 = smoothBox.minX; z1 = smoothBox.minZ;
+            x2 = smoothBox.maxX; z2 = smoothBox.maxZ;
+            yTop = smoothBox.maxY;
+        } else {
+            x1 = basePos.getX(); z1 = basePos.getZ();
+            x2 = x1 + 1;         z2 = z1 + 1;
+            yTop = basePos.getY() + 1;
+        }
+        double yBottom = yTop - height;
+        var m = event.getMatrix();
+
+        RenderUtil.quadHorizontal(m, x1, z1, x2, z2, yTop, side);
+        RenderUtil.gradientQuadVertical(m, x1, z1, x2, z1, yTop, yBottom, side, clear);
+        RenderUtil.gradientQuadVertical(m, x2, z1, x2, z2, yTop, yBottom, side, clear);
+        RenderUtil.gradientQuadVertical(m, x2, z2, x1, z2, yTop, yBottom, side, clear);
+        RenderUtil.gradientQuadVertical(m, x1, z2, x1, z1, yTop, yBottom, side, clear);
+
+        RenderUtil.drawLine(new Vec3(x1, yTop, z1), new Vec3(x2, yTop, z1), line, lw);
+        RenderUtil.drawLine(new Vec3(x2, yTop, z1), new Vec3(x2, yTop, z2), line, lw);
+        RenderUtil.drawLine(new Vec3(x2, yTop, z2), new Vec3(x1, yTop, z2), line, lw);
+        RenderUtil.drawLine(new Vec3(x1, yTop, z2), new Vec3(x1, yTop, z1), line, lw);
+
+        RenderUtil.drawLine(new Vec3(x1, yTop, z1), new Vec3(x1, yBottom, z1), line, lw);
+        RenderUtil.drawLine(new Vec3(x2, yTop, z1), new Vec3(x2, yBottom, z1), line, lw);
+        RenderUtil.drawLine(new Vec3(x2, yTop, z2), new Vec3(x2, yBottom, z2), line, lw);
+        RenderUtil.drawLine(new Vec3(x1, yTop, z2), new Vec3(x1, yBottom, z2), line, lw);
+    }
+
+    private void drawPulse(Render3DEvent event, long elapsed, long life) {
+        double fade = 1.0 - (double) elapsed / life;
+        double phase = elapsed / 1000.0 * pulseSpeed.getValue();
+        double pulse = (Math.sin(phase * Math.PI * 2.0) + 1.0) * 0.5;
+        double grow = pulse * pulseExpand.getValue();
+
+        Color base = pulseColor.getValue();
+        Color fill = new Color(base.getRed(), base.getGreen(), base.getBlue(),
+                Math.clamp((int) (base.getAlpha() * fade), 0, 255));
+        Color line = new Color(base.getRed(), base.getGreen(), base.getBlue(),
+                Math.clamp((int) (255 * fade), 0, 255));
+
+        AABB box = new AABB(renderPos).inflate(grow);
+        RenderUtil.drawBoxFilled(event.getMatrix(), box, fill);
+        RenderUtil.drawBox(event.getMatrix(), box, line, lineWidth.getValue());
+    }
+
+    private static double lerp(double a, double b, double f) {
+        return a + (b - a) * f;
     }
 
     @Subscribe
@@ -576,6 +666,14 @@ public class GuangxiCrystalModule extends Module {
             entitySnapshotTick = -1;
             entitySnapshot = List.of();
             for (int id : removed.getEntityIds()) attackRetries.removed(id);
+            // Obelisk-style entity-destroy echo: if the crystal on our placed slot is
+            // gone after an entity-remove packet (broken without an explosion echo,
+            // suppressed blast, or server cleanup), the slot is free again — zero the
+            // place cooldown so the next PreTick re-seeds immediately.
+            if (lastPlaceAir != null && !hasLiveCrystalAt(lastPlaceAir)) {
+                placeTimer.reset();
+                crystalPlaces.remove(lastPlaceAir.asLong());
+            }
             return;
         }
         if (packet instanceof ClientboundPlayerPositionPacket) {
@@ -583,10 +681,22 @@ public class GuangxiCrystalModule extends Module {
             pendingRotation = null;
             return;
         }
-        if (packet instanceof ClientboundExplodePacket) {
+        if (packet instanceof ClientboundExplodePacket explode) {
             long now = System.currentTimeMillis();
             explodeTimes.addLast(now);
             while (!explodeTimes.isEmpty() && now - explodeTimes.peekFirst() > 1000) explodeTimes.removeFirst();
+            // Explosion-echo placement: when the blast centre matches our last placed
+            // crystal slot (Obelisk uses dist^2 <= 144), the slot is confirmed free —
+            // zero the place cooldown so the next PreTick re-seeds immediately.
+            if (lastPlaceAir != null && Double.isFinite(explode.getX()) && Double.isFinite(explode.getY()) && Double.isFinite(explode.getZ())) {
+                double dx = explode.getX() - (lastPlaceAir.getX() + 0.5);
+                double dy = explode.getY() - (lastPlaceAir.getY() + 1.0);
+                double dz = explode.getZ() - (lastPlaceAir.getZ() + 0.5);
+                if (dx * dx + dy * dy + dz * dz <= 144.0) {
+                    placeTimer.reset();
+                    crystalPlaces.remove(lastPlaceAir.asLong());
+                }
+            }
             return;
         }
         if (packet instanceof ClientboundEntityEventPacket pkt) {
@@ -598,8 +708,6 @@ public class GuangxiCrystalModule extends Module {
         }
 
         if (packet instanceof ClientboundAddEntityPacket pkt) {
-            if (pkt.getType() == EntityType.END_CRYSTAL)
-                visuals.stageAt(BlockPos.containing(pkt.getX(),pkt.getY(),pkt.getZ()).below(), "SPAWN");
             entitySnapshotTick = -1;
             entitySnapshot = List.of();
             attackRetries.removed(pkt.getId());
@@ -742,9 +850,7 @@ public class GuangxiCrystalModule extends Module {
         crystal.setId(pkt.getId());
 
         AABB bb = crystal.getBoundingBox();
-        Vec3 reachEye = bestReachEye(bb);
-        if (sqDistToBox(reachEye, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ)
-                > breakRangeSq()) { instaGates[5]++; return; }
+        if (bestReachSq(bb) > breakRangeSq()) { instaGates[5]++; return; }
 
         if (rusherLogic() && !prepareRusherSword()) { instaGates[7]++; return; }
         if (rotate.getValue() && !aimBreakNow(crystal)) { instaGates[7]++; return; }
@@ -853,8 +959,6 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             lastBestDamage = 0;
             return;
         }
-        ensureSelfCache();
-        refreshEntitySnapshot();
         ownSwapPackets.set(0);
 
         if (weaponControlBusy()) {
@@ -881,6 +985,8 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         boolean canPlace = place.getValue() && placeReady && canSupplyCrystal();
         boolean canBase = basePlace.getValue() && placeReady && canSupplyObsidian();
         if (!canBreak && !canPlace && !canBase && !antiChineseReady) return;
+        ensureSelfCache();
+        refreshEntitySnapshot();
 
         long calculationTimer = ClientDiagnostics.startTimer();
         long calcStart = System.nanoTime();
@@ -924,7 +1030,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     Component.literal(String.format("AutoCrystal calc: %.3f ms", lastCalcMs)));
         }
 
+        // Waiting on the old cycle (placement pending or a live crystal still on the spot) is
+        // not "no valid site": do not spend another base on top of a cycle that may still
+        // complete. Bases are only laid when the search truly found nothing executable.
         boolean baseWins = baseTarget != null
+                && !(crystalTarget == null && placeSearchWaiting)
                 && (crystalTarget == null
                     || (crystalTarget.damage <= baseOverrideMax.getValue()
                         && baseTarget.damage > crystalTarget.damage));
@@ -984,6 +1094,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
         BlockPos playerPos = mc.player.blockPosition();
 
+        ensureMiningSnapshot();
         int topLayerY    = targetFeetY - 1;
         int bottomLayerY = playerPos.getY() - r;
         int lowerLayerCount = Math.max(0, topLayerY - bottomLayerY + 1);
@@ -1014,7 +1125,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     if (isBlocked(crystalPos)) continue;
 
                     if (playerCenter.distanceToSqr(basePos.getX() + 0.5, basePos.getY() + 0.5, basePos.getZ() + 0.5) > rangeSq) continue;
-                    if (!PlaceUtil.canPlace(basePos)) continue;
+                    if (!PlaceUtil.canPlace(basePos, range)) continue;
                     if (detectMining.getValue() && isBeingMinedNow(basePos)) continue;
 
                     if (sqDistToBox(eye, crystalPos.getX(), crystalPos.getY(), crystalPos.getZ(),
@@ -1023,8 +1134,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     Vec3 crystalCenter = new Vec3(crystalPos.getX() + 0.5, crystalPos.getY(), crystalPos.getZ() + 0.5);
                     double cMinX = crystalCenter.x - 1, cMinZ = crystalCenter.z - 1;
                     double cMaxX = crystalCenter.x + 1, cMaxY = crystalCenter.y + 2, cMaxZ = crystalCenter.z + 1;
-                    Vec3 breakEye = bestReachEye(new AABB(cMinX, crystalCenter.y, cMinZ, cMaxX, cMaxY, cMaxZ));
-                    if (sqDistToBox(breakEye, cMinX, crystalCenter.y, cMinZ, cMaxX, cMaxY, cMaxZ) > breakRangeSq()) continue;
+                    if (bestReachSq(cMinX, crystalCenter.y, cMinZ, cMaxX, cMaxY, cMaxZ) > breakRangeSq()) continue;
 
                     if (!anyTargetWithin(potentialTargets, crystalCenter, 144.0)) continue;
 
@@ -1095,8 +1205,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                         placeRangeValue(), placeRangeValue());
                 if (aim != null) {
                     float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), aim.getLocation());
-                    if (!GuizhouWare.rotationManager.tryAction(rotationOptions.request(
-                            "AutoCrystal_base", 60, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
+                    if (!sendLook(angles[0], angles[1])) return false;
                 }
             }
             return placeBaseShared(target.base, mc.player.getEyePosition(), mode, scope);
@@ -1143,14 +1252,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         double maxSelf = maxSelfDamage.getValue();
         double breakRangeSq = breakRangeSq();
 
-        AABB searchArea = mc.player.getBoundingBox().inflate(breakRangeValue() + 2);
-        for (Entity e : mc.level.getEntities(null, searchArea)) {
+        for (Entity e : snapshotEntities()) {
             if (!(e instanceof EndCrystal crystal)) continue;
             if (!crystalAttackEligible(crystal)) continue;
 
-            AABB bb = crystal.getBoundingBox();
-            Vec3 reachEye = bestReachEye(bb);
-            if (sqDistToBox(reachEye, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ) > breakRangeSq) continue;
+            if (bestReachSq(crystal.getBoundingBox()) > breakRangeSq) continue;
             if (!canPlanCrystalAttack(crystal)) continue;
 
             Vec3 cp = crystal.position();
@@ -1172,17 +1278,10 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (mc.gameMode == null || mc.getConnection() == null || weaponControlBusy()
                 || !crystalAttackEligible(crystal)
                 || !switchTimer.passedMs(tpsMs(switchPause.getValue()))) return false;
-        if (rotate.getValue()) {
-            Vec3 eyePos = mc.player.getEyePosition(1.0f);
-            Vec3 hit = getClosestPointToEye(eyePos, crystal.getBoundingBox());
-            float[] angles = MathUtil.calcAngle(eyePos, hit);
-            if (!canBreakCrystal(crystal, angles[0], angles[1])) return false;
-            if (!GuizhouWare.rotationManager.tryAction(rotationOptions.request(
-                "AutoCrystal_break", 60, angles[0], angles[1], RotationRequest.Mode.SILENT
-            ))) return false;
-        }
+        if (rusherLogic() && !prepareRusherSword()) return false;
+        if (rotate.getValue() && !aimBreakNow(crystal)) return false;
         acceptPendingRotation();
-        if ((rusherLogic() || rotate.getValue())
+        if (rotate.getValue()
                 && (!sentRotationKnown || !canBreakCrystal(crystal, sentYaw, sentPitch))) return false;
         return sendCrystalAttack(crystal, false);
     }
@@ -1233,7 +1332,8 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     /** Look packet on this tick. The following place or attack uses these angles. */
     private boolean sendLook(float yaw, float pitch) {
-        if (!GuizhouWare.rotationManager.tryAction(rotationOptions.request("AutoCrystal_break", 60, yaw, pitch, RotationRequest.Mode.SILENT))) return false;
+        if (!GuizhouWare.rotationManager.tryAction(new dev.guizhou.manager.RotationRequest(
+                "AutoCrystal_break", 60, yaw, pitch, dev.guizhou.manager.RotationRequest.Mode.SILENT, false, true))) return false;
         acceptPendingRotation();
         sentYaw = GuizhouWare.rotationManager.getServerYaw();
         sentPitch = GuizhouWare.rotationManager.getServerPitch();
@@ -1388,8 +1488,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     if (sqDistToBox(eyePos, bx, ay, bz, bx + 1, ay + 1, bz + 1) > placeRangeSq) { scanPlaceR++; continue; }
 
                     double cx = bx + 0.5, cy = by + 1.0, cz = bz + 0.5;
-                    Vec3 breakEye = bestReachEye(new AABB(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1));
-                    if (sqDistToBox(breakEye, cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq) { scanBreakR++; continue; }
+                    if (bestReachSq(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq) { scanBreakR++; continue; }
 
                     Vec3 crystalCenter = new Vec3(cx, cy, cz);
 
@@ -1416,6 +1515,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         }
 
         candidates.sort((a, b) -> Float.compare(b.bound, a.bound));
+        // DEFAULT must retain the descending bound order used by lock release and pruning.
+        // The old asynchronous hint only repeats last pass's bound maximum.
+        if (rusherLogic()) promoteRankedCandidate();
 
         BlockPos locked = null;
         if (lastPlaceAir != null) {
@@ -1423,8 +1525,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             boolean pending = lockTs != 0L && now - lockTs < pendingWindowMs();
             if (pending || hasLiveCrystalAt(lastPlaceAir)) {
                 double cx = lastPlaceAir.getX() + 0.5, cy = lastPlaceAir.getY(), cz = lastPlaceAir.getZ() + 0.5;
-                Vec3 lockEye = bestReachEye(new AABB(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1));
-                if (sqDistToBox(lockEye, cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) <= breakRangeSq) {
+                if (bestReachSq(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) <= breakRangeSq) {
                     locked = lastPlaceAir;
                 } else {
                     lastPlaceAir = null;
@@ -1434,19 +1535,17 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             }
         }
 
-        // Damage-aware lock release: the same-spot rhythm lock must not blind us to a clearly
-        // better position (upstream behaviour locked onto the old spot even at 6.9 vs 12.8 dmg).
+        // The lock only falls here when the old cycle's spot is no longer even a candidate
+        // (base gone, cell replaced). Otherwise challengers displace it inside the loop by
+        // final evaluated damage plus the margin, not by the optimistic unobstructed bound:
+        // a spot that merely bounds high but cannot actually be executed must not kill a
+        // working cycle.
         if (locked != null && !candidates.isEmpty()) {
-            float lockedBound = -1f;
+            boolean lockedPresent = false;
             for (int i = 0, n = candidates.size(); i < n; i++) {
-                if (candidates.get(i).airPos.equals(locked)) {
-                    lockedBound = candidates.get(i).bound;
-                    break;
-                }
+                if (candidates.get(i).airPos.equals(locked)) { lockedPresent = true; break; }
             }
-            if (lockedBound < 0f || candidates.get(0).bound > lockedBound + LOCK_RELEASE_MARGIN) {
-                locked = null;
-            }
+            if (!lockedPresent) locked = null;
         }
 
         PlaceTarget best = null;
@@ -1460,9 +1559,14 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
             if (best != null && c.bound <= best.damage - 1.0f) break;
 
             if (locked != null && !c.airPos.equals(locked)) {
-                if (c.bound > topRejectBound) { topRejectBound = c.bound; topReject = c.airPos + " locked"; }
-                rejLocked++;
-                continue;
+                // Only a candidate whose optimistic bound can beat the remembered final damage
+                // of the in-flight cycle by the margin is worth challenging with; acceptance
+                // below then compares the challenger's evaluated damage, never the bound.
+                if (c.bound <= lastPlaceDamage + LOCK_RELEASE_MARGIN) {
+                    if (c.bound > topRejectBound) { topRejectBound = c.bound; topReject = c.airPos + " locked"; }
+                    rejLocked++;
+                    continue;
+                }
             }
             LivingEntity faceEntity = entityOverlap.getValue() ? faceOverlapAllowed(c.airPos, potentialTargets) : null;
             if (faceEntity == null && isBlocked(c.airPos)) {
@@ -1505,7 +1609,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 rejBal++;
                 continue;
             }
-            boolean higherDamage = best == null || totalDmg > best.damage;
+            boolean higherDamage = best == null
+                    ? locked == null || totalDmg > lastPlaceDamage + LOCK_RELEASE_MARGIN
+                    : totalDmg > best.damage;
             // Spots within 1 damage keep the one closer to the eye. A far crystal that is
             // barely stronger is harder to rotate onto and harder to break.
             boolean closerTie = best != null && totalDmg > best.damage - 1.0f
@@ -1518,10 +1624,33 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                 bestCenter = c.crystalCenter;
             }
         }
+        // A null result with the lock still held means "the old cycle owns this tick", not
+        // "there is no usable site around here"; the base branch must not read it as the latter.
+        placeSearchWaiting = locked != null && best == null;
         logPlacePick(best, topReject, topRejectBound,
                 scanAir, scanPlaceR, scanBreakR, scanLowBound,
                 rejLocked, rejBlocked, rejPending, rejSelf, rejMin, rejBal);
         return best;
+    }
+
+    /** Last tick's copied bounds are ranked off-thread. A stale cell is only moved forward; exact checks still run. */
+    private void promoteRankedCandidate() {
+        if (candidates.isEmpty()) return;
+        long hint = placeRank.poll(1L);
+        if (hint != Long.MIN_VALUE) {
+            for (int i = 1; i < candidates.size(); i++) {
+                if (candidates.get(i).airPos.asLong() != hint) continue;
+                candidates.add(0, candidates.remove(i));
+                break;
+            }
+        }
+        float[] scores = new float[candidates.size()];
+        long[] cells = new long[candidates.size()];
+        for (int i = 0; i < candidates.size(); i++) {
+            scores[i] = candidates.get(i).bound;
+            cells[i] = candidates.get(i).airPos.asLong();
+        }
+        placeRank.submit(1L, scores, cells);
     }
 
     /** Position-level place-decision diagnostics, printed when PacketLog is on (1 in 10 decisions). */
@@ -1591,11 +1720,22 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     private final Set<BlockPos> miningCheck = new HashSet<>();
 
-    private boolean isBeingMinedNow(BlockPos pos) {
-        GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
-        if (mine == null || !mine.isEnabled()) return false;
+    private int miningSnapshotTick = Integer.MIN_VALUE;
+
+    /** One mining snapshot per tick; base-place used to rebuild it for every candidate. */
+    private void ensureMiningSnapshot() {
+        int tick = mc.player.tickCount;
+        if (miningSnapshotTick == tick) return;
+        miningSnapshotTick = tick;
         miningCheck.clear();
+        if (!detectMining.getValue()) return;
+        GuangxiMineModule mine = GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class);
+        if (mine == null || !mine.isEnabled()) return;
         mine.collectMiningPositions(miningCheck, 0.0);
+    }
+
+    private boolean isBeingMinedNow(BlockPos pos) {
+        ensureMiningSnapshot();
         return miningCheck.contains(pos);
     }
 
@@ -1644,8 +1784,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
                     if (sqDistToBox(eyePos, bx, ay, bz, bx + 1, ay + 1, bz + 1) > placeRangeSq) continue;
 
                     double cx = bx + 0.5, cy = by + 1.0, cz = bz + 0.5;
-                    Vec3 breakEye = bestReachEye(new AABB(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1));
-                    if (sqDistToBox(breakEye, cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq) continue;
+                    if (bestReachSq(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq) continue;
 
                     Vec3 crystalCenter = new Vec3(cx, cy, cz);
 
@@ -1676,14 +1815,12 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
         EndCrystal best = null;
         double bestDist = Double.MAX_VALUE;
-        AABB searchArea = mc.player.getBoundingBox().inflate(breakRangeValue() + 2);
-        for (Entity e : mc.level.getEntities(null, searchArea)) {
+        for (Entity e : snapshotEntities()) {
             if (!(e instanceof EndCrystal crystal)) continue;
             if (!crystalAttackEligible(crystal)) continue;
 
             AABB bb = crystal.getBoundingBox();
-            Vec3 reachEye = bestReachEye(bb);
-            if (sqDistToBox(reachEye, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ) > breakRangeSq) continue;
+            if (bestReachSq(bb) > breakRangeSq) continue;
             if (!canPlanCrystalAttack(crystal)) continue;
 
             Vec3 cp = crystal.position();
@@ -1846,6 +1983,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     private boolean doPlace(PlaceTarget target, boolean trustBase) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        AutoTotemModule.holdForCombat(Items.END_CRYSTAL);
         boolean holdingCrystal = mc.player.getMainHandItem().is(Items.END_CRYSTAL)
                 || mc.player.getOffhandItem().is(Items.END_CRYSTAL);
         if (autoSwap.getValue() == AutoSwapMode.NONE) {
@@ -1880,20 +2018,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (hit == null) return false;
         if (rotate.getValue()) {
             float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
-            if (!GuizhouWare.rotationManager.tryAction(rotationOptions.request(
-                    "AutoCrystal_place", 60, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
+            if (!sendLook(angles[0], angles[1])) return false;
         }
         boolean sent = placeCrystalShared(target.base, trustBase, target.faceEntity(), options, null);
         if (sent) {
+            lastReactorPlaceTick = mc.player.tickCount;
             diagPlaceSent++;
-            recordPlace(air);
-            if (renderMode.getValue() != RenderMode.NONE) {
-                BlockPos base = air.below();
-                Vec3 source = Vec3.atBottomCenterOf(air);
-                visuals.main(base, new AABB(base), Vec3.atCenterOf(base),
-                        target.damage > 0 ? target.damage : Float.NaN,
-                        calcDamageSelf(source, trustBase ? base : null), "WAIT");
-            }
+            recordPlace(air, target.damage);
             // The spawn for this placement takes the next sequential entity id.
             sendGhostAttacksAfter(lastMaxEntityId);
         }
@@ -1913,6 +2044,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     public boolean placeCrystalShared(BlockPos base, boolean trustBase, LivingEntity faceEntity) {
         return placeCrystalShared(base, trustBase, faceEntity,
                 dev.guizhou.manager.PlacementManager.CrystalOptions.DEFAULT, null);
+    }
+
+    /** Partner modules (GuangxiTP) preflight: crystal supply plus the shared weapon-control pause. */
+    public boolean partnerCanPlaceCrystal() {
+        return canSupplyCrystal() && !weaponControlBusy();
     }
 
     /** Same placement path, from a caller-supplied eye (GuangxiTP desync). */
@@ -1957,10 +2093,11 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         };
     }
 
-    private void recordPlace(BlockPos airPos) {
+    private void recordPlace(BlockPos airPos, float damage) {
         crystalPlaces.put(airPos.asLong(), System.currentTimeMillis());
-        markDamage(airPos);
+        markRender(airPos);
         lastPlaceAir = airPos;
+        lastPlaceDamage = damage;
     }
 
     private boolean hasLiveCrystalAt(BlockPos airPos) {
@@ -2012,8 +2149,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (sqDistToBox(eye, bx, by, bz, bx + 1, by + 1, bz + 1) > placeRangeSq()) return false;
 
         double cx = bx + 0.5, cy = by, cz = bz + 0.5;
-        if (sqDistToBox(bestReachEye(new AABB(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1)),
-                cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq()) return false;
+        if (bestReachSq(cx - 1, cy, cz - 1, cx + 1, cy + 2, cz + 1) > breakRangeSq()) return false;
 
         Vec3 crystalCenter = new Vec3(cx, cy, cz);
         float playerHealth = selfNow().health();
@@ -2167,6 +2303,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         cachedChunkX = cachedChunkZ = Integer.MIN_VALUE;
         selfDamageCache.clear();
         targetDamageCache.clear();
+        exposurePass.reset();
 
         float health = mc.player.getHealth() + mc.player.getAbsorptionAmount();
         var baseSnapshot = CombatSnapshotService.get(mc.player);
@@ -2275,62 +2412,15 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private double calcExposure(Vec3 source, AABB box, BlockPos phantomObsidianPos, boolean projected) {
-        double dx = box.getXsize();
-        double dy = box.getYsize();
-        double dz = box.getZsize();
-        double stepX = 1.0 / (dx * 2.0 + 1.0);
-        double stepY = 1.0 / (dy * 2.0 + 1.0);
-        double stepZ = 1.0 / (dz * 2.0 + 1.0);
-        if (stepX <= 0 || stepY <= 0 || stepZ <= 0) return 0;
-        double offsetX = (1.0 - Math.floor(1.0 / stepX) * stepX) / 2.0;
-        double offsetZ = (1.0 - Math.floor(1.0 / stepZ) * stepZ) / 2.0;
-        int total = 0;
-        int unblocked = 0;
-
-        ExposureContext ctx = exposureCtx;
-        BiFunction<ExposureContext, BlockPos, BlockHitResult> tester = (c, pos) -> {
-            Vec3 from = c.start, to = c.end;
-            if (phantomObsidianPos != null && pos.equals(phantomObsidianPos)) {
-                return Shapes.block().clip(from, to, pos);
-            }
-
-            if (projected && !seeThrough.isEmpty() && seeThrough.contains(pos)) return null;
-            BlockState state = getStateFast(pos);
-            if (state.isAir()) return null;
-
-            if (projected && blockDestruction.getValue() && state.getBlock().getExplosionResistance() < EXPLODABLE_RESISTANCE) return null;
-
-            VoxelShape shape = state.getCollisionShape(mc.level, pos);
-            if (shape.isEmpty()) return null;
-            return shape.clip(from, to, pos);
-        };
-
-        for (double xi = 0; xi <= 1.0; xi += stepX) {
-            for (double yi = 0; yi <= 1.0; yi += stepY) {
-                for (double zi = 0; zi <= 1.0; zi += stepZ) {
-                    Vec3 point = new Vec3(
-                        box.minX + dx * xi + offsetX,
-                        box.minY + dy * yi,
-                        box.minZ + dz * zi + offsetZ
-                    );
-                    ctx.set(point, source);
-                    if (BlockGetter.traverseBlocks(point, source, ctx, tester, c -> null) == null) unblocked++;
-                    total++;
-                }
-            }
-        }
-        ClientDiagnostics.count("combat.GuangxiCrystal.rays", total);
-        return total == 0 ? 0 : (double) unblocked / total;
-    }
-
-    private static final class ExposureContext {
-        private Vec3 start = Vec3.ZERO;
-        private Vec3 end = Vec3.ZERO;
-
-        void set(Vec3 start, Vec3 end) {
-            this.start = start;
-            this.end = end;
-        }
+        ClientDiagnostics.count("combat.GuangxiCrystal.exposure", 1);
+        return exposurePass.exposure(source, box, pos -> {
+            if (pos.equals(phantomObsidianPos)) return Shapes.block();
+            if (projected && seeThrough.contains(pos)) return Shapes.empty();
+            if (projected && blockDestruction.getValue()
+                    && exposurePass.stateAt(pos).getBlock().getExplosionResistance() < EXPLODABLE_RESISTANCE)
+                return Shapes.empty();
+            return exposurePass.shapeAt(pos);
+        }, "combat.GuangxiCrystal.rays");
     }
 
     private double getDynamicMin(float health, float absorption, boolean armorBroken) {
@@ -2401,7 +2491,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     public String getMeta() {
         long now = System.currentTimeMillis();
         while (!explodeTimes.isEmpty() && now - explodeTimes.peekFirst() > 1000) explodeTimes.removeFirst();
-        return rusherLogic() ? String.valueOf(explodeTimes.size()) : "爆炸 " + explodeTimes.size() + "/s";
+        return rusherLogic() ? String.valueOf(explodeTimes.size()) : dev.guizhou.util.lang.ClientLanguage.text("爆炸 ") + explodeTimes.size() + "/s";
     }
 
     private record PlaceTarget(BlockPos base, float damage, LivingEntity faceEntity) {
@@ -2432,31 +2522,73 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         return section.getBlockState(pos.getX() & 15, pos.getY() & 15, pos.getZ() & 15);
     }
 
-    private Vec3 bestReachEye(AABB box) {
+    private int reachEyeTick = Integer.MIN_VALUE;
+    private double reachX0, reachY0, reachZ0;
+    private double reachX1, reachY1, reachZ1;
+    private double reachX2, reachY2, reachZ2;
+    private double reachX3, reachY3, reachZ3;
+
+    /** Eye poses are stable for a tick; the place scan used to rebuild them per block. */
+    private void ensureReachEyes() {
+        int tick = mc.player.tickCount;
+        if (tick == reachEyeTick) return;
+        reachEyeTick = tick;
         Vec3 base = mc.player.getEyePosition(1.0f);
+        Vec3 pos = mc.player.position();
         float scale = (float) mc.player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
         double standing = 1.62 * scale;
         double sneaking = 1.27 * scale;
-        double swimming = 0.4  * scale;
-
-        Vec3 pos = mc.player.position();
-        double[] heights;
-        Pose pose = mc.player.getPose();
-        switch (pose) {
+        double swimming = 0.4 * scale;
+        double h1, h2, h3;
+        switch (mc.player.getPose()) {
             case FALL_FLYING:
             case SPIN_ATTACK:
-            case SWIMMING:    heights = new double[]{swimming, standing, sneaking}; break;
-            case CROUCHING:   heights = new double[]{sneaking, standing, swimming}; break;
-            default:          heights = new double[]{standing, sneaking, swimming};
+            case SWIMMING:
+                h1 = swimming; h2 = standing; h3 = sneaking; break;
+            case CROUCHING:
+                h1 = sneaking; h2 = standing; h3 = swimming; break;
+            default:
+                h1 = standing; h2 = sneaking; h3 = swimming; break;
         }
+        reachX0 = base.x; reachY0 = base.y; reachZ0 = base.z;
+        reachX1 = pos.x; reachY1 = pos.y + h1; reachZ1 = pos.z;
+        reachX2 = pos.x; reachY2 = pos.y + h2; reachZ2 = pos.z;
+        reachX3 = pos.x; reachY3 = pos.y + h3; reachZ3 = pos.z;
+    }
 
-        Vec3 bestEye = base;
-        double bestSq = sqDistToBox(base, box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ);
-        for (double h : heights) {
-            Vec3 e = new Vec3(pos.x, pos.y + h, pos.z);
-            double sq = sqDistToBox(e, box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ);
-            if (sq < bestSq) { bestSq = sq; bestEye = e; }
-        }
-        return bestEye;
+    private double bestReachSq(AABB box) {
+        return bestReachSq(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ);
+    }
+
+    private double bestReachSq(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
+        ensureReachEyes();
+        double best = sqDistRaw(reachX0, reachY0, reachZ0, minX, minY, minZ, maxX, maxY, maxZ);
+        best = Math.min(best, sqDistRaw(reachX1, reachY1, reachZ1, minX, minY, minZ, maxX, maxY, maxZ));
+        best = Math.min(best, sqDistRaw(reachX2, reachY2, reachZ2, minX, minY, minZ, maxX, maxY, maxZ));
+        return Math.min(best, sqDistRaw(reachX3, reachY3, reachZ3, minX, minY, minZ, maxX, maxY, maxZ));
+    }
+
+    private static double sqDistRaw(double x, double y, double z,
+                                    double minX, double minY, double minZ,
+                                    double maxX, double maxY, double maxZ) {
+        double dx = x < minX ? minX - x : (x > maxX ? x - maxX : 0);
+        double dy = y < minY ? minY - y : (y > maxY ? y - maxY : 0);
+        double dz = z < minZ ? minZ - z : (z > maxZ ? z - maxZ : 0);
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    private Vec3 bestReachEye(AABB box) {
+        ensureReachEyes();
+        double minX = box.minX, minY = box.minY, minZ = box.minZ;
+        double maxX = box.maxX, maxY = box.maxY, maxZ = box.maxZ;
+        double bestX = reachX0, bestY = reachY0, bestZ = reachZ0;
+        double bestSq = sqDistRaw(bestX, bestY, bestZ, minX, minY, minZ, maxX, maxY, maxZ);
+        double sq = sqDistRaw(reachX1, reachY1, reachZ1, minX, minY, minZ, maxX, maxY, maxZ);
+        if (sq < bestSq) { bestSq = sq; bestX = reachX1; bestY = reachY1; bestZ = reachZ1; }
+        sq = sqDistRaw(reachX2, reachY2, reachZ2, minX, minY, minZ, maxX, maxY, maxZ);
+        if (sq < bestSq) { bestSq = sq; bestX = reachX2; bestY = reachY2; bestZ = reachZ2; }
+        sq = sqDistRaw(reachX3, reachY3, reachZ3, minX, minY, minZ, maxX, maxY, maxZ);
+        if (sq < bestSq) { bestX = reachX3; bestY = reachY3; bestZ = reachZ3; }
+        return new Vec3(bestX, bestY, bestZ);
     }
 }

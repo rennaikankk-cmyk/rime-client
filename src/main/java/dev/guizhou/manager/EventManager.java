@@ -29,12 +29,24 @@ public class EventManager extends Feature {
         if (nullCheck())
             return;
         GuizhouWare.moduleManager.onTick();
+        if (deathLevel != mc.level) {
+            deathLevel = mc.level;
+            dead.clear();
+        }
+        // One DeathEvent per death: the death animation keeps health at 0 for ~20 ticks.
+        java.util.Set<Integer> stillDead = new java.util.HashSet<>();
         for (Player player : mc.level.players()) {
             if (player == null || player.getHealth() > 0.0F)
                 continue;
-            EVENT_BUS.post(new DeathEvent(player));
+            stillDead.add(player.getId());
+            if (!dead.contains(player.getId())) EVENT_BUS.post(new DeathEvent(player));
         }
+        dead.clear();
+        dead.addAll(stillDead);
     }
+
+    private final java.util.Set<Integer> dead = new java.util.HashSet<>();
+    private Object deathLevel;
 
     @Subscribe(priority = 100)
     public void onUpdateWalkingPlayer(UpdateWalkingPlayerEvent event) {

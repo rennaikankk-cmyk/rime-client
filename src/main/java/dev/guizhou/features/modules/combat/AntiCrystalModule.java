@@ -38,30 +38,29 @@ public final class AntiCrystalModule extends Module {
     private String status;
     public AntiCrystalModule() {
         super("AntiCrystal", "用实体占据周围水晶位置，巡航和空战时自动让行。", Category.COMBAT);
-        displayName.setValue("防水晶占位");
     }
     @Override public void onDisable() { nextTick = 0; status = null; ItemUseTracker.cancel("AntiCrystal"); }
     @Override public String getDisplayInfo() { return status; }
     @Subscribe private void onTick(TickEvent event) {
-        if (!HeartbeatManager.authorized()) { status = "授权不可用"; return; }
+        if (!HeartbeatManager.authorized()) { status = dev.guizhou.util.lang.ClientLanguage.text("授权不可用"); return; }
         if (sessionPlayer != mc.player || sessionLevel != mc.level) {
             nextTick = 0; sessionPlayer = mc.player; sessionLevel = mc.level;
         }
         status = UtilityActionGuard.pauseReason();
         if (status != null) return;
         var crystal = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
-        if (yieldCrystal.getValue() && crystal != null && crystal.isEnabled()) { status = "自动水晶优先"; return; }
-        if (ItemUseTracker.waiting("AntiCrystal")) { status = "等待动作确认"; return; }
-        if (mc.player.tickCount < nextTick) { status = "冷却"; return; }
-        if (enemyOnly.getValue() && !ThrowEnvironment.nearEnemy(6)) { status = "等待敌人"; return; }
+        if (yieldCrystal.getValue() && crystal != null && crystal.isEnabled()) { status = dev.guizhou.util.lang.ClientLanguage.text("自动水晶优先"); return; }
+        if (ItemUseTracker.waiting("AntiCrystal")) { status = dev.guizhou.util.lang.ClientLanguage.text("等待动作确认"); return; }
+        if (mc.player.tickCount < nextTick) { status = dev.guizhou.util.lang.ClientLanguage.text("冷却"); return; }
+        if (enemyOnly.getValue() && !ThrowEnvironment.nearEnemy(6)) { status = dev.guizhou.util.lang.ClientLanguage.text("等待敌人"); return; }
         var item = InventoryUtil.find(this::suitable, InventoryUtil.FULL_SCOPE);
-        if (!item.found()) { status = "缺少可用物品"; return; }
+        if (!item.found()) { status = dev.guizhou.util.lang.ClientLanguage.text("缺少可用物品"); return; }
         BlockHitResult hit = findBase();
-        if (hit == null) { status = "周围无空位"; return; }
+        if (hit == null) { status = dev.guizhou.util.lang.ClientLanguage.text("周围无空位"); return; }
         float[] aim = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
         if (ItemUseTracker.use("AntiCrystal", item, aim[0], aim[1], method.getValue() == Method.Crossbow ? null : hit)) {
-            nextTick = mc.player.tickCount + delay.getValue(); status = "已提交占位";
-        } else status = "动作暂缓";
+            nextTick = mc.player.tickCount + delay.getValue(); status = dev.guizhou.util.lang.ClientLanguage.text("已提交占位");
+        } else status = dev.guizhou.util.lang.ClientLanguage.text("动作暂缓");
     }
     private boolean suitable(ItemStack stack) {
         return switch (method.getValue()) {

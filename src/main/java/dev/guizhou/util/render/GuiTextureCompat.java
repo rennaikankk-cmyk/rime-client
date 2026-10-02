@@ -4,6 +4,10 @@ import net.minecraft.resources.ResourceLocation;
 /** Tinted GUI textures using the immediate 1.21.1 GUI renderer. */
 public final class GuiTextureCompat {
     private GuiTextureCompat() {}
+    public static void blit(GuiGraphics g, ResourceLocation texture, int x, int y, float u, float v,
+                            int w, int h, int tw, int th) {
+        blit(g, texture, x, y, u, v, w, h, tw, th, 0xFFFFFFFF);
+    }
     private static void tint(GuiGraphics g, int color) {
         color = GuiFade.apply(color);
         g.setColor((color >> 16 & 255) / 255f, (color >> 8 & 255) / 255f, (color & 255) / 255f, (color >>> 24) / 255f);

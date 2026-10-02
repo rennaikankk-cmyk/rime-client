@@ -11,6 +11,9 @@ public record CommandUsage(String syntax, String note) {
         note = note == null ? "" : note.strip();
     }
 
+    public String syntax() { return dev.guizhou.util.lang.ClientLanguage.text(syntax); }
+    public String note() { return dev.guizhou.util.lang.ClientLanguage.text(note); }
+
     public String fill() {
         int cut = syntax.length();
         for (char marker : new char[]{'<', '[', '('}) {
@@ -21,6 +24,6 @@ public record CommandUsage(String syntax, String note) {
     }
 
     public String render(String prefix, String command) {
-        return syntax.isEmpty() ? prefix + command : prefix + command + " " + syntax;
+        return syntax.isEmpty() ? prefix + command : prefix + command + " " + syntax();
     }
 }

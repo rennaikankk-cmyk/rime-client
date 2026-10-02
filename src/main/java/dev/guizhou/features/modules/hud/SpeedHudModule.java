@@ -55,7 +55,7 @@ public class SpeedHudModule extends HudModule {
         int ox = o[0], oy = o[1];
 
         HudDraw.card(g, ox, oy, cardW, H, HudDraw.RADIUS);
-        HudDraw.textMid(g, "速度", ox + PAD, oy + 8f, LABEL, HudFonts.SEMI, ShadcnDraw.MUTED);
+        HudDraw.textMid(g, dev.guizhou.util.lang.ClientLanguage.text("速度"), ox + PAD, oy + 8f, LABEL, HudFonts.SEMI, ShadcnDraw.MUTED);
         HudDraw.textMid(g, shown, ox + PAD, oy + 18.5f, VALUE, HudFonts.BOLD, ShadcnDraw.TEXT);
         HudDraw.textMid(g, "b/s", ox + PAD + textW + 3f, oy + 19.5f, UNIT, HudFonts.REGULAR, ShadcnDraw.SUBTLE);
 

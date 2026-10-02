@@ -15,7 +15,6 @@ import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.inventory.SwapMode;
 import dev.guizhou.util.render.RenderUtil;
-import dev.guizhou.util.render.placement.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
@@ -76,13 +75,6 @@ public class AutoMineModule extends Module {
             .setVisibility(v -> glassRender.getValue());
     private final Setting<Boolean> renderDebugScores = bool("DebugScores", false).setPage("Render");
 
-    private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, false, false, false);
-    private final PlacementVisuals mineVisuals = new PlacementVisuals("自动挖");
-    private final PlacementVisuals glassVisuals = new PlacementVisuals("补玻璃");
-    private final Setting<Boolean> targetRender = bool("TargetRender", true).setPage("Render");
-    private final Setting<Boolean> scoreText = bool("ScoreText", false).setPage("Render");
-    private final Setting<Float> lineWidth = num("LineWidth", 1.5f, .5f, 5f).setPage("Render");
-    private final Setting<Color> targetColor = color("TargetColor", 255, 180, 95, 160).setPage("Render");
     private Player targetPlayer = null;
     private CityBlock target1 = null;
     private CityBlock target2 = null;
@@ -98,6 +90,11 @@ public class AutoMineModule extends Module {
     private GlassStage glassStage = GlassStage.Idle;
     private int glassStageAge;
     private final List<CityBlock> debugScores = new ArrayList<>();
+    private final List<BlockPos> feetCells = new ArrayList<>();
+    private int feetCacheTick = Integer.MIN_VALUE;
+    private int feetCacheId = Integer.MIN_VALUE;
+    private boolean singleFootCell;
+    private boolean feetOnBedrock;
     private volatile long lifecycleGeneration;
     private net.minecraft.client.multiplayer.ClientLevel sessionLevel;
     private net.minecraft.client.player.LocalPlayer sessionPlayer;
@@ -108,7 +105,7 @@ public class AutoMineModule extends Module {
     private final GuangxiMineModule.MineFinishListener finishListener = this::onMineFinish;
 
     public AutoMineModule() {
-        super("AutoMine", "Automatically mines feasible target blocks. Requires GuangxiMine.", Category.COMBAT);
+        super("AutoMine", "Automatically mines feasible target blocks. Requires PacketMine.", Category.COMBAT);
         antiSurroundInnerSnap.setVisibility(v -> antiSurroundMode.getValue() == AntiSurroundMode.Auto
                 || antiSurroundMode.getValue() == AntiSurroundMode.Inner);
         antiSurroundOuterSnap.setVisibility(v -> antiSurroundMode.getValue() == AntiSurroundMode.Auto
@@ -147,8 +144,6 @@ public class AutoMineModule extends Module {
         enemyBreaking.clear();
         resetGlass();
         glassRenderPos = null;
-        glassVisuals.clear();
-        mineVisuals.clear();
         debugScores.clear();
         sessionLevel = null;
         sessionPlayer = null;
@@ -253,8 +248,6 @@ public class AutoMineModule extends Module {
             enemyBreaking.clear();
             resetGlass();
             glassRenderPos = null;
-            glassVisuals.clear();
-            mineVisuals.clear();
             return;
         }
         ensureSession();
@@ -272,8 +265,6 @@ public class AutoMineModule extends Module {
         debugScores.clear();
         resetGlass();
         glassRenderPos = null;
-        glassVisuals.clear();
-        mineVisuals.clear();
         lastOuterPlaceTime = 0;
         sessionLevel = mc.level;
         sessionPlayer = mc.player;
@@ -461,8 +452,6 @@ public class AutoMineModule extends Module {
             mine.holdRebreak(pos, glassWaitTicks.getValue());
             glassRenderPos = pos.immutable();
             glassRenderStart = System.currentTimeMillis();
-            if (glassRender.getValue()) glassVisuals.main(glassRenderPos, new AABB(glassRenderPos), Vec3.atCenterOf(glassRenderPos),
-                    Float.NaN, Float.NaN, "PL");
         }
     }
 
@@ -590,6 +579,7 @@ public class AutoMineModule extends Module {
         if (rebreak == null || !blockPos.equals(rebreak)) return false;
 
         if (inBedrock) {
+            ensureFeetCache();
             boolean isSelfTrapBlock = false;
             for (Direction dir : HORIZONTAL) {
                 if (targetPlayer.blockPosition().above().relative(dir).equals(blockPos)) {
@@ -598,7 +588,7 @@ public class AutoMineModule extends Module {
                 }
             }
             boolean canFacePlace = mc.level.getBlockState(targetPlayer.blockPosition().above()).isAir();
-            return BlockPos.betweenClosedStream(targetFeetBox()).count() == 1
+            return singleFootCell
                     && (blockPos.equals(targetPlayer.blockPosition().above(2))
                             || (isSelfTrapBlock && canFacePlace));
         } else {
@@ -775,7 +765,8 @@ public class AutoMineModule extends Module {
             score += 10;
         }
 
-        if (BlockPos.betweenClosedStream(targetFeetBox()).count() == 1) {
+        ensureFeetCache();
+        if (singleFootCell) {
             boolean canMineFaceBlock = !mc.level.getBlockState(targetPlayer.blockPosition().above()).is(Blocks.BEDROCK);
             if (canMineFaceBlock) {
                 if (blockPos.equals(targetPlayer.blockPosition().above())) {
@@ -804,31 +795,21 @@ public class AutoMineModule extends Module {
 
     @Override
     public void onRender3D(Render3DEvent event) {
-        if (nullCheck() || sessionLevel != mc.level || sessionPlayer != mc.player) { mineVisuals.clear(); glassVisuals.clear(); return; }
-        if (targetRender.getValue()) {
-            showMineTarget(target1,"主目标"); showMineTarget(target2,"副目标");
-            Color c=targetColor.getValue();
-            mineVisuals.render(event,visualOptions,new Color(c.getRed(),c.getGreen(),c.getBlue(),35),c,lineWidth.getValue(),.25);
-        } else mineVisuals.clear();
-        if (glassRender.getValue()) {
-            if (glassStage == GlassStage.AwaitBreak) glassVisuals.stage("main","MINE");
-            glassVisuals.render(event,visualOptions,glassFillColor.getValue(),glassOutlineColor.getValue(),lineWidth.getValue(),glassFadeTime.getValue());
-        } else glassVisuals.clear();
-    }
+        if (nullCheck() || !glassRender.getValue() || glassRenderPos == null) return;
 
-    private void showMineTarget(CityBlock selected,String role) {
-        if(selected==null) return;
-        BlockPos p=selected.blockPos;
-        var mine=speedMine();
-        if (mc.level.getBlockState(p).isAir()) { mineVisuals.stage(role,"DONE"); return; }
-        String type=switch(selected.type) {
-            case Feet -> "FT"; case Surround -> "SR"; case Extend -> "EX";
-            case FacePlace -> "FP"; case Head -> "HD"; case Below -> "BL"; case TerrainBase -> "BS";
-        };
-        String state=mine!=null && mine.isMining(p)?"MINE":"WAIT";
-        mineVisuals.mark(role,new AABB(p),p,Vec3.atCenterOf(p),Float.NaN,Float.NaN,
-                state,true,null);
-        mineVisuals.info(role,scoreText.getValue()?String.format(java.util.Locale.ROOT,type+" SC%.1f",selected.score):type);
+        long age = System.currentTimeMillis() - glassRenderStart;
+        double fadeMs = glassFadeTime.getValue() * 1000.0;
+        if (age > fadeMs) {
+            glassRenderPos = null;
+            return;
+        }
+        double t = age / fadeMs;
+        Color fc = glassFillColor.getValue();
+        Color oc = glassOutlineColor.getValue();
+        RenderUtil.drawBoxFilled(event.getMatrix(), glassRenderPos,
+                new Color(fc.getRed(), fc.getGreen(), fc.getBlue(), (int) (fc.getAlpha() * (1 - t))));
+        RenderUtil.drawBox(event.getMatrix(), glassRenderPos,
+                new Color(oc.getRed(), oc.getGreen(), oc.getBlue(), (int) (oc.getAlpha() * (1 - t))), 1.5f);
     }
 
     @Subscribe
@@ -842,11 +823,7 @@ public class AutoMineModule extends Module {
         for (CityBlock cp : debugScores) {
             double s = cp.score;
             int alpha = (int) Math.min(200, Math.max(20, 200 * (s / bestScore)));
-            RenderUtil.placementBox(new AABB(cp.blockPos), new Color(0,0,0,0), new Color(255,40,40,alpha),1.0f,
-                    visualOptions.occlusion.getValue() == PlacementVisualOptions.Occlusion.THROUGH,false,true);
-            if (visualOptions.occlusion.getValue() == PlacementVisualOptions.Occlusion.FADED)
-                RenderUtil.placementBox(new AABB(cp.blockPos), new Color(0,0,0,0),
-                        new Color(255,40,40,(int)(alpha*visualOptions.hiddenAlpha.getValue())),1.0f,true,false,true);
+            RenderUtil.drawBox(event.getMatrix(), cp.blockPos, new Color(255, 40, 40, alpha), 1.0f);
         }
     }
 
@@ -861,17 +838,34 @@ public class AutoMineModule extends Module {
         return new AABB(bb.minX, feetY, bb.minZ, bb.maxX, feetY + 0.1, bb.maxZ);
     }
 
+    private void ensureFeetCache() {
+        if (targetPlayer == null || mc.player == null) return;
+        int tick = mc.player.tickCount;
+        int id = targetPlayer.getId();
+        if (tick == feetCacheTick && id == feetCacheId) return;
+        feetCacheTick = tick;
+        feetCacheId = id;
+        feetCells.clear();
+        feetOnBedrock = false;
+        int n = 0;
+        for (BlockPos raw : iterate(targetFeetBox())) {
+            BlockPos cell = raw.immutable();
+            feetCells.add(cell);
+            n++;
+            if (mc.level.getBlockState(cell).is(Blocks.BEDROCK)) feetOnBedrock = true;
+        }
+        singleFootCell = n == 1;
+    }
+
     private boolean inBedrockCase() {
-        return BlockPos.betweenClosedStream(targetFeetBox())
-                .anyMatch(bp -> mc.level.getBlockState(bp).is(Blocks.BEDROCK));
+        ensureFeetCache();
+        return feetOnBedrock;
     }
 
     private boolean isBlockInFeet(BlockPos blockPos) {
-        AABB feetBox = targetFeetBox();
-        for (BlockPos pos : BlockPos.betweenClosed(
-                Mth.floor(feetBox.minX), Mth.floor(feetBox.minY), Mth.floor(feetBox.minZ),
-                Mth.floor(feetBox.maxX), Mth.floor(feetBox.maxY), Mth.floor(feetBox.maxZ))) {
-            if (blockPos.equals(pos)) return true;
+        ensureFeetCache();
+        for (int i = 0, n = feetCells.size(); i < n; i++) {
+            if (blockPos.equals(feetCells.get(i))) return true;
         }
         return false;
     }

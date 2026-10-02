@@ -34,9 +34,9 @@ public final class WaypointMath {
     }
 
     public static String shortDimension(String dimension) {
-        if (NETHER.equals(dimension)) return "下界";
-        if (END.equals(dimension)) return "末地";
-        if (OVERWORLD.equals(dimension)) return "主世界";
+        if (NETHER.equals(dimension)) return dev.guizhou.util.lang.ClientLanguage.text("下界");
+        if (END.equals(dimension)) return dev.guizhou.util.lang.ClientLanguage.text("末地");
+        if (OVERWORLD.equals(dimension)) return dev.guizhou.util.lang.ClientLanguage.text("主世界");
         int colon = dimension == null ? -1 : dimension.indexOf(':');
         return dimension == null ? "?" : colon >= 0 ? dimension.substring(colon + 1) : dimension;
     }

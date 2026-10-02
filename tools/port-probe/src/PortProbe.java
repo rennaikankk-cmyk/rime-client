@@ -5,6 +5,7 @@ public final class PortProbe implements net.fabricmc.api.ClientModInitializer {
   case "font" -> new FontProbe().onInitializeClient();
   case "ui" -> new CombatUiProbe().onInitializeClient();
   case "mace" -> new CombatProbe().onInitializeClient();
+  case "offhand" -> new OffhandProbe().onInitializeClient();
   default -> throw new IllegalArgumentException("Unknown probe");
  } }
 }

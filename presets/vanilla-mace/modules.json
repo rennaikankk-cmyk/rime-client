@@ -1,11 +1,17 @@
 {
   "GuangxiElytra": {
     "Enabled": "false",
+    "FlightMode": "CONTROL",
+    "MotionLerp": "1.0",
+    "Takeoff": "true",
     "TerrainGuard": "true",
+    "SafeLanding": "true",
+    "LegacyVerticalBoost": "false",
+    "GrimBoost": "false",
     "Mode": "NoAC",
     "SpeedBps": "120.0",
     "ClimbBps": "120.0",
-    "AdaptiveSlowdown": "false"
+    "GZBoost": "false"
   },
   "GuangxiElytraChase": {
     "Enabled": "false",
@@ -17,7 +23,9 @@
     "MaceUseExtraAttack": "false",
     "MaceAdaptive": "true",
     "MaceHeight": "20.0",
-    "MaceMinFallDistance": "1.5"
+    "MaceMinFallDistance": "1.5",
+    "MaceCustomPullUpAngle": "0.0",
+    "AutoArmorFly": "true"
   },
   "ArmorFly": {
     "Enabled": "false"

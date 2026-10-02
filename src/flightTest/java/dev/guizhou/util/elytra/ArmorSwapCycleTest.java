@@ -8,9 +8,11 @@ public final class ArmorSwapCycleTest {
 
     public static void main(String[] args) {
         continuousExchange();
+        serverPacedWindows();
         earlyReturnAndTailAreIdempotent();
-        delayedServerClearKeepsArmorWithoutExtraSwaps();
+        delayedServerClearKeepsWingsOnEveryMove();
         rocketWaitsForRestartWindow();
+        wornGlideBoostPrecedesChestplate();
         ownershipLostDuringDelayedClearAbandons();
         explicitDiveHandoverDuringDelayedClear();
         interruptionBetweenMovementHooks();
@@ -21,8 +23,9 @@ public final class ArmorSwapCycleTest {
         manualInventoryChanges();
         invalidBeginAndAbandon();
         maceDescentYieldsAndReacquires();
+        naturalStrikeRetainsChestplateAndOwnership();
+        naturalStrikeStillHonorsRecoveryAndManualChanges();
         explicitDiveOwnsEquipmentUntilRecovery();
-        ownedMaceFallKeepsArmor();
         System.out.println("ArmorSwapCycleTest passed: " + checks + " checks");
     }
 
@@ -48,36 +51,36 @@ public final class ArmorSwapCycleTest {
         check(player.restorations == 0, "An ongoing cycle must not release equipment ownership");
     }
 
-    private static void ownedMaceFallKeepsArmor() {
+    private static void serverPacedWindows() {
         Model player = new Model();
         ArmorSwapCycle cycle = begin(player);
-        cycle.beforeMovement(true, true, true);
+        cycle.beforeMovement(true, true, true, false, true);
         cycle.afterMovement(true, true, true);
-        for (int tick=0; tick<12; tick++) {
-            player.newTick(true);
-            cycle.holdDescent(true, true);
-            player.move();
-            cycle.holdDescent(true, true);
-            check(cycle.active() && player.chest==player.armor && !player.gliding,
-                    "A combat fall retains chestplate ownership without restarting gliding");
-            check(player.events.equals(List.of("MOVE_ARMOR")) && !cycle.rocketWindowOpen(),
-                    "Repeated fall hooks cannot swap wings, reset descent or open a rocket window");
+        check(player.chest == player.armor, "SLM equips armor after the initial wing movement");
+        for (int delay = 0; delay < 12; delay++) {
+            player.newTick(false);
+            cycle.beforeMovement(true, true, true, false, true);
+            cycle.afterMovement(true, true, true);
+            check(player.chest == player.armor && player.events.isEmpty(), "SLM waits for the observed glide end");
+            check(!cycle.rocketWindowOpen(), "A stale glide cannot launch another rocket through armor");
         }
         player.newTick(true);
-        cycle.beforeMovement(true,true,true);
-        check(player.chest==player.wings && player.gliding && cycle.rocketWindowOpen(),
-                "Ending the bounded fall can resume a fresh glide");
-        cycle.afterMovement(true,true,true);
-        player.newTick(true);
-        cycle.holdDescent(false,true);
-        check(player.events.isEmpty() && player.chest==player.armor, "Unsafe inventory defers recovery swaps");
-        cycle.holdDescent(true,true);
-        check(!cycle.active() && player.chest==player.wings && player.restorations==1,
-                "A previously interrupted hold recovers instead of reacquiring combat ownership");
-        player = new Model(); cycle = begin(player);
+        cycle.beforeMovement(true, true, true, false, true);
+        check(cycle.rocketWindowOpen(), "The observed end opens a fresh restart window");
+        player.move(); cycle.afterMovement(true, true, true);
+        check(player.events.equals(List.of("SWAP_WINGS", "START", "MOVE_WINGS", "SWAP_ARMOR")), "SLM restart order");
+        player.assertTickBounds();
+        player.newTick(false);
+        cycle.stop(false);
+        check(player.events.isEmpty(), "Open inventory defers cleanup");
+        cycle.stop(true);
+        check(player.chest == player.wings && !cycle.active(), "Disable restores the owned wings safely");
+        check(player.duplicateStarts == 0, "Server-paced mode never restarts an existing glide");
+        cycle = begin(player);
         player.reserve = new Object();
-        cycle.holdDescent(true,true);
-        check(!cycle.active() && player.events.isEmpty(), "Manual inventory changes abandon a held fall pair");
+        player.newTick(false);
+        cycle.beforeMovement(true, true, true, false, true);
+        check(!cycle.active() && player.events.isEmpty(), "Manual equipment replacement cancels stale SLM swaps");
     }
 
     private static void earlyReturnAndTailAreIdempotent() {
@@ -104,7 +107,7 @@ public final class ArmorSwapCycleTest {
         check(player.events.equals(afterHandover), "Dive handover must prevent any stale return");
     }
 
-    private static void delayedServerClearKeepsArmorWithoutExtraSwaps() {
+    private static void delayedServerClearKeepsWingsOnEveryMove() {
         Model player = new Model();
         ArmorSwapCycle cycle = begin(player);
         cycle.beforeMovement(true, true, true);
@@ -113,18 +116,18 @@ public final class ArmorSwapCycleTest {
         for (int tick = 0; tick < 8; tick++) {
             player.newTick(false);
             cycle.beforeMovement(true, true, true);
-            check(player.chest == player.armor, "A persistent glide must retain armor on tick " + tick);
+            check(player.chest == player.wings, "A delayed server clear must not postpone the movement wing swap on tick " + tick);
             check(player.gliding, "The still-running glide must be ridden, not restarted, on tick " + tick);
             player.move();
-            check(player.events.equals(List.of("MOVE_ARMOR")),
-                    "Delayed metadata must not cause equipment or START spam on tick " + tick);
+            check(player.events.equals(List.of("SWAP_WINGS", "MOVE_WINGS")),
+                    "A delayed-clear tick exchanges wings for movement without any START on tick " + tick);
             cycle.afterMovement(true, true, true);
             check(player.chest == player.armor && player.reserve == player.wings,
-                    "Armor stays equipped throughout delayed-clear movement on tick " + tick);
+                    "Armor returns after each delayed-clear movement on tick " + tick);
             player.assertTickBounds();
         }
         check(player.duplicateStarts == 0 && player.startsThisTick == 0,
-                "Waiting on metadata must never toggle the glide flag");
+                "Persistent wing exchanges must never toggle the glide flag");
         player.newTick(true);
         cycle.beforeMovement(true, true, true);
         check(player.events.equals(List.of("SWAP_WINGS", "START")),
@@ -173,6 +176,24 @@ public final class ArmorSwapCycleTest {
         check(!cycle.rocketWindowOpen(), "Rejected glide restart must not permit a rocket");
     }
 
+    private static void wornGlideBoostPrecedesChestplate() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        cycle.beforeMovement(true, true, true, true);
+        check(cycle.rocketWindowOpen(), "An existing elytra glide opens the boost window");
+        check(player.events.isEmpty(), "Already-worn wings do not swap before the firework");
+        cycle.afterMovement(true, true, true, true);
+        check(player.chest == player.wings, "A sent firework keeps the elytra through the return");
+        check(player.events.isEmpty(), "Chestplate waits until the firework tick is over");
+        cycle.afterMovement(true, true, true, true);
+        check(player.chest == player.wings, "The tail listener must not swap chestplate after a firework");
+        player.newTick(true);
+        cycle.beforeMovement(true, true, true, false);
+        player.move();
+        cycle.afterMovement(true, true, true, false);
+        check(player.chest == player.armor, "The next window can return the chestplate");
+    }
+
     private static void ownershipLostDuringDelayedClearAbandons() {
         Model player = new Model();
         ArmorSwapCycle cycle = begin(player);
@@ -195,14 +216,14 @@ public final class ArmorSwapCycleTest {
         cycle.afterMovement(true, true, true);
         player.newTick(false);
         cycle.beforeMovement(true, true, true);
-        check(player.chest == player.armor && player.events.isEmpty(),
-                "The new equipment owner receives the current armor without a stale swap");
+        check(player.chest == player.wings && player.events.equals(List.of("SWAP_WINGS")),
+                "Wings are equipped for movement when the dive owner takes over");
         cycle.abandon();
         player.move();
         cycle.afterMovement(true, true, true);
         cycle.stop(true);
-        check(player.events.equals(List.of("MOVE_ARMOR")),
-                "An equipment handover keeps the new owner's armor without any restore");
+        check(player.events.equals(List.of("SWAP_WINGS", "MOVE_WINGS")),
+                "A dive handover keeps the dive's wings and never returns armor");
         check(player.restorations == 0 && !cycle.active(), "The dive owns the pair without a stale restore callback");
     }
 
@@ -240,11 +261,11 @@ public final class ArmorSwapCycleTest {
         cycle.afterMovement(true, true, true);
         player.newTick(false);
         cycle.beforeMovement(true, true, true);
-        check(player.events.isEmpty(),
-                "A persistent glide keeps armor without an extra equipment transaction");
+        check(player.events.equals(List.of("SWAP_WINGS")),
+                "A delayed clear still restores wings before the movement window");
         cycle.afterMovement(false, false, false);
-        check(player.chest == player.armor && player.events.isEmpty(),
-                "GUI and landing defer all equipment changes and the restore callback");
+        check(player.chest == player.wings && player.events.equals(List.of("SWAP_WINGS")),
+                "GUI and landing after the wing swap defer both the armor return and the restore callback");
         cycle.beforeMovement(false, true, false);
         check(player.events.equals(List.of("SWAP_WINGS", "RESTORED")),
                 "Safe recovery after landing restores ownership without trying to fly");
@@ -430,6 +451,69 @@ public final class ArmorSwapCycleTest {
         check(player.events.equals(List.of("SWAP_ARMOR")) && player.duplicateStarts == 0,
                 "The resumed cycle returns armor without sending a duplicate START");
         check(player.chest == player.armor && player.reserve == player.wings, "Resuming preserves both original items");
+    }
+
+    private static void naturalStrikeRetainsChestplateAndOwnership() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        cycle.beforeMovement(true, true, true);
+        cycle.afterMovement(true, true, true);
+        for (int tick = 0; tick < 3; tick++) {
+            player.newTick(true);
+            cycle.beforeMovement(true, true, true, true, false, true);
+            check(cycle.active() && player.chest == player.armor && player.reserve == player.wings,
+                    "A validated natural strike keeps its original chestplate and owned pair");
+            check(!player.gliding && !cycle.rocketWindowOpen() && player.events.isEmpty(),
+                    "Protecting the natural strike must neither restart glide nor open a rocket window");
+            player.move();
+            cycle.afterMovement(true, true, true);
+            cycle.afterMovement(true, true, true);
+            check(player.events.equals(List.of("MOVE_ARMOR")) && player.restorations == 0,
+                    "Both movement tails retain armor without early restore callbacks");
+            player.assertTickBounds();
+        }
+        player.newTick(true);
+        cycle.beforeMovement(true, true, true);
+        player.move();
+        cycle.afterMovement(true, true, true);
+        check(player.events.equals(List.of("SWAP_WINGS", "START", "MOVE_WINGS", "SWAP_ARMOR")),
+                "The completed strike resumes the same owned pair through one normal glide restart");
+        check(player.restorations == 0 && cycle.active(), "Resuming does not reacquire or lose equipment ownership");
+        player.assertTickBounds();
+        player.newTick(true);
+        cycle.stop(true);
+        check(!cycle.active() && player.chest == player.wings && player.reserve == player.armor,
+                "Disable still restores both original equipment items");
+    }
+
+    private static void naturalStrikeStillHonorsRecoveryAndManualChanges() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        cycle.beforeMovement(true, true, true);
+        cycle.afterMovement(true, true, true);
+        player.newTick(true);
+        cycle.beforeMovement(true, false, true, false, false, true);
+        check(cycle.active() && player.events.isEmpty(), "An unsafe inventory defers every protected-strike exchange");
+        cycle.beforeMovement(true, true, true, false, false, true);
+        check(!cycle.active() && player.events.equals(List.of("SWAP_WINGS", "RESTORED")),
+                "Pending interruption recovery wins over a renewed strike request");
+
+        player = new Model(); cycle = begin(player);
+        cycle.beforeMovement(true, true, true); cycle.afterMovement(true, true, true);
+        player.newTick(true); player.reserve = new Object();
+        cycle.beforeMovement(true, true, true, false, false, true);
+        cycle.afterMovement(true, true, true);
+        check(!cycle.active() && player.events.isEmpty(), "A manual replacement abandons the protected pair without stale swaps");
+
+        player = new Model(); cycle = begin(player);
+        player.newTick(false); player.failSwap = true;
+        cycle.beforeMovement(true, true, true, false, false, true);
+        check(player.events.equals(List.of("SWAP_REJECTED")) && !cycle.rocketWindowOpen(),
+                "A rejected chestplate exchange cannot restart flight or create a rocket opportunity");
+        player.failSwap = false; player.newTick(false);
+        cycle.beforeMovement(true, true, true, false, false, true);
+        check(!cycle.active() && player.events.equals(List.of("RESTORED")),
+                "A failed protected exchange recovers rather than silently taking ownership again");
     }
 
     private static void explicitDiveOwnsEquipmentUntilRecovery() {

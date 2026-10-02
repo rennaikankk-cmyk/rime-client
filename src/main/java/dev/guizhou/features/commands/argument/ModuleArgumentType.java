@@ -28,7 +28,7 @@ public record ModuleArgumentType(boolean fullName) implements ArgumentType<Modul
                 Module::getDisplayName, value, !fullName);
         if (match.ambiguous()) {
             reader.setCursor(start);
-            throw CommandExceptions.invalidArgument("模块名 %s 有歧义，请输入完整的模块 ID 或标准名称", value)
+            throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("模块名 %s 有歧义，请输入完整的模块 ID 或标准名称"), value)
                     .createWithContext(reader);
         }
         if (match.value() != null) return match.value();
@@ -40,8 +40,8 @@ public record ModuleArgumentType(boolean fullName) implements ArgumentType<Modul
         List<String> guesses = FuzzyMatch.didYouMean(value, names, 1);
         reader.setCursor(start);
         throw (guesses.isEmpty()
-                ? CommandExceptions.invalidArgument("找不到模块 %s", value)
-                : CommandExceptions.invalidArgument("找不到模块 %s，你是不是想输入 %s？", value, guesses.get(0)))
+                ? CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("找不到模块 %s"), value)
+                : CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("找不到模块 %s，你是不是想输入 %s？"), value, guesses.get(0)))
                 .createWithContext(reader);
     }
 
@@ -54,7 +54,7 @@ public record ModuleArgumentType(boolean fullName) implements ArgumentType<Modul
             String canonical = ModuleNames.displayName(module.getName()).toLowerCase(Locale.ROOT);
             if (FuzzyMatch.bestScore(input, name, canonical, module.getDisplayName()) == FuzzyMatch.NO_MATCH) continue;
             LiteralMessage tooltip = new LiteralMessage(module.getDisplayName() + " · "
-                    + module.getCategory().getName() + " · " + (module.isEnabled() ? "已开启" : "未开启"));
+                    + module.getCategory().getName() + " · " + (module.isEnabled() ? dev.guizhou.util.lang.ClientLanguage.text("已开启") : dev.guizhou.util.lang.ClientLanguage.text("未开启")));
             builder.suggest(canonical, tooltip);
             if (!name.equals(canonical) && FuzzyMatch.matches(input, name)) builder.suggest(name, tooltip);
         }

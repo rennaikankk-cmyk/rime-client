@@ -10,8 +10,10 @@ import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.combat.*;
 import dev.guizhou.features.modules.player.*;
 import dev.guizhou.features.settings.Bind;
+import dev.guizhou.features.settings.SettingText;
 import dev.guizhou.features.modules.client.ClickGuiModule;
 import dev.guizhou.features.modules.client.HudClientModule;
+import dev.guizhou.features.modules.client.InterfaceFeedbackModule;
 import dev.guizhou.features.modules.client.NotificationsModule;
 import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.features.modules.funny.TrickshotModule;
@@ -19,8 +21,6 @@ import dev.guizhou.features.modules.funny.MoFuckerModule;
 import dev.guizhou.features.modules.movement.SprintModule;
 import dev.guizhou.features.modules.movement.VelocityModule;
 import dev.guizhou.features.modules.movement.NoSlowModule;
-import dev.guizhou.features.modules.movement.NoJumpDelayModule;
-import dev.guizhou.features.modules.movement.EntityControlModule;
 import dev.guizhou.features.modules.movement.GuangxiElytraModule;
 import dev.guizhou.features.modules.world.AutoPortalModule;
 import dev.guizhou.features.modules.world.FastPortalModule;
@@ -70,13 +70,29 @@ public class ModuleManager implements Jsonable, Util {
         register(new HudClientModule());
         register(new ClickGuiModule());
         register(new NotificationsModule());
-        register(new dev.guizhou.features.modules.client.InterfaceFeedbackModule());
+        register(new InterfaceFeedbackModule());
         register(new dev.guizhou.features.modules.client.GuangxiProbeModule());
         register(new TargetsModule());
+        register(new dev.guizhou.features.modules.client.UnfocusedFpsModule());
+        register(new dev.guizhou.features.modules.extra.AntiBotModule());
+        register(new dev.guizhou.features.modules.extra.AntiLevitationModule());
+        register(new dev.guizhou.features.modules.extra.AutoCenterModule());
+        register(new dev.guizhou.features.modules.extra.AutoFishModule());
+        register(new dev.guizhou.features.modules.extra.AutoJumpModule());
+        register(new dev.guizhou.features.modules.extra.AutoRespawnModule());
+        register(new dev.guizhou.features.modules.extra.AutoToolModule());
+        register(new dev.guizhou.features.modules.extra.AutoWalkModule());
+        register(new dev.guizhou.features.modules.extra.ChestStealerModule());
+        register(new dev.guizhou.features.modules.extra.ItemSaverModule());
+        register(new dev.guizhou.features.modules.extra.LagNotifierModule());
+        register(new dev.guizhou.features.modules.extra.NoSoundLagModule());
+        register(new dev.guizhou.features.modules.extra.SafeWalkModule());
+        register(new dev.guizhou.features.modules.extra.ViewLockModule());
         register(new AutoTrapModule());
         register(new AutoTotemModule());
         register(new AutoLogModule());
         register(new AutoSwordModule());
+        register(new KillAuraModule());
         register(new GuangxiCrystalModule());
         register(new AntiCrystalModule());
         register(new AutoThrowModule());
@@ -86,12 +102,13 @@ public class ModuleManager implements Jsonable, Util {
         register(new VelocityModule());
         register(new SprintModule());
         register(new NoSlowModule());
-        register(new NoJumpDelayModule());
-        register(new EntityControlModule());
+        register(new dev.guizhou.features.modules.movement.NoJumpDelayModule());
+        register(new dev.guizhou.features.modules.movement.EntityControlModule());
         register(new dev.guizhou.features.modules.movement.NoFallModule());
         register(new AntiHungerModule());
         register(new GuangxiElytraModule());
         register(new dev.guizhou.features.modules.movement.ArmorFlyModule());
+        register(new dev.guizhou.features.modules.movement.SLMArmorFlyModule());
 
         register(new AutoPortalModule());
         register(new FastPortalModule());
@@ -114,6 +131,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new LogoutSpotsModule());
         register(new PopEffectsModule());
         register(new ShulkerPreviewModule());
+        register(new dev.guizhou.features.modules.render.ChestHistoryModule());
         register(new QuadSupremeModule());
         register(new ViewModelModule());
         register(new MiddleClickExtraModule());
@@ -135,6 +153,9 @@ public class ModuleManager implements Jsonable, Util {
         register(new ScaffoldModule());
         register(new ReplenishModule());
         register(new InstantRekitModule());
+        register(new dev.guizhou.features.modules.player.KitReplenishModule());
+        register(new dev.guizhou.features.modules.combat.AntiReplenishModule());
+        register(new dev.guizhou.features.modules.hud.ChunkLagModule());
         register(new NoRotateModule());
         register(new dev.guizhou.features.modules.client.AutoReconnectModule());
         register(new dev.guizhou.features.modules.client.VisualRangeModule());
@@ -157,7 +178,7 @@ public class ModuleManager implements Jsonable, Util {
     }
 
     public void register(Module module) {
-        dev.guizhou.features.settings.SettingText.fill(module);
+        SettingText.fill(module);
         getModules().add(module);
         fastRegistry.put(module.getClass(), module);
         String prefix = "module." + module.getName();
@@ -249,9 +270,9 @@ public class ModuleManager implements Jsonable, Util {
         if (key <= 0 || mc.screen != null) return;
         stream().filter(module -> module.getBind().getKey() == key).forEach(module -> {
             if (module.getBindMode() == Module.BindMode.HOLD) {
-                if (!module.isEnabled()) module.enable();
+                module.setEnabledByUser(true);
             } else {
-                module.toggle();
+                module.toggleByUser();
             }
         });
     }
@@ -261,7 +282,7 @@ public class ModuleManager implements Jsonable, Util {
         stream().filter(module -> module.getBind().getKey() == key
                 && module.getBindMode() == Module.BindMode.HOLD
                 && module.isEnabled())
-                .forEach(Module::disable);
+                .forEach(module -> module.setEnabledByUser(false));
     }
 
     public void onMousePressed(int button) {
@@ -269,9 +290,9 @@ public class ModuleManager implements Jsonable, Util {
         int key = Bind.MOUSE_BUTTON_OFFSET + button;
         stream().filter(module -> module.getBind().getKey() == key).forEach(module -> {
             if (module.getBindMode() == Module.BindMode.HOLD) {
-                if (!module.isEnabled()) module.enable();
+                module.setEnabledByUser(true);
             } else {
-                module.toggle();
+                module.toggleByUser();
             }
         });
     }
@@ -281,7 +302,7 @@ public class ModuleManager implements Jsonable, Util {
         stream().filter(module -> module.getBind().getKey() == key
                 && module.getBindMode() == Module.BindMode.HOLD
                 && module.isEnabled())
-                .forEach(Module::disable);
+                .forEach(module -> module.setEnabledByUser(false));
     }
 
     @Override

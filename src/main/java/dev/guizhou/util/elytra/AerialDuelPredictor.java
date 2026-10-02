@@ -12,6 +12,10 @@ public final class AerialDuelPredictor {
     private static final double MAX_OFFSET = 12.0;
 
     public enum Weapon { NONE, MELEE, SPEAR, MACE }
+    /** Copied on the main thread. The worker never sees the entity. */
+    public enum TargetKind { PLAYER, SLIME, MOB }
+    /** Copied tag. STRAIGHT keeps the single lead; strafe tags replace it with the copied offset. */
+    public enum MotionTag { STRAIGHT, AIR_STRAFE, GROUND_STRAFE }
     public enum ThreatKind { NONE, MELEE, SPEAR, MACE, PROJECTILE }
 
     /** Velocity is blocks/tick. After movement, velocity becomes velocity*drag + (0,-gravity,0). */
@@ -24,7 +28,8 @@ public final class AerialDuelPredictor {
                         double targetReach, Weapon targetWeapon, boolean targetOnGround, boolean targetGliding,
                         boolean targetAttackActive, int latencyTicks, boolean velocityConsistent,
                         List<Projectile> projectiles, FlightCollisionSnapshot snapshot,
-                        TargetMotionTracker.Snapshot targetMotion) {
+                        TargetMotionTracker.Snapshot targetMotion, TargetKind targetKind,
+                        MotionTag motionTag, Vec3 strafeOffset) {
         public Input(Vec3 selfPosition, Vec3 selfVelocity, double selfWidth, double selfHeight,
                      Vec3 targetPosition, Vec3 targetVelocity, Vec3 targetEye, Vec3 targetLook,
                      double targetReach, Weapon targetWeapon, boolean targetOnGround, boolean targetGliding,
@@ -32,11 +37,37 @@ public final class AerialDuelPredictor {
                      List<Projectile> projectiles, FlightCollisionSnapshot snapshot) {
             this(selfPosition, selfVelocity, selfWidth, selfHeight, targetPosition, targetVelocity,
                     targetEye, targetLook, targetReach, targetWeapon, targetOnGround, targetGliding,
-                    targetAttackActive, latencyTicks, velocityConsistent, projectiles, snapshot, null);
+                    targetAttackActive, latencyTicks, velocityConsistent, projectiles, snapshot, null,
+                    TargetKind.PLAYER, MotionTag.STRAIGHT, Vec3.ZERO);
+        }
+        public Input(Vec3 selfPosition, Vec3 selfVelocity, double selfWidth, double selfHeight,
+                     Vec3 targetPosition, Vec3 targetVelocity, Vec3 targetEye, Vec3 targetLook,
+                     double targetReach, Weapon targetWeapon, boolean targetOnGround, boolean targetGliding,
+                     boolean targetAttackActive, int latencyTicks, boolean velocityConsistent,
+                     List<Projectile> projectiles, FlightCollisionSnapshot snapshot,
+                     TargetMotionTracker.Snapshot targetMotion) {
+            this(selfPosition, selfVelocity, selfWidth, selfHeight, targetPosition, targetVelocity,
+                    targetEye, targetLook, targetReach, targetWeapon, targetOnGround, targetGliding,
+                    targetAttackActive, latencyTicks, velocityConsistent, projectiles, snapshot, targetMotion,
+                    TargetKind.PLAYER, MotionTag.STRAIGHT, Vec3.ZERO);
+        }
+        public Input(Vec3 selfPosition, Vec3 selfVelocity, double selfWidth, double selfHeight,
+                     Vec3 targetPosition, Vec3 targetVelocity, Vec3 targetEye, Vec3 targetLook,
+                     double targetReach, Weapon targetWeapon, boolean targetOnGround, boolean targetGliding,
+                     boolean targetAttackActive, int latencyTicks, boolean velocityConsistent,
+                     List<Projectile> projectiles, FlightCollisionSnapshot snapshot,
+                     TargetMotionTracker.Snapshot targetMotion, TargetKind targetKind) {
+            this(selfPosition, selfVelocity, selfWidth, selfHeight, targetPosition, targetVelocity,
+                    targetEye, targetLook, targetReach, targetWeapon, targetOnGround, targetGliding,
+                    targetAttackActive, latencyTicks, velocityConsistent, projectiles, snapshot, targetMotion,
+                    targetKind, MotionTag.STRAIGHT, Vec3.ZERO);
         }
         public Input {
             projectiles = projectiles == null ? List.of()
                     : projectiles.stream().filter(projectile -> projectile != null).limit(MAX_PROJECTILES).toList();
+            if (targetKind == null) targetKind = TargetKind.PLAYER;
+            if (motionTag == null) motionTag = MotionTag.STRAIGHT;
+            if (strafeOffset == null || !Double.isFinite(strafeOffset.lengthSqr())) strafeOffset = Vec3.ZERO;
         }
     }
 
@@ -60,6 +91,16 @@ public final class AerialDuelPredictor {
         if (input.targetMotion != null) lead = Math.min(lead, input.targetMotion.maxLeadTicks());
         Vec3 intercept = input.targetMotion == null ? bounded(input.targetVelocity.scale(lead), MAX_OFFSET)
                 : input.targetMotion.displacement(lead);
+        if (input.motionTag == MotionTag.AIR_STRAFE || input.motionTag == MotionTag.GROUND_STRAFE) {
+            intercept = input.strafeOffset;
+            lead = input.targetVelocity.lengthSqr() < 1.0E-9 ? 0.0 : intercept.length() / input.targetVelocity.length();
+        } else if (input.targetKind == TargetKind.SLIME) {
+            intercept = EntityAim.hopLead(input.targetVelocity);
+            lead = input.targetVelocity.lengthSqr() < 1.0E-9 ? 0.0 : intercept.length() / input.targetVelocity.length();
+        } else if (input.targetKind == TargetKind.MOB && !input.velocityConsistent) {
+            intercept = Vec3.ZERO;
+            lead = 0.0;
+        }
         AABB body = body(input);
         int horizon = 6 + Math.clamp(input.latencyTicks, 0, 4);
         Threat threat = meleeThreat(input, body, horizon);
@@ -133,8 +174,7 @@ public final class AerialDuelPredictor {
 
     private static Threat maceThreat(Input input, AABB body, int horizon) {
         if (input.targetWeapon != Weapon.MACE || !input.targetAttackActive || input.targetOnGround
-                || input.targetGliding && (input.targetMotion == null
-                || input.targetMotion.mode() != TargetMotionTracker.Mode.ARMORED_AIR) || input.targetVelocity.y >= -0.15
+                || input.targetGliding || input.targetVelocity.y >= -0.15
                 || input.targetPosition.y <= input.selfPosition.y + 0.5 || input.targetReach <= 0.0) return null;
         // Defensive envelope only: a short or plugin-like observation must not hide an ordinary falling attacker.
         Threat falling = maceThreatPath(input, body, horizon, false);

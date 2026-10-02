@@ -2,6 +2,7 @@ package dev.guizhou.mixin.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.guizhou.features.modules.render.NoRenderModule;
+import dev.guizhou.util.player.InsideBlockUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ScreenEffectRenderer;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -26,9 +27,13 @@ public class MixinScreenEffectRenderer {
         }
     }
 
+    /**
+     * Block-in-face overlay. NoRender.NoWall cancels it always; pearl-phase (and any other
+     * inside-block state) must also cancel it so the camera can see past the wall after clipping in.
+     */
     @Inject(method = "renderTex", at = @At("HEAD"), cancellable = true)
     private static void guizhouware$noWall(TextureAtlasSprite sprite, PoseStack matrices, CallbackInfo ci) {
-        if (NoRenderModule.isActive(m -> m.noWall.getValue())) {
+        if (NoRenderModule.isActive(m -> m.noWall.getValue()) || InsideBlockUtil.isInsideBlock()) {
             ci.cancel();
         }
     }

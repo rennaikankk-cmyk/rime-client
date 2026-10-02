@@ -58,7 +58,7 @@ public class FriendManager implements Jsonable {
         if (!alreadyFriend && whisper) {
             whisperFriendAdded(name);
         }
-        GuizhouWare.configManager.save();
+        GuizhouWare.configManager.markDirty();
     }
 
     public boolean isWhisperOnAdd() {
@@ -67,7 +67,7 @@ public class FriendManager implements Jsonable {
 
     public void setWhisperOnAdd(boolean whisperOnAdd) {
         this.whisperOnAdd = whisperOnAdd;
-        GuizhouWare.configManager.save();
+        GuizhouWare.configManager.markDirty();
     }
 
     private void whisperFriendAdded(String name) {
@@ -79,12 +79,12 @@ public class FriendManager implements Jsonable {
 
     public void removeFriend(String name) {
         friends.keySet().removeIf(s -> s.equalsIgnoreCase(name));
-        GuizhouWare.configManager.save();
+        GuizhouWare.configManager.markDirty();
     }
 
     public void clearFriends() {
         friends.clear();
-        GuizhouWare.configManager.save();
+        GuizhouWare.configManager.markDirty();
     }
 
     public long getExpiry(String name) {

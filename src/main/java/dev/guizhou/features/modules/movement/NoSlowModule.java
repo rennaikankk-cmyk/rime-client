@@ -31,11 +31,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
 public class NoSlowModule extends Module {
-    public enum EatMode { SlotResend, Grim, Client, GrimV3 }
+    public enum EatMode { SlotResend, Grim, Client, GrimV3, NoAC }
 
     public final Setting<Boolean> crawl = bool("Crawl", true);
     public final Setting<Boolean> eat = bool("Eat", true);
-    public final Setting<EatMode> eatMode = mode("EatMode", EatMode.Grim);
+    public final Setting<EatMode> eatMode = mode("EatMode", EatMode.Grim)
+            .described("NoAC 为无反作弊服直接取消减速，不补发换槽、移动或转头包；其他模式保留原有行为。");
     public final Setting<Boolean> items = bool("Items", false);
     public final Setting<Boolean> shields = bool("Shields", false);
     public final Setting<Boolean> sneak = bool("Sneak", false);
@@ -79,6 +80,7 @@ public class NoSlowModule extends Module {
     @Override
     public void onTick() {
         if (!HeartbeatManager.authorized()) { HeartbeatManager.notifyDeniedOnce(); resetState(); return; }
+        if (eatMode.getValue() == EatMode.NoAC) { resetState(); return; }
         if (nullCheck() || corrected.getAndSet(false) || sessionPlayer != mc.player || sessionWorld != mc.level) {
             resetState();
             return;
@@ -101,6 +103,7 @@ public class NoSlowModule extends Module {
     private void onPacketSend(PacketEvent.Send event) {
         if (!isEnabled() || !HeartbeatManager.authorized() || !mc.isSameThread() || nullCheck()
                 || mc.getConnection() == null || corrected.get() || forwardingMovement) return;
+        if (eatMode.getValue() == EatMode.NoAC) return;
 
         if (event.getPacket() instanceof ServerboundUseItemPacket use) {
             if (eat.getValue() && eatMode.getValue() == EatMode.GrimV3) {
@@ -285,7 +288,8 @@ public class NoSlowModule extends Module {
         }
         if (isConsumable(used)) {
             if (!module.eat.getValue()) return false;
-            if (module.eatMode.getValue() == EatMode.Client || module.eatMode.getValue() == EatMode.Grim) return true;
+            if (module.eatMode.getValue() == EatMode.Client || module.eatMode.getValue() == EatMode.Grim
+                    || module.eatMode.getValue() == EatMode.NoAC) return true;
             return module.slotResendEnabled() && module.validSession()
                     && module.isConsumingMainHandItem() && module.serverHoldsSelectedSlot();
         }

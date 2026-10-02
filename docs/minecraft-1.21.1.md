@@ -16,6 +16,8 @@ The render adapter uses 1.21.1 RenderTypes, framebuffer post passes, resource re
 
 ## Validation and release
 
+The explicitly requested Rime 1.2.7 synchronization is described in [release-rime127-mc1211.md](release-rime127-mc1211.md). Earlier fixture results below are historical; the current port has separate native and signed-release acceptance records. Routine 1.21.11 releases do not automatically update this branch.
+
 Use `gradlew.bat build`: regression tests, remapping, ProGuard and final obfuscated-jar verification are part of the build. Commit before the final build because the jar name embeds the source revision. Publish only the reviewed `-obfuscated.jar`; retain mappings for internal diagnostics.
 
 An isolated development fixture exercised menu hit testing and screenshots at three scales, placement rendering, hand/world post effects, resizing and resource reload, custom particles, native server sneak placement, Aura, spear metadata and aerial behavior. A real 1.21.1 client connected through external ViaProxy to a local 1.21.11 server and verified all seven materials plus charge/expiry/recharge. These checks are not a server damage benchmark or a claim about public-server anti-cheat compatibility. Final production jars additionally require startup checks on both supported Java 21 runtimes.

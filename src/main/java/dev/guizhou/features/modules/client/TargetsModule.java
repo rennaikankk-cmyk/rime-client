@@ -58,7 +58,7 @@ public class TargetsModule extends Module {
         if (living.isDeadOrDying()) return false;
 
         if (entity instanceof Player player) {
-            return players.getValue() && !GuizhouWare.friendManager.isFriend(player);
+            return players.getValue() && isAllowedPlayer(player);
         }
 
         // Training dummies are armor stands; none of the hostility tiers match them.
@@ -69,6 +69,14 @@ public class TargetsModule extends Module {
         if (passives.getValue() && isPassive(entity)) return true;
 
         return false;
+    }
+
+    /** Safety policy for local target selectors, independent of this module's Players switch. */
+    public static boolean isAllowedPlayer(Player player) {
+        if (player == mc.player || player.isDeadOrDying() || player.isRemoved() || player.isSpectator()
+                || GuizhouWare.friendManager.isFriend(player)) return false;
+        var antiBot = GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.extra.AntiBotModule.class);
+        return antiBot == null || !antiBot.bot(player);
     }
 
     public static boolean isHostile(Entity e) {

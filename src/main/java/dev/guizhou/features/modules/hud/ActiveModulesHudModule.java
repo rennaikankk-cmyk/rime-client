@@ -39,12 +39,22 @@ public class ActiveModulesHudModule extends HudModule implements Jsonable {
     private final LinkedHashSet<String> entries = new LinkedHashSet<>();
     private final Anim anim = new Anim();
     private final List<Line> lines = new ArrayList<>();
+    private List<Module> displayedCache = List.of();
+    private long displayRefresh, lineRefresh;
+    private Sort cachedSort;
 
-    private record Line(String id, String display, String meta, String bind, boolean enabled, float width) {}
+    @dev.guizhou.event.system.Subscribe
+    private void changed(dev.guizhou.event.impl.ClientEvent event) { invalidate(); }
+    private void invalidate() { displayRefresh = lineRefresh = 0; }
+
+
+    private record Line(String id, String display, String meta, String bind, boolean enabled,
+                        float width, float nameWidth, float metaWidth) {}
 
     public ActiveModulesHudModule() {
         super("ActiveModules");
         INSTANCE = this;
+        EVENT_BUS.register(this, "ActiveModulesHud");
         GuizhouWare.configManager.addConfig(this);
     }
 
@@ -55,16 +65,19 @@ public class ActiveModulesHudModule extends HudModule implements Jsonable {
     public boolean add(String name) {
         Module module = GuizhouWare.moduleManager.getModuleByName(name);
         if (module == null) return false;
+        invalidate();
         return entries.add(module.getName());
     }
 
     public boolean remove(String name) {
         Module module = GuizhouWare.moduleManager.getModuleByName(name);
         String key = module != null ? module.getName() : name;
+        invalidate();
         return entries.removeIf(e -> e.equalsIgnoreCase(key));
     }
 
     public void clear() {
+        invalidate();
         entries.clear();
     }
 
@@ -74,13 +87,22 @@ public class ActiveModulesHudModule extends HudModule implements Jsonable {
 
     /** The normal module list follows live toggles; the explicit watch list remains available. */
     public List<Module> displayedModules() {
+        long now = System.nanoTime();
+        if (now < displayRefresh) return displayedCache;
         HudClientModule hud = GuizhouWare.moduleManager.getModuleByClass(HudClientModule.class);
+        List<Module> next = new ArrayList<>();
         if (hud != null && hud.activeModulesSource.getValue() == Source.WATCHLIST) {
-            return entries.stream().map(GuizhouWare.moduleManager::getModuleByName)
-                    .filter(java.util.Objects::nonNull).toList();
+            for (String entry : entries) {
+                Module module = GuizhouWare.moduleManager.getModuleByName(entry);
+                if (module != null) next.add(module);
+            }
+        } else {
+            for (Module module : GuizhouWare.moduleManager.getModules())
+                if (module.isEnabled() && !module.hidden) next.add(module);
         }
-        return GuizhouWare.moduleManager.getModules().stream()
-                .filter(m -> m.isEnabled() && !m.hidden).toList();
+        displayedCache = List.copyOf(next);
+        displayRefresh = now + 50_000_000L;
+        return displayedCache;
     }
 
     public int renderedLineCount() { return displayedModules().size(); }
@@ -102,26 +124,29 @@ public class ActiveModulesHudModule extends HudModule implements Jsonable {
         Sort sort = hudClient != null ? hudClient.activeModulesSort.getValue() : Sort.ADDED;
         boolean edge = hudClient == null || hudClient.activeModulesEdge.getValue();
 
-        lines.clear();
-        float textW = 0f;
-        for (Module module : displayed) {
-            String display = module.getDisplayName();
-            String meta = module.getMeta();
-            meta = meta == null || meta.isEmpty() ? "" : meta;
-            Bind bind = module.getBind().getKey() > 0 ? module.getBind() : null;
-            String bindText = bind != null ? bind.toString() : "";
-            float w = ShadcnDraw.width(display, NAME, HudFonts.SEMI)
-                    + (meta.isEmpty() ? 0f : 4f + ShadcnDraw.width(meta, META))
-                    + (bindText.isEmpty() ? 0f : 5f + HudDraw.keycapWidth(bindText, 6f));
-            textW = Math.max(textW, w);
-            lines.add(new Line(module.getName(), display, meta, bindText, module.isEnabled(), w));
+        long now = System.nanoTime();
+        if (now >= lineRefresh || sort != cachedSort) {
+            lines.clear();
+            for (Module module : displayed) {
+                String display = module.getDisplayName();
+                String meta = module.getMeta();
+                meta = meta == null || meta.isEmpty() ? "" : meta;
+                Bind bind = module.getBind().getKey() > 0 ? module.getBind() : null;
+                String bindText = bind != null ? bind.toString() : "";
+                float nameWidth = ShadcnDraw.width(display, NAME, HudFonts.SEMI);
+                float metaWidth = meta.isEmpty() ? 0 : ShadcnDraw.width(meta, META);
+                float w = nameWidth
+                        + (meta.isEmpty() ? 0f : 4f + metaWidth)
+                        + (bindText.isEmpty() ? 0f : 5f + HudDraw.keycapWidth(bindText, 6f));
+                lines.add(new Line(module.getName(), display, meta, bindText, module.isEnabled(), w, nameWidth, metaWidth));
+            }
+            if (sort == Sort.NAME) lines.sort(Comparator.comparing(Line::display, String.CASE_INSENSITIVE_ORDER));
+            else if (sort == Sort.WIDTH) lines.sort(Comparator.comparingDouble(Line::width).reversed());
+            cachedSort = sort;
+            lineRefresh = now + 50_000_000L;
         }
-        if (lines.isEmpty()) {
-            bounds(0, 0, 0, 0);
-            return;
-        }
-        if (sort == Sort.NAME) lines.sort(Comparator.comparing(Line::display, String.CASE_INSENSITIVE_ORDER));
-        else if (sort == Sort.WIDTH) lines.sort(Comparator.comparingDouble(Line::width).reversed());
+        float textW = 0;
+        for (Line line : lines) textW = Math.max(textW, line.width());
 
         float edgeRoom = edge ? EDGE + 5f : 0f;
         float cardW = PAD * 2 + edgeRoom + textW;
@@ -149,11 +174,11 @@ public class ActiveModulesHudModule extends HudModule implements Jsonable {
             int nameColor = ShadcnDraw.mix(ShadcnDraw.MUTED, activeColor, on);
             float x = left ? ox + PAD + edgeRoom : ox + cardW - PAD - edgeRoom - line.width();
             HudDraw.textMid(ctx, line.display(), x, mid, NAME, HudFonts.SEMI, nameColor);
-            x += ShadcnDraw.width(line.display(), NAME, HudFonts.SEMI);
+            x += line.nameWidth();
             if (!line.meta().isEmpty()) {
                 x += 4f;
                 HudDraw.textMid(ctx, line.meta(), x, mid, META, HudFonts.REGULAR, ShadcnDraw.MUTED);
-                x += ShadcnDraw.width(line.meta(), META);
+                x += line.metaWidth();
             }
             if (!line.bind().isEmpty()) HudDraw.keycap(ctx, line.bind(), x + 5f, mid - 4.5f, 9f, 6f);
         }
@@ -171,6 +196,7 @@ public class ActiveModulesHudModule extends HudModule implements Jsonable {
 
     @Override
     public void fromJson(JsonElement element) {
+        invalidate();
         entries.clear();
         JsonElement arr = element.getAsJsonObject().get("entries");
         if (arr == null || !arr.isJsonArray()) return;

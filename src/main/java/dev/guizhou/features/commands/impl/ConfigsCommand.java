@@ -44,17 +44,17 @@ public class ConfigsCommand extends Command {
                             List<String> names = GuizhouWare.configManager.listNamed();
                             if (names.isEmpty()) {
                                 return replyKeyed("list", ChatTone.MUTED, Component.empty()
-                                        .append(ChatFeed.text("还没有保存的预设，使用 ", ChatPalette.MUTED))
+                                        .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("还没有保存的预设，使用 "), ChatPalette.MUTED))
                                         .append(ChatFeed.command("configs save ", null)));
                             }
                             String prefix = ctx.getSource().getCommandPrefix();
                             MutableComponent body = Component.empty()
-                                    .append(ChatFeed.text("预设 " + names.size() + "  ", ChatPalette.TEXT));
+                                    .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("预设 ") + names.size() + "  ", ChatPalette.TEXT));
                             for (int i = 0; i < names.size(); i++) {
                                 if (i > 0) body.append(ChatFeed.text(" · ", ChatPalette.SUBTLE));
                                 String name = names.get(i);
                                 body.append(ChatFeed.suggest(name, prefix + "configs load " + name,
-                                        ChatFeed.text("加载预设 " + name, ChatPalette.MUTED), ChatPalette.ACCENT_2));
+                                        ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("加载预设 ") + name, ChatPalette.MUTED), ChatPalette.ACCENT_2));
                             }
                             return replyKeyed("list", ChatTone.INFO, body);
                         }))
@@ -64,9 +64,9 @@ public class ConfigsCommand extends Command {
                                 .executes((ctx) -> {
                                     String name = StringArgumentType.getString(ctx, "name");
                                     if (!GuizhouWare.configManager.saveNamed(name)) {
-                                        return fail("无法保存预设 '%s'（名称只能包含 A-Z a-z 0-9 _ -）", name);
+                                        return fail(dev.guizhou.util.lang.ClientLanguage.text("无法保存预设 '%s'（名称只能包含 A-Z a-z 0-9 _ -）"), name);
                                     }
-                                    return success("已保存预设 {cyan} %s", name);
+                                    return success(dev.guizhou.util.lang.ClientLanguage.text("已保存预设 {cyan} %s"), name);
                                 })))
                 .then(literal("load")
                         .then(argument("name", StringArgumentType.word())
@@ -74,9 +74,9 @@ public class ConfigsCommand extends Command {
                                 .executes((ctx) -> {
                                     String name = StringArgumentType.getString(ctx, "name");
                                     if (!GuizhouWare.configManager.loadNamed(name)) {
-                                        return fail("未能完整加载预设 '%s'，请检查名称，或查看日志中的无效文件", name);
+                                        return fail(dev.guizhou.util.lang.ClientLanguage.text("未能完整加载预设 '%s'，请检查名称，或查看日志中的无效文件"), name);
                                     }
-                                    return success("已加载预设 {cyan} %s", name);
+                                    return success(dev.guizhou.util.lang.ClientLanguage.text("已加载预设 {cyan} %s"), name);
                                 })))
                 .then(literal("delete")
                         .then(argument("name", StringArgumentType.word())
@@ -84,9 +84,9 @@ public class ConfigsCommand extends Command {
                                 .executes((ctx) -> {
                                     String name = StringArgumentType.getString(ctx, "name");
                                     if (!GuizhouWare.configManager.deleteNamed(name)) {
-                                        return fail("没有名为 '%s' 的预设", name);
+                                        return fail(dev.guizhou.util.lang.ClientLanguage.text("没有名为 '%s' 的预设"), name);
                                     }
-                                    return success("已删除预设 {cyan} %s", name);
+                                    return success(dev.guizhou.util.lang.ClientLanguage.text("已删除预设 {cyan} %s"), name);
                                 })))
                 .then(literal("import").then(argument("name", StringArgumentType.word())
                         .then(argument("path", StringArgumentType.greedyString()).executes(ctx -> {
@@ -95,11 +95,11 @@ public class ConfigsCommand extends Command {
                             try {
                                 Path path = Path.of(input).toAbsolutePath().normalize();
                                 if (!Files.isRegularFile(path) || Files.size(path) > 512 * 1024)
-                                    return fail("文件不存在或超过 512 KiB");
+                                    return fail(dev.guizhou.util.lang.ClientLanguage.text("文件不存在或超过 512 KiB"));
                                 return GuizhouWare.configManager.importBundle(name, Files.readString(path), false)
-                                        ? success("已导入参数 %s；使用 configs load %s 应用", name, name)
-                                        : fail("参数格式不兼容：需要 GuizhouWare JSON 预设");
-                            } catch (Exception invalid) { return fail("导入失败：%s", invalid.getMessage()); }
+                                        ? success(dev.guizhou.util.lang.ClientLanguage.text("已导入参数 %s；使用 configs load %s 应用"), name, name)
+                                        : fail(dev.guizhou.util.lang.ClientLanguage.text("参数格式不兼容：需要 GuizhouWare JSON 预设"));
+                            } catch (Exception invalid) { return fail(dev.guizhou.util.lang.ClientLanguage.text("导入失败：%s"), invalid.getMessage()); }
                         }))))
                 .then(literal("export").then(argument("name", StringArgumentType.word())
                         .then(argument("path", StringArgumentType.greedyString()).executes(ctx -> {
@@ -110,8 +110,8 @@ public class ConfigsCommand extends Command {
                                         "live".equalsIgnoreCase(name) ? null : name, false);
                                 Path path = Path.of(input).toAbsolutePath().normalize();
                                 ConfigFiles.write(path, encoded);
-                                return success("参数已导出：%s", path);
-                            } catch (Exception invalid) { return fail("导出失败：%s", invalid.getMessage()); }
+                                return success(dev.guizhou.util.lang.ClientLanguage.text("参数已导出：%s"), path);
+                            } catch (Exception invalid) { return fail(dev.guizhou.util.lang.ClientLanguage.text("导出失败：%s"), invalid.getMessage()); }
                         }))))
                 .then(literal("cloud").then(cloudScope("private")).then(cloudScope("public")));
     }
@@ -121,18 +121,18 @@ public class ConfigsCommand extends Command {
         LiteralArgumentBuilder<CommandManager> branch = literal(scope);
         branch.then(literal("list").executes(ctx -> {
             CloudConfigClient.request(scope, "list", null, null, reply ->
-                    sendMessage(reply.ok() ? (reply.names().isEmpty() ? "云端暂无参数" :
-                            "云端参数：" + String.join("、", reply.names())) : "{red} " + reply.message()));
-            return success("正在读取云参数…");
+                    sendMessage(reply.ok() ? (reply.names().isEmpty() ? dev.guizhou.util.lang.ClientLanguage.text("云端暂无参数") :
+                            dev.guizhou.util.lang.ClientLanguage.text("云端参数：") + String.join("、", reply.names())) : "{red} " + reply.message()));
+            return success(dev.guizhou.util.lang.ClientLanguage.text("正在读取云参数…"));
         }));
         branch.then(literal("save").then(argument("name", StringArgumentType.word()).executes(ctx -> {
             String name = StringArgumentType.getString(ctx, "name");
             try {
                 String encoded = GuizhouWare.configManager.exportBundle(null, publicPreset);
                 CloudConfigClient.request(scope, "save", name, encoded, reply ->
-                        sendMessage(reply.ok() ? "云参数已保存：" + reply.message() : "{red} " + reply.message()));
-                return success(publicPreset ? "正在发布公开参数…" : "正在同步私人参数…");
-            } catch (Exception invalid) { return fail("保存失败：%s", invalid.getMessage()); }
+                        sendMessage(reply.ok() ? dev.guizhou.util.lang.ClientLanguage.text("云参数已保存：") + reply.message() : "{red} " + reply.message()));
+                return success(publicPreset ? dev.guizhou.util.lang.ClientLanguage.text("正在发布公开参数…") : dev.guizhou.util.lang.ClientLanguage.text("正在同步私人参数…"));
+            } catch (Exception invalid) { return fail(dev.guizhou.util.lang.ClientLanguage.text("保存失败：%s"), invalid.getMessage()); }
         })));
         branch.then(literal("load").then(argument("name", publicPreset
                 ? StringArgumentType.greedyString() : StringArgumentType.word()).executes(ctx -> {
@@ -141,18 +141,18 @@ public class ConfigsCommand extends Command {
                 if (!reply.ok()) { sendMessage("{red} " + reply.message()); return; }
                 ConfigManager configs = GuizhouWare.configManager;
                 if (!configs.applyBundle(reply.bundle(), publicPreset)) {
-                    sendMessage("{red} 云参数格式不兼容"); return;
+                    sendMessage(dev.guizhou.util.lang.ClientLanguage.text("{red} 云参数格式不兼容")); return;
                 }
                 configs.save();
-                sendMessage("已应用云参数：" + name);
+                sendMessage(dev.guizhou.util.lang.ClientLanguage.text("已应用云参数：") + name);
             });
-            return success("正在载入云参数…");
+            return success(dev.guizhou.util.lang.ClientLanguage.text("正在载入云参数…"));
         })));
         branch.then(literal("delete").then(argument("name", StringArgumentType.word()).executes(ctx -> {
             String name = StringArgumentType.getString(ctx, "name");
             CloudConfigClient.request(scope, "delete", name, null, reply ->
-                    sendMessage(reply.ok() ? "云参数已删除：" + name : "{red} " + reply.message()));
-            return success("正在删除云参数…");
+                    sendMessage(reply.ok() ? dev.guizhou.util.lang.ClientLanguage.text("云参数已删除：") + name : "{red} " + reply.message()));
+            return success(dev.guizhou.util.lang.ClientLanguage.text("正在删除云参数…"));
         })));
         return branch;
     }

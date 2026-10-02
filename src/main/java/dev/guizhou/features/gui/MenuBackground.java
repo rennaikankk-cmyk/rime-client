@@ -3,8 +3,10 @@ package dev.guizhou.features.gui;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import dev.guizhou.util.render.GuiTextureCompat;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
+import org.lwjgl.system.MemoryUtil;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
@@ -22,6 +24,7 @@ import java.awt.HeadlessException;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -54,6 +57,7 @@ public final class MenuBackground {
     private static int imageW, imageH;
     private static long started;
     private static final List<ResourceLocation> live = new ArrayList<>();
+    private static MenuVideoPlayer video;
 
     private MenuBackground() {}
 
@@ -73,11 +77,19 @@ public final class MenuBackground {
         imageW = imageH = 0;
         started = System.nanoTime();
         if (selection.kind == Kind.VIDEO) {
-            banner = "已选择视频，暂无法播放";
+            String name = selection.file == null ? "" : selection.file.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+            if (name.endsWith(".webm")) {
+                banner = dev.guizhou.util.lang.ClientLanguage.text("webm 暂不支持，请转换为 mp4");
+                return;
+            }
+            video = new MenuVideoPlayer();
+            MenuVideoPlayer.start(selection.file);
             return;
         }
+        MenuVideoPlayer.stopWorker();
+        video = null;
         if (selection.kind == Kind.MISSING) {
-            banner = "背景文件不存在";
+            banner = dev.guizhou.util.lang.ClientLanguage.text("背景文件不存在");
             return;
         }
         if (selection.kind == Kind.BUILTIN || selection.file == null) return;
@@ -87,13 +99,21 @@ public final class MenuBackground {
         } catch (Exception e) {
             release(mc);
             kind = Kind.MISSING;
-            banner = "背景无法读取";
+            banner = dev.guizhou.util.lang.ClientLanguage.text("背景无法读取");
         }
     }
 
-    /** Cover-fits a custom still or GIF. Built-in clips and video return false. */
+    /** Cover-fits a custom still, GIF or MP4. Built-in clips return false. */
     public static boolean draw(GuiGraphics g, int screenW, int screenH) {
         prepare();
+        if (kind == Kind.VIDEO && video != null) {
+            if (video.draw(g, screenW, screenH)) return true;
+            if (MenuVideoPlayer.failed()) {
+                banner = dev.guizhou.util.lang.ClientLanguage.text("视频无法解码，已回退默认背景");
+                return false;
+            }
+            return false; // first frame still decoding; built-in clip shows through
+        }
         if (frames.length == 0 || imageW <= 0 || imageH <= 0 || screenW <= 0 || screenH <= 0) return false;
         int index = frameIndex();
         float cover = Math.max(screenW / (float) imageW, screenH / (float) imageH);
@@ -103,8 +123,8 @@ public final class MenuBackground {
         int v = Math.max(0, (imageH - regionH) / 2);
         var pose = g.pose();
         pose.pushPose();
-        pose.scale(cover, cover, 1f);
-        g.blit(frames[index], 0, 0, u, v, regionW, regionH, imageW, imageH);
+        pose.scale(cover, cover, 1);
+        GuiTextureCompat.blit(g, frames[index], 0, 0, u, v, regionW, regionH, imageW, imageH);
         pose.popPose();
         return true;
     }
@@ -117,10 +137,12 @@ public final class MenuBackground {
     public static String statusLine() {
         prepare();
         return switch (kind) {
-            case BUILTIN -> "当前：默认动态背景";
-            case VIDEO -> "当前：" + label + "（视频暂不能播放）";
-            case MISSING -> "当前：" + (label.isEmpty() ? "无法读取" : label);
-            default -> "当前：" + label;
+            case BUILTIN -> dev.guizhou.util.lang.ClientLanguage.text("当前：默认动态背景");
+            case VIDEO -> dev.guizhou.util.lang.ClientLanguage.text("当前：") + label
+                    + (MenuVideoPlayer.failed() ? dev.guizhou.util.lang.ClientLanguage.text("（视频无法解码）")
+                                                 : dev.guizhou.util.lang.ClientLanguage.text("（视频循环播放中）"));
+            case MISSING -> dev.guizhou.util.lang.ClientLanguage.text("当前：") + (label.isEmpty() ? dev.guizhou.util.lang.ClientLanguage.text("无法读取") : label);
+            default -> dev.guizhou.util.lang.ClientLanguage.text("当前：") + label;
         };
     }
 
@@ -144,7 +166,7 @@ public final class MenuBackground {
     public static Path pickFile() {
         if (!dialogsAvailable()) return null;
         try {
-            FileDialog dialog = new FileDialog((Frame) null, "选择主菜单背景", FileDialog.LOAD);
+            FileDialog dialog = new FileDialog((Frame) null, dev.guizhou.util.lang.ClientLanguage.text("选择主菜单背景"), FileDialog.LOAD);
             dialog.setFile("*.png;*.jpg;*.jpeg;*.gif;*.mp4;*.webm");
             dialog.setVisible(true);
             String name = dialog.getFile();
@@ -161,18 +183,18 @@ public final class MenuBackground {
 
     /** Copies an image/GIF into the game folder, or remembers a video path. Null means success. */
     public static String use(String text) {
-        if (text == null || text.isBlank()) return "请先选择文件";
+        if (text == null || text.isBlank()) return dev.guizhou.util.lang.ClientLanguage.text("请先选择文件");
         Path source;
         try {
             source = Path.of(text.trim());
         } catch (Exception e) {
-            return "路径无效";
+            return dev.guizhou.util.lang.ClientLanguage.text("路径无效");
         }
-        if (!Files.isRegularFile(source)) return "找不到该文件";
+        if (!Files.isRegularFile(source)) return dev.guizhou.util.lang.ClientLanguage.text("找不到该文件");
         String ext = extension(source);
-        if (!supported(ext)) return "仅支持 png、jpg、gif、mp4、webm";
+        if (!supported(ext)) return dev.guizhou.util.lang.ClientLanguage.text("仅支持 png、jpg、gif、mp4、webm");
         Minecraft mc = Minecraft.getInstance();
-        if (mc == null) return "游戏目录不可用";
+        if (mc == null) return dev.guizhou.util.lang.ClientLanguage.text("游戏目录不可用");
         Path folder = root(mc);
         try {
             Files.createDirectories(folder);
@@ -191,7 +213,7 @@ public final class MenuBackground {
             token = Long.MIN_VALUE;
             return null;
         } catch (Exception e) {
-            return "无法保存背景";
+            return dev.guizhou.util.lang.ClientLanguage.text("无法保存背景");
         }
     }
 
@@ -259,7 +281,7 @@ public final class MenuBackground {
                 int destW = Math.max(1, Math.round(canvasW * scale));
                 int destH = Math.max(1, Math.round(canvasH * scale));
                 int limit = Math.min(count, MAX_FRAMES);
-                if (count > MAX_FRAMES) banner = "GIF 较长，只播放前 " + MAX_FRAMES + " 帧";
+                if (count > MAX_FRAMES) banner = dev.guizhou.util.lang.ClientLanguage.text("GIF 较长，只播放前 ") + MAX_FRAMES + dev.guizhou.util.lang.ClientLanguage.text(" 帧");
                 frames = new ResourceLocation[limit];
                 delays = new long[limit];
                 BufferedImage canvas = new BufferedImage(destW, destH, BufferedImage.TYPE_INT_ARGB);
@@ -327,12 +349,16 @@ public final class MenuBackground {
             delays = grownDelays;
         }
         ResourceLocation id = ResourceLocation.fromNamespaceAndPath("guizhouware", "dynamic/menu_custom_" + token + "_" + index);
-        mc.getTextureManager().register(id, new LinearBackgroundTexture(image));
+        DynamicTexture texture = new DynamicTexture(image);
+        texture.upload();
+        mc.getTextureManager().register(id, texture);
         frames[index] = id;
         live.add(id);
     }
 
     private static void release(Minecraft mc) {
+        MenuVideoPlayer.stopWorker();
+        video = null;
         for (ResourceLocation id : live) {
             try {
                 mc.getTextureManager().release(id);
@@ -363,7 +389,7 @@ public final class MenuBackground {
                 return fileSelection(file);
             }
         } catch (Exception e) {
-            return new Selection(Kind.MISSING, null, "配置无法读取");
+            return new Selection(Kind.MISSING, null, dev.guizhou.util.lang.ClientLanguage.text("配置无法读取"));
         }
         Path legacy = folder.resolve("background.png");
         if (Files.isRegularFile(legacy)) return fileSelection(legacy);
@@ -461,22 +487,15 @@ public final class MenuBackground {
         int w = frame.getWidth(), h = frame.getHeight();
         int[] rgb = frame.getRGB(0, 0, w, h, null, 0, w);
         NativeImage image = new NativeImage(NativeImage.Format.RGBA, w, h, false);
-        for (int i = 0; i < rgb.length; i++) {
-            int p = rgb[i];
+        IntBuffer buf = MemoryUtil.memIntBuffer(((dev.guizhou.mixin.client.NativeImageAccessor)(Object)image).rime$pixels(), w * h);
+        for (int p : rgb) {
             int a = (p >>> 24) & 0xFF;
             int r = (p >>> 16) & 0xFF;
             int g = (p >>> 8) & 0xFF;
             int b = p & 0xFF;
-            image.setPixelRGBA(i % w, i / w, (a << 24) | (b << 16) | (g << 8) | r);
+            buf.put((a << 24) | (b << 16) | (g << 8) | r);
         }
         return image;
-    }
-
-    private static final class LinearBackgroundTexture extends DynamicTexture {
-        LinearBackgroundTexture(NativeImage image) {
-            super(image);
-            this.setFilter(true, false);
-        }
     }
 
     private static Node tree(IIOMetadata metadata, String format) {

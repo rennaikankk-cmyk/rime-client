@@ -13,6 +13,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundSetHealthPacket;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
@@ -35,13 +36,18 @@ public class AutoLogModule extends Module {
 
     private int cachedTotems = 0;
     private volatile boolean awaitingRechamber = false;
-    private List<String> nearbyPlayerNames = new ArrayList<>();
 
     public AutoLogModule() {
         super("AutoLog", "Automatically disconnects based on health or totem count. AutoReconnect never "
                 + "reconnects after an AutoLog disconnect.", Category.COMBAT);
         healthThreshold.setVisibility(v -> logOnHealth.getValue());
         totemThreshold.setVisibility(v -> logOnTotems.getValue());
+    }
+
+    /** True for a short window after this client disconnected on purpose (AutoLog, VisualRange). */
+    public static boolean recentlyLoggedOut() {
+        long at = lastIntentionalDisconnectMs;
+        return at != 0 && System.currentTimeMillis() - at <= INTENTIONAL_WINDOW_MS;
     }
 
     @Override
@@ -58,46 +64,52 @@ public class AutoLogModule extends Module {
     @Subscribe
     private void onTick(TickEvent event) {
         if (nullCheck()) return;
-        if (mc.screen != null) return;
-        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
         if (mc.player.isDeadOrDying()) { disable(); return; }
         updateTotemCount();
-        nearbyPlayerNames = mc.level.players().stream()
-                .filter(p -> p != mc.player)
-                .map(p -> p.getGameProfile().getName())
-                .toList();
         if (!awaitingRechamber && isSurvival()) checkThresholds();
     }
 
+    /**
+     * Receive callbacks run on the Netty thread: only read the packet here and hand every
+     * decision (world reads, disable, disconnect and its chat output) to the client thread.
+     */
     @Subscribe
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (nullCheck() || !isSurvival()) return;
         if (event.getPacket() instanceof ClientboundEntityEventPacket pkt) {
-            if (pkt.getEventId() == 35 && pkt.getEntity(mc.level) == mc.player) {
-                cachedTotems--;
-                if (!logOnTotems.getValue() || cachedTotems > totemThreshold.getValue()) return;
-
-                if (awaitingRechamber) {
-                    awaitingRechamber = false;
-                    mc.execute(this::disconnect);
-                    return;
-                }
-
-                boolean pollOffhand = totemThreshold.getValue() > 1 && isAutoTotemEnabled();
-                Channel channel = pollOffhand ? getChannel() : null;
-                if (channel == null) {
-                    disconnect();
-                    return;
-                }
-                awaitingRechamber = true;
-                pollForRechamber(channel, System.currentTimeMillis() + 500);
-            }
+            if (pkt.getEventId() != 35) return;
+            mc.execute(() -> onTotemPopPacket(pkt));
         } else if (event.getPacket() instanceof ClientboundSetHealthPacket pkt) {
-            if (pkt.getHealth() <= 0) { disable(); return; }
-            if (logOnHealth.getValue() && pkt.getHealth() <= healthThreshold.getValue()) {
-                disconnect();
-            }
+            float health = pkt.getHealth();
+            mc.execute(() -> onHealthPacket(health));
         }
+    }
+
+    private void onTotemPopPacket(ClientboundEntityEventPacket pkt) {
+        if (!isEnabled() || nullCheck() || !isSurvival()) return;
+        if (pkt.getEntity(mc.level) != mc.player) return;
+        cachedTotems--;
+        if (!logOnTotems.getValue() || cachedTotems > totemThreshold.getValue()) return;
+
+        if (awaitingRechamber) {
+            awaitingRechamber = false;
+            disconnect();
+            return;
+        }
+
+        boolean pollOffhand = totemThreshold.getValue() > 1 && isAutoTotemEnabled();
+        Channel channel = pollOffhand ? getChannel() : null;
+        if (channel == null) {
+            disconnect();
+            return;
+        }
+        awaitingRechamber = true;
+        pollForRechamber(channel, System.currentTimeMillis() + 500);
+    }
+
+    private void onHealthPacket(float health) {
+        if (!isEnabled() || nullCheck() || !isSurvival()) return;
+        if (health <= 0) { disable(); return; }
+        if (logOnHealth.getValue() && health <= healthThreshold.getValue()) disconnect();
     }
 
     @Subscribe
@@ -174,12 +186,6 @@ public class AutoLogModule extends Module {
         return mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.SURVIVAL;
     }
 
-    /** True for a short window after this client disconnected on purpose (AutoLog, VisualRange). */
-    public static boolean recentlyLoggedOut() {
-        long at = lastIntentionalDisconnectMs;
-        return at != 0 && System.currentTimeMillis() - at <= INTENTIONAL_WINDOW_MS;
-    }
-
     private void disconnect() {
         logOut("AutoLog Disconnect");
         disable();
@@ -198,11 +204,15 @@ public class AutoLogModule extends Module {
         AutoLogModule module = GuizhouWare.moduleManager.getModuleByClass(AutoLogModule.class);
         if (!nullCheck() && mc.getConnection() != null) {
             BlockPos pos = mc.player.blockPosition();
-            List<String> nearby = module == null ? List.of() : module.nearbyPlayerNames;
+            List<String> nearby = new ArrayList<>();
+            for (Player player : mc.level.players()) {
+                if (player != mc.player) nearby.add(player.getGameProfile().getName());
+            }
             StringBuilder msg = new StringBuilder(title);
             msg.append("\nTotems: ").append(module == null ? 0 : module.cachedTotems);
             msg.append("\nCoords: ").append(pos.getX()).append(", ").append(pos.getY()).append(", ").append(pos.getZ());
             msg.append(nearby.isEmpty() ? "\nNearby: none" : "\nNearby: " + String.join(", ", nearby));
+
             mc.getConnection().getConnection().disconnect(Component.literal(msg.toString()));
         } else if (module != null) {
             module.closeChannel();

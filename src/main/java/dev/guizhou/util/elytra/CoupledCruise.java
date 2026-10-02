@@ -28,7 +28,7 @@ public final class CoupledCruise {
             descentFloor = bounded(descentFloor, -20, 0, -1.7);
             heightWindow = bounded(heightWindow, 1, 1200, 60);
             speedCap = bounded(speedCap, 0.05, 15, 15);
-            boxCap = bounded(boxCap, 0.01, 15, 1.7);
+            boxCap = bounded(boxCap, 0.01, 5, 1.7);
             inset = bounded(inset, 0, 0.1, 0.002);
             dualClimbAngle = bounded(dualClimbAngle, 0, 89.5, 0);
             dualDiveAngle = bounded(dualDiveAngle, 0, 30, 0);
@@ -41,10 +41,6 @@ public final class CoupledCruise {
                     heightWindow, speedCap, boxCap, inset, 0, 0);
         }
 
-        public Config withBoxCap(double axisCap) {
-            return new Config(cruisePitch, climbPitch, descentPitch, smartClimb, descentFloor, porpoise,
-                    heightWindow, speedCap, axisCap, inset, dualClimbAngle, dualDiveAngle);
-        }
         public static Config defaults() {
             return new Config(15, -45, 30, true, -1.7, false, 60, 15, 1.7, .002);
         }
@@ -94,6 +90,7 @@ public final class CoupledCruise {
 
     private double acceleratedReferenceY = Double.NaN;
     private boolean bankSide;
+    private Vec3 combatClimbAxis = Vec3.ZERO;
     private double referenceY = Double.NaN;
     private Phase phase = Phase.LEVEL;
     private Config lastConfig;
@@ -102,6 +99,7 @@ public final class CoupledCruise {
         referenceY = Double.NaN;
         acceleratedReferenceY = Double.NaN;
         bankSide = false;
+        combatClimbAxis = Vec3.ZERO;
         phase = Phase.LEVEL;
         lastConfig = null;
     }
@@ -113,6 +111,7 @@ public final class CoupledCruise {
         CoupledCruise copy = new CoupledCruise();
         copy.acceleratedReferenceY = acceleratedReferenceY;
         copy.bankSide = bankSide;
+        copy.combatClimbAxis = combatClimbAxis;
         copy.referenceY = referenceY;
         copy.phase = phase;
         copy.lastConfig = lastConfig;
@@ -233,6 +232,37 @@ public final class CoupledCruise {
         return new Selection(look, phase, vertical, false, true, dualActive, boxLook);
     }
 
+    /** Use the pursuit heading for dual-view thrust, only outside precise strike/evade windows. */
+    public Selection selectCombat(Config config, Vec3 request, double playerY,
+                                  boolean dualView, boolean precision, boolean directional) {
+        return selectCombat(config, request, playerY, dualView, precision, directional, BoostMode.Aggressive);
+    }
+
+    public Selection selectCombat(Config config, Vec3 request, double playerY,
+                                  boolean dualView, boolean precision, boolean directional, BoostMode boostMode) {
+        if (config == null || !dualView || precision || directional || !finite(request)
+                || request.lengthSqr() < 1e-8) return null;
+        // Combat owns its altitude; never introduce a manual cruise height wave.
+        Config combat = new Config(config.cruisePitch(), config.climbPitch(), config.descentPitch(),
+                config.smartClimb(), config.descentFloor(), false, config.heightWindow(),
+                config.speedCap(), config.boxCap(), config.inset(), config.dualClimbAngle(), config.dualDiveAngle());
+        double horizontal = Math.hypot(request.x, request.z);
+        double vertical = Math.abs(request.y) > Math.max(.1, horizontal * .1) ? Math.signum(request.y) : 0;
+        Vec3 heading = new Vec3(request.x, 0, request.z);
+        if (vertical > 0 && horizontal > 1e-6) {
+            // Axial banking is the proven high-lift profile. Keep it across small
+            // bearing changes, but never let it point more than 60 degrees off pursuit.
+            Vec3 direction = heading.normalize();
+            if (combatClimbAxis.lengthSqr() > 0 && combatClimbAxis.dot(direction) >= .5)
+                heading = combatClimbAxis;
+            else heading = Math.abs(request.x) >= Math.abs(request.z)
+                    ? new Vec3(Math.signum(request.x), 0, 0) : new Vec3(0, 0, Math.signum(request.z));
+        }
+        Selection selected = select(combat, new Intent(heading, vertical, false, true, boostMode), 0, playerY, true);
+        combatClimbAxis = vertical > 0 ? heading.normalize() : Vec3.ZERO;
+        return selected.active() && selected.dualActive() ? selected : null;
+    }
+
     private static double smoothUnit(double value) {
         double x = Math.max(0, Math.min(1, value));
         return x * x * (3 - 2 * x);
@@ -330,6 +360,33 @@ public final class CoupledCruise {
         boolean feasible = box.contains(result, 1e-9) && norm(result) <= cap + 1e-9;
         return new Result(result, feasible, limited, controlledDescentUnmet(config, selection, result),
                 selection.pureVertical() && horizontal(result));
+    }
+
+    /** Combat supplies the heading; only the available thrust is shared with cruise.
+     * Precision and defensive directions must not be replaced by box-corner steering. */
+    public static Result applyCombat(Config config, Vec3 request, Vec3 previous, Vec3 simulated,
+                                     Vec3 look, Vec3 lastLook, boolean precision, boolean directional) {
+        if (config == null || !finite(request)) return new Result(Vec3.ZERO, false, false, false, false);
+        Envelope box = envelope(config, previous, simulated, look, lastLook);
+        if (box == null) return new Result(Vec3.ZERO, false, false, false, false);
+        Vec3 wish = ElytraPhysics.projectToEnvelope(request, box.min, box.max,
+                !precision && !directional, 0, precision);
+        Vec3 nearest = clamp(Vec3.ZERO, box);
+        if (norm(nearest) > config.speedCap()) return new Result(nearest, false, true, false, false);
+        boolean limited = norm(wish) > config.speedCap();
+        Vec3 result = wish;
+        if (limited) {
+            double low = 0, high = 1;
+            result = nearest;
+            for (int i = 0; i < 60; i++) {
+                double scale = (low + high) * .5;
+                Vec3 candidate = clamp(wish.scale(scale), box);
+                if (norm(candidate) <= config.speedCap()) { low = scale; result = candidate; }
+                else high = scale;
+            }
+        }
+        return new Result(result, box.contains(result, 1e-9) && norm(result) <= config.speedCap() + 1e-9,
+                limited, false, false);
     }
 
     private static boolean controlledDescentUnmet(Config config, Selection selection, Vec3 result) {

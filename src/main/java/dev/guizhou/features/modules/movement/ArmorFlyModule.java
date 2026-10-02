@@ -28,7 +28,6 @@ public final class ArmorFlyModule extends Module {
 
     public ArmorFlyModule() {
         super("ArmorFly", "Independent armor/elytra switching while gliding; keeps manual steering.", Category.MOVEMENT);
-        displayName.setValue("甲飞");
         instance = this;
         dev.guizhou.util.PacketSendUtil.addSubmissionListener(packet -> {
             if (mc.isSameThread() && requested() && mc.player != null
@@ -42,16 +41,21 @@ public final class ArmorFlyModule extends Module {
     }
 
     public static boolean requested() {
-        return instance != null && instance.isEnabled() && HeartbeatManager.authorized();
+        return (instance != null && instance.isEnabled() || SLMArmorFlyModule.selected())
+                && HeartbeatManager.authorized()
+                && !dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ARMOR);
     }
 
     public static boolean yieldsToCruise() {
+        if (SLMArmorFlyModule.selected()) return SLMArmorFlyModule.yieldsToCruise();
         if (!requested() || !instance.cruisePriority.getValue()) return false;
         var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
         return flight != null && flight.gzBoostControlsLook();
     }
 
     @Override public void onEnable() {
+        var slm = GuizhouWare.moduleManager.getModuleByClass(SLMArmorFlyModule.class);
+        if (slm != null && slm.isEnabled()) slm.disable();
         var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
         if (flight != null) flight.monitorArmorFly();
     }
@@ -94,7 +98,7 @@ public final class ArmorFlyModule extends Module {
 
     private boolean metadataEligible() {
         var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
-        return requested() && !delayBlocked && glideTrackerDelay.getValue() > 0 && mc.player != null
+        return isEnabled() && requested() && !delayBlocked && glideTrackerDelay.getValue() > 0 && mc.player != null
                 && (flight == null || !flight.isEnabled())
                 && !mc.player.onGround() && !mc.player.isDeadOrDying()
                 && !mc.player.isInWater() && !mc.player.isInLava()
@@ -146,8 +150,10 @@ public final class ArmorFlyModule extends Module {
     }
 
     @Override public String getDisplayInfo() {
-        if (yieldsToCruise()) return "巡航优先";
-        if (delayBlocked && glideTrackerDelay.getValue() > 0) return "回拉后已停用延迟";
-        return metadata.pending() ? "等待滑翔同步" : null;
+        String foreign = dev.guizhou.util.compat.ClientCoexistence.flightReason();
+        if (foreign != null) return dev.guizhou.util.lang.ClientLanguage.text("让行：") + foreign;
+        if (yieldsToCruise()) return dev.guizhou.util.lang.ClientLanguage.text("巡航优先");
+        if (delayBlocked && glideTrackerDelay.getValue() > 0) return dev.guizhou.util.lang.ClientLanguage.text("回拉后已停用延迟");
+        return metadata.pending() ? dev.guizhou.util.lang.ClientLanguage.text("等待滑翔同步") : null;
     }
 }

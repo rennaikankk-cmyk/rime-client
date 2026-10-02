@@ -133,8 +133,9 @@ public abstract class HudModule implements Util {
                 x = live[0];
                 y = live[1];
             } else if (hud.isCustomPosition(this)) {
-                x = Math.round(hud.normalizedX(this) * screenWidth());
-                y = Math.round(hud.normalizedY(this) * screenHeight());
+                int[] saved = hud.savedPosition(this, scaledW, scaledH, screenWidth(), screenHeight());
+                x = saved[0];
+                y = saved[1];
             } else if (autoPlace()) {
                 var placed = hud.defaultPlacement(this, x, y, scaledW, scaledH);
                 x = placed.x();

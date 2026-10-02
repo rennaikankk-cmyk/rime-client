@@ -45,7 +45,7 @@ public final class FlatBaseProbe implements ClientModInitializer {
         });
     }
     @SuppressWarnings({"rawtypes","unchecked"})
-    private static void setting(Module module,String name,Object value) {
+    static void setting(Module module,String name,Object value) {
         for (Setting s:module.getSettings()) if(s.getName().equals(name)) {
             if(s.getValue() instanceof Enum e && value instanceof String text)value=Enum.valueOf(e.getDeclaringClass(),text);
             s.setValue(value);return;

@@ -33,3 +33,6 @@ forge*changelog.txt
 
 /CLAUDE.md
 .claude
+
+/tools/port-probe/runs/
+/tools/port-probe/port-probe.jar

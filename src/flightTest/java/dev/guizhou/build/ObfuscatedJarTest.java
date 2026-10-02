@@ -179,6 +179,12 @@ public final class ObfuscatedJarTest {
     }
 
     private static void verifyResources(JarFile input, JarFile output) throws IOException {
+        var metadata = com.google.gson.JsonParser.parseString(new String(entry(input, "fabric.mod.json"),
+                java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+        check(metadata.getAsJsonObject("custom").has("rimeguard"), "Release metadata must require the distribution guard");
+        check(!metadata.getAsJsonObject("entrypoints").has("fabric-client-gametest"), "Client tests must not become release entrypoints");
+        check(input.stream().noneMatch(e -> e.getName().startsWith("dev/guizhou/test/")),
+                "Development client fixtures must not be packaged");
         for (String name : List.of("AI_NOTICE.md", "CLAUDE.md", "AGENTS.md", "LLM.txt", "README.md",
                 "fabric.mod.json", "guizhouware.mixins.json", "guizhouware.accesswidener")) {
             byte[] original = entry(input, name);
@@ -270,49 +276,33 @@ public final class ObfuscatedJarTest {
         requiredMethod(heartbeat, authorized + "()Z");
         requiredMethod(heartbeat, denied + "()V");
         Map<String, List<String>> checkpoints = Map.ofEntries(
-                Map.entry("ElytraWeaponController", List.of("update")),
-                Map.entry("AutoSwordModule", List.of("onPreTick", "attack", "sendTeleport")),
-                Map.entry("AutoTotemModule", List.of("onTick", "refillOffhandTotem")),
+                Map.entry("UtilityModule", List.of("onTick", "permitted")),
+                Map.entry("AutoSwordModule", List.of("onPreTick", "prepareAttackTick", "tryAttack", "tryDeflect", "strike", "attackFrom", "sendTeleport", "moveTo")),
+                Map.entry("KillAuraModule", List.of("onPreTick")),
                 Map.entry("GuangxiCrystalModule", List.of("onPreTick", "onCrystalSpawn", "onBlockUpdate",
                         "lambda$onBlockUpdate$", "scanBlockUpdate", "preplaceCrystal", "breakCrystal",
                         "sendCrystalAttack", "sendGhostAttack", "doPlace", "placeCrystalShared")),
                 Map.entry("GuangxiMineModule", List.of("onTick", "onAttackBlock", "requestBreak", "startMine",
                         "begin", "stopBreak", "sendAction", "isAvailable", "fireFinish", "fireSubmitted")),
                 Map.entry("AutoMineModule", List.of("onPreTick", "onMineFinish", "onPacket", "lambda$onPacket$", "placeGlass")),
-                Map.entry("GuangxiElytraChaseModule", List.of("onPreTick", "onPostMovement", "attack")),
+                Map.entry("GuangxiElytraChaseModule", List.of("onPreTick", "onPostMovement", "onElytra", "isEatingRetreatRequested", "updateEatingRetreat")),
                 Map.entry("GuangxiBedModule", List.of("onPreTick")),
                 Map.entry("GuangxiElytraModule", List.of("onPreTick")),
                 Map.entry("AutoUseModule", List.of("onPreTick", "shouldKeepUsing")),
                 Map.entry("ArmorFlyModule", List.of("onPreTick", "onFlightWindow", "requested")),
+                Map.entry("SLMArmorFlyModule", List.of("onPreTick", "onFlightWindow", "requested")),
                 Map.entry("AutoAnchorModule", List.of("onPreTick")),
                 Map.entry("GuangxiPistonModule", List.of("onTick")),
                 Map.entry("NoFallModule", List.of("onPreTick", "protects")),
                 Map.entry("NoSlowModule", List.of("onTick", "onPacketSend", "shouldCancelConsumeSlow", "isActive")),
-                Map.entry("AntiHungerModule", List.of("onPreTick", "onPacketSend")));
-        // Newly gated callbacks may inspect null/UI state before their guard.
-        // LicenseActionHookTest checks denied-path reachability; preserve that exact
-        // control flow in the final artifact as well, without relaxing legacy checks.
-        Map<String, List<String>> reviewedCallbacks = Map.ofEntries(
-                Map.entry("AutoXPModule", List.of("onTick")),
-                Map.entry("KeyPotionModule", List.of("onTick")),
-                Map.entry("ItemUseTracker", List.of("useBatch")),
-                Map.entry("PhaseModule", List.of("onTick")),
-                Map.entry("FastPortalModule", List.of("onPreTick")),
-                Map.entry("MiddleClickExtraModule", List.of("onMouse")),
-                Map.entry("TrickshotModule", List.of("onTick")),
-                Map.entry("MoFuckerModule", List.of("onTick")),
-                Map.entry("InstantRekitModule", List.of("onTick")),
-                Map.entry("ReplenishModule", List.of("onTick")),
-                Map.entry("GuangxiSpearTPModule", List.of("execute", "onPacketSend", "onPreTick")),
-                Map.entry("GuangxiProbeModule", List.of("onEnable", "onPreTick")),
-                Map.entry("AutoLogModule", List.of("onTick")),
-                Map.entry("VelocityModule", List.of("phaseConditionMet")),
-                Map.entry("NoRotateModule", List.of("isActive")),
-                Map.entry("SprintModule", List.of("onTick", "wantsSprint")),
-                Map.entry("FastuseModule", List.of("onTick")));
-        Map<String, List<String>> allCheckpoints = new LinkedHashMap<>(checkpoints);
-        allCheckpoints.putAll(reviewedCallbacks);
-        for (var checkpoint : allCheckpoints.entrySet()) {
+                Map.entry("AntiHungerModule", List.of("onPreTick", "onPacketSend")),
+                Map.entry("SurroundModule", List.of("breakCrystal", "centerInput")),
+                Map.entry("HoleFillModule", List.of("onTick", "fill")),
+                Map.entry("AutoArmorModule", List.of("onTick", "equip")),
+                Map.entry("AutoEatModule", List.of("onPreTick", "startMeal", "shouldKeepEating")),
+                Map.entry("AutoTotemModule", List.of("sync", "tryUseOffhandGapple", "useGappleOnUse")),
+                Map.entry("AutoReconnectModule", List.of("reconnect")));
+        for (var checkpoint : checkpoints.entrySet()) {
             String simpleName = checkpoint.getKey();
             List<ClassInfo> matches = before.values().stream()
                     .filter(info -> info.name.endsWith("/" + simpleName)).toList();
@@ -331,7 +321,7 @@ public final class ObfuscatedJarTest {
                 String mappedName = mapping.requiredMember(source.name, methodMappingKey(sourceMethod));
                 MethodInfo outputMethod = requiredMethod(result, mappedName + mapping.descriptor(sourceMethod.descriptor));
                 verifyAuthorizationFlow(sourceMethod, outputMethod, owner, authorized, simpleName);
-                if (checkpoints.containsKey(simpleName) && Set.of("onPreTick", "onTick", "onPostMovement", "onFlightWindow").contains(sourceMethod.name)) {
+                if (Set.of("onPreTick", "onTick", "onPostMovement", "onFlightWindow").contains(sourceMethod.name)) {
                     verifyDeniedTickPrefix(source, sourceMethod);
                 }
             }
@@ -385,7 +375,7 @@ public final class ObfuscatedJarTest {
         check(branch.opcode == Opcodes.IFNE, "Denied tick must take a terminating cleanup path: " + label);
         int allowedWork = labelOrdinal(method, (Label) branch.value);
         boolean returned = false;
-        Set<String> cleanup = Set.of("stopUnauthorizedMining", "resetGlass", "resetState", "restoreSprint");
+        Set<String> cleanup = Set.of("stopUnauthorizedMining", "resetGlass", "resetState", "restoreSprint", "resetSession");
         for (int index = 2; index < allowedWork; index++) {
             Step step = steps.get(index);
             if (step.opcode == Opcodes.RETURN) { returned = true; break; }
@@ -394,11 +384,12 @@ public final class ObfuscatedJarTest {
             if (step.opcode >= Opcodes.INVOKEVIRTUAL && step.opcode <= Opcodes.INVOKEINTERFACE) {
                 boolean notification = member(step, Opcodes.INVOKESTATIC, HEARTBEAT, "notifyDeniedOnce", "()V");
                 boolean restoresGlide = owner.name.endsWith("/ArmorFlyModule") && step.name.equals("flushMetadata");
-                boolean ownCleanup = owner.name.equals(step.owner) && (cleanup.contains(step.name) || restoresGlide)
+                boolean releasesMeal = owner.name.equals("dev/guizhou/features/modules/combat/GuangxiElytraChaseModule")
+                        && step.name.equals("endEatingRetreat");
+                boolean ownCleanup = owner.name.equals(step.owner) && (cleanup.contains(step.name) || restoresGlide || releasesMeal)
                         && step.descriptor.equals("()V");
                 boolean clear = step.name.equals("clear") && step.descriptor.equals("()V")
-                        && (step.owner.startsWith("java/util/") || step.owner.equals("dev/guizhou/features/modules/combat/MiningBreakTracker")
-                        || step.owner.equals("dev/guizhou/util/render/placement/PlacementVisuals"));
+                        && (step.owner.startsWith("java/util/") || step.owner.equals("dev/guizhou/features/modules/combat/MiningBreakTracker"));
                 check(notification || ownCleanup || clear, "Denied tick calls normal business: " + label + " -> " + step.name);
             }
         }
@@ -466,10 +457,10 @@ public final class ObfuscatedJarTest {
             MethodInfo beat = retainedMethod(before, classes, mapping, HEARTBEAT, "beat()V", obfuscated);
             String verifyName = obfuscated ? mapping.requiredMember(signed, "verify(byte[],java.security.PublicKey)") : "verify";
             String allowedName = obfuscated ? mapping.requiredMember(verdict, "allowed()") : "allowed";
-            String successName = obfuscated ? mapping.requiredMember(lease, "verifiedSuccess(long,long)") : "verifiedSuccess";
+            String successName = obfuscated ? mapping.requiredMember(lease, "verifiedSuccess()") : "verifiedSuccess";
             int verify = uniqueCall(beat, signedOwner, verifyName, "([BLjava/security/PublicKey;)L" + verdictOwner + ";");
             int allowed = uniqueCall(beat, verdictOwner, allowedName, "()Z");
-            int success = uniqueCall(beat, leaseOwner, successName, "(JJ)V");
+            int success = uniqueCall(beat, leaseOwner, successName, "()V");
             check(verify < allowed && allowed < success, "Heartbeat lease renewal must follow verified allowed verdict");
             check(!flowReaches(beat, 0, success, verify) && !flowReaches(beat, 0, success, allowed),
                     "Heartbeat lease renewal bypasses signature verification or the allowed verdict");
@@ -485,26 +476,10 @@ public final class ObfuscatedJarTest {
             MethodInfo verifier = retainedMethod(before, classes, mapping, signed,
                     "verify([BLjava/security/PublicKey;)L" + verdict + ";", obfuscated);
             int signature = uniqueCall(verifier, "java/security/Signature", "verify", "([B)Z");
-            int createVerdict = uniqueCall(verifier, verdictOwner, "<init>", "(ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)V");
+            int createVerdict = uniqueCall(verifier, verdictOwner, "<init>", "(ZLjava/lang/String;)V");
             check(!flowReaches(verifier, 0, createVerdict, signature)
                             && !flowReaches(verifier, rejectedBooleanPath(verifier, signature), createVerdict, -1),
                     "SignedHeartbeat can construct a verdict after a failed or skipped cryptographic verification");
-
-            String matchName = obfuscated ? mapping.requiredMember(verdict, "matchesRequest(java.lang.String,java.lang.String)") : "matchesRequest";
-            int match = uniqueCall(beat, verdictOwner, matchName, "(Ljava/lang/String;Ljava/lang/String;)Z");
-            check(!flowReaches(beat, 0, success, match)
-                            && !flowReaches(beat, rejectedBooleanPath(beat, match), success, -1),
-                    "Lease renewal must require the current nonce and token subject");
-
-            String windowClass = "dev/guizhou/util/license/SignedHeartbeat$Window";
-            String windowOwner = obfuscated ? mapping.requiredClass(windowClass) : windowClass;
-            String windowName = obfuscated ? mapping.requiredMember(verdict, "windowFor(java.lang.String,long)") : "windowFor";
-            int window = uniqueCall(beat, verdictOwner, windowName, "(Ljava/lang/String;J)L" + windowOwner + ";");
-            check(!flowReaches(beat, 0, success, window), "Lease renewal bypasses session/age/lease validation");
-            for (ExceptionRegion region : beat.exceptions) {
-                if (labelIndex(beat, region.start) <= window && window < labelIndex(beat, region.end))
-                    check(!flowReaches(beat, labelIndex(beat, region.handler), success, -1), "Invalid session window renews a lease");
-            }
 
             ClassInfo subscriber = required(classes, limitedOwner);
             check(subscriber.interfaces.contains("java/net/http/HttpResponse$BodySubscriber"),

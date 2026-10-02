@@ -93,8 +93,8 @@ public class VisualRangeModule extends Module {
     }
 
     private void announce(UUID id, String name, boolean entered, boolean friend, boolean enemy) {
-        String tag = enemy ? " (仇人)" : friend ? " (好友)" : "";
-        String text = name + tag + (entered ? " 进入了视距" : " 离开了视距");
+        String tag = enemy ? dev.guizhou.util.lang.ClientLanguage.text(" (仇人)") : friend ? dev.guizhou.util.lang.ClientLanguage.text(" (好友)") : "";
+        String text = name + tag + (entered ? dev.guizhou.util.lang.ClientLanguage.text(" 进入了视距") : dev.guizhou.util.lang.ClientLanguage.text(" 离开了视距"));
         int color = enemy ? 0xFF5555 : friend ? 0x55FF55 : entered ? 0xFFFF55 : 0xAAAAAA;
         ChatUtil.sendPersistent("visual:" + id, Component.literal(text).withColor(color));
         NotifierHudModule.push("visual:" + id, entered && !friend ? NotifierHudModule.Icon.DANGER : NotifierHudModule.Icon.INFO, text);

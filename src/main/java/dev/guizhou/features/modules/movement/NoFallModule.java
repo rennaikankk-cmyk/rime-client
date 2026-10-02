@@ -10,7 +10,6 @@ import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.HeartbeatManager;
 import dev.guizhou.mixin.network.MovePlayerPacketAccessor;
-import dev.guizhou.util.elytra.MappedCombatItems;
 import dev.guizhou.util.movement.GroundSpoofPolicy;
 import dev.guizhou.util.movement.MovementSpoofContext;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -18,15 +17,17 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Ground-bit protection, or one extra Grim full move when the fall reaches the distance setting. */
 public final class NoFallModule extends Module {
-    public enum Mode { GroundSpoof, Grim }
+    public enum Mode { GroundSpoof, Grim, NoAC }
 
-    private final Setting<Mode> mode = mode("Mode", Mode.GroundSpoof);
+    private final Setting<Mode> mode = mode("Mode", Mode.GroundSpoof)
+            .described("NoAC 为无反作弊服直接设置下落移动包的落地标志，不等待转头、TPS 或附近地面；仍遵守重锤暂停设置。");
     private final Setting<Double> fallDistance = num("FallDistance", 2.5, 1.0, 10.0);
     private final Setting<Boolean> checkGround = bool("CheckGround", true);
     private final Setting<Double> groundRange = num("GroundRange", 4.0, 0.5, 8.0);
@@ -98,7 +99,6 @@ public final class NoFallModule extends Module {
                 grimPending = false;
                 grimForwarding = true;
                 try {
-                    // 1.21.1 PosRot has no horizontal-collision flag.
                     mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
                             move.getX(mc.player.getX()),
                             move.getY(mc.player.getY()) + 1.00001E-9,
@@ -119,20 +119,21 @@ public final class NoFallModule extends Module {
         return MovementSpoofContext.ordinaryMovement()
                 && mc.player.tickCount >= pauseUntil
                 && !corrected.get()
-                && !(pauseMace.getValue() && MappedCombatItems.isMace(mc.player.getMainHandItem()));
+                && !(pauseMace.getValue() && mc.player.getMainHandItem().is(Items.MACE));
     }
 
     private boolean protects(ServerboundMovePlayerPacket move) {
-        if (mode.getValue() != Mode.GroundSpoof) return false;
+        boolean noAc = mode.getValue() == Mode.NoAC;
+        if (!noAc && mode.getValue() != Mode.GroundSpoof) return false;
         if (!isEnabled() || !HeartbeatManager.authorized() || !MovementSpoofContext.ordinaryMovement()
-                || !move.hasPosition() || corrected.get()) return false;
+                || !noAc && (!move.hasPosition() || corrected.get())) return false;
         ensureSession();
-        if (mc.player.tickCount < pauseUntil
-                || pauseMace.getValue() && MappedCombatItems.isMace(mc.player.getMainHandItem())
+        if (!noAc && mc.player.tickCount < pauseUntil
+                || pauseMace.getValue() && mc.player.getMainHandItem().is(Items.MACE)
                 || !GroundSpoofPolicy.falling(mc.player.fallDistance, fallDistance.getValue(),
                         mc.player.getDeltaMovement().y, mc.player.onGround())) return false;
         // Search only blocks below the feet: an entity or a wall beside the body is not ground.
-        if (!checkGround.getValue()) return true;
+        if (noAc || !checkGround.getValue()) return true;
         AABB body = mc.player.getBoundingBox();
         AABB below = new AABB(body.minX + 1.0e-4, body.minY - groundRange.getValue(), body.minZ + 1.0e-4,
                 body.maxX - 1.0e-4, body.minY - 1.0e-4, body.maxZ - 1.0e-4);

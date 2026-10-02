@@ -52,7 +52,6 @@ public final class CombatPlanningWiringTest {
         check(method("dev/guizhou/util/AnchorDamageUtil$Target", "of").find("get", UTIL + "CombatSnapshotService") >= 0,
                 "Anchor and bed share the same equipment cache");
         Trace updates = method(MODULE + "GuangxiCrystalModule", "onBlockUpdate");
-        // 1.21.1: Minecraft.schedule became tell (always-queue main-thread dispatch).
         check(updates.find("tell", null) >= 0 && !updates.has("scanBlockUpdate", null),
                 "Reactive block updates queue one drain instead of scanning in each callback");
         check(method(MODULE + "GuangxiCrystalModule", "onCrystalSpawn").find("sendCrystalAttack", null) >= 0,

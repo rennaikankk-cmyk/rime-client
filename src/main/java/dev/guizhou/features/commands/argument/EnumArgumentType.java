@@ -41,7 +41,7 @@ public class EnumArgumentType<T extends Enum<?>> implements ArgumentType<T> {
         }
 
         reader.setCursor(start);
-        throw CommandExceptions.invalidArgument("无效的选项 %s，可选：%s", value,
+        throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("无效的选项 %s，可选：%s"), value,
                 String.join(" / ", enumNameMap.keySet()).toLowerCase(Locale.ROOT)).createWithContext(reader);
     }
 

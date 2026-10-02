@@ -70,9 +70,9 @@ public class FakePlayerCommand extends Command {
         }
 
         if (popped == 0) {
-            return fail("还没有假人，先生成一个");
+            return fail(dev.guizhou.util.lang.ClientLanguage.text("还没有假人，先生成一个"));
         }
-        return success("已为 %s 个假人播放图腾动画", popped);
+        return success(dev.guizhou.util.lang.ClientLanguage.text("已为 %s 个假人播放图腾动画"), popped);
     }
 
     private int toggleSwim() {
@@ -88,7 +88,7 @@ public class FakePlayerCommand extends Command {
             if (fake.getPose() != Pose.SWIMMING) anyStanding = true;
         }
         if (found == 0) {
-            return fail("还没有假人，先生成一个");
+            return fail(dev.guizhou.util.lang.ClientLanguage.text("还没有假人，先生成一个"));
         }
 
         Pose pose = anyStanding ? Pose.SWIMMING : Pose.STANDING;
@@ -98,8 +98,8 @@ public class FakePlayerCommand extends Command {
             fake.refreshDimensions();
         }
         return success(pose == Pose.SWIMMING
-                ? "假人已切换为游泳姿势"
-                : "假人已恢复站立");
+                ? dev.guizhou.util.lang.ClientLanguage.text("假人已切换为游泳姿势")
+                : dev.guizhou.util.lang.ClientLanguage.text("假人已恢复站立"));
     }
 
     private int spawn(String name) {
@@ -121,12 +121,12 @@ public class FakePlayerCommand extends Command {
         }
         mc.level.addEntity(fake);
         spawned.add(fake);
-        ChatFeed.send(ChatTone.MUTED, Component.literal("本地假人可用于观察追踪与接近动作；它不在服务器上，不会收到真实伤害。伤害/图腾测试请使用服务器训练目标（"
-                + ChatFeed.prefix() + "fakeplayer pop 仅模拟图腾动画）。"));
+        ChatFeed.send(ChatTone.MUTED, Component.literal(dev.guizhou.util.lang.ClientLanguage.text("本地假人可用于观察追踪与接近动作；它不在服务器上，不会收到真实伤害。伤害/图腾测试请使用服务器训练目标（")
+                + ChatFeed.prefix() + dev.guizhou.util.lang.ClientLanguage.text("fakeplayer pop 仅模拟图腾动画）。")));
         if (despawned > 0) {
-            return success("已替换为假人 {cyan} %s", name);
+            return success(dev.guizhou.util.lang.ClientLanguage.text("已替换为假人 {cyan} %s"), name);
         }
-        return success("已生成假人 {cyan} %s", name);
+        return success(dev.guizhou.util.lang.ClientLanguage.text("已生成假人 {cyan} %s"), name);
     }
 
     private int removeAll() {
@@ -136,9 +136,9 @@ public class FakePlayerCommand extends Command {
         }
         int removed = despawnAll();
         if (removed == 0) {
-            return info("没有需要移除的假人");
+            return info(dev.guizhou.util.lang.ClientLanguage.text("没有需要移除的假人"));
         }
-        return success("已移除 %s 个假人", removed);
+        return success(dev.guizhou.util.lang.ClientLanguage.text("已移除 %s 个假人"), removed);
     }
 
     private int despawnAll() {

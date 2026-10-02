@@ -185,20 +185,17 @@ public final class FlightTelemetryWiringTest {
     private static void coupledMovementBoundaries() throws IOException {
         Map<String, Trace> methods = read(FLIGHT);
         Trace constructor = method(methods, "<init>");
-        boolean profile = false, adaptiveOff = false;
+        boolean off = false;
         for (int i = 0; i + 1 < constructor.steps.size(); i++) {
-            if ("Mode".equals(constructor.steps.get(i).constant)) profile = true;
-            if ("AdaptiveSlowdown".equals(constructor.steps.get(i).constant)
-                    && constructor.steps.get(i + 1).opcode == Opcodes.ICONST_0) adaptiveOff = true;
+            if ("CoupledCruise".equals(constructor.steps.get(i).constant)
+                    && constructor.steps.get(i + 1).opcode == Opcodes.ICONST_0) off = true;
         }
-        check(profile, "Flight exposes its explicit Grim/NoAC profile; cruise is internal policy");
-        check(adaptiveOff, "Adaptive slowdown is exposed but defaults off");
+        check(off, "Cruise is opt-in; existing flight and combat defaults remain unchanged");
         Trace eligible = method(methods, "cruiseEligible");
-        Trace motionEligible = method(methods, "cruiseMotionEligible");
         String chase = "dev/guizhou/features/modules/combat/GuangxiElytraChaseModule";
-        check(motionEligible.hasCall(chase, "isMaceDiveActive") && motionEligible.hasCall(chase, "preservesMaceDescent")
+        check(eligible.hasCall(chase, "isMaceDiveActive") && eligible.hasCall(chase, "preservesMaceDescent")
                         && eligible.hasCall(FLIGHT, "chaseWantsFlight") && eligible.hasCall(FLIGHT, "chaseActive")
-                        && eligible.hasCall(FLIGHT, "cruiseMotionEligible") && motionEligible.hasCall(FLIGHT, "needsLandingRecovery"),
+                        && eligible.hasCall(FLIGHT, "needsLandingRecovery"),
                 "Cruise gate excludes combat ownership, natural mace falls and landing recovery");
         Trace apply = method(methods, "applyFlightVelocity");
         int consumption = apply.field("pendingCruise", Opcodes.PUTFIELD, -1);

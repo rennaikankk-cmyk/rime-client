@@ -29,10 +29,10 @@ public class SaveKitCommand extends Command {
 
     private int save(String name) {
         InstantRekitModule module = GuizhouWare.moduleManager.getModuleByClass(InstantRekitModule.class);
-        if (module == null) return fail("InstantRekit 模块未注册");
+        if (module == null) return fail(dev.guizhou.util.lang.ClientLanguage.text("InstantRekit 模块未注册"));
         int saved = module.saveKit(name);
-        if (saved == 0) return fail("背包为空，没有可保存的物品");
+        if (saved == 0) return fail(dev.guizhou.util.lang.ClientLanguage.text("背包为空，没有可保存的物品"));
         GuizhouWare.configManager.save();
-        return success("已保存套装 {cyan} %s {}，共 {cyan} %s {} 个物品格", name, saved);
+        return success(dev.guizhou.util.lang.ClientLanguage.text("已保存套装 {cyan} %s {}，共 {cyan} %s {} 个物品格"), name, saved);
     }
 }

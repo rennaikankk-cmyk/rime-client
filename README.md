@@ -1,17 +1,22 @@
+> Daily maintenance targets Minecraft **1.21.11**. The member **1.21.1** port is synchronized only when the owner explicitly requests it. See [maintenance policy](docs/maintenance-policy.md).
+
 <p align="center">
-  <img src="src/main/resources/assets/guizhouware/icon.png" alt="GuizhouWare" width="180" />
+  <img src="src/main/resources/assets/guizhouware/icon.png" alt="Rime" width="180" />
 </p>
 
-<h1 align="center">Rime · Minecraft 1.21.1</h1>
+<h1 align="center">Rime</h1>
 
-[![Java CI with Gradle](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/gradle-upload.yml/badge.svg?branch=main)](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/gradle-upload.yml)
-[![Security Review](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/security-review.yml/badge.svg?branch=main)](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/security-review.yml)
+[![Java CI with Gradle](https://github.com/rennaikankk-cmyk/rime-client/actions/workflows/gradle-upload.yml/badge.svg?branch=codex%2Fminecraft-1.21.1)](https://github.com/rennaikankk-cmyk/rime-client/actions/workflows/gradle-upload.yml)
+[![Security Review](https://github.com/rennaikankk-cmyk/rime-client/actions/workflows/security-review.yml/badge.svg?branch=codex%2Fminecraft-1.21.1)](https://github.com/rennaikankk-cmyk/rime-client/actions/workflows/security-review.yml)
 
-**Rime** (formerly GuizhouWare) is a Minecraft 1.21.1 Fabric PvP client maintained by **renna**.
+**Rime** (formerly GuizhouWare) is a Minecraft 1.21.1 Fabric PvP client (the on-demand port of Rime 1.2.7) maintained by **renna**.
 It is a fork of **Homovore**, originally developed by **Leonetic and WiderThanEurasia**,
 with AutoCrystal enhancements ported from **AlienV4**.
 
-This repository contains the GuizhouWare fork and its build configuration. See [LICENSE](LICENSE) for the AGPL license.
+This repository contains the Rime client and its build configuration. The Fabric mod ID and existing
+config directory remain `guizhouware` for compatibility. See [LICENSE](LICENSE) for the AGPL license.
+The protection and release merge tools live in [rimeguard](https://github.com/rennaikankk-cmyk/rimeguard),
+and the Windows launcher lives in [rime-launcher](https://github.com/rennaikankk-cmyk/rime-launcher).
 
 ---
 
@@ -68,14 +73,10 @@ Named presets are stored in `guizhouware/configs/<name>/`; use `.configs save <n
 
 ---
 
-## Current release
-
-Rime **1.1.2** for Minecraft **1.21.1**, distributed with **Rimeguard 3.1** through the official launcher. See [alignment notes](docs/release-rime112-1.21.1.md) and [version-specific compatibility](docs/minecraft-1.21.1.md). The `main` branch maintains the separate 1.21.11 build.
-
 ## Requirements
 
 - **JDK 21** for building; use Java 21 to launch the game.
-- Minecraft **1.21.1**, Fabric Loader **0.18.4 or newer**, and the matching Fabric API.
+- Minecraft **1.21.11**, Fabric Loader **0.18.4 or newer**, and the matching Fabric API.
 - Git for cloning and embedding commit metadata in the build.
 - The checked-in **Gradle Wrapper (9.2.0)**; a separate Gradle installation is not needed.
 
@@ -88,8 +89,8 @@ Set `JAVA_HOME` to your JDK 21 directory and check `java -version` if the build 
 Clone this repository using a GitHub account with access if it is private:
 
 ```bash
-git clone https://github.com/rennaikankk-cmyk/guizhouware.git
-cd guizhouware
+git clone https://github.com/rennaikankk-cmyk/rime-client.git
+cd rime-client
 ```
 
 On Linux or macOS:
@@ -106,9 +107,9 @@ On Windows PowerShell:
 
 Build outputs are written to `build/libs/`:
 
-- `guizhouware-<commit>-<version>-obfuscated.jar`: the verified release candidate. Production use requires the existing licensed launcher/credential process.
-- `guizhouware-<commit>-<version>.jar`: the internal, unobfuscated mod JAR; do not distribute it as the release.
-- `guizhouware-<commit>-<version>-sources.jar`: sources for development; do not install this as the mod.
+- `rime-<commit>-<version>-obfuscated.jar`: the verified client-side build for the rimeguard release merge. Production use requires the existing licensed launcher/credential process.
+- `rime-<commit>-<version>.jar`: the internal, unobfuscated mod JAR; do not distribute it as the release.
+- `rime-<commit>-<version>-sources.jar`: sources for development; do not install this as the mod.
 
 The build runs regression checks, remapping, ProGuard and `verifyObfuscatedJar`.
 Keep `build/proguard-map.txt` internal. Follow [AGENTS.md](AGENTS.md) for release protection and runtime validation.
@@ -121,11 +122,12 @@ release artifacts without it. A runtime development flag alone cannot unlock a p
 
 ## Build and Security Checks
 
-[Java CI with Gradle](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/gradle-upload.yml)
+[Java CI with Gradle](https://github.com/rennaikankk-cmyk/rime-client/actions/workflows/gradle-upload.yml)
 builds on Linux and Windows for every push and for pull requests targeting `main`, and supports manual runs.
-Download the `guizhouware-<runner OS>-<commit>` artifacts from a successful run.
+Download the JAR artifact from a successful run. The workflow currently names it
+`guizhouware-<runner OS>-<commit>`.
 
-[Security Review](https://github.com/rennaikankk-cmyk/guizhouware/actions/workflows/security-review.yml)
+[Security Review](https://github.com/rennaikankk-cmyk/rime-client/actions/workflows/security-review.yml)
 runs Gradle Wrapper validation, a clean Java 21 build, and Gitleaks secret scanning.
 Its summary reports which optional checks were skipped. A green workflow does not mean a skipped check ran.
 

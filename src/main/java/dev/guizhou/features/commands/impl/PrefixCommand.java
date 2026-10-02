@@ -20,13 +20,13 @@ public class PrefixCommand extends Command {
                 .executes((ctx) -> {
                     String prefix = getString(ctx, "prefix");
                     if (prefix == null || prefix.isEmpty()) {
-                        return fail("前缀不能为空");
+                        return fail(dev.guizhou.util.lang.ClientLanguage.text("前缀不能为空"));
                     }
                     ctx.getSource().setCommandPrefix(prefix);
                     // ClickGui's Prefix setting is re-applied on every start, so it must hold the value too.
                     ClickGuiModule clickGui = ClickGuiModule.getInstance();
                     if (clickGui != null) clickGui.prefix.setValue(prefix);
-                    return success("命令前缀已改为 {cyan} %s", prefix);
+                    return success(dev.guizhou.util.lang.ClientLanguage.text("命令前缀已改为 {cyan} %s"), prefix);
                 }));
     }
 }

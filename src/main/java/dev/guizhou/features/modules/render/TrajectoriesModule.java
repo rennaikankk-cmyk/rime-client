@@ -2,33 +2,31 @@ package dev.guizhou.features.modules.render;
 
 import dev.guizhou.GuizhouWare;
 import dev.guizhou.event.impl.network.DisconnectEvent;
+import dev.guizhou.event.impl.network.PacketEvent;
 import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.hud.NotifierHudModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.combat.ProjectileSim;
+import dev.guizhou.util.combat.ProjectilePrediction;
+import dev.guizhou.util.entity.PearlOwnership;
 import dev.guizhou.util.player.ChatUtil;
 import dev.guizhou.util.render.RenderUtil;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.AbstractArrow;
-import net.minecraft.world.entity.projectile.ThrownExperienceBottle;
-import net.minecraft.world.entity.projectile.ThrownPotion;
-import net.minecraft.world.entity.projectile.ThrownTrident;
 import net.minecraft.world.entity.projectile.ThrowableItemProjectile;
 import net.minecraft.world.entity.projectile.ThrownEnderpearl;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import java.awt.Color;
@@ -51,6 +49,7 @@ public class TrajectoriesModule extends Module {
     private final Setting<Boolean> pearlAlert = bool("PearlAlert", true).setPage("Alert");
     private final Setting<Double> alertRange = num("AlertRange", 48.0, 4.0, 128.0).setPage("Alert");
     private final Setting<Boolean> alertFriends = bool("AlertFriends", false).setPage("Alert");
+    private final Setting<Boolean> alertUnknown = bool("AlertUnknown", true).setPage("Alert");
 
     private final Setting<Float> lineWidth = num("LineWidth", 1.5f, 0.5f, 4.0f).setPage("Render");
     private final Setting<Color> selfColor = color("SelfColor", 250, 249, 245, 220).setPage("Render");
@@ -59,6 +58,9 @@ public class TrajectoriesModule extends Module {
     private final Setting<Color> landColor = color("LandColor", 224, 138, 108, 60).setPage("Render");
 
     private final Set<Integer> alerted = new HashSet<>();
+    /** Owner fallback for pearls whose thrower entity the client no longer tracks. */
+    private final PearlOwnership ownership = new PearlOwnership();
+    private net.minecraft.world.level.Level ownershipScope;
 
     public TrajectoriesModule() {
         super("Trajectories", "Draws the landing path of what you are about to throw or shoot and of projectiles "
@@ -68,36 +70,80 @@ public class TrajectoriesModule extends Module {
     @Override
     public void onDisable() {
         alerted.clear();
+        ownership.clear();
     }
 
     @Subscribe
     private void onDisconnect(DisconnectEvent event) {
         alerted.clear();
+        ownership.clear();
+    }
+
+    /** Pearl spawn packets carry the thrower's entity id even after the thrower despawns. */
+    @Subscribe
+    private void onPacketReceive(PacketEvent.Receive event) {
+        if (!pearlAlert.getValue() || mc.player == null) return;
+        if (event.getPacket() instanceof ClientboundAddEntityPacket packet
+                && packet.getType() == EntityType.ENDER_PEARL) {
+            mc.execute(() -> ownership.onPearlSpawn(packet.getId(), packet.getData(), System.currentTimeMillis()));
+        }
     }
 
     @Override
     public void onTick() {
         if (nullCheck() || !pearlAlert.getValue()) return;
+        if (ownershipScope != mc.level) {
+            // another dimension or world: entity ids and bindings no longer mean anything
+            ownershipScope = mc.level;
+            ownership.clear();
+            alerted.clear();
+        }
+        long now = System.currentTimeMillis();
+        for (Player player : mc.level.players()) {
+            ownership.observePlayer(player.getId(), player.getUUID(), player.getGameProfile().getName(), now);
+        }
         Set<Integer> alive = new HashSet<>();
         double rangeSq = range.getValue() * range.getValue();
         for (Entity entity : mc.level.entitiesForRendering()) {
             if (!(entity instanceof ThrownEnderpearl pearl) || pearl.distanceToSqr(mc.player) > rangeSq) continue;
             alive.add(pearl.getId());
             if (alerted.contains(pearl.getId())) continue;
-            if (!(pearl.getOwner() instanceof Player owner) || owner == mc.player) continue;
-            if (!alertFriends.getValue() && GuizhouWare.friendManager.isFriend(owner)) continue;
+            Player directOwner = pearl.getOwner() instanceof Player owner ? owner : null;
+            PearlOwnership.Identity identity = directOwner != null
+                    ? new PearlOwnership.Identity(directOwner.getUUID(), directOwner.getGameProfile().getName())
+                    : ownership.resolve(pearl.getId()).orElse(null);
+            if (identity == null && directOwner == null) {
+                int ownerEid = ownership.ownerEid(pearl.getId());
+                if (ownerEid > 0 && mc.level.getEntity(ownerEid) instanceof Player player) {
+                    identity = new PearlOwnership.Identity(player.getUUID(), player.getGameProfile().getName());
+                }
+            }
+            if (identity != null && identity.uuid().equals(mc.player.getUUID())) continue;
+            if (identity != null && !alertFriends.getValue()
+                    && GuizhouWare.friendManager.isFriend(identity.name())) continue;
+            if (identity == null && !alertUnknown.getValue()) continue;
             ProjectileSim.Result result = simulate(pearl);
             if (!result.landed()) continue;
             double[] end = result.end();
             double distance = mc.player.position().distanceTo(new Vec3(end[0], end[1], end[2]));
             alerted.add(pearl.getId());
             if (distance > alertRange.getValue()) continue;
-            String text = String.format("%s 的珍珠将落在 %d, %d, %d（距你 %.0f 格，%.1f 秒）", owner.getGameProfile().getName(),
+            String text = String.format(dev.guizhou.util.lang.ClientLanguage.text("%s 的珍珠将落在 %d, %d, %d（距你 %.0f 格，%.1f 秒）"), describeOwner(directOwner, identity),
                     (int) Math.floor(end[0]), (int) Math.floor(end[1]), (int) Math.floor(end[2]), distance, result.ticks() / 20.0);
             ChatUtil.sendMessage(Component.literal(text));
             NotifierHudModule.push("pearl:" + pearl.getId(), NotifierHudModule.Icon.DANGER, text);
         }
+        ownership.retain(alive, now);
         alerted.retainAll(alive);
+    }
+
+    /** Name plus an online/offline suffix once the owner entity is gone; unknown stays unknown. */
+    private String describeOwner(Player directOwner, PearlOwnership.Identity identity) {
+        if (directOwner != null) return directOwner.getGameProfile().getName();
+        if (identity == null) return dev.guizhou.util.lang.ClientLanguage.text("未知归属");
+        boolean online = mc.getConnection() != null && mc.getConnection().getOnlinePlayers().stream()
+                .anyMatch(info -> identity.uuid().equals(info.getProfile().getId()));
+        return identity.name() + dev.guizhou.util.lang.ClientLanguage.text(online ? "（在线）" : "（离线）");
     }
 
     @Override
@@ -126,17 +172,7 @@ public class TrajectoriesModule extends Module {
     }
 
     private ProjectileSim.Result simulate(Projectile projectile) {
-        Vec3 v = projectile.getDeltaMovement();
-        return ProjectileSim.simulate(projectile.getX(), projectile.getY(), projectile.getZ(), v.x, v.y, v.z,
-                profile(projectile), MAX_TICKS, mc.level.getMinBuildHeight() - 8, collider(projectile));
-    }
-
-    private static ProjectileSim.Profile profile(Projectile projectile) {
-        if (projectile instanceof ThrownTrident) return ProjectileSim.TRIDENT;
-        if (projectile instanceof AbstractArrow) return ProjectileSim.ARROW;
-        if (projectile instanceof ThrownPotion) return ProjectileSim.POTION;
-        if (projectile instanceof ThrownExperienceBottle) return ProjectileSim.XP_BOTTLE;
-        return ProjectileSim.THROWABLE;
+        return ProjectilePrediction.simulate(projectile, MAX_TICKS);
     }
 
     private record Shot(ProjectileSim.Profile profile, double speed, float pitchOffset) {}
@@ -147,7 +183,7 @@ public class TrajectoriesModule extends Module {
         if (shot == null) return;
         float yaw = mc.player.getViewYRot(partial), pitch = mc.player.getViewXRot(partial);
         double[] v = ProjectileSim.launch(yaw, pitch, shot.pitchOffset(), shot.speed());
-        Vec3 motion = mc.player.getDeltaMovement();
+        Vec3 motion = mc.player.getKnownMovement();
         double vx = v[0] + motion.x, vy = v[1] + (mc.player.onGround() ? 0.0 : motion.y), vz = v[2] + motion.z;
         Vec3 eye = mc.player.getEyePosition(partial);
         ProjectileSim.Result result = ProjectileSim.simulate(eye.x, eye.y - 0.1, eye.z, vx, vy, vz, shot.profile(),
@@ -156,7 +192,8 @@ public class TrajectoriesModule extends Module {
     }
 
     private Shot shotFor(ItemStack stack, InteractionHand hand) {
-        if (stack.is(Items.ENDER_PEARL) || stack.is(Items.SNOWBALL) || stack.is(Items.EGG)) {
+        if (stack.is(Items.ENDER_PEARL) || stack.is(Items.SNOWBALL) || stack.is(Items.EGG)
+               ) {
             return new Shot(ProjectileSim.THROWABLE, 1.5, 0f);
         }
         if (stack.is(Items.EXPERIENCE_BOTTLE)) return new Shot(ProjectileSim.XP_BOTTLE, 0.7, -20f);
@@ -172,33 +209,7 @@ public class TrajectoriesModule extends Module {
     }
 
     private ProjectileSim.Collider collider(Entity source) {
-        return new ProjectileSim.Collider() {
-            @Override
-            public double hit(double x0, double y0, double z0, double x1, double y1, double z1) {
-                Vec3 from = new Vec3(x0, y0, z0), to = new Vec3(x1, y1, z1);
-                double length = from.distanceTo(to);
-                if (length < 1.0e-9) return -1;
-                double best = -1;
-                BlockHitResult block = mc.level.clip(new ClipContext(from, to, ClipContext.Block.COLLIDER,
-                        ClipContext.Fluid.NONE, source));
-                if (block.getType() == HitResult.Type.BLOCK) best = block.getLocation().distanceTo(from) / length;
-                AABB swept = new AABB(from, to).inflate(0.3);
-                List<LivingEntity> entities = mc.level.getEntitiesOfClass(LivingEntity.class, swept,
-                        e -> e != mc.player && e != source && e.isAlive() && !e.isSpectator());
-                for (LivingEntity entity : entities) {
-                    var clip = entity.getBoundingBox().inflate(0.3).clip(from, to);
-                    if (clip.isEmpty()) continue;
-                    double fraction = clip.get().distanceTo(from) / length;
-                    if (best < 0 || fraction < best) best = fraction;
-                }
-                return best;
-            }
-
-            @Override
-            public boolean inWater(double x, double y, double z) {
-                return !mc.level.getFluidState(net.minecraft.core.BlockPos.containing(x, y, z)).isEmpty();
-            }
-        };
+        return ProjectilePrediction.collider(mc.level, source);
     }
 
     private void draw(ProjectileSim.Result result, Color color) {

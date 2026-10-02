@@ -38,8 +38,8 @@ public final class CommandHelp {
         String prefix = manager.getCommandPrefix();
 
         MutableComponent body = Component.empty()
-                .append(ChatFeed.text("命令列表", ChatPalette.TEXT))
-                .append(ChatFeed.text("   第 " + page.page() + "/" + page.pages() + " 页 · 共 " + page.total() + " 条",
+                .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("命令列表"), ChatPalette.TEXT))
+                .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("   第 ") + page.page() + "/" + page.pages() + dev.guizhou.util.lang.ClientLanguage.text(" 页 · 共 ") + page.total() + dev.guizhou.util.lang.ClientLanguage.text(" 条"),
                         ChatPalette.SUBTLE));
 
         CommandCategory current = null;
@@ -57,13 +57,13 @@ public final class CommandHelp {
 
         body.append("\n  ");
         body.append(page.hasPrevious()
-                ? ChatFeed.suggest("‹ 上一页", prefix + "help " + (page.page() - 1), null, ChatPalette.ACCENT_2)
-                : ChatFeed.text("‹ 上一页", ChatPalette.SUBTLE));
+                ? ChatFeed.suggest(dev.guizhou.util.lang.ClientLanguage.text("‹ 上一页"), prefix + "help " + (page.page() - 1), null, ChatPalette.ACCENT_2)
+                : ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("‹ 上一页"), ChatPalette.SUBTLE));
         body.append(ChatFeed.text("   ", ChatPalette.SUBTLE));
         body.append(page.hasNext()
-                ? ChatFeed.suggest("下一页 ›", prefix + "help " + (page.page() + 1), null, ChatPalette.ACCENT_2)
-                : ChatFeed.text("下一页 ›", ChatPalette.SUBTLE));
-        body.append(ChatFeed.text("    " + prefix + "help <命令> 查看用法 · " + prefix + "<模块> <设置> <值> 改设置",
+                ? ChatFeed.suggest(dev.guizhou.util.lang.ClientLanguage.text("下一页 ›"), prefix + "help " + (page.page() + 1), null, ChatPalette.ACCENT_2)
+                : ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("下一页 ›"), ChatPalette.SUBTLE));
+        body.append(ChatFeed.text("    " + prefix + dev.guizhou.util.lang.ClientLanguage.text("help <命令> 查看用法 · ") + prefix + dev.guizhou.util.lang.ClientLanguage.text("<模块> <设置> <值> 改设置"),
                 ChatPalette.SUBTLE));
         ChatFeed.replace("help", ChatTone.INFO, "☰", body);
     }
@@ -83,11 +83,11 @@ public final class CommandHelp {
                 .append(ChatFeed.text("  ·  " + command.getCategory().label(), command.getCategory().color()))
                 .append("\n  ").append(ChatFeed.text(command.getSummary(), ChatPalette.TEXT));
         if (command.getAliases().length > 1) {
-            body.append("\n  ").append(ChatFeed.text("别名  ", ChatPalette.SUBTLE))
+            body.append("\n  ").append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("别名  "), ChatPalette.SUBTLE))
                     .append(ChatFeed.text(String.join(" · ", Arrays.copyOfRange(command.getAliases(), 1,
                             command.getAliases().length)), ChatPalette.MUTED));
         }
-        body.append("\n  ").append(ChatFeed.text("用法", ChatPalette.SUBTLE));
+        body.append("\n  ").append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("用法"), ChatPalette.SUBTLE));
         appendUsages(body, manager, command, Integer.MAX_VALUE);
         ChatFeed.replace("help", ChatTone.INFO, "☰", body);
     }
@@ -97,9 +97,9 @@ public final class CommandHelp {
         String prefix = manager.getCommandPrefix();
         Module module = moduleFor(command);
         if (module != null) {
-            body.append("\n    ").append(ChatFeed.suggest(prefix + command.getName() + " <设置> <值>",
+            body.append("\n    ").append(ChatFeed.suggest(prefix + command.getName() + dev.guizhou.util.lang.ClientLanguage.text(" <设置> <值>"),
                     prefix + command.getName() + " ", null, ChatPalette.ACCENT_2));
-            body.append(ChatFeed.text("  " + prefix + "help " + command.getName() + " 列出全部设置",
+            body.append(ChatFeed.text("  " + prefix + "help " + command.getName() + dev.guizhou.util.lang.ClientLanguage.text(" 列出全部设置"),
                     ChatPalette.SUBTLE));
             return 1;
         }
@@ -169,16 +169,16 @@ public final class CommandHelp {
     private static volatile int indexedModules = -1;
 
     public static String moduleSummary(Module module) {
-        return "配置模块 " + module.getDisplayName() + " · " + (module.isEnabled() ? "已开启" : "未开启");
+        return dev.guizhou.util.lang.ClientLanguage.text("配置模块 ") + module.getDisplayName() + " · " + (module.isEnabled() ? dev.guizhou.util.lang.ClientLanguage.text("已开启") : dev.guizhou.util.lang.ClientLanguage.text("未开启"));
     }
 
     private static MutableComponent moduleCard(String prefix, Command command, Module module) {
         MutableComponent body = Component.empty()
                 .append(ChatFeed.text(module.getDisplayName(), ChatPalette.TEXT))
-                .append(ChatFeed.text("  ·  模块设置  ·  ", ChatPalette.SUBTLE))
-                .append(ChatFeed.text(module.isEnabled() ? "已开启" : "未开启",
+                .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("  ·  模块设置  ·  "), ChatPalette.SUBTLE))
+                .append(ChatFeed.text(module.isEnabled() ? dev.guizhou.util.lang.ClientLanguage.text("已开启") : dev.guizhou.util.lang.ClientLanguage.text("未开启"),
                         module.isEnabled() ? ChatPalette.SUCCESS : ChatPalette.MUTED))
-                .append("\n  ").append(ChatFeed.text("用法  " + prefix + command.getName() + " <设置> <值>",
+                .append("\n  ").append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("用法  ") + prefix + command.getName() + dev.guizhou.util.lang.ClientLanguage.text(" <设置> <值>"),
                         ChatPalette.SUBTLE));
         int shown = 0;
         List<Setting<?>> settings = configurable(module);
@@ -192,16 +192,16 @@ public final class CommandHelp {
                     .append(ChatFeed.text(formatValue(setting.getValue()), ChatPalette.TEXT));
         }
         if (settings.size() > MAX_SETTINGS) {
-            body.append("\n    ").append(ChatFeed.text("… 还有 " + (settings.size() - MAX_SETTINGS)
-                    + " 项，输入 " + prefix + command.getName() + " 后按 Tab 浏览", ChatPalette.SUBTLE));
+            body.append("\n    ").append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("… 还有 ") + (settings.size() - MAX_SETTINGS)
+                    + dev.guizhou.util.lang.ClientLanguage.text(" 项，输入 ") + prefix + command.getName() + dev.guizhou.util.lang.ClientLanguage.text(" 后按 Tab 浏览"), ChatPalette.SUBTLE));
         }
-        if (settings.isEmpty()) body.append("\n    ").append(ChatFeed.text("此模块没有可通过命令修改的设置", ChatPalette.MUTED));
+        if (settings.isEmpty()) body.append("\n    ").append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("此模块没有可通过命令修改的设置"), ChatPalette.MUTED));
         return body;
     }
 
     /** Must match the literal ModuleCommand registers for the setting. */
     public static String settingLiteral(Setting<?> setting) {
-        return setting.getName().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+        return dev.guizhou.util.lang.ClientLanguage.englishSettingName(setting.getName()).toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
     }
 
     public static List<Setting<?>> configurable(Module module) {
@@ -216,7 +216,7 @@ public final class CommandHelp {
 
     public static String formatValue(Object value) {
         if (value instanceof Color color) return String.format(Locale.ROOT, "#%02X%02X%02X", color.getRed(), color.getGreen(), color.getBlue());
-        if (value instanceof Boolean bool) return bool ? "开" : "关";
+        if (value instanceof Boolean bool) return bool ? dev.guizhou.util.lang.ClientLanguage.text("开") : dev.guizhou.util.lang.ClientLanguage.text("关");
         if (value instanceof Double || value instanceof Float) {
             double number = ((Number) value).doubleValue();
             return number == Math.rint(number) ? String.valueOf((long) number) : String.format(Locale.ROOT, "%.2f", number)
@@ -228,9 +228,9 @@ public final class CommandHelp {
     public static String typeHint(Setting<?> setting) {
         Object value = setting.getDefaultValue();
         if (value instanceof Boolean) return "true / false";
-        if (value instanceof Number) return "数值 " + setting.getMin() + " ~ " + setting.getMax();
+        if (value instanceof Number) return dev.guizhou.util.lang.ClientLanguage.text("数值 ") + setting.getMin() + " ~ " + setting.getMax();
         if (value instanceof Enum<?> e) {
-            StringBuilder options = new StringBuilder("可选 ");
+            StringBuilder options = new StringBuilder(dev.guizhou.util.lang.ClientLanguage.text("可选 "));
             Object[] constants = e.getDeclaringClass().getEnumConstants();
             for (int i = 0; i < constants.length; i++) {
                 if (i > 0) options.append(" / ");
@@ -238,8 +238,8 @@ public final class CommandHelp {
             }
             return options.toString();
         }
-        if (value instanceof Color) return "颜色：#RRGGBB、r,g,b[,a] 或 hsb:h,s,b";
-        return "文本";
+        if (value instanceof Color) return dev.guizhou.util.lang.ClientLanguage.text("颜色：#RRGGBB、r,g,b[,a] 或 hsb:h,s,b");
+        return dev.guizhou.util.lang.ClientLanguage.text("文本");
     }
 
     // --------------------------------------------------------------- internals

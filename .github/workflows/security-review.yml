@@ -2,7 +2,7 @@ name: Security Review
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/minecraft-1.21.1]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]

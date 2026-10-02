@@ -8,8 +8,17 @@ import java.io.InputStream;
 public final class CompatibilityHookTest {
     private static final String MC = "net/minecraft/";
     public static void main(String[] args) throws Exception {
-        boolean modern = CompatibilityHookTest.class.getClassLoader().getResource(MC + "resources/Identifier.class") != null;
-        String resource = MC + "resources/" + (modern ? "Identifier" : "ResourceLocation");
+        boolean modern = CompatibilityHookTest.class.getClassLoader().getResource(MC + "client/renderer/ShaderManager.class") != null;
+        String resource = MC + "resources/" + (modern ? "ResourceLocation" : "ResourceLocation");
+        if (!modern) {
+            String send = "(L" + MC + "network/protocol/Packet;L" + MC + "network/PacketSendListener;Z)V";
+            if (read(MC + "network/Connection").methods.stream().noneMatch(m -> m.name.equals("sendPacket") && m.desc.equals(send)))
+                throw new AssertionError("Native network callback changed");
+            String handler = send.substring(0, send.length() - 2) + "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;)V";
+            if (read("dev/guizhou/mixin/network/MixinClientConnection").methods.stream()
+                    .noneMatch(m -> m.name.equals("sendImmediately") && m.desc.equals(handler)))
+                throw new AssertionError("Network injection must use native PacketSendListener");
+        }
         call("client/renderer/LevelRenderer", "renderLevel", modern
                 ? MC + "client/renderer/ShaderManager;getPostChain(L" + resource + ";Ljava/util/Set;)L" + MC + "client/renderer/PostChain;"
                 : MC + "client/renderer/PostChain;process(F)V");

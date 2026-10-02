@@ -24,7 +24,7 @@ public class PhaseModule extends Module {
     private static final int PRIORITY = 150;
 
     public PhaseModule() {
-        super("Phase", "Phases into walls", Category.COMBAT);
+        super("Phase", "Phases into walls. After you clip in, the block overlay is cleared so you can see outside.", Category.COMBAT);
     }
 
     @Subscribe

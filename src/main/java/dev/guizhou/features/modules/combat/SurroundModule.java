@@ -16,9 +16,14 @@ import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.render.RenderUtil;
 import dev.guizhou.util.player.EatUtil;
+import dev.guizhou.util.player.ScreenGate;
+import dev.guizhou.manager.HeartbeatManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.FireworkRocketEntity;
@@ -43,6 +48,12 @@ public class SurroundModule extends Module {
     private final Setting<Boolean> crystalProtect = bool("CrystalProtect", true).setPage("General");
 
     private final Setting<Boolean> avoidHelping  = bool("AvoidHelpingOpponents", true).setPage("General");
+
+    private final Setting<Boolean> onlyOnGround   = bool("OnlyOnGround", true).setPage("Toggle");
+    private final Setting<Boolean> disableOnJump  = bool("DisableOnJump", true).setPage("Toggle");
+    private final Setting<Boolean> disableOnRise  = bool("DisableOnYChange", true).setPage("Toggle");
+    private final Setting<Boolean> disableOnTeleport = bool("DisableOnTeleport", true).setPage("Toggle");
+    private final Setting<Boolean> center         = bool("Center", false).setPage("Toggle");
 
     private final Setting<Boolean> selfTrap      = bool("SelfTrap", true).setPage("SelfTrap");
     private final Setting<SelfTrapMode> selfTrapMode = mode("SelfTrapMode", SelfTrapMode.Smart).setPage("SelfTrap");
@@ -125,13 +136,72 @@ public class SurroundModule extends Module {
             Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST
     };
 
+    /** Feet block Y the surround was built for; -infinity until the player first stands on ground. */
+    private int anchorFeetY = Integer.MIN_VALUE;
+    private Vec3 lastTickPos;
+    private int centerTicks;
+    private static final int CENTER_TIMEOUT_TICKS = 10;
+
     public SurroundModule() {
-        super("Surround", "Surrounds you in obsidian to prevent crystal damage.", Category.COMBAT);
+        super("Surround", "Surrounds you in obsidian to prevent crystal damage. Pauses in the air and "
+                + "turns itself off when you jump, climb above the hole or teleport (pearl/chorus).", Category.COMBAT);
     }
 
     @Override
     public void onEnable() {
         GuizhouWare.placementManager.addListener(airRefillListener);
+        anchorFeetY = !nullCheck() && mc.player.onGround() ? mc.player.blockPosition().getY() : Integer.MIN_VALUE;
+        lastTickPos = nullCheck() ? null : mc.player.position();
+        centerTicks = center.getValue() ? CENTER_TIMEOUT_TICKS : 0;
+    }
+
+    /** Input override while centering: walk toward the block middle using ordinary movement keys. */
+    public static net.minecraft.client.player.Input centerInput(net.minecraft.client.player.Input real) {
+        SurroundModule module = GuizhouWare.moduleManager == null ? null
+                : GuizhouWare.moduleManager.getModuleByClass(SurroundModule.class);
+        if (module == null || !module.isEnabled() || module.centerTicks <= 0 || nullCheck()
+                || !mc.player.onGround() || !dev.guizhou.manager.HeartbeatManager.authorized()) return real;
+        if (real.up || real.down || real.left || real.right || real.jumping) {
+            module.centerTicks = 0;
+            return real;
+        }
+        Vec3 pos = mc.player.position();
+        double dx = Math.floor(pos.x) + 0.5 - pos.x;
+        double dz = Math.floor(pos.z) + 0.5 - pos.z;
+        if (dx * dx + dz * dz < 0.12 * 0.12) {
+            module.centerTicks = 0;
+            return real;
+        }
+        module.centerTicks--;
+        double yaw = Math.toRadians(mc.player.getYRot());
+        double forward = -dx * Math.sin(yaw) + dz * Math.cos(yaw);
+        double left = dx * Math.cos(yaw) + dz * Math.sin(yaw);
+        double dead = 0.05;
+        var fixed = new net.minecraft.client.player.Input();
+        fixed.up = forward > dead; fixed.down = forward < -dead;
+        fixed.left = left > dead; fixed.right = left < -dead;
+        fixed.shiftKeyDown = real.shiftKeyDown;
+        float magnitude = real.shiftKeyDown ? (float) mc.player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SNEAKING_SPEED) : 1f;
+        fixed.forwardImpulse = ((fixed.up ? 1 : 0) - (fixed.down ? 1 : 0)) * magnitude;
+        fixed.leftImpulse = ((fixed.left ? 1 : 0) - (fixed.right ? 1 : 0)) * magnitude;
+        return fixed;
+    }
+
+    private boolean shouldAutoDisable() {
+        // Freecam borrows the jump key to raise the camera; the player itself is not jumping.
+        if (disableOnJump.getValue() && mc.options.keyJump.isDown() && !mc.player.isInWater()
+                && !dev.guizhou.features.modules.render.FreecamModule.active()) return true;
+        Vec3 now = mc.player.position();
+        if (disableOnTeleport.getValue() && lastTickPos != null && now.distanceToSqr(lastTickPos) > 16.0) return true;
+        lastTickPos = now;
+        int feetY = mc.player.blockPosition().getY();
+        if (mc.player.onGround()) {
+            if (disableOnRise.getValue() && anchorFeetY != Integer.MIN_VALUE && feetY > anchorFeetY) return true;
+            anchorFeetY = feetY;
+        } else if (disableOnRise.getValue() && anchorFeetY != Integer.MIN_VALUE && mc.player.getY() > anchorFeetY + 1.1) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -153,11 +223,25 @@ public class SurroundModule extends Module {
         lastExtendThreat = 0;
         lastCrystalNearHead  = 0;
         lastAttackTime       = 0;
+        anchorFeetY = Integer.MIN_VALUE;
+        lastTickPos = null;
+        centerTicks = 0;
     }
 
     @Subscribe(priority = 1)
     private void onTick(TickEvent event) {
-        if (nullCheck() || mc.screen != null) return;
+        if (nullCheck()) return;
+        if (shouldAutoDisable()) {
+            disable();
+            return;
+        }
+        if (!ScreenGate.allowsWorldUpkeep()) return;
+        if (onlyOnGround.getValue() && !mc.player.onGround() && !mc.player.isVisuallyCrawling()) {
+            GuizhouWare.placementManager.removeQueuedFor(ownedQueued::contains);
+            ownedQueued.clear();
+            wantedPoses.clear();
+            return;
+        }
 
         var obs = InventoryUtil.find(Items.OBSIDIAN, InventoryUtil.PLACE_SCOPE);
         if (!obs.found() || obs.type() == ResultType.OFFHAND) {
@@ -305,9 +389,8 @@ public class SurroundModule extends Module {
 
         if (attack.getValue() && now - lastAttackTime >= 50) {
             EndCrystal crystal = findThreateningCrystal();
-            if (crystal != null) {
+            if (crystal != null && breakCrystal(crystal)) {
                 BlockPos crystalCell = crystal.blockPosition();
-                breakCrystal(crystal);
                 lastAttackTime = now;
                 for (BlockPos p : wantedPoses) {
                     if (Math.abs(p.getX() - crystalCell.getX()) <= 1
@@ -424,13 +507,25 @@ public class SurroundModule extends Module {
                 && (p.getX() < minX || p.getX() > maxX || p.getZ() < minZ || p.getZ() > maxZ);
     }
 
-    private void breakCrystal(EndCrystal crystal) {
+    /** Attacks only after the silent rotation was actually sent, then swings like a real hit. */
+    private boolean breakCrystal(EndCrystal crystal) {
+        if (!HeartbeatManager.authorized()) return false;
+        if (mc.gameMode == null || !crystal.isAlive() || weaknessBlocksBreak()) return false;
         Vec3 eye = mc.player.getEyePosition(1.0f);
         Vec3 hit = closestPointToEye(eye, crystal.getBoundingBox());
         float[] angles = MathUtil.calcAngle(eye, hit);
-        if (!GuizhouWare.rotationManager.tryAction(new RotationRequest(
-                "Surround", 100, angles[0], angles[1], RotationRequest.Mode.SILENT))) return;
+        if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
+                "Surround", 100, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
         mc.gameMode.attack(mc.player, crystal);
+        mc.player.swing(InteractionHand.MAIN_HAND);
+        return true;
+    }
+
+    /** Weakness turns a bare-hand or tool hit into zero damage, which never pops a crystal. */
+    private boolean weaknessBlocksBreak() {
+        if (!mc.player.hasEffect(MobEffects.WEAKNESS) || mc.player.hasEffect(MobEffects.DAMAGE_BOOST)) return false;
+        var held = mc.player.getMainHandItem();
+        return !held.is(ItemTags.SWORDS) && !held.is(ItemTags.AXES) && !held.is(Items.MACE);
     }
 
     private Vec3 closestPointToEye(Vec3 eye, AABB box) {

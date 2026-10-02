@@ -52,6 +52,20 @@ loom {
     accessWidenerPath = file("src/main/resources/guizhouware.accesswidener")
 }
 
+// Real client/world regression tests are separate from the release source set.
+if (providers.gradleProperty('gzwClientTests').map { it.toBoolean() }.getOrElse(false)) {
+    if (!developmentBuild) throw new GradleException('Client regression tests require -PgzwDevelopmentBuild=true.')
+    fabricApi {
+        configureTests {
+            createSourceSet = true
+            modId = 'rime-client-tests'
+            enableGameTests = false
+            enableClientGameTests = true
+            eula = true
+        }
+    }
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings loom.officialMojangMappings()
@@ -67,6 +81,8 @@ dependencies {
     include modImplementation("com.github.cattyngmd.catformat:catformat-fabric:${project.catformat_version}")
 
     include implementation("meteordevelopment:discord-ipc:1.1")
+    // pure-Java H.264/MP4 decode for the custom main-menu background (no natives)
+    include implementation('org.jcodec:jcodec:0.2.5')
 
     // licence heartbeat HWID — same OSHI factor chain as the launcher
     // licence heartbeat HWID: use MC-bundled oshi/jna at runtime — bundling clashes with MC's own copy
@@ -93,12 +109,24 @@ processResources {
     inputs.property "version", project.version
     inputs.property "minecraft_version", project.minecraft_version
     inputs.property "loader_version", project.loader_version
+    inputs.property "gzwDevelopmentBuild", developmentBuild
     filteringCharset "UTF-8"
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
                 "minecraft_version": project.minecraft_version,
                 "loader_version": project.loader_version
+    }
+    // The external distribution guard is merged only by rimeguard's release pipeline.
+    // Local development uses the existing compile-time + Loader development gate instead.
+    // All Jar tasks above reject this build, and production resources retain the guard marker.
+    doLast {
+        if (developmentBuild) {
+            def metadataFile = new File(destinationDir, 'fabric.mod.json')
+            def metadata = new groovy.json.JsonSlurper().parse(metadataFile)
+            metadata.custom?.remove('rimeguard')
+            metadataFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(metadata))
+        }
     }
 }
 
@@ -144,11 +172,20 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
-        compatibilityHookTest: 'dev.guizhou.util.render.CompatibilityHookTest',
-        aerialAttackGeometryTest: 'dev.guizhou.util.elytra.AerialAttackGeometryTest',
-        auraPolicyTest: 'dev.guizhou.util.combat.AuraPolicyTest',
+        commandFuzzyTest: 'dev.guizhou.features.commands.ui.CommandFuzzyTest',
+        commandPresentationTest: 'dev.guizhou.features.commands.ui.CommandPresentationTest',
         rotationMathTest: 'dev.guizhou.manager.RotationMathTest',
+        auraPolicyTest: 'dev.guizhou.util.combat.AuraPolicyTest',
+        aerialAttackGeometryTest: 'dev.guizhou.util.elytra.AerialAttackGeometryTest',
+        maceFlightWindowTest: 'dev.guizhou.util.elytra.MaceFlightWindowTest',
+        compatibilityHookTest: 'dev.guizhou.util.render.CompatibilityHookTest',
         placementVisualTest: 'dev.guizhou.util.render.placement.PlacementVisualTest',
+
+        explosionSamplingTest: 'dev.guizhou.util.combat.ExplosionSamplingTest',
+        maceCombatTest: 'dev.guizhou.util.elytra.MaceCombatTest',
+        evadeCommitmentTest: 'dev.guizhou.util.elytra.EvadeCommitmentTest',
+        pearlLandingThreatTest: 'dev.guizhou.util.elytra.PearlLandingThreatTest',
+        clientLanguageTest: 'dev.guizhou.util.lang.ClientLanguageTest',
         placementGeometryTest: 'dev.guizhou.manager.PlacementGeometryTest',
         licenseLeaseTest: 'dev.guizhou.util.license.LicenseLeaseTest',
         signedHeartbeatTest: 'dev.guizhou.util.license.SignedHeartbeatTest',
@@ -174,23 +211,36 @@ def clientRegressionTests = [
         miningBreakTrackerTest: 'dev.guizhou.features.modules.combat.MiningBreakTrackerTest',
         hudAppearanceTest: 'dev.guizhou.util.render.HudAppearanceTest',
         hudLayoutTest: 'dev.guizhou.features.modules.client.HudLayoutTest',
+        hudCoordinatesTest: 'dev.guizhou.features.modules.client.HudCoordinatesTest',
+        attackCooldownTest: 'dev.guizhou.util.combat.AttackCooldownTest',
+        auraDefenceHookTest: 'dev.guizhou.util.combat.AuraDefenceHookTest',
         shadcnTextFieldTest: 'dev.guizhou.features.gui.ShadcnTextFieldTest',
         eventBusTest: 'dev.guizhou.event.system.EventBusTest',
+        bundleFilterTest: 'dev.guizhou.event.system.BundleFilterTest',
         configFilesTest: 'dev.guizhou.util.ConfigFilesTest',
         armorFlyConfigMigrationTest: 'dev.guizhou.util.ArmorFlyConfigMigrationTest',
         autoUseWhitelistTest: 'dev.guizhou.util.player.AutoUseWhitelistTest',
         itemUseOwnershipTest: 'dev.guizhou.util.player.ItemUseOwnershipTest',
         pendingSequencesTest: 'dev.guizhou.util.inventory.PendingSequencesTest',
+        replenishPlanningTest: 'dev.guizhou.util.inventory.ReplenishPlanningTest',
+        containerHistoryStoreTest: 'dev.guizhou.util.world.ContainerHistoryStoreTest',
+        kitDemandTest: 'dev.guizhou.util.inventory.KitDemandTest',
+        pearlOwnershipTest: 'dev.guizhou.util.entity.PearlOwnershipTest',
+        signalHysteresisTest: 'dev.guizhou.util.hud.SignalHysteresisTest',
+        bedCandidateWatchTest: 'dev.guizhou.util.combat.BedCandidateWatchTest',
+        spearPassThroughHeadingTest: 'dev.guizhou.util.elytra.SpearPassThroughHeadingTest',
         glideMetadataDelayTest: 'dev.guizhou.util.elytra.GlideMetadataDelayTest',
         fontPageTest: 'dev.guizhou.util.render.font.FontPageTest',
         fontRecoveryTest: 'dev.guizhou.util.render.font.FontRecoveryTest',
         fontFacesTest: 'dev.guizhou.util.render.font.FontFacesTest',
         targetMotionTrackerTest: 'dev.guizhou.util.elytra.TargetMotionTrackerTest',
         aerialCombatPolicyTest: 'dev.guizhou.util.elytra.AerialCombatPolicyTest',
+        eatingRetreatTest: 'dev.guizhou.util.elytra.EatingRetreatTest',
+        gappleSelectionTest: 'dev.guizhou.util.player.GappleSelectionTest',
+        aerialEngagementTest: 'dev.guizhou.util.elytra.AerialEngagementTest',
         aerialInterceptTest: 'dev.guizhou.util.elytra.AerialInterceptTest',
         maceApproachTest: 'dev.guizhou.util.elytra.MaceApproachTest',
-        mappedCombatItemsTest: 'dev.guizhou.util.elytra.MappedCombatItemsTest',
-        maceFlightWindowTest: 'dev.guizhou.util.elytra.MaceFlightWindowTest',
+        maceStrikeTimingTest: 'dev.guizhou.util.elytra.MaceStrikeTimingTest',
         aerialDuelPredictorTest: 'dev.guizhou.util.elytra.AerialDuelPredictorTest',
         flightPlanningTaskTest: 'dev.guizhou.util.elytra.FlightPlanningTaskTest',
         flightCollisionSnapshotTest: 'dev.guizhou.util.elytra.FlightCollisionSnapshotTest',
@@ -201,6 +251,8 @@ def clientRegressionTests = [
         macePassTrackerTest: 'dev.guizhou.util.elytra.MacePassTrackerTest',
         maceDamageScoreTest: 'dev.guizhou.util.combat.MaceDamageScoreTest',
         armorSwapCycleTest: 'dev.guizhou.util.elytra.ArmorSwapCycleTest',
+        armorFlightHandoffTest: 'dev.guizhou.util.elytra.ArmorFlightHandoffTest',
+        foreignClientProbeTest: 'dev.guizhou.util.compat.ForeignClientProbeTest',
         armorSwapHeldUseTest: 'dev.guizhou.util.elytra.ArmorSwapHeldUseTest',
         flightRoutePlannerTest: 'dev.guizhou.util.elytra.FlightRoutePlannerTest',
         flightTerrainSafetyTest: 'dev.guizhou.util.elytra.FlightTerrainSafetyTest',
@@ -216,6 +268,11 @@ def clientRegressionTests = [
         combatHitWindowTest: 'dev.guizhou.util.elytra.CombatHitWindowTest',
         spearCombatTest: 'dev.guizhou.util.elytra.SpearCombatTest',
         spearCapabilityTest: 'dev.guizhou.util.elytra.SpearCapabilityTest',
+        mappedCombatItemsTest: 'dev.guizhou.util.elytra.MappedCombatItemsTest',
+        totemSafetyTest: 'dev.guizhou.util.combat.TotemSafetyTest',
+        threadHandoffHookTest: 'dev.guizhou.manager.ThreadHandoffHookTest',
+        entityAimTest: 'dev.guizhou.util.elytra.EntityAimTest',
+        worldUtilityTest: 'dev.guizhou.util.world.WorldUtilityTest',
         spearApproachTest: 'dev.guizhou.util.elytra.SpearApproachTest',
         spearRecoveryTest: 'dev.guizhou.util.elytra.SpearRecoveryTest',
         elytraWeaponControllerTest: 'dev.guizhou.util.elytra.ElytraWeaponControllerTest',
@@ -229,6 +286,7 @@ def clientRegressionTests = [
         crystalSelectionPolicyTest: 'dev.guizhou.util.combat.CrystalSelectionPolicyTest',
         crystalWeaponDamageTest: 'dev.guizhou.util.combat.CrystalWeaponDamageTest',
         guardActionGateTest: 'dev.guizhou.util.license.GuardActionGateTest',
+        guardBridgeTest: 'dev.guizhou.util.license.GuardBridgeTest',
         crystalAttackWindowTest: 'dev.guizhou.util.combat.CrystalAttackWindowTest',
         crystalAttackHookTest: 'dev.guizhou.util.combat.CrystalAttackHookTest',
         packetApplicationHookTest: 'dev.guizhou.manager.PacketApplicationHookTest',

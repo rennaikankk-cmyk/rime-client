@@ -50,16 +50,16 @@ public class LoadKitCommand extends Command {
 
     private int load(String name) {
         InstantRekitModule module = GuizhouWare.moduleManager.getModuleByClass(InstantRekitModule.class);
-        if (module == null) return fail("InstantRekit 模块未注册");
+        if (module == null) return fail(dev.guizhou.util.lang.ClientLanguage.text("InstantRekit 模块未注册"));
         if (!module.loadKit(name)) {
             List<String> kits = List.copyOf(module.listKits());
             String prefix = GuizhouWare.commandManager.getCommandPrefix();
-            MutableComponent body = Component.empty().append(ChatFeed.text("没有名为 " + name + " 的套装", ChatPalette.DANGER_SOFT));
+            MutableComponent body = Component.empty().append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("没有名为 ") + name + dev.guizhou.util.lang.ClientLanguage.text(" 的套装"), ChatPalette.DANGER_SOFT));
             if (kits.isEmpty()) {
-                body.append(ChatFeed.text("   还没有保存过套装，先用 ", ChatPalette.MUTED))
+                body.append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("   还没有保存过套装，先用 "), ChatPalette.MUTED))
                         .append(ChatFeed.command("savekit ", null));
             } else {
-                body.append(ChatFeed.text("   已保存：", ChatPalette.MUTED));
+                body.append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("   已保存："), ChatPalette.MUTED));
                 for (int i = 0; i < kits.size(); i++) {
                     if (i > 0) body.append(ChatFeed.text(" · ", ChatPalette.SUBTLE));
                     body.append(ChatFeed.suggest(kits.get(i), prefix + "loadkit " + kits.get(i), null, ChatPalette.ACCENT_2));
@@ -67,6 +67,6 @@ public class LoadKitCommand extends Command {
             }
             return reply(ChatTone.ERROR, body);
         }
-        return success("已选择套装 {cyan} %s {}，打开容器时自动补给", name);
+        return success(dev.guizhou.util.lang.ClientLanguage.text("已选择套装 {cyan} %s {}，打开容器时自动补给"), name);
     }
 }

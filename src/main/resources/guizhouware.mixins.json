@@ -13,6 +13,7 @@
     "client.MixinAbstractContainerScreen",
     "client.MixinChatComponent",
     "client.MixinFont",
+    "client.MixinFramerateLimitTracker",
     "client.MixinGuiGraphics",
     "client.MixinItemSpearHeldUse",
     "client.MixinMinecraftSpearUse",
@@ -32,11 +33,12 @@
     "entity.MixinAvatarRenderer",
     "entity.MixinClientPlayerEntity",
     "entity.MixinEntity",
+    "entity.MixinPlayerSafeWalk",
+    "entity.MixinSlimeBlock",
     "entity.MixinEntityRenderer",
     "entity.MixinLivingEntityJump",
     "entity.MixinLivingEntityTravel",
     "entity.MixinLocalPlayerRotation",
-    "entity.MixinSlimeBlock",
     "input.MixinKeyboard",
     "input.MixinMouse",
     "network.MixinClientCommonPacketListenerImpl",
@@ -75,7 +77,8 @@
     "render.gui.MixinHeldItemTooltip",
     "render.gui.MixinInGameHud",
     "render.gui.MixinScreen",
-    "render.gui.MixinTitleScreen"
+    "render.gui.MixinTitleScreen",
+    "client.NativeImageAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -20,8 +20,8 @@ public class DebugLimitsCommand extends Command {
             MoveLimitDebug debug = MoveLimitDebug.get();
             debug.toggle();
             return debug.isEnabled()
-                    ? success("移动速率调试浮层已开启")
-                    : info("移动速率调试浮层已关闭");
+                    ? success(dev.guizhou.util.lang.ClientLanguage.text("移动速率调试浮层已开启"))
+                    : info(dev.guizhou.util.lang.ClientLanguage.text("移动速率调试浮层已关闭"));
         });
     }
 }

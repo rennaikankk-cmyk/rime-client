@@ -5,6 +5,7 @@ import dev.guizhou.event.impl.ClientEvent;
 import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.commands.Command;
 import dev.guizhou.features.gui.GuizhouWareGui;
+import dev.guizhou.features.gui.Labeled;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Bind;
 import dev.guizhou.features.settings.Setting;
@@ -15,18 +16,25 @@ import java.awt.*;
 public class ClickGuiModule extends Module {
     private static ClickGuiModule INSTANCE;
 
+    public final Setting<dev.guizhou.util.lang.ClientLanguage.Language> language =
+            mode("Language", dev.guizhou.util.lang.ClientLanguage.Language.CHINESE)
+                    .described("界面语言：中文或 English，即时生效。");
+    private final Setting<Integer> languageRevision = num("LanguageRevision", 2, 2, 2);
+
+    public final Setting<Boolean> clientCompatibility = bool("ClientCompatibility", true).setPage("Compatibility")
+            .described("Yield overlapping flight, armor and item actions to active SlimefunHelper or RusherHack modules.");
     public Setting<String>  prefix           = str("Prefix", "rime");
-    public Setting<Theme>   theme            = mode("Theme", Theme.GUIZHOUWARE);
-    public Setting<Color>   customColor      = color("Custom Color", 114, 168, 216, 220);
-    public Setting<Boolean> smooth           = bool("Smooth", true);
-    public Setting<Double> menuScale = num("菜单大小 (%)", 100.0, 60.0, 150.0);
-    public Setting<String>  menuNotice       = str("MenuNotice", "");
-    public Setting<String>  menuWatermark    = str("MenuWatermark", "");
+    public Setting<Boolean> blurBackground   = bool("BlurBackground", true);
     public Setting<Boolean> descriptions     = bool("Descriptions", true);
     /** Forces 1.12 packet gates (dual view, legacy firework/input, crystal/TP 1.12) even if Via did not detect them. */
     public Setting<Boolean> protocol112      = bool("1.12协议", false);
-    /** Panel positions and collapse flags: PRESET.CATEGORY=x,y,collapsed;... */
-    public Setting<String>  panelLayout      = str("PanelLayout", "");
+    public Setting<String>  menuNotice       = str("MenuNotice", "");
+    public Setting<String>  menuWatermark    = str("MenuWatermark", "");
+    public Setting<Theme>   theme            = mode("Theme", Theme.GUIZHOUWARE);
+    public Setting<Frame>   frame            = mode("菜单样式", Frame.GLASS);
+    public Setting<Color>   customColor      = color("Custom Color", 114, 168, 216, 220);
+    public Setting<Boolean> smooth           = bool("Smooth", true);
+    public Setting<Double> menuScale = num("菜单大小 (%)", 100.0, 60.0, 150.0);
     public Setting<Integer> rainbowHue       = num("Delay", 240, 0, 600);
     public Setting<Float>   rainbowBrightness = num("Brightness", 200.0f, 1.0f, 255.0f);
     public Setting<Float>   rainbowSaturation = num("Saturation", 140.0f, 1.0f, 255.0f);
@@ -34,6 +42,10 @@ public class ClickGuiModule extends Module {
     public Setting<Boolean> clickGuiFont = bool("ClickGUI Font", false);
     public Setting<Boolean> hudFont      = bool("HUD Font", false);
     public Setting<String>  fontName     = str("Font Name", "");
+    /** Comma-separated module names pinned in the ClickGUI favourites view. */
+    public Setting<String>  favorites    = str("Favorites", "");
+    /** Panel positions and collapse flags per panel style: STYLE.CATEGORY=x,y,collapsed;... */
+    public Setting<String>  panelLayout  = str("PanelLayout", "");
 
     /* IB (InternalBeyond) 色板：雾蓝玻璃 + 烛火暗红点缀，低饱和统一气质 */
     private static final Color CAT_COMBAT   = new Color(160,  82,  82); // Infernal 烛火暗红
@@ -107,8 +119,29 @@ public class ClickGuiModule extends Module {
         clickGuiFont.setVisibility(v -> false);
         hudFont.setVisibility(v -> false);
         fontName.setVisibility(v -> false);
+        favorites.setVisibility(v -> false);
+        panelLayout.setVisibility(v -> false);
 
         INSTANCE = this;
+        languageRevision.setVisibility(v -> false);
+        dev.guizhou.util.lang.ClientLanguage.bind(() -> language.getValue()
+                == dev.guizhou.util.lang.ClientLanguage.Language.CHINESE);
+    }
+
+    @Override
+    public void fromJson(com.google.gson.JsonElement element) {
+        super.fromJson(element);
+        if (element != null && element.isJsonObject()) {
+            var object = element.getAsJsonObject();
+            var revision = object.get("LanguageRevision");
+            if (revision == null || !revision.isJsonPrimitive() || !"2".equals(revision.getAsString())) {
+                // Revision 2: Chinese is now the default audience language. Existing configs were
+                // force-migrated to English back in revision 1 without an explicit user choice,
+                // so they migrate back to Chinese; users who genuinely prefer English switch once.
+                language.setValue(dev.guizhou.util.lang.ClientLanguage.Language.CHINESE);
+            }
+            languageRevision.setValue(2);
+        }
     }
 
     @Subscribe
@@ -117,7 +150,7 @@ public class ClickGuiModule extends Module {
                 && event.getSetting().getFeature().equals(this)) {
             if (event.getSetting().equals(this.prefix)) {
                 GuizhouWare.commandManager.setCommandPrefix(this.prefix.getPlannedValue());
-                Command.sendMessage("Prefix set to {global} %s",
+                Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("命令前缀已改为 {accent} %s"),
                         GuizhouWare.commandManager.getCommandPrefix());
             }
             if (event.getSetting().equals(this.clickGuiFont)
@@ -158,4 +191,16 @@ public class ClickGuiModule extends Module {
     public enum Theme {
         GUIZHOUWARE, COLORS, CUSTOM, RAINBOW
     }
+
+    /** Glass columns, or one tight category stack with the open row filled. */
+    public enum Frame implements Labeled {
+        GLASS("玻璃"), LIST("分类列");
+
+        private final String label;
+
+        Frame(String label) { this.label = label; }
+
+        @Override public String label() { return dev.guizhou.util.lang.ClientLanguage.text(label); }
+    }
+
 }

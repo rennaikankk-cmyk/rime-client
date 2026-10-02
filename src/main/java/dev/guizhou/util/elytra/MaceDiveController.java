@@ -49,8 +49,9 @@ public final class MaceDiveController {
         level = mc.level;
         if (!safeInventory() || player.isUsingItem() || !player.isFallFlying() || player.onGround()
                 || player.isInWater() || player.isInLava() || player.isPassenger()
-                || player.getAbilities().flying || (requireDescent && player.getDeltaMovement().y >= -0.05)
-                || !(dev.guizhou.util.elytra.MappedCombatItems.isMace(player.getMainHandItem()))) return false;
+                || player.getAbilities().flying
+                || (requireDescent && player.getDeltaMovement().y >= -0.05)
+                || !MaceCombat.isMace(player.getMainHandItem())) return false;
         ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
         if (!usableWings(chest) || !player.inventoryMenu.getSlot(CHEST_MENU_SLOT).mayPickup(player)) return false;
         int candidate = -1;
@@ -101,7 +102,7 @@ public final class MaceDiveController {
         return isActive() && ownsPair() && safeInventory() && !player.isUsingItem()
                 && InventoryUtil.selected() == selectedSlot
                 && !player.onGround() && !player.isInWater() && !player.isInLava() && !player.isPassenger()
-                && dev.guizhou.util.elytra.MappedCombatItems.isMace(player.getMainHandItem())
+                && MaceCombat.isMace(player.getMainHandItem())
                 && state.canAttack(player.isFallFlying(), player.getDeltaMovement().y < -0.05,
                 MaceItem.canSmashAttack(player));
     }
@@ -120,6 +121,10 @@ public final class MaceDiveController {
 
     private void service() {
         if (state.phase() == MaceDiveState.Phase.IDLE) return;
+        if (dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ARMOR)
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FLIGHT)) {
+            forget(); return;
+        }
         if (!sameSession() || player.isDeadOrDying() || player.isSpectator()) {
             forget();
             return;
@@ -130,10 +135,10 @@ public final class MaceDiveController {
             return;
         }
         boolean mustRecover = !safeInventory() || player.isUsingItem() || InventoryUtil.selected() != selectedSlot
-                || !(dev.guizhou.util.elytra.MappedCombatItems.isMace(player.getMainHandItem()))
+                || !MaceCombat.isMace(player.getMainHandItem())
                 || player.onGround() || player.isInWater() || player.isInLava() || player.isPassenger()
                 || player.getAbilities().flying;
-        state.observe(player.tickCount, player.isFallFlying(), mustRecover);
+        state.observe(player.tickCount, player.isFallFlying(), mustRecover, player.fallDistance, 1.5);
         if (state.phase() != MaceDiveState.Phase.RECOVERING || !safeInventory()
                 || !recoverySlotAvailable(InventoryUtil.selected(), armorSlot)) return;
         if (lastRecoveryAttempt == player.tickCount) return;
@@ -170,7 +175,9 @@ public final class MaceDiveController {
     }
 
     private boolean safeInventory() {
-        return sameSession() && mc.gameMode != null && mc.getConnection() != null && mc.screen == null
+        return !dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.ARMOR)
+                && !dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FLIGHT)
+                && sameSession() && mc.gameMode != null && mc.getConnection() != null && mc.screen == null
                 && !player.isDeadOrDying() && !player.isSpectator()
                 && player.containerMenu == player.inventoryMenu && player.containerMenu.getCarried().isEmpty()
                 && (GuizhouWare.swapManager == null || !GuizhouWare.swapManager.isLatched());
@@ -186,7 +193,7 @@ public final class MaceDiveController {
     }
 
     private boolean chestArmor(ItemStack stack) {
-        return wearableChest(stack) && !VersionCompat.isGlider(stack)
+        return wearableChest(stack) && !dev.guizhou.util.VersionCompat.isGlider(stack)
                 && !EnchantmentHelper.has(stack, EnchantmentEffectComponents.PREVENT_ARMOR_CHANGE);
     }
 
@@ -195,7 +202,7 @@ public final class MaceDiveController {
     }
 
     private boolean usableWings(ItemStack stack) {
-        return wearableChest(stack) && VersionCompat.isGlider(stack)
+        return wearableChest(stack) && dev.guizhou.util.VersionCompat.isGlider(stack)
                 && (!stack.isDamageableItem() || stack.getDamageValue() < stack.getMaxDamage() - 1);
     }
 

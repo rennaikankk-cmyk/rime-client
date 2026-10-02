@@ -1,6 +1,0 @@
-.gradle/
-build/
-dist/
-*.class
-__pycache__/
-*.pyc

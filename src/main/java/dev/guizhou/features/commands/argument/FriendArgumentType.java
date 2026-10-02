@@ -23,7 +23,7 @@ public class FriendArgumentType implements ArgumentType<String> {
         String input = builder.getRemaining();
         for (String name : GuizhouWare.friendManager.getFriends()) {
             if (FuzzyMatch.matches(input, name)) {
-                builder.suggest(name, new LiteralMessage("好友"));
+                builder.suggest(name, new LiteralMessage(dev.guizhou.util.lang.ClientLanguage.text("好友")));
             }
         }
         return builder.buildFuture();

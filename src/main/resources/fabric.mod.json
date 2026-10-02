@@ -29,5 +29,8 @@
     "fabric": "*",
     "mixinextras": ">=0.5.5",
     "minecraft": "${minecraft_version}"
+  },
+  "custom": {
+    "rimeguard": "3.3"
   }
 }

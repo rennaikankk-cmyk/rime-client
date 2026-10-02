@@ -106,6 +106,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
                     .forEach(dev.guizhou.features.modules.Module::disable);
         }
         moduleManager.onLoad();
+        new ConfigAutosave().init();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> configManager.save()));
 
         long endTime = System.nanoTime();

@@ -2,7 +2,6 @@ package dev.guizhou.features.modules.movement;
 
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
-import net.minecraft.client.Minecraft;
 
 public class VelocityModule extends Module {
     public final Setting<Boolean> phaseOnly = bool("PhaseOnly", true);
@@ -22,8 +21,6 @@ public class VelocityModule extends Module {
     public boolean phaseConditionMet() {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         if (!phaseOnly.getValue()) return true;
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.level == null) return false;
-        return mc.level.getBlockCollisions(mc.player, mc.player.getBoundingBox()).iterator().hasNext();
+        return dev.guizhou.util.player.InsideBlockUtil.isInsideBlock();
     }
 }

@@ -18,21 +18,8 @@ public final class ElytraPhysicsTest {
         fireworkSpeedLimit();
         invalidInputs();
         randomizedBounds();
+        coupledPullupComparison();
         System.out.println("ElytraPhysicsTest passed: " + assertions + " assertions");
-    }
-
-    private static void fireworkSpeedLimit() {
-        Vec3 fast = new Vec3(3.0, 4.0, 0.0);
-        vectorNear(fast, ElytraPhysics.limitFireworkSpeed(fast, 0.0, 0.0), "disabled limit");
-        vectorNear(new Vec3(0.0, 2.0, 0.0),
-                ElytraPhysics.limitFireworkSpeed(new Vec3(0.0, 3.0, 0.0), 2.0, 2.0), "vertical climb cap");
-        vectorNear(new Vec3(3.0, 0.0, 0.0),
-                ElytraPhysics.limitFireworkSpeed(new Vec3(3.0, 1.0, 0.0), 2.0, 2.0), "climb keeps horizontal");
-        Vec3 dive = ElytraPhysics.limitFireworkSpeed(new Vec3(3.0, -1.0, 0.0), 2.0, 2.0);
-        near(-1.0, dive.y, 1.0E-8, "dive keeps fall speed");
-        near(Math.sqrt(3.0), dive.horizontalDistance(), 1.0E-8, "dive cuts horizontal to the sphere");
-        vectorNear(new Vec3(0.0, -3.0, 0.0),
-                ElytraPhysics.limitFireworkSpeed(new Vec3(0.0, -3.0, 0.0), 2.0, 2.0), "pure dive is unchanged");
     }
 
     private static void yawRoundTrip() {
@@ -168,6 +155,57 @@ public final class ElytraPhysicsTest {
             Vec3 filled = ElytraPhysics.cornerFill(desired.scale(10), desired, min, max, cap);
             assertBounds(filled, min, max, cap);
         }
+    }
+
+    private static void fireworkSpeedLimit() {
+        Vec3 fast = new Vec3(3.0, 4.0, 0.0);
+        vectorNear(fast, ElytraPhysics.limitFireworkSpeed(fast, 0.0, 0.0), "disabled limit");
+        vectorNear(new Vec3(0.0, 2.0, 0.0),
+                ElytraPhysics.limitFireworkSpeed(new Vec3(0.0, 3.0, 0.0), 2.0, 2.0), "vertical climb cap");
+        vectorNear(new Vec3(3.0, 0.0, 0.0),
+                ElytraPhysics.limitFireworkSpeed(new Vec3(3.0, 1.0, 0.0), 2.0, 2.0), "climb keeps horizontal");
+        Vec3 dive = ElytraPhysics.limitFireworkSpeed(new Vec3(3.0, -1.0, 0.0), 2.0, 2.0);
+        near(-1.0, dive.y, 1.0E-8, "dive keeps fall speed");
+        near(Math.sqrt(3.0), dive.horizontalDistance(), 1.0E-8, "dive cuts horizontal to the sphere");
+        vectorNear(new Vec3(0.0, -3.0, 0.0),
+                ElytraPhysics.limitFireworkSpeed(new Vec3(0.0, -3.0, 0.0), 2.0, 2.0), "pure dive is unchanged");
+    }
+
+    /** Look stays on the request. Height is the summed Y of the Grim envelope, not a new angle. */
+    private static void coupledPullupComparison() {
+        double coupled = climbGain(-54.5, -54.5);
+        double steeper = climbGain(-75.0, -75.0);
+        double shallower = climbGain(-35.0, -35.0);
+        double vertical = climbGain(-89.0, -89.0);
+        double split = climbGain(-89.0, -54.5);
+        System.out.println("gzboost pull-up height/8t coupled54.5=" + coupled
+                + " steeper75=" + steeper + " shallower35=" + shallower
+                + " vertical89=" + vertical + " splitLook=" + split);
+        check(coupled > steeper && coupled > shallower && coupled > vertical,
+                "54.5 coupled pull-up gains more height than steeper, shallower, and vertical");
+        check(coupled > split, "A look that leaves the boost cone gains less height than the coupled diagonal");
+        Vec3 aimed = ElytraPhysics.bestPullupSpeed(new Vec3(4, 0, 0));
+        near(-54.5, ElytraPhysics.rotationToPitch(aimed), 0.05, "bestPullupSpeed is the measured cone");
+    }
+
+    private static double climbGain(double lookPitch, double requestPitch) {
+        Vec3 look = ElytraPhysics.pitchYawToRotation((float) lookPitch, 0.0F);
+        Vec3 requestDir = ElytraPhysics.pitchYawToRotation((float) requestPitch, 0.0F);
+        Vec3 velocity = new Vec3(0.6, 0.15, 0.0);
+        double height = 0.0;
+        for (int tick = 0; tick < 8; tick++) {
+            Vec3 simulated = ElytraPhysics.simulateGlide(velocity, look, 0.08);
+            Vec3 applied = ElytraPhysics.clampToGrimEnvelope(requestDir.scale(6.0), velocity, simulated,
+                    look, look, 2.5, false, 8.0, 0.0);
+            velocity = applied;
+            height += applied.y;
+        }
+        return height;
+    }
+
+    private static void check(boolean ok, String message) {
+        assertions++;
+        if (!ok) throw new AssertionError(message);
     }
 
     private static void assertBounds(Vec3 value, Vec3 min, Vec3 max, double cap) {

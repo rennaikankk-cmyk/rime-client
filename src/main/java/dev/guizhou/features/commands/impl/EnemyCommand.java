@@ -35,43 +35,43 @@ public class EnemyCommand extends Command {
                         .executes((ctx) -> {
                             List<String> enemies = GuizhouWare.enemyManager.getEnemies();
                             if (enemies.isEmpty()) {
-                                return replyKeyed("list", ChatTone.MUTED, Component.literal("敌人列表为空"));
+                                return replyKeyed("list", ChatTone.MUTED, Component.literal(dev.guizhou.util.lang.ClientLanguage.text("敌人列表为空")));
                             }
                             String prefix = ctx.getSource().getCommandPrefix();
                             MutableComponent body = Component.empty()
-                                    .append(ChatFeed.text("敌人 " + enemies.size() + "  ", ChatPalette.TEXT));
+                                    .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("敌人 ") + enemies.size() + "  ", ChatPalette.TEXT));
                             for (int i = 0; i < enemies.size(); i++) {
                                 if (i > 0) body.append(ChatFeed.text(" · ", ChatPalette.SUBTLE));
                                 String name = enemies.get(i);
                                 body.append(ChatFeed.suggest(name, prefix + "enemy remove " + name,
-                                        ChatFeed.text("移除敌人 " + name, ChatPalette.MUTED), ChatPalette.DANGER_SOFT));
+                                        ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("移除敌人 ") + name, ChatPalette.MUTED), ChatPalette.DANGER_SOFT));
                             }
                             return replyKeyed("list", ChatTone.INFO, body);
                         }))
                 .then(literal("clear")
                         .executes((ctx) -> {
                             GuizhouWare.enemyManager.clearEnemies();
-                            return success("已清空敌人列表");
+                            return success(dev.guizhou.util.lang.ClientLanguage.text("已清空敌人列表"));
                         }))
                 .then(literal("add")
                         .then(argument("username", onlinePlayer())
                                 .executes((ctx) -> {
                                     String username = getOnlinePlayer(ctx, "username");
                                     if (GuizhouWare.enemyManager.isEnemy(username)) {
-                                        return warn("{red} %s {reset} 已在敌人列表中", username);
+                                        return warn(dev.guizhou.util.lang.ClientLanguage.text("{red} %s {reset} 已在敌人列表中"), username);
                                     }
                                     GuizhouWare.enemyManager.addEnemy(username);
-                                    return success("已将 {red} %s {reset} 加入敌人列表", username);
+                                    return success(dev.guizhou.util.lang.ClientLanguage.text("已将 {red} %s {reset} 加入敌人列表"), username);
                                 })))
                 .then(literal("remove")
                         .then(argument("username", enemy())
                                 .executes((ctx) -> {
                                     String username = getEnemy(ctx, "username");
                                     if (!GuizhouWare.enemyManager.isEnemy(username)) {
-                                        return warn("%s 不在敌人列表中", username);
+                                        return warn(dev.guizhou.util.lang.ClientLanguage.text("%s 不在敌人列表中"), username);
                                     }
                                     GuizhouWare.enemyManager.removeEnemy(username);
-                                    return success("已将 {red} %s {reset} 移出敌人列表", username);
+                                    return success(dev.guizhou.util.lang.ClientLanguage.text("已将 {red} %s {reset} 移出敌人列表"), username);
                                 })));
     }
 }

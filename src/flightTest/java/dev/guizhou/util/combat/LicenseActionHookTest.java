@@ -17,93 +17,18 @@ public final class LicenseActionHookTest {
     private static final String CRYSTAL = BASE + "combat/GuangxiCrystalModule";
     private static final String MINE = BASE + "world/GuangxiMineModule";
     private static final String AUTO = BASE + "combat/AutoMineModule";
+    private static final String SWORD = BASE + "combat/AutoSwordModule";
     private static final String HEARTBEAT = "dev/guizhou/manager/HeartbeatManager";
     private static int checks;
 
     public static void main(String[] args) throws IOException {
-        guarded(BASE + "combat/AutoSwordModule", "onPreTick", null, "findTarget", "tryAttack");
-        guarded(BASE + "combat/AutoSwordModule", "engage", null, "tryAction", "withSwap");
-        guarded(BASE + "combat/AutoSwordModule", "tryAttack", null, "engage");
-        guarded(BASE + "combat/AutoSwordModule", "tickSwordGap", null, "latch");
-        guarded(BASE + "combat/AutoSwordModule", "attack", null, "send");
-        guarded(BASE + "combat/AutoSwordModule", "sendTeleport", null, "moveTo");
-        check(!method(BASE + "combat/AutoSwordModule", "moveTo", null).hasAuthorization(), "TP return survives revocation");
-        guarded(BASE + "combat/AutoTotemModule", "onTick", null, "refillOffhandTotem");
-        guarded(BASE + "combat/AutoTotemModule", "refillOffhandTotem", null, "swapToOffhand");
-        guarded(BASE + "combat/GuangxiElytraChaseModule", "attack", null, "send");
-        guarded(BASE + "combat/GuangxiElytraChaseModule", "onPreTick", null, "syncFlightControl", "classifyTarget");
-        check(!method(BASE + "combat/GuangxiElytraChaseModule", "resetState", null).hasAuthorization(), "Air cleanup survives revocation");
-        guarded("dev/guizhou/util/elytra/ElytraWeaponController", "update", null, "swap", "send", "useItem");
         crystalActions();
         miningActionsAndCleanup();
         autoMineCallbacks();
         anchorCallbacks();
-        newlyGatedModules();
+        swordAttack();
+        utilityActions();
         System.out.println("LicenseActionHookTest passed: " + checks + " authorization/action/cleanup checks");
-    }
-
-    /** Modules that send server-bound packets or alter movement outside PlacementManager;
-     * each tick/handler gate was added 2026-09-22 and must keep cleanup ungated. */
-    private static void newlyGatedModules() throws IOException {
-        guarded(BASE + "player/AutoXPModule", "onTick", null, "throwBottles");
-        guarded(BASE + "combat/KeyPotionModule", "onTick", null, "use");
-        guarded("dev/guizhou/util/inventory/ItemUseTracker", "useBatch", null, "withSwap");
-        guarded(BASE + "combat/PhaseModule", "onTick", null, "withSwap");
-        guarded(BASE + "world/FastPortalModule", "onPreTick", null, "withSwap");
-        guarded(BASE + "player/MiddleClickExtraModule", "onMouse", null, "withSwap");
-        guarded(BASE + "funny/TrickshotModule", "onTick", null, "withSwap");
-        guarded(BASE + "funny/MoFuckerModule", "onTick", null, "place", "collect");
-        guarded(BASE + "player/InstantRekitModule", "onTick", null, "rekit");
-        guarded(BASE + "player/ReplenishModule", "onTick", null, "swap");
-        guarded(BASE + "combat/GuangxiSpearTPModule", "execute", null, "attack", "send");
-        guarded(BASE + "client/GuangxiProbeModule", "onPreTick", null, "tickDig", "tickAttack", "tickMove");
-        check(method(BASE + "client/GuangxiProbeModule", "onEnable", null).hasAuthorization(),
-                "Probe must not start measuring without authorization");
-        guarded(BASE + "combat/AutoLogModule", "onTick", null, "checkThresholds");
-        guarded(BASE + "movement/VelocityModule", "phaseConditionMet", null, "getBlockCollisions");
-        check(method(BASE + "player/NoRotateModule", "isActive", null).hasAuthorization(),
-                "NoRotate must stop ignoring server rotations after revocation");
-        guarded(BASE + "movement/SprintModule", "onTick", null, "setSprinting");
-        check(method(BASE + "movement/SprintModule", "wantsSprint", null).hasAuthorization(),
-                "Sprint helper must respect revocation");
-        guarded(BASE + "player/FastuseModule", "onTick", null, "matches");
-        guarded(BASE + "combat/AutoSwordModule", "tickSwordGap", null, "latch");
-        guarded(BASE + "combat/HoleFillModule", "onTick", null, "fill");
-        guarded(BASE + "combat/HoleFillModule", "fill", null, "placeBatch");
-        check(!method(BASE + "combat/HoleFillModule", "onDisable", null).hasAuthorization(), "HoleFill cleanup survives revocation");
-        guarded(BASE + "player/AutoArmorModule", "onTick", null, "equip");
-        guarded(BASE + "player/AutoArmorModule", "equip", null, "click");
-        guarded(BASE + "player/AutoEatModule", "onPreTick", null, "startMeal");
-        guarded(BASE + "player/AutoEatModule", "startMeal", null, "latch", "useItem");
-        guarded(BASE + "player/AutoEatModule", "shouldKeepEating", null, "ownsMeal");
-        guarded(BASE + "client/AutoReconnectModule", "reconnect", null, "startConnecting");
-        Code freeze = guarded(BASE + "combat/GuangxiSpearTPModule", "onPacketSend", null, "cancel");
-        check(freeze.calls("disable").stream().anyMatch(call -> freeze.reachable(call, false, null)),
-                "Revocation must end the spear freeze and permit vanilla movement packets");
-        check(method(BASE + "combat/GuangxiSpearTPModule", "onPreTick", null).hasAuthorization(),
-                "Spear freeze must expire on revocation even without a movement packet");
-        Code sprint = method(BASE + "movement/SprintModule", "onTick", null);
-        check(sprint.calls("cancel").stream().anyMatch(call -> sprint.reachable(call, false, null)),
-                "Denied sprint releases its outstanding rotation without blocking vanilla sprint");
-        Code probeCleanup = method(BASE + "client/GuangxiProbeModule", "onDisable", null);
-        check(!probeCleanup.hasAuthorization(), "Probe abort must remain available after revocation");
-        check(probeCleanup.calls("send").stream().anyMatch(call -> probeCleanup.reachable(call, false, null)),
-                "Disabling an outstanding probe must be able to send ABORT");
-        Code sword = method(BASE + "combat/AutoSwordModule", "tickSwordGap", null);
-        check(sword.calls("releaseSwordGap").stream().anyMatch(call -> sword.reachable(call, false, null)),
-                "Denied Aura can release its held gapple slot");
-        check(!method(BASE + "combat/AutoSwordModule", "releaseSwordGap", null).hasAuthorization(),
-                "Slot restoration never requires a current lease");
-        // Cleanup paths must survive revocation.
-        for (String[] cleanup : new String[][]{
-                {BASE + "combat/AutoSwordModule", "onDisable"},
-                {BASE + "combat/GuangxiSpearTPModule", "onDisable"},
-                {BASE + "funny/MoFuckerModule", "onEnable"},
-                {BASE + "player/AutoXPModule", "onDisable"},
-                {BASE + "world/FastPortalModule", "onDisable"}}) {
-            check(!method(cleanup[0], cleanup[1], null).hasAuthorization(),
-                    cleanup[1] + " cleanup must remain ungated");
-        }
     }
 
     private static void anchorCallbacks() throws IOException {
@@ -116,13 +41,109 @@ public final class LicenseActionHookTest {
         check(!method(anchor, "onDisable", null).hasAuthorization(), "Anchor listener cleanup survives revocation");
     }
 
+    private static void swordAttack() throws IOException {
+        guarded(SWORD, "onPreTick", null, "tryAttack");
+        guarded(SWORD, "tryAttack", null, "withSwap");
+        guarded(SWORD, "prepareAttackTick", null, "restorePosition");
+        guarded(SWORD, "tryDeflect", null, "strike", "trySubmit");
+        guarded(BASE + "combat/KillAuraModule", "onPreTick", null, "tryDeflect", "tryAttack");
+        int strikeCallbacks = 0;
+        for (Code callback : methods(SWORD, "lambda$tryAttack$")) {
+            if (callback.calls("strike").isEmpty()) continue;
+            strikeCallbacks++;
+            check(callback.hasAuthorization(), "tryAttack strike callback has no authorization check");
+            for (int call : callback.calls("strike")) {
+                check(!callback.reachable(call, false, null), "Denied path reaches tryAttack -> strike");
+                check(callback.reachable(call, true, null), "Authorized path cannot reach tryAttack -> strike");
+            }
+        }
+        check(strikeCallbacks >= 1, "tryAttack callback no longer strikes");
+        guarded(SWORD, "strike", null, "attack");
+        guarded(BASE + "combat/AutoSwordModule", "tickSwordGap", null, "latch");
+        check(!method(SWORD, "onDisable", null).hasAuthorization(), "Disabling AutoSword must stay able to drop its target");
+    }
+
+    /** Server-facing actions of the utility modules; their cleanup stays ungated. */
+    private static void utilityActions() throws IOException {
+        String extra = BASE + "extra/UtilityModule";
+        Code utilityTick = guarded(extra, "onTick", null, "tick");
+        check(utilityTick.calls("resetSession").stream().anyMatch(call -> utilityTick.reachable(call, false, null)),
+                "Denied utility ticks must clear pending actions and restore owned tools");
+        check(method(extra, "permitted", null).hasAuthorization(), "Input and packet utility hooks require authorization");
+        check(!method(extra, "onDisable", null).hasAuthorization(), "Utility cleanup survives revocation");
+
+        String surround = BASE + "combat/SurroundModule";
+        guarded(surround, "breakCrystal", null, "trySubmit", "attack", "swing");
+        guarded(surround, "centerInput", null, "sin", "cos");
+        check(!method(surround, "onDisable", null).hasAuthorization(), "Surround cleanup survives revocation");
+
+        String holeFill = BASE + "combat/HoleFillModule";
+        guarded(holeFill, "onTick", null, "fill");
+        guarded(holeFill, "fill", null, "placeBatch");
+        check(!method(holeFill, "onDisable", null).hasAuthorization(), "HoleFill cleanup survives revocation");
+
+        String armor = BASE + "player/AutoArmorModule";
+        guarded(armor, "onTick", null, "equip");
+        guarded(armor, "equip", null, "click");
+
+        String slm = BASE + "movement/SLMArmorFlyModule";
+        guarded(slm, "onPreTick", null, "monitorArmorFly");
+        guarded(slm, "onFlightWindow", null, "serviceIndependentArmorFly");
+        check(method(slm, "requested", null).hasAuthorization(), "SLM equipment requests need authorization");
+        check(!method(slm, "onDisable", null).hasAuthorization(), "SLM cleanup survives revocation");
+
+        String eat = BASE + "player/AutoEatModule";
+        guarded(eat, "onPreTick", null, "startMeal");
+        guarded(eat, "startMeal", null, "latch", "useItem");
+        guarded(eat, "shouldKeepEating", null, "ownsMeal");
+        Code eatCleanup = method(eat, "resetState", null);
+        check(!eatCleanup.hasAuthorization() && !eatCleanup.calls("release").isEmpty(),
+                "AutoEat must hand the hotbar back even when revoked");
+
+        String offhand = BASE + "combat/AutoTotemModule";
+        guarded(offhand, "sync", null, "swapToOffhand");
+        guarded(offhand, "tryUseOffhandGapple", null, "useGappleOnUse");
+        guarded(offhand, "useGappleOnUse", null, "useItem");
+        String chase = BASE + "combat/GuangxiElytraChaseModule";
+        guarded(chase, "updateEatingRetreat", null, "pauseUse", "requestRecovery", "direction");
+        guarded(chase, "onElytra", null, "set");
+        check(method(chase, "isEatingRetreatRequested", null).hasAuthorization(), "Eating flight requests require authorization");
+        check(!method(chase, "endEatingRetreat", null).hasAuthorization(), "Eating flight cleanup remains available after revocation");
+        Code gappleCleanup = method(offhand, "stopGappleUse", null);
+        check(!gappleCleanup.hasAuthorization() && !gappleCleanup.calls("releaseUsingItem").isEmpty(),
+                "Offhand meal cleanup survives authorization revocation");
+
+        String replenish = BASE + "player/ReplenishModule";
+        guarded(replenish, "onTick", null);
+        guarded(replenish, "moveTo", null, "click");
+        guarded(replenish, "mergeInto", null, "click");
+        Code replenishCleanup = method(replenish, "resetState", null);
+        check(!replenishCleanup.hasAuthorization(), "Replenish cleanup survives revocation");
+
+        String kit = BASE + "player/KitReplenishModule";
+        guarded(kit, "onTick", null);
+        guarded(kit, "takeFromOpenContainer", null, "click");
+        guarded(kit, "placeShulker", null, "use");
+        guarded(kit, "breakPlacedShulker", null, "startDestroyBlock", "swing");
+        guarded(kit, "mergeInto", null, "click");
+        Code kitCleanup = method(kit, "finishChain", null);
+        check(!kitCleanup.hasAuthorization(), "KitReplenish cleanup survives revocation");
+
+        guarded(BASE + "client/AutoReconnectModule", "reconnect", null, "startConnecting");
+
+        String anti = BASE + "combat/AntiReplenishModule";
+        guarded(anti, "onTick", null);
+        guarded(anti, "mineEnemyBox", null, "startDestroyBlock", "swing");
+        check(!method(anti, "stopMining", null).hasAuthorization(), "AntiReplenish cleanup survives revocation");
+    }
+
     private static void crystalActions() throws IOException {
         guarded(CRYSTAL, "onCrystalSpawn", null, "sendCrystalAttack", "sendGhostAttacksAfter");
         guarded(CRYSTAL, "onBlockUpdate", null, "tell");
         guarded(CRYSTAL, "lambda$onBlockUpdate$", null, "scanBlockUpdate");
         guarded(CRYSTAL, "scanBlockUpdate", null, "findBestCrystal", "findBestPlace", "breakCrystal", "doPlace");
         guarded(CRYSTAL, "preplaceCrystal", null, "doPlace");
-        guarded(CRYSTAL, "breakCrystal", null, "tryAction", "sendCrystalAttack");
+        guarded(CRYSTAL, "breakCrystal", null, "aimBreakNow", "sendCrystalAttack");
         guarded(CRYSTAL, "sendCrystalAttack", null, "send", "attack", "markSent");
         guarded(CRYSTAL, "sendGhostAttack", null, "send");
         guarded(CRYSTAL, "attackWithDefaultWeapon", null, "withSwap");
@@ -203,15 +224,23 @@ public final class LicenseActionHookTest {
     }
 
     private static Code method(String owner, String wanted, String descriptor) throws IOException {
+        var found = methods(owner, wanted, descriptor);
+        check(found.size() == 1, "Expected one method: " + owner + "." + wanted + ", got " + found.size());
+        return found.getFirst();
+    }
+
+    private static List<Code> methods(String owner, String wanted) throws IOException {
+        return methods(owner, wanted, null);
+    }
+
+    private static List<Code> methods(String owner, String wanted, String descriptor) throws IOException {
         try (InputStream input = LicenseActionHookTest.class.getClassLoader().getResourceAsStream(owner + ".class")) {
             if (input == null) throw new AssertionError("Missing compiled " + owner);
             ClassNode klass = new ClassNode();
             new ClassReader(input).accept(klass, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-            var found = klass.methods.stream().filter(method -> (wanted.endsWith("$")
+            return klass.methods.stream().filter(method -> (wanted.endsWith("$")
                     ? method.name.startsWith(wanted) : method.name.equals(wanted))
-                    && (descriptor == null || method.desc.contains(descriptor))).toList();
-            check(found.size() == 1, "Expected one method: " + owner + "." + wanted + ", got " + found.size());
-            return new Code(found.getFirst());
+                    && (descriptor == null || method.desc.contains(descriptor))).map(Code::new).toList();
         }
     }
 

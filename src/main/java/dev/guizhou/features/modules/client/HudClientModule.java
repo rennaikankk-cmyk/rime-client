@@ -34,6 +34,7 @@ public class HudClientModule extends Module {
     private final Map<HudModule, Setting<Boolean>> customPos = new LinkedHashMap<>();
     private final Map<HudModule, Setting<Double>> posX = new LinkedHashMap<>();
     private final Map<HudModule, Setting<Double>> posY = new LinkedHashMap<>();
+    private final Map<HudModule, Setting<Boolean>> anchoredPos = new LinkedHashMap<>();
     private final Map<HudModule, Setting<Double>> sizes = new LinkedHashMap<>();
     private final Map<HudModule, Setting<Double>> opacity = new LinkedHashMap<>();
     private final Map<HudModule, Setting<Color>> backgrounds = new LinkedHashMap<>();
@@ -62,6 +63,7 @@ public class HudClientModule extends Module {
     public HudClientModule() {
         super("Hud", "Static-position HUD elements", Category.CLIENT);
         register(new TotemsHudModule(), true);
+        register(new dev.guizhou.features.modules.hud.SuppliesHudModule(), true);
         register(new ArmorHudModule(), true);
         register(new CountsHudModule(), true);
         register(new CoordinatesHudModule(), true);
@@ -90,6 +92,7 @@ public class HudClientModule extends Module {
         customPos.put(element, bool(id + " CustomPos", false).setPage("Layout"));
         posX.put(element, num(id + " X", 0.5, 0.0, 1.0).setPage("Layout"));
         posY.put(element, num(id + " Y", 0.5, 0.0, 1.0).setPage("Layout"));
+        anchoredPos.put(element, bool(id + " AnchoredPos", false).setPage("Layout").setVisibility(v -> false));
         sizes.put(element, num(id + " 大小 (%)", 100.0, 50.0, 200.0).setPage(id));
         opacity.put(element, num(id + " 背景不透明度 (%)", 100.0, 0.0, 100.0).setPage(id));
         backgrounds.put(element, register(new Setting<>(id + " 背景颜色", new Color(0x30302E))).setPage(id));
@@ -254,6 +257,21 @@ public class HudClientModule extends Module {
         return s == null ? 0.5f : s.getValue().floatValue();
     }
 
+    /** Resolution/GUI/card-size changes only project the saved anchor; they never save clamped pixels. */
+    public int[] savedPosition(HudModule element, int width, int height, int sw, int sh) {
+        Setting<Boolean> anchored = anchoredPos.get(element);
+        if (anchored != null && !anchored.getValue() && width < sw && height < sh) {
+            posX.get(element).setValue(HudCoordinates.migrate(posX.get(element).getValue(), sw, width));
+            posY.get(element).setValue(HudCoordinates.migrate(posY.get(element).getValue(), sh, height));
+            anchored.setValue(true);
+        }
+        if (anchored == null || !anchored.getValue()) {
+            return new int[]{Math.round(normalizedX(element) * sw), Math.round(normalizedY(element) * sh)};
+        }
+        return new int[]{HudCoordinates.pixel(posX.get(element).getValue(), sw, width),
+                HudCoordinates.pixel(posY.get(element).getValue(), sh, height)};
+    }
+
     /** Persist a dropped position as normalized settings; clamped to keep the element onscreen. */
     public void savePosition(HudModule element, int x, int y, int w, int h) {
         int sw = Math.max(1, mc.getWindow().getGuiScaledWidth());
@@ -264,8 +282,9 @@ public class HudClientModule extends Module {
         Setting<Double> sy = posY.get(element);
         Setting<Boolean> use = customPos.get(element);
         if (sx == null || sy == null || use == null) return;
-        sx.setValue(x / (double) sw);
-        sy.setValue(y / (double) sh);
+        sx.setValue(HudCoordinates.normalize(x, sw, w));
+        sy.setValue(HudCoordinates.normalize(y, sh, h));
+        anchoredPos.get(element).setValue(true);
         use.setValue(true);
     }
 
@@ -310,7 +329,11 @@ public class HudClientModule extends Module {
         for(HudModule other:elements.keySet()) {
             if(other==element || !elements.get(other).getValue() || other.boundW()<=0 || other.boundH()<=0)continue;
             if(other.wasRendered())occupied.add(new HudLayout.Rect(other.boundX(),other.boundY(),other.boundW(),other.boundH()));
-            else if(isCustomPosition(other))occupied.add(new HudLayout.Rect(Math.round(normalizedX(other)*sw),Math.round(normalizedY(other)*sh),other.boundW(),other.boundH()));
+            else if(isCustomPosition(other)) {
+                int ow = other.previewWidth(scaleOf(other)), oh = other.previewHeight(scaleOf(other));
+                int[] position = savedPosition(other, ow, oh, sw, sh);
+                occupied.add(new HudLayout.Rect(position[0], position[1], ow, oh));
+            }
         }
         return HudLayout.place(new HudLayout.Rect(x,y,w,h),sw,sh,occupied);
     }

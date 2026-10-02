@@ -16,6 +16,19 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 public final class VersionCompat {
     private VersionCompat() {}
 
+    /** Evaluate one attribute only: old ItemAttributeModifiers.compute combines types. */
+    public static double attributeValue(ItemStack stack,
+            net.minecraft.core.Holder<net.minecraft.world.entity.ai.attributes.Attribute> attribute,
+            double base, EquipmentSlot slot) {
+        var value = new net.minecraft.world.entity.ai.attributes.AttributeInstance(attribute, ignored -> {});
+        value.setBaseValue(base);
+        stack.getOrDefault(net.minecraft.core.component.DataComponents.ATTRIBUTE_MODIFIERS,
+                net.minecraft.world.item.component.ItemAttributeModifiers.EMPTY).forEach(slot, (type, modifier) -> {
+            if (type.equals(attribute)) value.addOrUpdateTransientModifier(modifier);
+        });
+        return value.getValue();
+    }
+
     /** 1.21.5: EQUIPPABLE.slot() == CHEST && EQUIPPABLE.canBeEquippedBy(type). */
     public static boolean wearableChest(LivingEntity wearer, ItemStack stack) {
         return !stack.isEmpty() && stack.getCount() == 1

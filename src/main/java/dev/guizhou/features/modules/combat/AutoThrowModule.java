@@ -33,28 +33,27 @@ public final class AutoThrowModule extends Module {
 
     public AutoThrowModule() {
         super("AutoThrow", "按地形与血量投掷有益药水，自动让行巡航、空战与甲飞。", Category.COMBAT);
-        displayName.setValue("智能投药");
     }
     @Override public void onDisable() { nextTick = 0; status = null; ItemUseTracker.cancel("AutoThrow"); }
     @Override public String getDisplayInfo() { return status; }
     @Subscribe private void onTick(TickEvent event) {
-        if (!HeartbeatManager.authorized()) { status = "授权不可用"; return; }
+        if (!HeartbeatManager.authorized()) { status = dev.guizhou.util.lang.ClientLanguage.text("授权不可用"); return; }
         if (sessionPlayer != mc.player || sessionLevel != mc.level) {
             nextTick = 0; sessionPlayer = mc.player; sessionLevel = mc.level;
         }
         status = UtilityActionGuard.pauseReason();
         if (status != null) return;
-        if (ItemUseTracker.waiting("AutoThrow")) { status = "等待动作确认"; return; }
-        if (mc.player.tickCount < nextTick) { status = "冷却"; return; }
-        if (avoidEnemies.getValue() && ThrowEnvironment.nearEnemy(enemyRange.getValue())) { status = "附近有敌人"; return; }
+        if (ItemUseTracker.waiting("AutoThrow")) { status = dev.guizhou.util.lang.ClientLanguage.text("等待动作确认"); return; }
+        if (mc.player.tickCount < nextTick) { status = dev.guizhou.util.lang.ClientLanguage.text("冷却"); return; }
+        if (avoidEnemies.getValue() && ThrowEnvironment.nearEnemy(enemyRange.getValue())) { status = dev.guizhou.util.lang.ClientLanguage.text("附近有敌人"); return; }
         if (!ThrowEnvironment.accepts(ground.getValue(), ceiling.getValue(), rising.getValue(), airborne.getValue(), gap.getValue())) {
-            status = "等待合适地形"; return;
+            status = dev.guizhou.util.lang.ClientLanguage.text("等待合适地形"); return;
         }
         var potion = InventoryUtil.find(this::needed, InventoryUtil.FULL_SCOPE);
-        if (!potion.found()) { status = "无需投药或缺少药水"; return; }
+        if (!potion.found()) { status = dev.guizhou.util.lang.ClientLanguage.text("无需投药或缺少药水"); return; }
         if (ItemUseTracker.use("AutoThrow", potion, mc.player.getYRot(), 90f)) {
-            nextTick = mc.player.tickCount + delay.getValue(); status = "已投掷";
-        } else status = "动作暂缓";
+            nextTick = mc.player.tickCount + delay.getValue(); status = dev.guizhou.util.lang.ClientLanguage.text("已投掷");
+        } else status = dev.guizhou.util.lang.ClientLanguage.text("动作暂缓");
     }
     private boolean needed(ItemStack stack) {
         if (!stack.is(Items.SPLASH_POTION)) return false;

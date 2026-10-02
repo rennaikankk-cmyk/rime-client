@@ -34,7 +34,6 @@ import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.inventory.Result;
 import dev.guizhou.util.inventory.ResultType;
 import dev.guizhou.util.render.RenderUtil;
-import dev.guizhou.util.render.placement.*;
 import dev.guizhou.util.player.EatUtil;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.core.BlockPos;
@@ -47,6 +46,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -61,11 +61,10 @@ public class AutoAnchorModule extends Module {
 
     private final Setting<Double>  minDamage     = num("MinDamage", 6.0, 0.0, 36.0).setPage("General");
     private final Setting<Double>  maxSelfDamage = num("MaxSelfDamage", 4.0, 0.0, 36.0).setPage("General");
-    private final Setting<Double> placeRange = num("PlaceRange", 4.5, 1.0, 6.0).setPage("General");
-    private final Setting<Double> wallRange = num("WallRange", 0.0, 0.0, 6.0).setPage("General");
-    private final Setting<Boolean> airPlace = bool("AirPlace", false).setPage("General");
+    private final Setting<Double> placeRange = num("PlaceRange", 5.0, 1.0, 6.0).setPage("General");
+    private final Setting<Double> wallRange = num("WallRange", 5.0, 0.0, 6.0).setPage("General");
+    private final Setting<Boolean> airPlace = bool("AirPlace", true).setPage("General");
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
-    private final dev.guizhou.manager.RotationOptions rotationOptions = new dev.guizhou.manager.RotationOptions(this, rotate);
     private final Setting<Boolean> assumeBestArmor = bool("AssumeBestArmor", false).setPage("General");
     private enum AnchorSwap { SILENT, INVENTORY }
     private final Setting<AnchorSwap> autoSwap = mode("AutoSwap", AnchorSwap.SILENT).setPage("General");
@@ -124,9 +123,8 @@ public class AutoAnchorModule extends Module {
     private ClientLevel sessionLevel;
     private LocalPlayer sessionPlayer;
     private float lastDamage = 0f;
-    private final PlacementVisualOptions visualOptions = new PlacementVisualOptions(this, false);
-    private final PlacementVisuals visuals = new PlacementVisuals("锚");
-    private final Setting<Float> lineWidth = num("LineWidth", 1.5f, .5f, 5f).setPage("Render");
+    private BlockPos renderPos = null;
+    private long renderStart = 0L;
 
     public AutoAnchorModule() {
         super("AutoAnchor", "Places, charges and detonates anchors after observing each block state.", Category.COMBAT);
@@ -163,7 +161,7 @@ public class AutoAnchorModule extends Module {
         syncUntilTick = 0;
         capturedTick = Integer.MIN_VALUE;
         lastDamage = 0f;
-        visuals.clear();
+        renderPos = null;
         activePos = null;
         sequence.reset();
         sessionLevel = mc.level;
@@ -208,7 +206,6 @@ public class AutoAnchorModule extends Module {
         if (!dev.guizhou.manager.HeartbeatManager.authorized() || !mc.isSameThread()) return;
         if (sessionLevel != mc.level || sessionPlayer != mc.player) resetSession();
         if (nullCheck() || mc.player.isDeadOrDying()) return;
-        if (GuizhouWare.tpsCounterService.isRubberbandRecent()) { resetSession(); return; }
         if (mc.player.containerMenu != mc.player.inventoryMenu || !mc.player.inventoryMenu.getCarried().isEmpty()
                 || mc.player.isShiftKeyDown() || EatUtil.shouldDefer()) return;
         int tick = mc.player.tickCount;
@@ -252,14 +249,8 @@ public class AutoAnchorModule extends Module {
             stageDiagnostics.decision(action.name(), tick, confirmTicks.getValue());
             if (awaited != null && action != AnchorSequence.Action.WAIT && action != AnchorSequence.Action.ABORT
                     && action != awaited) timing.observed(awaited, tick - sentTick);
-            if (action == AnchorSequence.Action.WAIT) {
-                visuals.touch("main");
-                visuals.stage("main", "Q" + (anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)
-                        + " " + anchorStage(awaited));
-                return;
-            }
+            if (action == AnchorSequence.Action.WAIT) return;
             if (action == AnchorSequence.Action.COMPLETE || action == AnchorSequence.Action.ABORT) {
-                visuals.stage("main", action == AnchorSequence.Action.COMPLETE ? "DONE" : "STOP");
                 if (action == AnchorSequence.Action.COMPLETE && spamPlace.getValue()
                         && state.canBeReplaced() && !miningBlocked(activePos)) {
                     repeatPos = activePos.immutable();
@@ -286,7 +277,7 @@ public class AutoAnchorModule extends Module {
                     || mc.player.getEyePosition().distanceToSqr(center) > placeRange.getValue() * placeRange.getValue()) {
                 stageDiagnostics.blocked("safety"); abandonActive(); return;
             }
-            if (!mc.level.dimensionType().respawnAnchorWorks()
+            if (mc.level.dimensionType().respawnAnchorWorks()
                     || !canSupply(action, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)) {
                 stageDiagnostics.blocked("materialOrDimension"); abandonActive(); return;
             }
@@ -296,8 +287,7 @@ public class AutoAnchorModule extends Module {
                 lastActionTick = tick;
                 actionsThisTick++;
                 lastDamage = damage;
-                if (render.getValue()) visuals.main(activePos, new AABB(activePos), Vec3.atCenterOf(activePos),
-                        damage, local, "Q" + (anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0) + " " + anchorStage(action));
+                if (render.getValue()) { renderPos = activePos; renderStart = System.currentTimeMillis(); }
             } else stageDiagnostics.blocked("actionDeferred");
             return;
         }
@@ -415,9 +405,10 @@ public class AutoAnchorModule extends Module {
         if (mc.player.getEyePosition().distanceToSqr(hit.getLocation()) > placeRange.getValue() * placeRange.getValue()) return false;
         if (rotate.getValue()) {
             float[] angles = MathUtil.calcAngle(mc.player.getEyePosition(), hit.getLocation());
-            if (!GuizhouWare.rotationManager.tryAction(rotationOptions.request(
+            if (!GuizhouWare.rotationManager.trySubmit(new RotationRequest(
                     "AutoAnchor", 62, angles[0], angles[1], RotationRequest.Mode.SILENT))) return false;
         }
+        if (action == AnchorSequence.Action.PLACE) AutoTotemModule.holdForCombat(Items.RESPAWN_ANCHOR);
         if (action == AnchorSequence.Action.DETONATE)
             return detonate(hit, mc.level.getBlockState(pos).getValue(RespawnAnchorBlock.CHARGE));
         Result item = itemFor(action);
@@ -638,8 +629,11 @@ public class AutoAnchorModule extends Module {
                 for (int z = -r; z <= r; z++) {
                     if (xxyy + z * z > rr) continue;
                     cursor.set(playerPos.getX() + x, playerPos.getY() + y, playerPos.getZ() + z);
-                    Vec3 center = Vec3.atCenterOf(cursor);
-                    if (eye.distanceToSqr(center) > rangeSq) continue;
+                    double cx = cursor.getX() + 0.5, cy = cursor.getY() + 0.5, cz = cursor.getZ() + 0.5;
+                    double ex = eye.x - cx, ey = eye.y - cy, ez = eye.z - cz;
+                    if (ex * ex + ey * ey + ez * ez > rangeSq) continue;
+                    if (!nearAnyTarget(targets, cx, cy, cz)) continue;
+                    Vec3 center = new Vec3(cx, cy, cz);
 
                     if (miningBlocked(cursor)) continue;
                     BlockState state = mc.level.getBlockState(cursor);
@@ -692,6 +686,13 @@ public class AutoAnchorModule extends Module {
             out.add(AnchorDamageUtil.Target.of(living, assumeBestArmor.getValue()));
         }
         return out;
+    }
+
+    private static boolean nearAnyTarget(List<AnchorDamageUtil.Target> targets, double x, double y, double z) {
+        for (int i = 0, n = targets.size(); i < n; i++) {
+            if (targets.get(i).pos().distanceToSqr(x, y, z) <= AnchorDamageUtil.DIAMETER * AnchorDamageUtil.DIAMETER) return true;
+        }
+        return false;
     }
 
     private float score(List<AnchorDamageUtil.Target> targets, Vec3 center, BlockPos pos) {
@@ -748,20 +749,26 @@ public class AutoAnchorModule extends Module {
         return current;
     }
 
-    private static String anchorStage(AnchorSequence.Action action) {
-        if (action == null) return "WAIT";
-        return switch(action) {
-            case PLACE -> "PL";
-            case CHARGE -> "CHG";
-            case DETONATE -> "DET";
-            default -> "WAIT";
-        };
-    }
-
     @Override
     public void onRender3D(Render3DEvent event) {
-        if (!render.getValue()) { visuals.clear(); return; }
-        visuals.render(event, visualOptions, fillColor.getValue(), outlineColor.getValue(), lineWidth.getValue(), fadeTime.getValue());
+        if (!render.getValue() || renderPos == null) return;
+        long age = System.currentTimeMillis() - renderStart;
+        double fadeMs = fadeTime.getValue() * 1000.0;
+        if (age > fadeMs) {
+            renderPos = null;
+            return;
+        }
+        double t = age / fadeMs;
+        Color fc = fillColor.getValue();
+        Color oc = outlineColor.getValue();
+        RenderUtil.drawBoxFilled(event.getMatrix(), renderPos,
+                withAlpha(fc, (int) (fc.getAlpha() * (1 - t))));
+        RenderUtil.drawBox(event.getMatrix(), renderPos,
+                withAlpha(oc, (int) (oc.getAlpha() * (1 - t))), 1.0f);
+    }
+
+    private static Color withAlpha(Color c, int a) {
+        return new Color(c.getRed(), c.getGreen(), c.getBlue(), Mth.clamp(a, 0, 255));
     }
 
     @Override

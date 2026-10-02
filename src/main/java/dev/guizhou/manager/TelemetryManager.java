@@ -56,10 +56,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Automatic capability-gated diagnostics. Only explicitly allowlisted fields reach the wire. */
 public class TelemetryManager extends Feature {
-    public static final String ENDPOINT = "https://62.234.117.226/telemetryapi/v1/events";
+    public static final String ENDPOINT = "http://62.234.117.226/telemetryapi/v1/events";
     private static final Path STATE_FILE = Path.of("guizhouware", "telemetry.json");
     private static final long SECOND = 1_000_000_000L;
-    private static final HttpClient HTTP = dev.guizhou.util.license.AuthTransport.create();
+    private static final HttpClient HTTP = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
     private static final EquipmentSlot[] EQUIPMENT = {EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND,
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
@@ -217,10 +218,10 @@ public class TelemetryManager extends Feature {
         if (mc.player == null || mc.level == null || mc.getConnection() == null) return;
         if (!noticeShown || noticeUpload != canUpload()) {
             String prefix = GuizhouWare.commandManager.getCommandPrefix();
-            Command.sendMessage("[诊断] " + (canUpload() ? "自动上传战斗、移动与纠正诊断。"
-                    : capabilityExpired() ? "自动诊断上传暂不可用：上传凭据已过期。" : "当前 JAR 无有效上传凭据，不能自动上传诊断。")
-                    + "不上传聊天、玩家名、玩家 UUID 或坐标；" + prefix + "telemetry status 查看接收状态。"
-                    + prefix + "diag 报告仍仅保存在本地。");
+            Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("[诊断] ") + (canUpload() ? dev.guizhou.util.lang.ClientLanguage.text("自动上传战斗、移动与纠正诊断。")
+                    : capabilityExpired() ? dev.guizhou.util.lang.ClientLanguage.text("自动诊断上传暂不可用：上传凭据已过期。") : dev.guizhou.util.lang.ClientLanguage.text("当前 JAR 无有效上传凭据，不能自动上传诊断。"))
+                    + dev.guizhou.util.lang.ClientLanguage.text("不上传聊天、玩家名、玩家 UUID 或坐标；") + prefix + dev.guizhou.util.lang.ClientLanguage.text("telemetry status 查看接收状态。")
+                    + prefix + dev.guizhou.util.lang.ClientLanguage.text("diag 报告仍仅保存在本地。"));
             noticeShown = true;
             noticeUpload = canUpload();
         }
@@ -280,7 +281,7 @@ public class TelemetryManager extends Feature {
         sessionStarted = lastFlush = System.nanoTime();
         JsonObject start = new JsonObject();
         start.addProperty("loader", "fabric");
-        start.addProperty("mc", "1.21.1");
+        start.addProperty("mc", "1.21.11");
         start.addProperty("telemetry_version", 1);
         enqueue("session_start", start);
     }
@@ -442,7 +443,7 @@ public class TelemetryManager extends Feature {
             // Optional extension: absent when disabled, preserving the original receiver contract.
             // Its complete whitelist joins the per-tick tag, so changing cruise settings
             // cannot blend two configurations into one flight window.
-            var cruise = flight.diagnosticSetting("CoupledCruise");
+            var cruise = flight.getSettingByName("CoupledCruise");
             if (cruise != null && Boolean.TRUE.equals(cruise.getValue())) {
                 JsonObject coupled = new JsonObject();
                 putSetting(coupled, flight, "AutoFly", "auto_fly");
@@ -472,9 +473,7 @@ public class TelemetryManager extends Feature {
     }
 
     private static void putSetting(JsonObject target, Module module, String name, String key) {
-        Setting<?> setting = module instanceof dev.guizhou.features.modules.movement.GuangxiElytraModule flight
-                ? flight.diagnosticSetting(name) : module instanceof GuangxiElytraChaseModule chase
-                ? chase.diagnosticSetting(name) : module.getSettingByName(name);
+        Setting<?> setting = module.getSettingByName(name);
         if (setting == null) return;
         Object value = setting.getValue();
         if (value instanceof Boolean flag) target.addProperty(key, flag);
@@ -742,9 +741,7 @@ public class TelemetryManager extends Feature {
             data.addProperty("name", module.getName());
             JsonObject settings = new JsonObject();
             for (String name : new String[]{"ArmorFly", "AutoMaceDive", "GrimBoost", "SafeLanding", "TerrainGuard", "TerrainLookahead", "FreeLook"}) {
-                Setting<?> setting = module instanceof dev.guizhou.features.modules.movement.GuangxiElytraModule flight
-                ? flight.diagnosticSetting(name) : module instanceof GuangxiElytraChaseModule chase
-                ? chase.diagnosticSetting(name) : module.getSettingByName(name);
+                Setting<?> setting = module.getSettingByName(name);
                 if (setting != null) TelemetryPrivacy.setting(settings, name, setting.getValue());
             }
             for (Setting<?> setting : module.getSettings()) {

@@ -343,10 +343,7 @@ public final class AerialDuelPredictorTest {
         check(fixture.predict().impactTicks() < falling.impactTicks(),
                 "a more urgent observed descent also wins over the ordinary falling path");
         fixture.gliding = true;
-        kind(ThreatKind.MACE, fixture.predict(), "observed armor flight may shed wings before its remote glide flag clears");
-        fixture.motion = new TargetMotionTracker.Snapshot(TargetMotionTracker.Mode.GLIDE, 22,
-                fixture.targetVelocity, Vec3.ZERO, 0, 1, 3);
-        kind(ThreatKind.NONE, fixture.predict(), "ordinary glide still does not predict a smash");
+        kind(ThreatKind.NONE, fixture.predict(), "the defensive envelope does not make gliding into a smash");
         fixture.gliding = false;
         fixture.onGround = true;
         kind(ThreatKind.NONE, fixture.predict(), "landing still immediately removes falling mace risk");

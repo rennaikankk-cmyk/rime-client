@@ -108,6 +108,11 @@ public final class ItemUseTracker {
         return action == null ? ItemStack.EMPTY : action.stack.copy();
     }
 
+    /** True while a module-owned use packet is being submitted on this thread. */
+    public static boolean moduleUseInFlight() {
+        return !submittingOwner.isEmpty();
+    }
+
     public static boolean use(String owner, Result result, float yaw, float pitch) {
         return use(owner, result, yaw, pitch, null);
     }

@@ -23,7 +23,7 @@ public class EnemyArgumentType implements ArgumentType<String> {
         String input = builder.getRemaining();
         for (String name : GuizhouWare.enemyManager.getEnemies()) {
             if (FuzzyMatch.matches(input, name)) {
-                builder.suggest(name, new LiteralMessage("敌人"));
+                builder.suggest(name, new LiteralMessage(dev.guizhou.util.lang.ClientLanguage.text("敌人")));
             }
         }
         return builder.buildFuture();

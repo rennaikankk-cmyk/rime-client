@@ -19,7 +19,7 @@ public enum CommandCategory {
     }
 
     public String label() {
-        return label;
+        return dev.guizhou.util.lang.ClientLanguage.text(label);
     }
 
     public int color() {

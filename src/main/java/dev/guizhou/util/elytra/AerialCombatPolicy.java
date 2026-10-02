@@ -54,6 +54,11 @@ public final class AerialCombatPolicy {
     }
 
     public Action evaluate(ThreatInput input, boolean predictedThreat, boolean preserveStrike) {
+        return evaluate(input, predictedThreat, preserveStrike, true);
+    }
+
+    /** The caller may exclude a geometrical approach when the observed weapon cannot attack on that path. */
+    public Action evaluate(ThreatInput input, boolean predictedThreat, boolean preserveStrike, boolean approachThreat) {
         if (input == null) {
             reset();
             return action;
@@ -75,7 +80,7 @@ public final class AerialCombatPolicy {
             lastThreatTick = Long.MIN_VALUE;
             return action;
         }
-        if (predictedThreat || input.spearThreat || input.maceThreat || incomingHighSpeed(input)) {
+        if (predictedThreat || input.spearThreat || input.maceThreat || approachThreat && incomingHighSpeed(input)) {
             lastThreatTick = input.tick;
             action = Action.EVADE;
         } else if (action != Action.EVADE || elapsed(input.tick, lastThreatTick) >= EVADE_CLEAR_TICKS) {
@@ -122,14 +127,6 @@ public final class AerialCombatPolicy {
         if (heldTicks < 10) return false;
         double improvement = Math.max(2.0, currentDistance * 0.2);
         return candidateDistance <= currentDistance - improvement;
-    }
-
-    /** Search immediately on target loss, otherwise bound empty/dynamic scans to once per four ticks. */
-    public static boolean shouldSearch(long tick, long lastSearch, boolean lostTarget,
-                                       boolean hasTarget, boolean dynamic) {
-        if (lostTarget) return true;
-        if (hasTarget && !dynamic) return false;
-        return tick < lastSearch || lastSearch <= Long.MIN_VALUE / 2 || tick - lastSearch >= 4;
     }
 
     /** Two nonstationary measurements within 60 degrees support longer prediction. */

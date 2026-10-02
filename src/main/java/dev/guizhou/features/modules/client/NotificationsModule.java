@@ -6,6 +6,9 @@ import dev.guizhou.event.impl.entity.TotemPopEvent;
 import dev.guizhou.event.impl.entity.player.PreTickEvent;
 import dev.guizhou.event.impl.network.DisconnectEvent;
 import dev.guizhou.event.system.Subscribe;
+import dev.guizhou.features.commands.ui.ChatFeed;
+import dev.guizhou.features.commands.ui.ChatPalette;
+import dev.guizhou.features.commands.ui.ChatTone;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.hud.NotifierHudModule;
 import dev.guizhou.features.settings.Setting;
@@ -66,18 +69,16 @@ public class NotificationsModule extends Module {
         }
 
         boolean moduleState = event.getFeature().isEnabled();
-        String name = event.getFeature().getName();
-        ChatUtil.sendPersistent("module:" + name, TextUtil.text(MODULE_FORMAT,
-                name,
-                moduleState ? "{green}" : "{red}",
-                moduleState ? "enabled" : "disabled"));
-        NotifierHudModule.push("module:"+name, NotifierHudModule.Icon.INFO,
-                event.getFeature().getName()+(moduleState?" 已开启":" 已关闭"));
+        String id = event.getFeature().getName();
+        String name = event.getFeature() instanceof Module module ? module.getDisplayName() : id;
+        ChatFeed.moduleToggled(id, name, moduleState);
+        NotifierHudModule.push("module:" + id, NotifierHudModule.Icon.INFO,
+                name + (moduleState ? dev.guizhou.util.lang.ClientLanguage.text(" 已开启") : dev.guizhou.util.lang.ClientLanguage.text(" 已关闭")));
     }
 
     @Subscribe(priority = 100)
     public void onPreTick(PreTickEvent event) {
-        if (!moduleToggle.getValue() || !deaths.getValue()) return;
+        if (!deaths.getValue()) return;
         if (mc.level == null || mc.player == null) return;
 
         Set<UUID> currentlyAlive = new HashSet<>();
@@ -87,12 +88,11 @@ public class NotificationsModule extends Module {
                 if (lastTickAlive.contains(id)) {
                     int pops = GuizhouWare.playerInfoManager.getTotemPops(id);
                     String name = player.getGameProfile().getName();
-                    String unit = pops == 1 ? "totem" : "totems";
                     Component message = Component.empty()
-                            .append(Component.literal(name + " has died after popping "))
-                            .append(Component.literal(String.valueOf(pops)).withColor(0xFFFF55))
-                            .append(Component.literal(" " + unit + "."));
-                    ChatUtil.sendPrefixed(ChatUtil.getSkullComponent(), message);
+                            .append(Component.literal(name + dev.guizhou.util.lang.ClientLanguage.text(" 阵亡，此前爆了 ")))
+                            .append(Component.literal(String.valueOf(pops)).withColor(ChatPalette.WARNING))
+                            .append(Component.literal(dev.guizhou.util.lang.ClientLanguage.text(" 个图腾")));
+                    ChatFeed.send(ChatTone.ERROR, "☠", message);
                     NotifierHudModule.push("death:"+id, NotifierHudModule.Icon.SKULL, message);
                 }
             } else {
@@ -105,7 +105,7 @@ public class NotificationsModule extends Module {
 
     @Subscribe(priority = -100)
     public void onTotemPop(TotemPopEvent event) {
-        if (!moduleToggle.getValue() || !totemPops.getValue()) return;
+        if (!totemPops.getValue()) return;
         if (mc.player == null) return;
 
         LivingEntity entity = event.getEntity();
@@ -113,19 +113,15 @@ public class NotificationsModule extends Module {
 
         UUID id = player.getUUID();
         int pops = GuizhouWare.playerInfoManager.getTotemPops(id);
-        String unit = pops == 1 ? "totem" : "totems";
         boolean self = player == mc.player;
-        String subject = self ? "You have" : player.getGameProfile().getName() + " has";
+        String subject = self ? dev.guizhou.util.lang.ClientLanguage.text("你") : player.getGameProfile().getName();
 
         Component body = Component.empty()
-                .append(Component.literal(subject + " popped "))
-                .append(Component.literal(String.valueOf(pops)).withColor(0xFFFF55))
-                .append(Component.literal(" " + unit + "!"));
+                .append(Component.literal(subject + dev.guizhou.util.lang.ClientLanguage.text(" 已爆 ")))
+                .append(Component.literal(String.valueOf(pops)).withColor(ChatPalette.WARNING))
+                .append(Component.literal(dev.guizhou.util.lang.ClientLanguage.text(" 个图腾")));
 
-        ChatUtil.sendPersistentPrefixed(
-                "pops:" + id,
-                ChatUtil.getInfoComponent(),
-                body);
+        ChatFeed.replace("pops:" + id, ChatTone.WARN, "✦", body);
 
         NotifierHudModule.push(
                 "pops:" + id,
@@ -135,7 +131,7 @@ public class NotificationsModule extends Module {
 
     @Subscribe
     public void onGearTick(PreTickEvent event) {
-        if (!moduleToggle.getValue() || !gear.getValue()) return;
+        if (!gear.getValue()) return;
         if (mc.player == null) return;
 
         for (GearItem gi : gearItems) {

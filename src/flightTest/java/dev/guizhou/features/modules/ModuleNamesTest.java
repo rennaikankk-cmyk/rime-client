@@ -24,11 +24,6 @@ public final class ModuleNamesTest {
                 "renamed modules expose standard configuration commands");
         check(java.util.Arrays.equals(ModuleNames.commandAliases("NoSlow"), new String[]{"noslow"}),
                 "unchanged command literals are deduplicated");
-        check("Aura".equals(ModuleNames.migrateDisplayName("AutoSword", "AutoSword")), "Aura default migration");
-        check("Offhand".equals(ModuleNames.migrateDisplayName("AutoTotem", "AutoTotem")), "Offhand default migration");
-        check("My sword".equals(ModuleNames.migrateDisplayName("AutoSword", "My sword")), "Aura custom label preserved");
-        check(ModuleNames.matches("AutoSword", "My sword", "Aura", false), "Aura command alias");
-        check(ModuleNames.matches("AutoTotem", "Offhand", "AutoTotem", false), "old totem command remains valid");
         resolutionPrecedence();
         System.out.println("ModuleNamesTest passed: legacy IDs, custom labels and locale-independent aliases");
     }

@@ -18,6 +18,23 @@ public final class SettingText {
         }
     }
 
+    public static String localizedDescription(Setting<?> setting, String raw) {
+        if (dev.guizhou.util.lang.ClientLanguage.isChinese()) return raw;
+        String translated = dev.guizhou.util.lang.ClientLanguage.text(raw);
+        if (!translated.equals(raw)) return translated;
+        // Generic descriptions contain stable setting IDs, so format them here at display time.
+        if (raw.equals(generic(setting))) {
+            String name = setting.getDisplayName();
+            if (setting.isNumberSetting() && setting.hasRestriction()) return "Value for " + name + "; bounds are shown at the slider ends.";
+            if (setting.isEnumSetting()) return "Choose the mode for " + name + ".";
+            if (setting.isColorSetting()) return "Color used by " + name + ".";
+            if (setting.getValue() instanceof Boolean) return "Enable or disable " + name + ".";
+            if (setting.getValue() instanceof Bind) return "Keybind for " + name + ".";
+            return "Adjust " + name + ".";
+        }
+        return translated;
+    }
+
     private static String specific(String type, String name) {
         Map<String, String> table = TABLES.get(type);
         return table == null ? null : table.get(name);
@@ -183,8 +200,10 @@ public final class SettingText {
                     Map.entry("Health", "血量低于这个值时强制把副手换成图腾。"),
                     Map.entry("SafeHealth", "血量高于这个值，才允许为金苹果或战斗物品让出图腾。"),
                     Map.entry("Delay", "两次换副手之间的等待，单位是刻。"),
-                    Map.entry("GappleOnUse", "按住使用键、主手是剑斧水晶或图腾时，副手换成金苹果。"),
-                    Map.entry("Crapple", "没有金苹果时允许用附魔金苹果。"),
+                    Map.entry("GappleOnUse", "按住右键，血量安全且主手是剑、斧、重锤、长矛、水晶或图腾时，换上副手苹果并直接吃。进食会暂停长矛蓄力和自动重锤；松开右键停止。"),
+                    Map.entry("Crapple", "开启时优先普通金苹果，关闭时优先附魔金苹果；正在吃的苹果保持到本次进食结束。"),
+                    Map.entry("GappleFallback", "首选苹果缺货时自动改用另一种金苹果，两种都没有时保留原副手。"),
+                    Map.entry("GapPickaxe", "主手拿镐时也允许安全右键副手进食。默认关闭。"),
                     Map.entry("CombatSync", "水晶、床或锚要出手时，先把副手换成对应物品。"),
                     Map.entry("Lethal", "预测到致命伤害时提前换上图腾。"),
                     Map.entry("LethalMargin", "预测伤害比当前血量高出这么多，才算致命。"),

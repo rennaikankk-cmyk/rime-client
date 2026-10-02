@@ -46,6 +46,9 @@ abstract class ShellStyle {
     void reload() { }
 
     static String labelOf(Object value) {
-        return value instanceof Labeled labeled ? labeled.label() : String.valueOf(value);
+        if (value instanceof Labeled labeled) return labeled.label();
+        // Enum constants display through the catalog when a Chinese label exists; unknown
+        // constants pass through unchanged so partial coverage never breaks a dropdown.
+        return dev.guizhou.util.lang.ClientLanguage.text(String.valueOf(value));
     }
 }

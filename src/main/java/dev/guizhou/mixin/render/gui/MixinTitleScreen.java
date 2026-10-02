@@ -91,7 +91,7 @@ public abstract class MixinTitleScreen extends Screen {
     @Inject(method = "init", at = @At("TAIL"))
     private void guizhouware$onInit(CallbackInfo ci) {
         if (guizhouware$coffee == null) guizhouware$coffee = java.util.concurrent.ThreadLocalRandom.current().nextBoolean();
-        guizhouware$backgroundButton = addRenderableWidget(Button.builder(Component.literal("背景"), b -> {
+        guizhouware$backgroundButton = addRenderableWidget(Button.builder(Component.literal(dev.guizhou.util.lang.ClientLanguage.text("背景")), b -> {
             if (minecraft != null) minecraft.setScreen(new MenuBackgroundScreen((Screen) (Object) this));
         }).bounds(0, 0, 32, 16).build());
         guizhouware$layout();
@@ -202,7 +202,7 @@ public abstract class MixinTitleScreen extends Screen {
         float brand = 13 * s, rw = width("Rime", brand, HudFonts.BOLD);
         text(g, "Rime", cx + (cw - rw) / 2, cy + 8 * s, brand, HudFonts.BOLD, 0xFFFFFFFF);
         String notice = gui == null ? "" : gui.menuNotice.getValue().trim();
-        if (notice.isEmpty()) notice = "欢迎回来，" + Minecraft.getInstance().getUser().getName();
+        if (notice.isEmpty()) notice = dev.guizhou.util.lang.ClientLanguage.text("欢迎回来，") + Minecraft.getInstance().getUser().getName();
         textCentered(g, fit(notice, cw - 16 * s, 7.5f * s), cx + cw / 2, cy + ch - 15 * s, 7.5f * s, HudFonts.REGULAR, 0xB4FFFFFF);
 
         for (var child : children()) {
@@ -231,7 +231,7 @@ public abstract class MixinTitleScreen extends Screen {
         int fg = !b.active ? 0x60FFFFFF : hover || focus ? 0xFFFFFFFF : 0xDCFFFFFF;
         if (corner) {
             if (b == guizhouware$backgroundButton) {
-                textCentered(g, "背景", x + w / 2, y + (h - 7f) / 2f, 7f, HudFonts.REGULAR, fg);
+                textCentered(g, dev.guizhou.util.lang.ClientLanguage.text("背景"), x + w / 2, y + (h - 7f) / 2f, 7f, HudFonts.REGULAR, fg);
             } else {
                 float is = Math.min(w, h) * .62f;
                 icon(g, guizhouware$icon(guizhouware$key(b)), x + (w - is) / 2, y + (h - is) / 2, is, fg);

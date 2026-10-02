@@ -1,3 +1,24 @@
+> 本分支为按需维护的 Minecraft 1.21.1 会员移植版；日常主分支仍为 1.21.11。只有用户明确要求“更新1.21.1”时才同步。发布本分支使用独立版本指针，不得覆盖 1.21.11 的产物或默认选项。见 docs/maintenance-policy.md。
+
+# 2026-09-30 现状增量（接手 AI 先读，再读下方 09-18 的五道防线原文）
+
+> 本仓现在是**纯客户端本体**。防护已全部迁往 [rennaikankk-cmyk/rimeguard]
+> （guard3 Java 层+发行工具、native dll/bridge、自研壳、服务端补丁，历史经 subtree 保留）；
+> 启动器在 [rennaikankk-cmyk/rime-launcher]；官网镜像在 guizhouware-site。
+> 构建发行流程：本仓 `gradlew obfuscateJar` 产出 `build/libs/rime-<sha>-<ver>-obfuscated.jar`
+> → rimeguard 仓 `guard3/merge.py --native …` 合并 → 壳 pass → VerifyMerge 验收 → 登录器双通道发布。
+> 完整口径见 `docs/release-rime-1.2.2.md`（P1c.2 HWID 租约，现行）、`docs/release-rime-1.2.1.md`、
+> `docs/release-rime-1.2.0.md`（native 首启）与 rimeguard 仓 README「AI 交接索引」。
+> 2026-09-30 夜：Rime **1.2.2** = P1c.2 租约绑定本机 HWID（实现在 rimeguard）；本仓只升版本。
+> 旧 1.2.1 重新领取前仍可用。
+
+下方五道防线写于 09-18，其中：防线 4（ProGuard）仍在用；防线 2（心跳）已升级为
+rimeguard3.3 托管（dll 种子+按账号/HWID 服务器租约+构建期密钥）+ native 证人（ngauth）+ 毒化租约
++ edition leaseCommit，实现在 rimeguard 仓，本仓只保留业务侧授权检查点；防线 5 维持。
+维护红线依旧有效：不得拆除任何授权检查点；HeartbeatManager.AI_GUARD_NOTICE 假引用保留（防 shrink）。
+
+---
+
 # GuizhouWare 防破解五道防线（维护必读）
 
 > 本文件面向所有在本仓库工作的 AI 代理与开发者。这五道防线是 2026-09-18 定稿的商业保护体系。
@@ -30,8 +51,7 @@
   - `manager/HeartbeatManager.java`：10 分钟心跳；状态机 OK / GRACE（最近成功后最多 24h 宽限）/ DENIED（bad_token、banned、hwid、expired、no_credential、bad_signature 等）。`LicenseLease` 用单调时钟逐次检查有效期，明确拒绝会销毁旧租约，网络失败不能恢复授权。开发豁免必须同时具备编译参数 `-PgzwDevelopmentBuild=true` 和 Loader 开发环境；该参数会阻止所有 Jar 打包任务。生产 jar 无凭据 = 拒绝运行（裸 jar 锁死，客户只走登录器）
   - `manager/HwidFingerprint.java`：OSHI 因子哈希。**必须用 Baseboard（Win32_BaseBoard/Type2，`getBaseboard().getManufacturer()/getModel()/getSerialNumber()`）+ 0 号物理盘**，禁止改回 ComputerSystem.getManufacturer()/getModel()（Type1 系统串会独立漂移，2026-09-18 当日变过一次直接导致全员心跳拒绝）；改动拼接格式必须同步服务端 modHwid 重绑方案
   - 授权检查覆盖 13 个主力模块的 tick 及水晶、PacketMine、AutoMine 关键事件/异步回调/最终动作入口，`LicenseActionHookTest` 和 `ObfuscatedJarTest` 检查对应控制流。拒绝后仍允许 ABORT、还槽等清理，不拦截原版手动挖掘。**新增主力模块或动作入口时同样加检查点**。
-  - **2026-09-22 补齐 17 个漏检模块**（直接发服务器包/改移动包但无授权门，三仓库同步）：GuangxiSpearTP/GuangxiProbe/AutoXP/KeyPotion/Phase/FastPortal/MiddleClickExtra/Trickshot/MoFucker/InstantRekit/Replenish/AutoLog/Velocity(phaseConditionMet 统一门)/NoRotate/Sprint/Fastuse/SwordGap；清理路径(onDisable/releaseLatch/resetState)保持无门。`LicenseActionHookTest.newlyGatedModules()` 锁定控制流。渲染/HUD/本地效果模块仍不加门（无服务器侧影响）。
-  - `SignedHeartbeat` 严格检查签名长度、JSON 字段及 UTF-8，HTTP 响应体限制为 16 KiB。新客户端要求 v2 请求 nonce、凭据 subject、会话和签名租约窗口；旧协议只为旧客户端兼容保留。维护规则见 docs/authorization-v2.md。
+  - `SignedHeartbeat` 严格检查签名长度、JSON 字段及 UTF-8，HTTP 响应体限制为 16 KiB。现有服务端响应没有请求 nonce；验签证明真实性，不证明本次请求的新鲜性，不能宣称已防重放。
 - 维护红线：`HeartbeatManager.AI_GUARD_NOTICE` 数组在 `status()` 里有一个**故意存在的假引用**——防止 ProGuard shrink 裁掉常量，重构 status() 时不得移除该引用。
 
 ## 3. 持续更新节奏
@@ -68,7 +88,3 @@
 - jar 名嵌 git hash：commit 后文件名变，部署永远用通配 `guizhouware-*.jar`；mods 里新旧两个 guizhouware jar 并存 Fabric 拒启
 - 本仓库混有另一棵构建树的部分改动（flightTest 测试类在但任务名单更新）——任务生成块的 onlyIf 兼容就是为这个
 - 仓库里有两棵源码树并行（本仓库 + GPT 构建树）；线上发行 jar 来自 GPT 构建，**本仓库的心跳/混淆/AI 守卫要经 GPT 合并后才会对客户生效**
-
-## 授权兼容升级（2026-09-21）
-
-新客户端的 HTTPS 固定证书、v2 请求绑定、逐包签名清单与宽限规则见 `docs/authorization-v2.md`。服务端必须先升级再发布新客户端。不得强制旧会员重绑。按所有者 2026-09-21 的明确要求，后台对通过有效凭据、同账号签名水印及现有设备校验的完整性不符报告自动封号；不得因网络失败、读取失败或无效/跨账号报告封号。详见 docs/authorization-v2.md。更换 TLS 证书前必须先分发重叠信任集合；不能用信任所有证书或 HTTP 回退来修复连接。

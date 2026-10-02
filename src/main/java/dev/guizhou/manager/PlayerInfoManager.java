@@ -19,6 +19,8 @@ public class PlayerInfoManager extends Feature {
 
     private final Map<UUID, Integer> totemPops = new ConcurrentHashMap<>();
     private final Set<UUID> lastTickAlive = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Long> lastSeen = new ConcurrentHashMap<>();
+    private static final long ABSENT_EXPIRY_MS = 5 * 60 * 1000L;
 
     public void init() {
         EVENT_BUS.register(this, "PlayerInfoManager");
@@ -47,7 +49,12 @@ public class PlayerInfoManager extends Feature {
             }
         }
 
-        totemPops.keySet().removeIf(id -> !presentIds.contains(id));
+        // Leaving render distance is not a death: keep the count, expire it only after a long absence.
+        long now = System.currentTimeMillis();
+        for (UUID id : presentIds) lastSeen.put(id, now);
+        totemPops.keySet().removeIf(id -> !presentIds.contains(id)
+                && now - lastSeen.getOrDefault(id, 0L) > ABSENT_EXPIRY_MS);
+        lastSeen.keySet().removeIf(id -> !totemPops.containsKey(id) && !presentIds.contains(id));
         lastTickAlive.clear();
         lastTickAlive.addAll(currentlyAlive);
     }
@@ -68,6 +75,7 @@ public class PlayerInfoManager extends Feature {
     public void resetAll() {
         totemPops.clear();
         lastTickAlive.clear();
+        lastSeen.clear();
     }
 
     public ItemStack getEquipment(Player player, EquipmentSlot slot) {

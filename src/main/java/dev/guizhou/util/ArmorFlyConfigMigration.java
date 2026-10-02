@@ -12,6 +12,12 @@ public final class ArmorFlyConfigMigration {
         JsonObject flight = object(copy, "GuangxiElytra");
         if (flight == null || !flight.has("ArmorFly")) return copy;
         Boolean legacy = bool(flight.remove("ArmorFly"));
+        if (legacy != null) {
+            JsonObject chase = object(copy, "GuangxiElytraChase");
+            if (chase == null) { chase = new JsonObject(); copy.add("GuangxiElytraChase", chase); }
+            // Preserve the old opt-in while leaving dormant flight/equipment disabled.
+            if (!chase.has("AutoArmorFly")) chase.addProperty("AutoArmorFly", legacy);
+        }
         if (!Boolean.TRUE.equals(legacy) || Boolean.FALSE.equals(bool(flight.get("Enabled")))) return copy;
         JsonObject standalone = object(copy, "ArmorFly");
         if (standalone == null) { standalone = new JsonObject(); copy.add("ArmorFly", standalone); }

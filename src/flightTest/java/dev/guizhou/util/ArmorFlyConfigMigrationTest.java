@@ -8,6 +8,7 @@ public final class ArmorFlyConfigMigrationTest {
             JsonObject original = json("{\"GuangxiElytra\":{\"ArmorFly\":\""+legacy+"\",\"Enabled\":\""+active+"\"},\"ArmorFly\":{\"Enabled\":\""+standalone+"\",\"AutoRocket\":\"false\"}}");
             JsonObject result = ArmorFlyConfigMigration.migrate(original);
             check(result.getAsJsonObject("ArmorFly").get("Enabled").getAsBoolean()==(legacy&&active||standalone),"Preserve active old ownership");
+            check(result.getAsJsonObject("GuangxiElytraChase").get("AutoArmorFly").getAsBoolean()==legacy,"Preserve latent chase armor preference");
             check(!result.getAsJsonObject("GuangxiElytra").has("ArmorFly"),"Remove old key");
             check(!result.getAsJsonObject("ArmorFly").get("AutoRocket").getAsBoolean(),"Preserve independent options");
             check(original.getAsJsonObject("GuangxiElytra").has("ArmorFly"),"Input unchanged");
@@ -19,7 +20,7 @@ public final class ArmorFlyConfigMigrationTest {
             check(!ArmorFlyConfigMigration.migrate(json("{\"GuangxiElytra\":{\"ArmorFly\":"+invalid+"}}")).has("ArmorFly"),"Invalid legacy value ignored");
         JsonObject modern=json("{\"ArmorFly\":{\"Enabled\":false},\"GuangxiElytra\":{\"Enabled\":true}}");
         check(modern.equals(ArmorFlyConfigMigration.migrate(modern)),"Modern disabled module remains disabled");
-        System.out.println("ArmorFlyConfigMigrationTest passed: 47 checks");
+        System.out.println("ArmorFlyConfigMigrationTest passed: 55 checks");
     }
     private static JsonObject json(String s) {return JsonParser.parseString(s).getAsJsonObject();}
     private static void check(boolean condition,String message) {if(!condition)throw new AssertionError(message);}

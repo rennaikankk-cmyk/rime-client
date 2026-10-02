@@ -65,6 +65,15 @@ public class MixinClientPlayerEntity {
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/Input;tick(ZF)V", shift = At.Shift.AFTER)
     )
     private void sprint$applyBeforeJump(CallbackInfo ci) {
+        var autoWalk = GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.extra.AutoWalkModule.class);
+        if (autoWalk != null && autoWalk.active()) {
+            LocalPlayer self = (LocalPlayer)(Object)this;
+            self.input.up = true;
+            self.input.down = false;
+            Vec2 movement = new Vec2(self.input.leftImpulse, 1.0F).normalized();
+            self.input.leftImpulse = movement.x;
+            self.input.forwardImpulse = movement.y;
+        }
         SprintModule sprint = GuizhouWare.moduleManager.getModuleByClass(SprintModule.class);
         if (sprint != null && sprint.wantsSprint()) {
             ((LocalPlayer) (Object) this).setSprinting(true);

@@ -61,12 +61,11 @@ public final class CombatSteeringTest {
         check(first.apply(21,2,east,35,false).equals(east), "Target/session change discards stale heading");
         check(first.apply(22,2,net.minecraft.world.phys.Vec3.ZERO,35,false).equals(net.minecraft.world.phys.Vec3.ZERO), "Zero intent stops immediately");
         var fv=new FlightVelocity(east,6);
-        var apex=new net.minecraft.world.phys.Vec3(2,40,2);
-        fv.requestClimb(apex);fv.refine(west);fv.refine(east);
-        check(fv.climbApex()==apex, "Flank and unobstructed route refinement preserve climb intent");
+        fv.preserveDirection();fv.set(west);fv.set(east);
+        check(fv.isDirectional(), "Route updates preserve directional intent");
         fv.requestAvoidance(west);
-        check(fv.climbApex()==null && fv.isAvoiding(), "Obstacle override cancels fast climb");
-        fv.requestPrecision();fv.refine(east);
+        check(fv.isAvoiding() && fv.value().equals(west), "Obstacle override adopts the safe direction");
+        fv.requestPrecision();fv.set(east);
         check(fv.isPrecise(), "Direction refinement preserves strike precision");
     }
     private static void check(boolean ok,String message) { checks++;if(!ok)throw new AssertionError(message); }

@@ -1,6 +1,6 @@
 package dev.guizhou.util.elytra;
 
-/** Holds owned armor between glide restarts; only a fresh restart opens a wing/rocket window. */
+/** Orders an owned equipment pair around every movement window; gliding restarts only after an observed end. */
 public final class ArmorSwapCycle {
     public interface Access {
         boolean intact();
@@ -45,9 +45,22 @@ public final class ArmorSwapCycle {
 
     /**
      * {@code boostOnWornGlide} opens the rocket window when this tick already
-     * started on elytra, so the firework can launch before the chestplate returns.
+     * started on elytra and a glide, so the firework can launch before chestplate.
+     * A wings swap performed inside this call is not that window.
      */
     public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide, boolean boostOnWornGlide) {
+        beforeMovement(requested, inventorySafe, canGlide, boostOnWornGlide, false);
+    }
+
+    /** SLM keeps the chestplate until the observed glide ends; restart only then. */
+    public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide,
+                               boolean boostOnWornGlide, boolean serverPaced) {
+        beforeMovement(requested, inventorySafe, canGlide, boostOnWornGlide, serverPaced, false);
+    }
+
+    /** Keep the owned chestplate during a validated natural strike; resume the same pair afterward. */
+    public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide,
+                               boolean boostOnWornGlide, boolean serverPaced, boolean preserveChestplate) {
         returnArmor = false;
         restartedThisWindow = false;
         deferArmorReturn = false;
@@ -58,20 +71,30 @@ public final class ArmorSwapCycle {
             recover(inventorySafe);
             return;
         }
+        if (preserveChestplate) {
+            swapTo(false);
+            return;
+        }
+        boolean enteredOnWings = access.wearingWings();
+        if (serverPaced && !enteredOnWings && access.gliding()) return;
+        if (!enteredOnWings) {
+            // The movement window must observe the owned wings even while an earlier
+            // glide flag is still running; a window click never toggles the glide flag.
+            if (!swapTo(true)) return;
+        }
         // A repeated START while already gliding makes the vanilla server stop flight.
         if (!access.gliding()) {
-            if (!swapTo(true)) return;
             if (!access.startGliding()) {
                 recovering = true;
                 recover(inventorySafe);
                 return;
             }
             restartedThisWindow = true;
-        } else if (boostOnWornGlide && access.wearingWings()) {
+        } else if (boostOnWornGlide && enteredOnWings) {
             restartedThisWindow = true;
             deferArmorReturn = true;
         }
-        returnArmor = access.wearingWings() && access.gliding();
+        returnArmor = access.gliding();
     }
 
     public void afterMovement(boolean requested, boolean inventorySafe, boolean canGlide) {
@@ -105,16 +128,6 @@ public final class ArmorSwapCycle {
 
     public void stop(boolean inventorySafe) {
         beforeMovement(false, inventorySafe, false);
-    }
-
-    /** Keep the owned chestplate during a bounded combat fall without restarting gliding. */
-    public void holdDescent(boolean inventorySafe, boolean canGlide) {
-        returnArmor = false;
-        restartedThisWindow = false;
-        if (!validate()) return;
-        if (!inventorySafe || !canGlide) recovering = true;
-        if (recovering) recover(inventorySafe);
-        else swapTo(false);
     }
 
     /** Another equipment owner or a new world must never trigger a stale return swap. */

@@ -31,8 +31,8 @@ public class FunnyCommand extends Command {
             }
             GuizhouWareGui.getInstance().reload();
             return nowVisible
-                    ? success("Funny 分类已显示")
-                    : info("Funny 分类已隐藏，其中的模块已关闭");
+                    ? success(dev.guizhou.util.lang.ClientLanguage.text("Funny 分类已显示"))
+                    : info(dev.guizhou.util.lang.ClientLanguage.text("Funny 分类已隐藏，其中的模块已关闭"));
         });
     }
 }

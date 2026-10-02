@@ -53,32 +53,83 @@ public final class ElytraCombatHookTest {
         verifyMaceDescentOwnership();
         verifyCombatRegressionWiring();
         verifyPlanningSpeedWiring();
+        verifyEngagementWiring();
+        verifyEatingRetreatIntegration();
         System.out.println("ElytraCombatHookTest passed: " + checks + " checks");
     }
 
     private static void verifyPlanningSpeedWiring() throws IOException {
-        // Reachability must be evaluated against the speed the flight controller is
-        // about to request, not the envelope-clamped instantaneous speed (measured
-        // applied 1.4-2.4 b/t vs the ~2.5 reachable threshold -> climb never commits).
-        Map<String, Trace> mace = read(CHASE + "$MaceBehavior");
-        Trace planning = method(mace, "planningSpeed");
-        check(planning.hasCall("dev/guizhou/features/modules/movement/GuangxiElytraModule", "lastRequestedBpt"),
-                "planningSpeed must consider the requested cruise speed, not just the clamped instantaneous one");
-        check(planning.hasCall("java/lang/Math", "max"),
-                "planningSpeed must take the larger of requested and instantaneous speed");
+        // Terminal braking must not feed a short request back into the next pass budget.
+        Trace planning = method(read(CHASE + "$MaceBehavior"), "planningSpeed");
+        check(planning.hasCall(FLIGHT, "combatPlanningSpeed") && planning.hasCall("java/lang/Math", "max"),
+                "Planning combines configured flight budget and actual motion");
+        Trace budget = method(read(FLIGHT), "combatPlanningSpeed");
+        check(budget.field(FLIGHT, "speed", Opcodes.GETFIELD) >= 0
+                        && budget.hasCall("java/lang/Math", "max")
+                        && budget.steps.stream().noneMatch(step -> step.opcode == Opcodes.GETFIELD
+                        && FLIGHT.equals(step.owner) && "lastRequestedBpt".equals(step.name)),
+                "The next approach keeps configured speed after terminal braking");
+    }
+
+    private static void verifyEatingRetreatIntegration() throws IOException {
+        Map<String, Trace> chase = read(CHASE);
+        Trace tick = method(chase, "onPreTick");
+        check(tick.call(CHASE, "updateEatingRetreat") < tick.call(CHASE, "updateDuelPlanning"),
+                "Meal retreat must run before stale attack planning or weapon acquisition");
+        Trace meal = method(chase, "updateEatingRetreat");
+        check(meal.hasCall(CHASE, "invalidatePlanning") && meal.field(CHASE, "attackGeneration", Opcodes.PUTFIELD) >= 0,
+                "Entering a meal invalidates in-flight attack work");
+        check(meal.hasCall("dev/guizhou/util/elytra/ElytraWeaponController", "pauseUse")
+                        && !meal.hasCall("dev/guizhou/util/elytra/ElytraWeaponController", "release"),
+                "Suspending spear charge must retain the selected main-hand weapon during an offhand meal");
+        check(meal.hasCall("dev/guizhou/util/elytra/MaceDiveController", "requestRecovery"),
+                "A meal ends an owned mace fall and recovers wings");
+        check(method(chase, "onPostMovement").field(CHASE, "eatingRetreat", Opcodes.GETFIELD) >= 0,
+                "Movement tail may not restart attacks while the meal escape owns flight");
+        check(method(read(FLIGHT), "wantsArmorSwap").hasCall(CHASE, "isEatingRetreatRequested"),
+                "Meal recovery leaves wings equipped instead of resuming the armor cycle");
+        Trace pause = method(read("dev/guizhou/util/elytra/ElytraWeaponController"), "pauseUse");
+        check(pause.hasCall("dev/guizhou/util/elytra/ElytraWeaponController", "stopOwnedUse")
+                        && !pause.hasCall("dev/guizhou/util/inventory/InventoryUtil", "select"),
+                "Only the previously owned spear use is relinquished; no slot is changed");
+        check(method(chase, "endEatingRetreat").hasCall(CHASE, "invalidatePlanning"),
+                "Finishing or cancelling the meal cannot reuse its retreat route or old attack plan");
+        Trace clearance = method(chase, "eatingPathClear");
+        check(clearance.hasCall(FLIGHT, "clearNavigationPath")
+                        && clearance.hasCall("dev/guizhou/util/elytra/FlightTerrainSafety", "trajectoryClear")
+                        && clearance.hasCall(FLIGHT, "isBoostAttached"),
+                "Meal lanes sweep their escape and actual rocket/glide momentum before being scored");
+    }
+
+    private static void verifyEngagementWiring() throws IOException {
+        Map<String, Trace> chase = read(CHASE);
+        Map<String, Trace> spear = read(CHASE + "$SpearBehavior");
+        String engagement = "dev/guizhou/util/elytra/AerialEngagement";
+        check(method(chase,"combatVelocity").hasCall(FLIGHT,"observedCombatVelocity"), "Chase uses fresh applied GZ motion");
+        for (String name : List.of("updateDuelPlanning","updateDefense","predictedTarget","fallingMaceThreat"))
+            check(method(chase,name).hasCall(CHASE,"combatVelocity"), "Planning and defense share the observed motion: "+name);
+        check(method(spear,"tick").hasCall(engagement,"chargeRange"), "Charge reserves opposing movement time");
+        check(method(spear,"nearPass").hasCall(engagement,"closingWindow"), "Near phase anticipates a fast pass");
+        for (String name : List.of("tickFollow","tickNearFollow"))
+            check(method(spear,name).hasCall(CHASE+"$SpearBehavior","limitChargedApproach"), "Approach gate runs before fixed range entry: "+name);
+        check(method(spear,"limitChargedApproach").hasCall(engagement,"spearStep"), "Actual pass uses precision decision");
+        check(method(read(CHASE+"$MaceBehavior"),"inject").hasCall(engagement,"climbStep"), "Mace aligns at the moving apex");
+        Trace attack = method(chase, "attack");
+        check(attack.hasCall("dev/guizhou/util/elytra/MaceStrikeTiming", "reserveOneTick")
+                        && attack.field(CHASE + "$MaceBehavior", "chargeDeferredTick", Opcodes.GETFIELD) >= 0
+                        && attack.field(CHASE + "$MaceBehavior", "chargeDeferredForPass", Opcodes.GETFIELD) >= 0,
+                "A charge reservation must remain bounded across both attack callbacks in one tick");
+        check(method(chase, "hasMaceDescentIntent").hasCall(CHASE, "realMaceHitWindow"),
+                "A genuine close smash may retain its natural fall even below the target's feet");
+        check(method(read(FLIGHT),"observedCombatVelocity").hasCall(engagement,"observedVelocity"), "Motion freshness gate is on the live path");
     }
 
     private static void verifyCombatRegressionWiring() throws IOException {
         Map<String, Trace> chase = read(CHASE);
         Map<String, Trace> mace = read(CHASE + "$MaceBehavior");
         Map<String, Trace> spear = read(CHASE + "$SpearBehavior");
-        check(method(mace, "inject").hasCall("dev/guizhou/util/elytra/FlightVelocity", "requestClimb")
-                        && method(mace, "inject").hasCall("dev/guizhou/util/elytra/FlightVelocity", "preserveDirection"),
-                "Climb planning is separate from exact intercept direction");
-        Map<String, Trace> flight = read("dev/guizhou/features/modules/movement/GuangxiElytraModule");
-        check(method(flight, "onPreTick").hasCall("dev/guizhou/util/elytra/CombatClimbPlan", "choose")
-                        && method(flight, "onPreTick").hasCall("dev/guizhou/features/modules/movement/GuangxiElytraModule", "dualViewAvailable"),
-                "Climb lane optimization uses the same protocol gate as cruise");
+        check(method(mace, "inject").hasCall("dev/guizhou/util/elytra/MaceApproach", "pullUpIntent"),
+                "Custom climb pitch must use the magnitude-preserving intent transformation");
         for (String name : List.of("tickFollow", "tickDive")) {
             check(method(mace, name).hasCall(CHASE + "$MaceBehavior", "aimDiveExit"),
                     "Glide exit must retain dive steering from entry through flag acknowledgement");
@@ -101,19 +152,27 @@ public final class ElytraCombatHookTest {
         }
         check(method(chase, "aimSpear").hasCall(CHASE, "targetPacketOffset"),
                 "Spear aim must include the same packet position as navigation");
-        check(method(chase, "aimSpear").hasCall("dev/guizhou/util/elytra/SpearCombat", "attackEye"),
-                "Spear aim must account for the server eye origin during owned armor flight");
-        check(method(chase, "aimSpear").hasCall(FLIGHT, "isArmorSwapActive"),
-                "Standing-eye compensation must depend on an active owned armor cycle");
-        for (String name : List.of("tickFollow", "strikePlan", "tryAttack", "shouldStartDive", "tickDive")) {
-            check(method(mace, name).hasCall(CHASE, "maceTargetBox"),
-                    "Mace approach, attack and recovery must agree on the client-observed target box: " + name);
+        check(method(chase, "aimSpear").hasCall(CHASE, "spearAttackEye")
+                        && method(chase, "tryPostMovementSpearAim").hasCall(CHASE, "spearAttackEye"),
+                "Pre and post movement spear aim must share the same pose-aware attack origin");
+        Trace spearEye = method(chase, "spearAttackEye");
+        check(spearEye.hasCall("net/minecraft/client/player/LocalPlayer", "getEyePosition")
+                        && !spearEye.hasCall(FLIGHT, "isArmorSwapActive"),
+                "Armor ownership must not substitute standing height while the real pose is still gliding");
+        for (String name : List.of("tickPullUp", "climbPlan", "tickFollow", "strikePlan", "tryAttack", "shouldStartDive", "tickDive")) {
+            check(method(mace, name).hasCall(CHASE, "observedTargetBox"),
+                    "Mace approach, attack and recovery must agree on the latest received target box: " + name);
         }
-        check(method(chase, "attack").hasCall(CHASE, "maceTargetBox"),
+        check(method(chase, "attack").hasCall(CHASE, "observedTargetBox"),
                 "Final reach and accepted-rotation ray must test the observed box used by the approach");
         check(method(mace, "shouldStartDive").hasCall("dev/guizhou/util/elytra/AerialIntercept", "dropApproachRange"),
                 "Fast opposing passes need a speed-aware glide-exit approach gate");
-        Trace standalone = method(read(FLIGHT), "serviceIndependentArmorFly");
+        var flightMethods = read(FLIGHT);
+        Trace standalone = flightMethods.get("serviceIndependentArmorFly(ZZ)V");
+        check(standalone != null, "Independent armor must expose the explicit handoff-recovery path");
+        Trace legacyStandalone = flightMethods.get("serviceIndependentArmorFly(Z)V");
+        check(legacyStandalone != null && legacyStandalone.hasCall(FLIGHT, "serviceIndependentArmorFly"),
+                "The old independent armor entry must retain the shared service");
         for (String forbidden : List.of("enable", "alignLook", "applyFlightVelocity", "buildSetbackTrigger")) {
             check(!standalone.hasCall(FLIGHT, forbidden), "Independent armor must not take direction or exploit ownership");
         }
@@ -152,13 +211,7 @@ public final class ElytraCombatHookTest {
                 case Opcodes.DCONST_1 -> stack.add(1.0);
                 case Opcodes.ICONST_0 -> stack.add(0);
                 case Opcodes.ICONST_1 -> stack.add(1);
-                case Opcodes.DCMPL, Opcodes.DCMPG -> {
-                    double right = ((Number) pop(stack)).doubleValue();
-                    double left = ((Number) pop(stack)).doubleValue();
-                    stack.add(Double.compare(left, right));
-                }
-                // 1.21.1 compares fallDistance as float (fcmpl) instead of double.
-                case Opcodes.FCMPL, Opcodes.FCMPG -> {
+                case Opcodes.DCMPL, Opcodes.DCMPG, Opcodes.FCMPL, Opcodes.FCMPG -> {
                     double right = ((Number) pop(stack)).doubleValue();
                     double left = ((Number) pop(stack)).doubleValue();
                     stack.add(Double.compare(left, right));
@@ -199,49 +252,50 @@ public final class ElytraCombatHookTest {
 
     private static void verifyAttackRotation() throws IOException {
         Trace attack = method(read(CHASE), "attack");
-        check(attack.hasCall(CHASE, "maceAttackEye"),
-                "Mace rotation and final geometry must account for the owned armor pose");
-        int submit = attack.call(ROTATION, "tryAction");
-        check(attack.hasCall(ROTATION, "tryAction"), "Mace actions use shared immediate rotation arbitration");
-        check(attack.field(CHASE, "attackBoundary", Opcodes.GETFIELD) < attack.call("dev/guizhou/util/PacketSendUtil", "send"),
-                "Final mace action must be gated by the normal pre-movement boundary");
-        int yaw = attack.call(ROTATION, "getServerYaw");
-        int pitch = attack.call(ROTATION, "getServerPitch");
-        int ray = attack.call("dev/guizhou/util/elytra/AerialAttackGeometry", "canHit");
-        int send = attack.call("dev/guizhou/util/PacketSendUtil", "send");
-        int phaseGate = attack.field(CHASE, "attackBoundary", Opcodes.GETFIELD);
-        check(!canReach(attack,0,send,phaseGate,new HashSet<>()), "Every attack send passes the pre-tick boundary guard");
-        Trace pre = method(read(CHASE), "onPreTick");
-        Trace post = method(read(CHASE), "onPostMovement");
-        check(pre.steps.stream().anyMatch(step -> step.opcode == Opcodes.PUTFIELD && "attackBoundary".equals(step.name))
-                && post.steps.stream().anyMatch(step -> step.opcode == Opcodes.PUTFIELD && "attackBoundary".equals(step.name)),
-                "Both guarded tick boundaries can consume a short-lived mace opportunity");
-        check(submit < yaw && yaw < pitch && pitch < ray && ray < send,
-                "Rotate uses the shared action arbitration and final submitted angles");
-        for (int required : new int[]{yaw,pitch,ray})
-            check(!canReach(attack,0,send,required,new HashSet<>()),"Even Rotate-off attacks require actual ray validation");
-        check(attack.hasCall("dev/guizhou/manager/SwapManager", "serverSlot"), "Attacks verify submitted weapon selection");
-        check(!attack.hasCall("net/minecraft/client/player/LocalPlayer", "hasLineOfSight"),
-                "Final attack must not use visibility of the stale rendered entity");
+        int submit = attack.call(ROTATION, "submit");
+        int accepted = attack.call(CHASE, "acceptPendingRotation");
+        int pitch = attack.field(CHASE, "sentPitch", Opcodes.GETFIELD);
+        int yaw = attack.field(CHASE, "sentYaw", Opcodes.GETFIELD);
+        int look = attack.call("net/minecraft/world/phys/Vec3", "directionFromRotation");
+        int clip = attack.call("net/minecraft/world/phys/AABB", "clip");
+        int empty = attack.call("java/util/Optional", "isEmpty");
+        int send = attack.call("net/minecraft/client/multiplayer/MultiPlayerGameMode", "attack");
+        check(submit < accepted && accepted < pitch && accepted < yaw && pitch < look && yaw < look
+                        && look < clip && clip < empty && empty < send,
+                "Attack must submit rotation and verify the resulting server ray before sending");
+        for (int required : new int[]{submit, accepted, pitch, yaw, look}) {
+            check(!canReach(attack, 0, send, required, new HashSet<>()),
+                    "A path to attack bypasses rotation submission or actual server angles");
+        }
+        Step miss = attack.steps.get(empty + 1);
+        check(miss.opcode == Opcodes.IFEQ, "Only a nonempty target-box intersection may continue");
+        assertFalseReturn(attack, empty + 2, "A ray missing the target box");
+        int contains = attack.call("net/minecraft/world/phys/AABB", "contains");
+        check(look < contains && contains < clip,
+                "The only geometric shortcut must check whether the eye is inside the target box");
     }
 
     private static void verifyAcceptedAttack() throws IOException {
-        Map<String,Trace> methods = read(CHASE);
-        Trace attack = method(methods,"attack");
-        int send = attack.call("dev/guizhou/util/PacketSendUtil","send");
-        int accepted = attack.field(CHASE,"attackAccepted",Opcodes.GETFIELD);
-        int tick = attack.field(CHASE,"lastAttackTick",Opcodes.PUTFIELD);
-        int arm = attack.call("dev/guizhou/util/elytra/CombatHitWindow","arm");
-        check(send < accepted && accepted < tick && tick < arm,"Only a matching final attack arms feedback");
-        check(!canReach(attack,0,arm,accepted,new HashSet<>()),"No feedback without submission validation");
-        check(attack.steps.get(accepted+1).opcode == Opcodes.IFNE,"An unaccepted attack branches to failure");
-        assertFalseReturn(attack,accepted+2,"Unaccepted attack");
-        check(method(methods,"onEnable").hasCall("dev/guizhou/util/PacketSendUtil","addSubmissionListener"),
-                "Final packet observer is registered while enabled");
-        check(method(methods,"onDisable").hasCall("dev/guizhou/util/PacketSendUtil","removeSubmissionListener"),
-                "Disable removes the observer");
-        check(!attack.hasCall("net/minecraft/client/multiplayer/MultiPlayerGameMode","attack"),
-                "Cancelled sends cannot reset vanilla cooldown through speculative local attack");
+        Map<String, Trace> methods = read(CHASE);
+        Trace attack = method(methods, "attack");
+        int send = attack.call("net/minecraft/client/multiplayer/MultiPlayerGameMode", "attack");
+        int cancelled = attack.call("dev/guizhou/event/impl/network/PacketEvent$Send", "isCancelled");
+        int arm = attack.call("dev/guizhou/util/elytra/CombatHitWindow", "arm");
+        int tick = attack.field(CHASE, "lastAttackTick", Opcodes.PUTFIELD);
+        check(send < cancelled && cancelled < tick && tick < arm,
+                "Only an accepted attack may start the hit confirmation window");
+        check(!canReach(attack, 0, arm, cancelled, new HashSet<>()),
+                "Cancelled dispatch must not arm a pending hit");
+        Step branch = attack.steps.get(cancelled + 1);
+        check(branch.opcode == Opcodes.IFEQ, "Only a noncancelled attack may continue");
+        assertFalseReturn(attack, cancelled + 2, "Cancelled attack");
+        check(method(methods, "onPacketSend").priority == Integer.MIN_VALUE,
+                "Outgoing attack and rotation observation must follow packet cancellation policies");
+        Trace rotation = method(methods, "acceptPendingRotation");
+        int rotateCancelled = rotation.call("dev/guizhou/event/impl/network/PacketEvent$Send", "isCancelled");
+        int acceptedYaw = rotation.field(CHASE, "sentYaw", Opcodes.PUTFIELD);
+        check(!canReach(rotation, 0, acceptedYaw, rotateCancelled, new HashSet<>()),
+                "Unaccepted rotation must not become the attack ray");
     }
 
     /** The silent arbitration window must not outlive its tick: the post-movement attack
@@ -425,18 +479,16 @@ public final class ElytraCombatHookTest {
         Set<String> sources = new HashSet<>();
         for (Step step : feedback.steps) {
             if (step.opcode == Opcodes.GETSTATIC
-                    && ("net/minecraft/world/damagesource/DamageTypes".equals(step.owner)
-                        // 1.21.1: MACE_SMASH/SPEAR exist only as GuizhouWare keys
-                        || "dev/guizhou/GuizhouWare".equals(step.owner))) {
+                    && "net/minecraft/world/damagesource/DamageTypes".equals(step.owner)) {
                 sources.add(step.name);
             }
+            if (step.opcode == Opcodes.LDC && ("mace_smash".equals(step.constant) || "spear".equals(step.constant))) {
+                sources.add(String.valueOf(step.constant).toUpperCase(java.util.Locale.ROOT));
+            }
         }
-        // 1.21.1's DamageTypes class exposes neither MACE_SMASH nor SPEAR constants
-        // (compile-probe verified), so GuizhouWare carries both ResourceKeys
-        // (MACE_SMASH_KEY/SPEAR_KEY) matched by resource location through
-        // DamageType holder.is(ResourceKey). PLAYER_ATTACK stays on the vanilla
-        // constant.
-        check(sources.containsAll(Set.of("MACE_SMASH_KEY", "PLAYER_ATTACK", "SPEAR_KEY")),
+        check(feedback.hasCall("net/minecraft/resources/ResourceKey", "create"),
+                "Compatibility damage names must be real registry keys");
+        check(sources.containsAll(Set.of("MACE_SMASH", "PLAYER_ATTACK", "SPEAR")),
                 "Feedback must recognize actual smash, ordinary melee and spear damage types");
         int direct = feedback.call(DAMAGE, "sourceDirectId");
         int typed = feedback.call(DAMAGE, "sourceType");
@@ -447,13 +499,13 @@ public final class ElytraCombatHookTest {
         check(consumed.opcode == Opcodes.IFEQ && feedback.target(consumed) > hit,
                 "An unmatched or consumed mace confirmation must skip the mace hit callback");
         check(feedback.hasCall(CHASE, "spearPhase"), "Spear damage feedback must require an active spear phase");
-        Trace outgoing = method(methods, "onSubmitted");
+        Trace outgoing = method(methods, "onPacketSend");
         check(outgoing.steps.stream().noneMatch(step -> step.opcode == Opcodes.INSTANCEOF
                         && "net/minecraft/network/protocol/game/ServerboundSetCarriedItemPacket".equals(step.owner)),
                 "Temporary firework and restored-hotbar selection must not erase an already-sent mace confirmation");
         check(outgoing.steps.stream().filter(step -> step.opcode == Opcodes.INSTANCEOF
-                        && "net/minecraft/network/protocol/game/ServerboundInteractPacket".equals(step.owner)).count() == 1 && outgoing.hasCall("net/minecraft/network/protocol/game/ServerboundInteractPacket", "dispatch"),
-                "Interactions must be decoded before accepted attacks invalidate feedback");
+                        && "net/minecraft/network/protocol/game/ServerboundInteractPacket".equals(step.owner)).count() == 2,
+                "The accepted owned attack must remain distinct from intervening entity interactions");
     }
 
     private static void verifyImmediateAttack() throws IOException {
@@ -488,7 +540,7 @@ public final class ElytraCombatHookTest {
                         && post.hasCall("dev/guizhou/event/impl/entity/player/UpdateWalkingPlayerEvent", "getStage")
                         && post.hasCall("dev/guizhou/manager/HeartbeatManager", "authorized")
                         && post.hasCall(CHASE, "paused"),
-                "Post-movement reach checks prepare the guarded next-tick attack transaction");
+                "Post-movement reach checks share the guarded attack transaction");
         Trace restart = method(read(CHASE + "$MaceBehavior"), "restartPass");
         int pullUpState = restart.field(CHASE + "$MaceBehavior", "state", Opcodes.PUTFIELD);
         int resumedMiss = restart.call(CHASE + "$MaceBehavior", "resumeAfterPass");
@@ -519,6 +571,10 @@ public final class ElytraCombatHookTest {
                 "Movement state must not disqualify an otherwise valid spear charge");
         check(tick.call(FLIGHT, "needsSpearBoostRefresh") < prepare,
                 "Required firework refresh must retain its charge-release opportunity");
+        check(tick.call("dev/guizhou/util/elytra/SpearApproach$CommitWindow", "admit") < prepare,
+                "Rocket refresh may preserve only a bounded imminent charged pass");
+        check(method(read(spear), "enter").hasCall("dev/guizhou/util/elytra/SpearApproach$CommitWindow", "reset"),
+                "Target, world, mode and disable clear the rocket commitment");
 
         Trace reset = method(methods, "resetDefenseBehavior");
         int phase = reset.call(CHASE, "spearPhase");
@@ -543,6 +599,19 @@ public final class ElytraCombatHookTest {
                         && defense.hasCall(CHASE, "maintainDefensiveSpearUse")
                         && defense.hasCall(CHASE, "clearSpearAim"),
                 "The real defense path must preserve use while discarding offensive rotation");
+        Trace counter = method(methods, "tryDefensiveMaceAttack");
+        check(counter.hasCall("dev/guizhou/manager/HeartbeatManager", "authorized")
+                        && counter.hasCall(CHASE, "willUseMaceAttack")
+                        && counter.hasCall("dev/guizhou/util/elytra/CombatHitWindow", "pending")
+                        && counter.hasCall(CHASE, "attack"),
+                "An evasive counter requires authorization, genuine smash readiness and the shared range/angle gate");
+        check(!counter.hasCall(CHASE + "$MaceBehavior", "tickWaitAttack")
+                        && !counter.hasCall(CHASE + "$MaceBehavior", "resumeAfterPass")
+                        && !counter.hasCall(FLIGHT, "finishDiveRecovery"),
+                "A counter must retain defensive flight rather than impose an offensive recovery");
+        check(defense.hasCall(CHASE, "tryDefensiveMaceAttack")
+                        && method(methods, "onPostMovement").hasCall(CHASE, "tryDefensiveMaceAttack"),
+                "Defense must retain both the pre-recovery and post-movement smash windows");
     }
 
     private static void verifyDefenseIntegration() throws IOException {
@@ -567,12 +636,7 @@ public final class ElytraCombatHookTest {
         Trace flight = method(methods, "onElytra");
         int injection = flight.call(CHASE + "$Behavior", "inject");
         int path = flight.call(CHASE, "safeFlightVector");
-        int apply = flight.callAfter("dev/guizhou/util/elytra/FlightVelocity", "refine", path);
-        check(flight.steps.subList(injection + 1, flight.steps.size()).stream().noneMatch(step ->
-                        "dev/guizhou/util/elytra/FlightVelocity".equals(step.owner) && "set".equals(step.name)),
-                "Unobstructed post-injection transforms must not erase the combat climb request");
-        check(flight.call("dev/guizhou/util/elytra/CombatSteering$Motion", "apply") < path,
-                "Collision checks must validate the smoothed path, not the old intent");
+        int apply = flight.callAfter("dev/guizhou/util/elytra/FlightVelocity", "set", path);
         check(injection < path && path < apply, "Route filtering must cover the final flight request");
         check(flight.hasCall("dev/guizhou/util/elytra/FlightVelocity", "requestBraking"),
                 "A fully blocked path must explicitly request braking");
@@ -638,16 +702,15 @@ public final class ElytraCombatHookTest {
                 "Trajectory validation must simulate glide and query terrain along the movement");
         Trace velocity = method(movementMethods, "applyFlightVelocity");
         int boostEnvelope = velocity.call("dev/guizhou/util/elytra/ElytraPhysics", "clampToGrimEnvelope");
-        boolean guardedEnvelope = false;
-        for (int i = 0; i + 1 < boostEnvelope; i++) {
-            Step flag = velocity.steps.get(i), branch = velocity.steps.get(i + 1);
-            if (flag.opcode == Opcodes.GETFIELD && FLIGHT.equals(flag.owner)
-                    && "pendingSafetySteering".equals(flag.name) && branch.opcode == Opcodes.IFNE
-                    && !canReach(velocity, velocity.target(branch), boostEnvelope, -1, new HashSet<>())) {
-                guardedEnvelope = true;
-            }
+        int safetyFlag = -1;
+        for (int i = 0; i < boostEnvelope; i++) {
+            Step step = velocity.steps.get(i);
+            if (step.opcode == Opcodes.GETFIELD && "pendingSafetySteering".equals(step.name)) safetyFlag = i;
         }
-        check(guardedEnvelope,
+        check(safetyFlag >= 0, "Boost envelope requires its own safety steering guard");
+        Step guardedBoost = velocity.steps.get(safetyFlag + 1);
+        check(safetyFlag < boostEnvelope && guardedBoost.opcode == Opcodes.IFNE
+                        && !canReach(velocity, velocity.target(guardedBoost), boostEnvelope, -1, new HashSet<>()),
                 "Safety steering must not be expanded back into boosted collision speed by the velocity hook");
         int finalSweep = velocity.callAfter(FLIGHT, "clearRelativePath", boostEnvelope);
         int finalTrajectory = velocity.callAfter(terrain, "trajectoryClear", finalSweep);
@@ -732,16 +795,46 @@ public final class ElytraCombatHookTest {
 
     private static void verifyMaceDescentOwnership() throws IOException {
         Map<String, Trace> chase = read(CHASE);
+        Trace pursuit = method(chase, "isMacePursuitActive");
+        for (String gate : List.of("isEnabled", "paused", "isValid"))
+            check(pursuit.hasCall(CHASE, gate), "Controlled mace climb checks " + gate);
+        check(pursuit.steps.stream().anyMatch(step -> step.opcode == Opcodes.INSTANCEOF
+                        && (CHASE + "$MaceBehavior").equals(step.owner)),
+                "Controlled climb is scoped to the active mace behavior, including MXS");
+        Trace boostMode = method(read(FLIGHT), "combatBoostMode");
+        check(boostMode.hasCall(CHASE, "isMacePursuitActive")
+                        && boostMode.steps.stream().anyMatch(step -> "Gentle".equals(step.name)),
+                "Mace pursuit selects controlled banking without replacing the manual cruise setting");
+        Trace manual = method(read(FLIGHT), "cruiseInput");
+        check(manual.steps.stream().anyMatch(step -> "gzBoostMode".equals(step.name))
+                        && !manual.hasCall(FLIGHT, "combatBoostMode"),
+                "Manual cruise continues to use the configured high-speed profile");
         Trace ownership = method(chase, "preservesMaceDescent");
         check(ownership.steps.stream().anyMatch(step -> "isFallFlying".equals(step.name)),
                 "A powered mace approach must not suppress armor cycling and rocket refresh before glide ends");
         check(ownership.hasCall(CHASE, "hasMaceDescentIntent"),
                 "Natural-fall ownership must also retain every mace intent gate");
+        check(ownership.hasCall(CHASE + "$MaceBehavior", "retainNaturalFall"),
+                "An incidental armor exit must validate its intercept before blocking glide recovery");
+        Trace fall = method(read(CHASE + "$MaceBehavior"), "retainNaturalFall");
+        check(fall.hasCall("dev/guizhou/util/elytra/AerialIntercept", "dropHitTick")
+                        && fall.hasCall(CHASE + "$MaceBehavior", "dropPathClear"),
+                "Natural falls must retain a reachable, unobstructed attack trajectory");
+        String armorController = "dev/guizhou/util/elytra/ArmorSwapController";
+        Map<String, Trace> armorMethods = read(armorController);
+        Trace protectedPair = method(armorMethods, "preservesOwnedMaceChestplate");
+        check(protectedPair.hasCall(CHASE, "preservesMaceDescent")
+                        && protectedPair.hasCall("dev/guizhou/util/elytra/ArmorSwapCycle", "active")
+                        && protectedPair.hasCall(FLIGHT, "armorFlyRequested"),
+                "Natural strike protection requires the current owned pair and the validated descent");
+        check(method(armorMethods, "onPreTick").hasCall(armorController, "preservesOwnedMaceChestplate")
+                        && method(armorMethods, "onTick").hasCall(armorController, "preservesOwnedMaceChestplate"),
+                "Preparation and the fallback movement tail must both preserve the natural strike's pair");
         ownership = method(chase, "hasMaceDescentIntent");
         for (String gate : List.of("isEnabled", "paused", "isValid")) {
             check(ownership.hasCall(CHASE, gate), "Mace descent ownership must check " + gate);
         }
-        check(ownership.hasCall("dev/guizhou/util/elytra/MappedCombatItems", "isMace")
+        check(ownership.hasCall("dev/guizhou/util/elytra/MaceCombat", "isMace")
                         && ownership.steps.stream().anyMatch(step -> step.opcode == Opcodes.INSTANCEOF
                         && (CHASE + "$MaceBehavior").equals(step.owner))
                         && ownership.steps.stream().anyMatch(step -> step.opcode == Opcodes.GETFIELD

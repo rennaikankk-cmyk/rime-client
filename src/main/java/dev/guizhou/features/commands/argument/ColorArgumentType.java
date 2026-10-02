@@ -23,7 +23,7 @@ public class ColorArgumentType implements ArgumentType<Color> {
             try {
                 return new Color(Integer.parseInt(value.substring(1), 16));
             } catch (NumberFormatException e) {
-                throw CommandExceptions.invalidArgument("无效的十六进制颜色 %s，应为 #RRGGBB", value)
+                throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("无效的十六进制颜色 %s，应为 #RRGGBB"), value)
                         .createWithContext(reader);
             }
         }
@@ -33,19 +33,19 @@ public class ColorArgumentType implements ArgumentType<Color> {
 
             int hue = elements[0];
             if (hue < 0 || hue > 360) {
-                throw CommandExceptions.invalidArgument("色相必须在 0-360 之间")
+                throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("色相必须在 0-360 之间"))
                         .createWithContext(reader);
             }
 
             int saturation = elements[1];
             if (saturation < 0 || saturation > 100) {
-                throw CommandExceptions.invalidArgument("饱和度必须在 0-100 之间")
+                throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("饱和度必须在 0-100 之间"))
                         .createWithContext(reader);
             }
 
             int brightness = elements[2];
             if (brightness < 0 || brightness > 100) {
-                throw CommandExceptions.invalidArgument("亮度必须在 0-100 之间")
+                throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("亮度必须在 0-100 之间"))
                         .createWithContext(reader);
             }
 
@@ -58,7 +58,7 @@ public class ColorArgumentType implements ArgumentType<Color> {
         for (int i = 0; i < elements.length; ++i) {
             int element = elements[i];
             if (element < 0 || element > 255) {
-                throw CommandExceptions.invalidArgument("%s通道必须在 0-255 之间", RGBA_VALUES[i])
+                throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("%s通道必须在 0-255 之间"), dev.guizhou.util.lang.ClientLanguage.text(RGBA_VALUES[i]))
                         .createWithContext(reader);
             }
         }
@@ -72,7 +72,7 @@ public class ColorArgumentType implements ArgumentType<Color> {
     private int[] parseColorElements(StringReader reader, String value) throws CommandSyntaxException {
         String[] parts = value.split(",");
         if (parts.length < 3 || parts.length > 4) {
-            throw CommandExceptions.invalidArgument("颜色需要 3 个值（可选第 4 个透明度），格式为 r,g,b[,a] 或 hsb:h,s,b")
+            throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("颜色需要 3 个值（可选第 4 个透明度），格式为 r,g,b[,a] 或 hsb:h,s,b"))
                     .createWithContext(reader);
         }
 
@@ -81,7 +81,7 @@ public class ColorArgumentType implements ArgumentType<Color> {
             try {
                 elements[i] = Integer.parseInt(parts[i].strip());
             } catch (NumberFormatException e) {
-                throw CommandExceptions.invalidArgument("颜色分量 \"%s\" 不是整数", parts[i])
+                throw CommandExceptions.invalidArgument(dev.guizhou.util.lang.ClientLanguage.text("颜色分量 \"%s\" 不是整数"), parts[i])
                         .createWithContext(reader);
             }
         }

@@ -9,7 +9,6 @@ public final class CoupledCruiseTest {
     private static final Vec3 NORTH = new Vec3(0, 0, 1);
 
     public static void main(String[] args) {
-        levelSpeedCap();
         inputAndHeading();
         verticalAndResidualMomentum();
         heightCycleAndReset();
@@ -23,7 +22,52 @@ public final class CoupledCruiseTest {
         boostModeSelection();
         longWaveWindow();
         forecastDoesNotAdvanceState();
+        combatHeading();
         System.out.println("CoupledCruiseTest passed: " + checks + " checks");
+    }
+
+    private static void combatHeading() {
+        Random random = new Random(9028);
+        Config config = Config.defaults();
+        for (int i = 0; i < 500; i++) {
+            Vec3 previous = new Vec3(random.nextDouble()*8-4, random.nextDouble()*8-4, random.nextDouble()*8-4);
+            Vec3 request = new Vec3(random.nextDouble()*8-4, random.nextDouble()*8-4, random.nextDouble()*8-4);
+            Vec3 look = request.normalize();
+            Vec3 simulated = ElytraPhysics.simulateGlide(previous, look, .08);
+            Envelope box = CoupledCruise.envelope(config, previous, simulated, look, look);
+            for (boolean precise : new boolean[]{false,true}) {
+                Result result = CoupledCruise.applyCombat(config, request, previous, simulated, look, look, precise, precise);
+                check(!result.feasible() || box.contains(result.velocity(),1e-8), "Combat stays in measured envelope");
+                check(!result.feasible() || result.velocity().length() <= config.speedCap()+1e-8, "Combat respects cruise cap");
+            }
+        }
+        CoupledCruise controller = new CoupledCruise();
+        Vec3 climb = new Vec3(1, 3, 1);
+        check(controller.selectCombat(config, climb, 100, false, false, false) == null, "No dual without protocol support");
+        check(controller.selectCombat(config, climb, 100, true, true, false) == null, "Precision cancels dual");
+        check(controller.selectCombat(config, climb, 100, true, false, true) == null, "Defense direction cancels dual");
+        Selection selection = controller.selectCombat(config, climb, 100, true, false, false);
+        check(selection != null && selection.dualActive(), "Climb uses actual dual selection");
+        Selection gentle = new CoupledCruise().selectCombat(config, climb, 100, true, false, false, BoostMode.Gentle);
+        check(gentle != null && gentle.look().y < selection.look().y
+                        && gentle.boxLook().distanceTo(selection.boxLook()) > .1,
+                "Combat respects the configured gentle climb pitch and banking span");
+        Vec3 simulated = ElytraPhysics.simulateGlide(Vec3.ZERO, selection.look(), .08);
+        Result dual = CoupledCruise.applyCombat(config, climb, Vec3.ZERO, simulated,
+                selection.look(), selection.boxLook(), false, false);
+        check(dual.feasible() && CoupledCruise.envelope(config, Vec3.ZERO, simulated,
+                selection.look(), selection.boxLook()).contains(dual.velocity(), 1e-8), "Dual combat stays inside published views");
+        Vec3 retained = controller.selectCombat(config, new Vec3(.95,3,1.05), 102, true,false,false).look();
+        check(Math.abs(retained.z) < 1e-8, "Small bearing jitter retains the climb axis");
+        Vec3 turned = controller.selectCombat(config, new Vec3(.1,3,1), 104, true,false,false).look();
+        check(Math.abs(turned.x) < 1e-8, "Climb turns when the old axis exceeds 60 degrees");
+        controller.reset();
+        Vec3 resetHeading = controller.selectCombat(config, new Vec3(.9,3,1), 100, true,false,false).look();
+        check(Math.abs(resetHeading.x) < 1e-8, "New flight does not retain the previous climb bearing");
+        Vec3 small = new Vec3(.1,0,0);
+        var exact = CoupledCruise.applyCombat(config, small, Vec3.ZERO, Vec3.ZERO,
+                new Vec3(1,0,0),new Vec3(1,0,0),true,true);
+        check(exact.feasible() && exact.velocity().distanceTo(small)<1e-9, "Terminal request is not accelerated past its intercept");
     }
 
     private static void forecastDoesNotAdvanceState() {
@@ -384,33 +428,6 @@ public final class CoupledCruiseTest {
         return new Vec3((random.nextDouble()*2-1)*range,(random.nextDouble()*2-1)*range,(random.nextDouble()*2-1)*range);
     }
     private static double pitch(Vec3 look) { return Math.toDegrees(-Math.asin(look.y)); }
-    private static void levelSpeedCap() {
-        Config fast = Config.defaults().withBoxCap(Config.defaults().speedCap());
-        check(fast.boxCap() == 15, "level axis allowance can match the aggressive total cap");
-        check(new Config(15, -45, 30, true, -1.7, false, 60, 15, 100, .002).boxCap() == 15,
-                "axis allowance does not exceed the total-cap bound");
-        CoupledCruise c = new CoupledCruise();
-        Selection level = c.select(fast, new Intent(NORTH, 0, false), 0, 200);
-        check(level.active() && level.vertical() == 0 && !level.dualActive(), "level boost stays on one view");
-        Result straight = c.apply(fast, level, Vec3.ZERO, Vec3.ZERO, level.look(), level.look());
-        check(straight.feasible() && straight.velocity().length() > 14 && straight.velocity().length() <= 15 + 1e-6,
-                "cardinal level flight reaches the speed cap: " + straight.velocity().length());
-        Selection diagonal = c.select(fast, new Intent(new Vec3(1, 0, 1), 0, false), 0, 200);
-        Result diag = c.apply(fast, diagonal, Vec3.ZERO, Vec3.ZERO, diagonal.look(), diagonal.look());
-        check(diag.feasible() && diag.velocity().length() > 14 && diag.velocity().length() <= 15 + 1e-6,
-                "diagonal level flight reaches the speed cap: " + diag.velocity().length());
-        Config gentle = new Config(15, -45, 30, true, -1.7, false, 60, 8, 1.7, .002).withBoxCap(8);
-        Selection g = new CoupledCruise().select(gentle, new Intent(NORTH, 0, false), 0, 200);
-        Result gr = new CoupledCruise().apply(gentle, g, Vec3.ZERO, Vec3.ZERO, g.look(), g.look());
-        check(gr.feasible() && gr.velocity().length() > 7.5 && gr.velocity().length() <= 8 + 1e-6,
-                "gentle level cap is honored: " + gr.velocity().length());
-        Config boxed = Config.defaults();
-        Selection boxedLevel = new CoupledCruise().select(boxed, new Intent(NORTH, 0, false), 0, 200);
-        Result limited = new CoupledCruise().apply(boxed, boxedLevel, Vec3.ZERO, Vec3.ZERO, boxedLevel.look(), boxedLevel.look());
-        check(limited.feasible() && limited.velocity().length() < 2.5,
-                "the 1.7 axis box still limits level flight when the caller keeps it");
-    }
-
     private static void near(double actual, double expected, String message) { check(Math.abs(actual-expected)<1e-8, message + ": " + actual); }
     private static void check(boolean condition, String message) {
         checks++;

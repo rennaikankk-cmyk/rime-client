@@ -31,7 +31,7 @@ public class TimingsCommand extends Command {
                 .then(literal("reset")
                         .executes(ctx -> {
                             ClientDiagnostics.start(60);
-                            return success("已开始新的 60 秒本地统计窗口；游玩后再输入 %stimings 查看，不会上传", ChatFeed.prefix());
+                            return success(dev.guizhou.util.lang.ClientLanguage.text("已开始新的 60 秒本地统计窗口；游玩后再输入 %stimings 查看，不会上传"), ChatFeed.prefix());
                         }))
                 .then(argument("topN", IntegerArgumentType.integer(1, 50))
                         .executes(ctx -> report(IntegerArgumentType.getInteger(ctx, "topN"))));
@@ -41,24 +41,24 @@ public class TimingsCommand extends Command {
         String prefix = ChatFeed.prefix();
         if (ClientDiagnostics.snapshot().startedAtEpochMillis() == 0) {
             ClientDiagnostics.start(60);
-            return info("已开启 60 秒本地统计窗口；游玩后再输入 %stimings 查看，不会上传", prefix);
+            return info(dev.guizhou.util.lang.ClientLanguage.text("已开启 60 秒本地统计窗口；游玩后再输入 %stimings 查看，不会上传"), prefix);
         }
         var flight = FlightPlanningTask.diagnostics();
         MutableComponent body = Component.empty()
-                .append(ChatFeed.text("本地耗时", ChatPalette.TEXT))
-                .append(ChatFeed.text("   飞行线程 " + flight.workers() + " · 活跃 " + flight.active()
-                        + " · 排队 " + flight.queued() + " · 已完成 " + flight.completedRuns(), ChatPalette.MUTED));
+                .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("本地耗时"), ChatPalette.TEXT))
+                .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("   飞行线程 ") + flight.workers() + dev.guizhou.util.lang.ClientLanguage.text(" · 活跃 ") + flight.active()
+                        + dev.guizhou.util.lang.ClientLanguage.text(" · 排队 ") + flight.queued() + dev.guizhou.util.lang.ClientLanguage.text(" · 已完成 ") + flight.completedRuns(), ChatPalette.MUTED));
         String report = EventBus.timingsReport(n);
         if (report.isEmpty()) {
-            body.append("\n  ").append(ChatFeed.text("本次采集没有计时数据；" + prefix + "timings reset 重新开始",
+            body.append("\n  ").append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("本次采集没有计时数据；") + prefix + dev.guizhou.util.lang.ClientLanguage.text("timings reset 重新开始"),
                     ChatPalette.MUTED));
             return replyKeyed("report", ChatTone.INFO, body);
         }
         for (String line : report.split("\n")) {
             if (!line.isBlank()) body.append("\n  ").append(ChatFeed.text(line, ChatPalette.TEXT));
         }
-        body.append("\n  ").append(ChatFeed.text("包含式耗时：监听器 / 模块 / 内部作用域相互重叠，请勿相加；P95 为近似值。"
-                + prefix + "timings reset 重新采集", ChatPalette.SUBTLE));
+        body.append("\n  ").append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("包含式耗时：监听器 / 模块 / 内部作用域相互重叠，请勿相加；P95 为近似值。")
+                + prefix + dev.guizhou.util.lang.ClientLanguage.text("timings reset 重新采集"), ChatPalette.SUBTLE));
         return replyKeyed("report", ChatTone.INFO, body);
     }
 }

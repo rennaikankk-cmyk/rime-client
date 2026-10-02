@@ -38,10 +38,10 @@ public class BindCommand extends Command {
                 .executes((ctx) -> {
                     module = getModule(ctx, "module");
                     ChatFeed.replace(STATUS_KEY, ChatTone.INFO, "⌨", Component.empty()
-                            .append(ChatFeed.text("请按下要绑定到 ", ChatPalette.MUTED))
+                            .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("请按下要绑定到 "), ChatPalette.MUTED))
                             .append(ChatFeed.text(module.getDisplayName(), ChatPalette.TEXT))
-                            .append(ChatFeed.text(" 的按键…", ChatPalette.MUTED))
-                            .append(ChatFeed.text("   Esc 取消", ChatPalette.SUBTLE)));
+                            .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text(" 的按键…"), ChatPalette.MUTED))
+                            .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("   Esc 取消"), ChatPalette.SUBTLE)));
                     return NO_OP;
                 }));
     }
@@ -53,7 +53,7 @@ public class BindCommand extends Command {
         }
 
         if (event.getKey() == GLFW_KEY_ESCAPE) {
-            ChatFeed.replace(STATUS_KEY, ChatTone.MUTED, Component.literal("已取消绑定 " + module.getDisplayName()));
+            ChatFeed.replace(STATUS_KEY, ChatTone.MUTED, Component.literal(dev.guizhou.util.lang.ClientLanguage.text("已取消绑定 ") + module.getDisplayName()));
             module = null;
             return;
         }
@@ -75,7 +75,7 @@ public class BindCommand extends Command {
         module.bind.setValue(bind);
         ChatFeed.replace(STATUS_KEY, ChatTone.SUCCESS, Component.empty()
                 .append(ChatFeed.text(module.getDisplayName(), ChatPalette.TEXT))
-                .append(ChatFeed.text("  ·  按键  →  ", ChatPalette.SUBTLE))
+                .append(ChatFeed.text(dev.guizhou.util.lang.ClientLanguage.text("  ·  按键  →  "), ChatPalette.SUBTLE))
                 .append(ChatFeed.text(label, ChatPalette.ACCENT_2)));
         module = null;
     }

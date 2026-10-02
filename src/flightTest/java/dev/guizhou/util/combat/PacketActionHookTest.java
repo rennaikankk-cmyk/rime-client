@@ -29,7 +29,7 @@ public final class PacketActionHookTest {
     private static void pistonAttackGates() throws IOException {
         Code code = method(PISTON, "breakCrystal", null);
         int safety = code.call(PISTON, "selfSafe");
-        int rotate = code.call(ROTATION, "tryAction");
+        int rotate = code.call(ROTATION, "trySubmit");
         int ray = code.lastCall(PISTON, "canHitCrystal");
         int send = code.call(SEND, "send");
         int mark = code.call("dev/guizhou/util/combat/CrystalRetryTracker", "markSent");

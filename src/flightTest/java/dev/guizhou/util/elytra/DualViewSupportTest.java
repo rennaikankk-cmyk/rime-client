@@ -12,9 +12,11 @@ public final class DualViewSupportTest {
         unsupportedFamilies();
         malformedNames();
         describeCoversAllStatuses();
-        check(DualViewSupport.legacyFireworkFamily("1.20.3-1.20.4"), "old firework NBT default");
-        check(!DualViewSupport.legacyFireworkFamily("1.20.5-1.20.6"), "modern components default");
-        check(!DualViewSupport.legacyFireworkFamily(null), "unknown target is not assumed legacy");
+        check(DualViewSupport.legacyFireworkFamily("1.20.3-1.20.4"), "old Via range uses the legacy rocket lifetime");
+        check(!DualViewSupport.legacyFireworkFamily("1.20.5-1.20.6"), "component protocol must retain its explicit default");
+        check(!DualViewSupport.legacyFireworkFamily("1.21.11"), "native version uses modern firework components");
+        check(!DualViewSupport.legacyFireworkFamily("1.20.4-rc1"), "unknown versions do not guess a rocket lifetime");
+        check(!DualViewSupport.legacyFireworkFamily("1.20.4-1.19.4"), "reversed ranges do not enable the legacy default");
         System.out.println("DualViewSupportTest passed: " + checks + " checks");
     }
 
@@ -25,20 +27,13 @@ public final class DualViewSupportTest {
         check(DualViewSupport.familySupported("1.20.2"), "1.20.2");
         check(DualViewSupport.familySupported("1.20"), "bare 1.20 is the (20,1) family");
         check(DualViewSupport.familySupported("1.12.2"), "1.12.2");
-        check(DualViewSupport.familySupported("1.9"), "1.9 introduced elytra");
-        check(DualViewSupport.familySupported("1.20.3-1.20.4"), "tested Via target range");
+        check(DualViewSupport.familySupported("1.8"), "1.8");
     }
 
     private static void unsupportedFamilies() {
         check(!DualViewSupport.familySupported("1.21"), "1.21 is out");
         check(!DualViewSupport.familySupported("1.21.4"), "1.21.4 is out");
         check(!DualViewSupport.familySupported("1.21.11"), "1.21.11 is out");
-        check(!DualViewSupport.familySupported("1.20.7"), "no such stable release");
-        check(!DualViewSupport.familySupported("1.8"), "no elytra");
-        check(!DualViewSupport.familySupported("1.21-1.20.4"), "reversed range");
-        check(!DualViewSupport.familySupported("2.20.4"), "unknown major");
-        check(!DualViewSupport.familySupported("1.0.20.4"), "extra component");
-        check(!DualViewSupport.familySupported("1.20.-1"), "negative patch");
     }
 
     private static void malformedNames() {

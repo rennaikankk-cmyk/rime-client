@@ -8,9 +8,11 @@ import dev.guizhou.event.impl.render.Render2DEvent;
 import dev.guizhou.event.impl.render.Render3DEvent;
 import dev.guizhou.features.Feature;
 import dev.guizhou.features.commands.Command;
+import dev.guizhou.features.modules.client.ClickGuiModule;
 import dev.guizhou.features.settings.Bind;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.manager.ConfigManager;
+import dev.guizhou.util.render.UiSounds;
 import dev.guizhou.util.traits.Jsonable;
 import dev.guizhou.util.traits.Toggleable;
 import net.minecraft.ChatFormatting;
@@ -84,26 +86,35 @@ public class Module extends Feature implements Jsonable, Toggleable {
         this.onDisable();
     }
 
-    public void toggleByUser() { setEnabledByUser(!isEnabled()); }
+    /**
+     * Toggle requested by the player (keybind, GUI, command). Programmatic paths such as
+     * config loading or a module switching itself off keep using {@link #toggle()}.
+     */
+    public void toggleByUser() {
+        setEnabledByUser(!isEnabled());
+    }
+
     public void setEnabledByUser(boolean on) {
         if (isEnabled() == on) return;
-        if (on) enable(); else disable();
-        if (isEnabled() == on && !(this instanceof dev.guizhou.features.modules.client.ClickGuiModule))
-            dev.guizhou.util.render.UiSounds.moduleToggle(on);
+        if (on) enable();
+        else disable();
+        // Modules may refuse to enable (not in a world, unmet requirements); only confirm real changes.
+        if (isEnabled() == on && !(this instanceof ClickGuiModule)) UiSounds.moduleToggle(on);
     }
+
     public String getDisplayName() {
-        return this.displayName.getValue();
+        return ModuleNames.localizedDisplayName(getName(), this.displayName.getValue());
     }
 
     public void setDisplayName(String name) {
         Module module = GuizhouWare.moduleManager.getModuleByDisplayName(name);
         Module originalModule = GuizhouWare.moduleManager.getModuleByName(name);
         if (module == null && originalModule == null) {
-            Command.sendMessage(this.getDisplayName() + ", name: " + this.getName() + ", has been renamed to: " + name);
+            Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("已将 {text} %s {} 重命名为 {cyan} %s"), getDisplayName(), name);
             this.displayName.setValue(name);
             return;
         }
-        Command.sendMessage("{red} A module of this name already exists.");
+        Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("{red} 已存在同名模块"));
     }
 
     @Override
@@ -117,7 +128,7 @@ public class Module extends Feature implements Jsonable, Toggleable {
     }
 
     public String getDescription() {
-        return this.description;
+        return dev.guizhou.util.lang.ClientLanguage.text(this.description);
     }
 
     public Category getCategory() {

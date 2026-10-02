@@ -4,14 +4,14 @@ package dev.guizhou.features.modules.hud;
 final class FlightMotionLabels {
     private FlightMotionLabels() {}
     static String label(String observed) {
-        if (observed == null) return "待观察";
+        if (observed == null) return dev.guizhou.util.lang.ClientLanguage.text("待观察");
         return switch (observed) {
-            case "GROUND" -> "地面移动";
-            case "GLIDE" -> "鞘翅滑翔";
-            case "GLIDE ACCEL" -> "滑翔加速";
-            case "ARMOR AIR" -> "胸甲空中";
-            case "AIRBORNE" -> "非滑翔空中";
-            default -> "待观察";
+            case "GROUND" -> dev.guizhou.util.lang.ClientLanguage.text("地面移动");
+            case "GLIDE" -> dev.guizhou.util.lang.ClientLanguage.text("鞘翅滑翔");
+            case "GLIDE ACCEL" -> dev.guizhou.util.lang.ClientLanguage.text("滑翔加速");
+            case "ARMOR AIR" -> dev.guizhou.util.lang.ClientLanguage.text("胸甲空中");
+            case "AIRBORNE" -> dev.guizhou.util.lang.ClientLanguage.text("非滑翔空中");
+            default -> dev.guizhou.util.lang.ClientLanguage.text("待观察");
         };
     }
 }

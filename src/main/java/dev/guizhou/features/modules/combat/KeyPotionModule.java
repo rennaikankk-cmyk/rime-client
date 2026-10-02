@@ -31,7 +31,7 @@ public class KeyPotionModule extends Module {
         }
         String pause = dev.guizhou.util.combat.UtilityActionGuard.pauseReason();
         if (pause != null || onGround.getValue() && !mc.player.onGround()) {
-            dev.guizhou.features.commands.Command.sendMessage("投药暂缓：" + (pause != null ? pause : "需要站在地面"));
+            dev.guizhou.features.commands.Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("投药暂缓：") + (pause != null ? pause : dev.guizhou.util.lang.ClientLanguage.text("需要站在地面")));
             disable(); return;
         }
 
@@ -41,7 +41,7 @@ public class KeyPotionModule extends Module {
             float pitch = 90f;
             if (!dev.guizhou.util.inventory.ItemUseTracker.use("KeyPotion", potion, yaw, pitch)) {
                 if (++waited < 40) return;
-                dev.guizhou.features.commands.Command.sendMessage("投药未完成：视角或物品持续被占用，请重试。");
+                dev.guizhou.features.commands.Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("投药未完成：视角或物品持续被占用，请重试。"));
             }
         }
         disable();
