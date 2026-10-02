@@ -300,6 +300,7 @@ public final class ObfuscatedJarTest {
                 Map.entry("HoleFillModule", List.of("onTick", "fill")),
                 Map.entry("AutoArmorModule", List.of("onTick", "equip")),
                 Map.entry("AutoEatModule", List.of("onPreTick", "startMeal", "shouldKeepEating")),
+                Map.entry("AutoTotemModule", List.of("sync", "tryUseOffhandGapple", "useGappleOnUse")),
                 Map.entry("AutoReconnectModule", List.of("reconnect")));
         for (var checkpoint : checkpoints.entrySet()) {
             String simpleName = checkpoint.getKey();

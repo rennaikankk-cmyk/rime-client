@@ -8,10 +8,14 @@ import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.combat.LethalPredictor;
 import dev.guizhou.util.combat.TotemSafety;
+import dev.guizhou.util.elytra.SpearCombat;
 import dev.guizhou.util.inventory.InventoryUtil;
+import dev.guizhou.util.player.ItemUseOwnership;
 import dev.guizhou.util.player.ScreenGate;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -53,6 +57,7 @@ public class AutoTotemModule extends Module {
     private String lastThreat;
     private int lethalHoldUntil;
     private static final int LETHAL_HOLD_TICKS = 10;
+    private final ItemUseOwnership gappleUse = new ItemUseOwnership();
 
     public AutoTotemModule() {
         super("AutoTotem", "Keeps the offhand on a totem, crystal, gapple, bed or anchor. Lethal forces a totem "
@@ -80,7 +85,20 @@ public class AutoTotemModule extends Module {
 
     @Subscribe(priority = 500)
     private void onPreTick(PreTickEvent event) {
-        sync(false);
+        useGappleOnUse(sync(false));
+    }
+
+    /** Route a manual right click to the safe offhand meal before vanilla tries the main hand. */
+    public static boolean tryUseOffhandGapple() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized() || GuizhouWare.moduleManager == null) return false;
+        AutoTotemModule module = GuizhouWare.moduleManager.getModuleByClass(AutoTotemModule.class);
+        return module != null && module.isEnabled() && !nullCheck() && module.gappleRequested()
+                && module.useGappleOnUse(module.sync(false));
+    }
+
+    @Override
+    public void onDisable() {
+        stopGappleUse();
     }
 
     @Subscribe
@@ -101,19 +119,81 @@ public class AutoTotemModule extends Module {
         });
     }
 
-    private void sync(boolean ignoreDelay) {
-        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
-        if (dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.OFFHAND)) return;
-        if (nullCheck() || mc.player.isDeadOrDying()) return;
-        if (!ScreenGate.allowsInventoryUpkeep(true)) return;
+    private Item sync(boolean ignoreDelay) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.OFFHAND)
+                || nullCheck() || mc.gameMode == null || mc.player.isDeadOrDying() || !ScreenGate.allowsInventoryUpkeep(true)) {
+            stopGappleUse();
+            return null;
+        }
 
         Item wanted = choose();
-        if (wanted == null || holding(wanted)) return;
-        if (!ignoreDelay && mc.player.tickCount - lastSwapTick < delay.getValue()) return;
+        if (wanted != gappleItem() || !gappleRequested()) stopGappleUse();
+        if (wanted == null || holding(wanted)) return wanted;
+        long elapsed = (long) mc.player.tickCount - lastSwapTick;
+        int lethalLeft = lethalHoldUntil - mc.player.tickCount;
+        boolean emergencyTotem = wanted == Items.TOTEM_OF_UNDYING
+                && (mc.player.getHealth() + mc.player.getAbsorptionAmount() <= health.getValue()
+                || lethal.getValue() && lethalLeft > 0 && lethalLeft <= LETHAL_HOLD_TICKS);
+        if (!ignoreDelay && !emergencyTotem && lastSwapTick != Integer.MIN_VALUE
+                && elapsed >= 0 && elapsed < delay.getValue()) return wanted;
         int slot = find(wanted);
-        if (slot < 0) return;
+        if (slot < 0) return wanted;
         InventoryUtil.swapToOffhand(slot);
         lastSwapTick = mc.player.tickCount;
+        return wanted;
+    }
+
+    /** A manual food request owns the one real item-use channel, including during spear charge. */
+    private boolean useGappleOnUse(Item wanted) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized() || nullCheck() || mc.gameMode == null
+                || mc.getConnection() == null || mc.screen != null || mc.player.isDeadOrDying() || mc.player.isSpectator()
+                || !ScreenGate.allowsWorldUpkeep() || !gappleRequested() || wanted != gappleItem() || !holding(wanted)
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.OFFHAND)
+                || dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FOOD)
+                || GuizhouWare.swapManager != null && GuizhouWare.swapManager.isLatched()) {
+            stopGappleUse();
+            return false;
+        }
+        ItemStack apple = mc.player.getOffhandItem();
+        var food = apple.get(DataComponents.FOOD);
+        if (food == null || !mc.player.canEat(food.canAlwaysEat()) || mc.player.getCooldowns().isOnCooldown(apple)) {
+            stopGappleUse();
+            return false;
+        }
+        if (mc.player.isUsingItem() && mc.player.getUsedItemHand() == InteractionHand.OFF_HAND
+                && mc.player.getUseItem() == apple) return true;
+        if (gappleUse.owned()) gappleUse.forget();
+        // The same failed attempt can be visited by the tick and right-click hook. Reserve it once.
+        if (!gappleUse.canAttempt(mc.player.tickCount)) return true;
+        gappleUse.recordAttempt(mc.player.tickCount);
+        if (mc.player.isUsingItem()) mc.gameMode.releaseUsingItem(mc.player);
+        if (mc.gameMode.useItem(mc.player, InteractionHand.OFF_HAND).consumesAction()
+                && mc.player.isUsingItem() && mc.player.getUsedItemHand() == InteractionHand.OFF_HAND
+                && mc.player.getUseItem() == apple) {
+            gappleUse.start(mc.player, mc.level, apple, ItemUseOwnership.Hand.OFF);
+        }
+        return true;
+    }
+
+    private boolean gappleRequested() {
+        return gappleOnUse.getValue() && mc.options.keyUse.isDown()
+                && mc.player.getHealth() + mc.player.getAbsorptionAmount() >= safeHealth.getValue()
+                && mainHandAllowsGapple();
+    }
+
+    /** Revocation, risk or key release stops only the meal this module actually started. */
+    private void stopGappleUse() {
+        boolean ours = !nullCheck() && mc.player.isUsingItem()
+                && mc.player.getUsedItemHand() == InteractionHand.OFF_HAND
+                && gappleUse.ownsActiveUse(mc.player, mc.level, mc.player.getUseItem(), false)
+                && mc.player.getOffhandItem() == gappleUse.stack();
+        gappleUse.forget();
+        if (ours && mc.gameMode != null && mc.getConnection() != null
+                && !dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.OFFHAND)
+                && !dev.guizhou.util.compat.ClientCoexistence.blocks(dev.guizhou.util.compat.ForeignClientProbe.Domain.FOOD)) {
+            mc.gameMode.releaseUsingItem(mc.player);
+        }
     }
 
     private Item choose() {
@@ -134,7 +214,7 @@ public class AutoTotemModule extends Module {
             if (left > 0 && left <= LETHAL_HOLD_TICKS) return Items.TOTEM_OF_UNDYING;
         }
         lastThreat = null;
-        if (gappleOnUse.getValue() && mc.options.keyUse.isDown() && hp >= safeHealth.getValue() && mainHandAllowsGapple()) {
+        if (gappleRequested()) {
             return gappleItem();
         }
         if (pinned != null) return pinned;
@@ -161,6 +241,7 @@ public class AutoTotemModule extends Module {
     private boolean mainHandAllowsGapple() {
         Item held = mc.player.getMainHandItem().getItem();
         return held == Items.END_CRYSTAL || held == Items.TOTEM_OF_UNDYING
+                || held == Items.MACE || SpearCombat.isSpear(mc.player.getMainHandItem())
                 || mc.player.getMainHandItem().is(ItemTags.SWORDS)
                 || mc.player.getMainHandItem().is(ItemTags.AXES);
     }

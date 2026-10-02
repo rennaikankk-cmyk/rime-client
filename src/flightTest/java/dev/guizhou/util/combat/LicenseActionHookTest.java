@@ -100,6 +100,14 @@ public final class LicenseActionHookTest {
         check(!eatCleanup.hasAuthorization() && !eatCleanup.calls("release").isEmpty(),
                 "AutoEat must hand the hotbar back even when revoked");
 
+        String offhand = BASE + "combat/AutoTotemModule";
+        guarded(offhand, "sync", null, "swapToOffhand");
+        guarded(offhand, "tryUseOffhandGapple", null, "useGappleOnUse");
+        guarded(offhand, "useGappleOnUse", null, "useItem");
+        Code gappleCleanup = method(offhand, "stopGappleUse", null);
+        check(!gappleCleanup.hasAuthorization() && !gappleCleanup.calls("releaseUsingItem").isEmpty(),
+                "Offhand meal cleanup survives authorization revocation");
+
         String replenish = BASE + "player/ReplenishModule";
         guarded(replenish, "onTick", null);
         guarded(replenish, "moveTo", null, "click");
