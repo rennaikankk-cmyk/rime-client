@@ -54,6 +54,7 @@ public final class ElytraCombatHookTest {
         verifyCombatRegressionWiring();
         verifyPlanningSpeedWiring();
         verifyEngagementWiring();
+        verifyEatingRetreatIntegration();
         System.out.println("ElytraCombatHookTest passed: " + checks + " checks");
     }
 
@@ -68,6 +69,36 @@ public final class ElytraCombatHookTest {
                         && budget.steps.stream().noneMatch(step -> step.opcode == Opcodes.GETFIELD
                         && FLIGHT.equals(step.owner) && "lastRequestedBpt".equals(step.name)),
                 "The next approach keeps configured speed after terminal braking");
+    }
+
+    private static void verifyEatingRetreatIntegration() throws IOException {
+        Map<String, Trace> chase = read(CHASE);
+        Trace tick = method(chase, "onPreTick");
+        check(tick.call(CHASE, "updateEatingRetreat") < tick.call(CHASE, "updateDuelPlanning"),
+                "Meal retreat must run before stale attack planning or weapon acquisition");
+        Trace meal = method(chase, "updateEatingRetreat");
+        check(meal.hasCall(CHASE, "invalidatePlanning") && meal.field(CHASE, "attackGeneration", Opcodes.PUTFIELD) >= 0,
+                "Entering a meal invalidates in-flight attack work");
+        check(meal.hasCall("dev/guizhou/util/elytra/ElytraWeaponController", "pauseUse")
+                        && !meal.hasCall("dev/guizhou/util/elytra/ElytraWeaponController", "release"),
+                "Suspending spear charge must retain the selected main-hand weapon during an offhand meal");
+        check(meal.hasCall("dev/guizhou/util/elytra/MaceDiveController", "requestRecovery"),
+                "A meal ends an owned mace fall and recovers wings");
+        check(method(chase, "onPostMovement").field(CHASE, "eatingRetreat", Opcodes.GETFIELD) >= 0,
+                "Movement tail may not restart attacks while the meal escape owns flight");
+        check(method(read(FLIGHT), "wantsArmorSwap").hasCall(CHASE, "isEatingRetreatRequested"),
+                "Meal recovery leaves wings equipped instead of resuming the armor cycle");
+        Trace pause = method(read("dev/guizhou/util/elytra/ElytraWeaponController"), "pauseUse");
+        check(pause.hasCall("dev/guizhou/util/elytra/ElytraWeaponController", "stopOwnedUse")
+                        && !pause.hasCall("dev/guizhou/util/inventory/InventoryUtil", "select"),
+                "Only the previously owned spear use is relinquished; no slot is changed");
+        check(method(chase, "endEatingRetreat").hasCall(CHASE, "invalidatePlanning"),
+                "Finishing or cancelling the meal cannot reuse its retreat route or old attack plan");
+        Trace clearance = method(chase, "eatingPathClear");
+        check(clearance.hasCall(FLIGHT, "clearNavigationPath")
+                        && clearance.hasCall("dev/guizhou/util/elytra/FlightTerrainSafety", "trajectoryClear")
+                        && clearance.hasCall(FLIGHT, "isBoostAttached"),
+                "Meal lanes sweep their escape and actual rocket/glide momentum before being scored");
     }
 
     private static void verifyEngagementWiring() throws IOException {

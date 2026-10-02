@@ -203,14 +203,16 @@ public final class ArmorSwapController {
     private boolean canSwapWhileUsing() {
         boolean using = player.isUsingItem();
         ItemStack used = player.getUseItem();
-        return preservesHeldUse(using, used.has(DataComponents.KINETIC_WEAPON), used,
+        return preservesHeldUse(using, used.has(DataComponents.KINETIC_WEAPON)
+                        || GuangxiElytraChaseModule.isEatingRetreatRequested()
+                        && dev.guizhou.util.player.EatUtil.isGoldenApple(used), used,
                 using ? player.getItemInHand(player.getUsedItemHand()) : ItemStack.EMPTY);
     }
 
-    static boolean preservesHeldUse(boolean using, boolean kinetic, Object used, Object held) {
+    static boolean preservesHeldUse(boolean using, boolean allowedUse, Object used, Object held) {
         // This controller swaps only the chest and a non-selected hotbar slot. Neither hand
-        // changes, so an intact spear charge can continue while the owned armor pair cycles.
-        return !using || kinetic && used != null && used == held;
+        // changes. Spear charging can continue; a retreat meal permits owned wings recovery.
+        return !using || allowedUse && used != null && used == held;
     }
 
     private boolean canGlide() {

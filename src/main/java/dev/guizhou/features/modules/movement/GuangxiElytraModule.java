@@ -333,6 +333,7 @@ public class GuangxiElytraModule extends Module {
         return armorFlyRequested() && !ArmorFlyModule.yieldsToCruise() && mc.player != null && !correctionPending.get()
                 && mc.player.tickCount >= boostRetryTick
                 && !dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()
+                && !dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isEatingRetreatRequested()
                 && !needsLandingRecovery();
     }
 

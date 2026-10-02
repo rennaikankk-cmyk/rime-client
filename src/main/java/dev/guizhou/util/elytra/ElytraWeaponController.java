@@ -120,6 +120,12 @@ public final class ElytraWeaponController {
                 && SpearCombat.isSpear(useStack);
     }
 
+    /** A meal suspends charging without restoring a different main-hand selection. */
+    public void pauseUse() {
+        if (foreignOwner()) forgetUse();
+        else stopOwnedUse();
+    }
+
     private void stopOwnedUse() {
         boolean releaseUse = ownsUse && usingOwnedStack();
         forgetUse();

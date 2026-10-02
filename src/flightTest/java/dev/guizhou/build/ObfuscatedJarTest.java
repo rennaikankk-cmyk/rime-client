@@ -285,7 +285,7 @@ public final class ObfuscatedJarTest {
                 Map.entry("GuangxiMineModule", List.of("onTick", "onAttackBlock", "requestBreak", "startMine",
                         "begin", "stopBreak", "sendAction", "isAvailable", "fireFinish", "fireSubmitted")),
                 Map.entry("AutoMineModule", List.of("onPreTick", "onMineFinish", "onPacket", "lambda$onPacket$", "placeGlass")),
-                Map.entry("GuangxiElytraChaseModule", List.of("onPreTick", "onPostMovement")),
+                Map.entry("GuangxiElytraChaseModule", List.of("onPreTick", "onPostMovement", "onElytra", "isEatingRetreatRequested", "updateEatingRetreat")),
                 Map.entry("GuangxiBedModule", List.of("onPreTick")),
                 Map.entry("GuangxiElytraModule", List.of("onPreTick")),
                 Map.entry("AutoUseModule", List.of("onPreTick", "shouldKeepUsing")),

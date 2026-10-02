@@ -15,6 +15,7 @@ import dev.guizhou.manager.RotationRequest;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.elytra.AerialCombatPolicy;
 import dev.guizhou.util.elytra.AerialEngagement;
+import dev.guizhou.util.elytra.EatingRetreat;
 import dev.guizhou.util.elytra.AerialIntercept;
 import dev.guizhou.util.elytra.AerialDuelPredictor;
 import dev.guizhou.util.elytra.AsyncFlightRoute;
@@ -23,6 +24,7 @@ import dev.guizhou.util.elytra.EntityAim;
 import dev.guizhou.util.elytra.ElytraWeaponController;
 import dev.guizhou.util.elytra.ElytraPhysics;
 import dev.guizhou.util.elytra.FlightVelocity;
+import dev.guizhou.util.elytra.FlightTerrainSafety;
 import dev.guizhou.util.elytra.FlightRoutePlanner;
 import dev.guizhou.util.elytra.FlightPlanningTask;
 import dev.guizhou.util.elytra.MaceDiveController;
@@ -109,6 +111,12 @@ public class GuangxiElytraChaseModule extends Module {
     private boolean armorEnabledByChase;
     private final Setting<Boolean> autoSpearUse = bool("AutoSpearUse", true).setPage("General");
     private final Setting<Boolean> adaptiveCombat = bool("AdaptiveCombat", true).setPage("General");
+    private final Setting<Boolean> whileEating = bool("WhileEating", true).setPage("Defense")
+            .described("吃普通或附魔金苹果时暂停进攻，恢复鞘翅、拉升并远离敌人；松键、吃完或取消后恢复空战。手动接管、地形和回弹保护优先。");
+    private final Setting<Double> eatingDistance = num("EatingDistance", 16.0, 6.0, 64.0).setPage("Defense")
+            .described("进食期间希望保持的安全距离，单位是方块；敌人的武器距离和接近速度会扩大避让距离。");
+    private final Setting<Double> eatingHeight = num("EatingHeight", 6.0, 1.0, 24.0).setPage("Defense")
+            .described("进食时希望高出附近敌人的高度；达到后停止继续拉高，遇到顶障时优先横向脱离。");
     private final Setting<Boolean> evadeCommitment = bool("EvadeCommitment", true).setPage("Defense")
             .described("Briefly keep an escape heading; obstacles and new threats can interrupt it.");
     private final Setting<Integer> evadeHoldTicks = num("EvadeHoldTicks", 3, 1, 6).setPage("Defense");
@@ -191,6 +199,7 @@ public class GuangxiElytraChaseModule extends Module {
     private final AerialCombatPolicy tactics = new AerialCombatPolicy();
     private AerialCombatPolicy.Action combatAction = AerialCombatPolicy.Action.CHASE;
     private Vec3 defensiveHeading = Vec3.ZERO;
+    private boolean eatingRetreat;
     private long targetSinceTick;
     private long lastTargetSearchTick = Long.MIN_VALUE / 2;
     private long evadeSideUntil;
@@ -215,6 +224,8 @@ public class GuangxiElytraChaseModule extends Module {
     public GuangxiElytraChaseModule() {
         super("GuangxiElytraChase", "Elytra pursuit bot: FOLLOW / MACE / SPEAR / MXS (rennaikanksmp ElytraBot port).", Category.COMBAT);
         INSTANCE = this;
+        eatingDistance.setVisibility(v -> whileEating.getValue());
+        eatingHeight.setVisibility(v -> whileEating.getValue());
     }
 
     public static boolean isUsingSpear(Player player) {
@@ -259,7 +270,7 @@ public class GuangxiElytraChaseModule extends Module {
     public static boolean isMacePursuitActive() {
         GuangxiElytraChaseModule bot = INSTANCE;
         if (bot == null || !bot.isEnabled() || bot.paused() || !bot.isValid(bot.target)
-                || bot.combatAction != AerialCombatPolicy.Action.CHASE) return false;
+                || bot.combatAction != AerialCombatPolicy.Action.CHASE || isEatingRetreatRequested()) return false;
         Behavior active = bot.behavior instanceof MxsBehavior mxs ? mxs.active : bot.behavior;
         return active instanceof MaceBehavior;
     }
@@ -267,7 +278,7 @@ public class GuangxiElytraChaseModule extends Module {
     public static boolean hasMaceDescentIntent() {
         GuangxiElytraChaseModule bot = INSTANCE;
         if (bot == null || !bot.isEnabled() || bot.paused() || !bot.isValid(bot.target)
-                || bot.combatAction != AerialCombatPolicy.Action.CHASE
+                || bot.combatAction != AerialCombatPolicy.Action.CHASE || isEatingRetreatRequested()
                 || !MaceCombat.isMace(mc.player.getMainHandItem())
                 || mc.player.onGround()) return false;
         Behavior active = bot.behavior instanceof MxsBehavior mxs ? mxs.active : bot.behavior;
@@ -292,7 +303,7 @@ public class GuangxiElytraChaseModule extends Module {
     public static boolean blocksCrystalCombat() {
         GuangxiElytraChaseModule bot = INSTANCE;
         return bot != null && bot.isEnabled() && !bot.paused() && bot.isValid(bot.target)
-                && (bot.weapons.isHoldingUse() || isUsingSpear(mc.player)
+                && (isEatingRetreatRequested() || bot.weapons.isHoldingUse() || isUsingSpear(mc.player)
                 || bot.maceDive.isActive()
                 || mc.player.tickCount == bot.lastAttackTick
                 || bot.maceFeedback.pending(bot.target.getId(), mc.player.tickCount));
@@ -301,6 +312,15 @@ public class GuangxiElytraChaseModule extends Module {
     private boolean spearPhase() {
         return behavior instanceof SpearBehavior
                 || behavior instanceof MxsBehavior mxs && !mxs.usingMace;
+    }
+
+    /** Read the real meal before the earlier armor listener decides whether to return a chestplate. */
+    public static boolean isEatingRetreatRequested() {
+        GuangxiElytraChaseModule bot = INSTANCE;
+        return dev.guizhou.manager.HeartbeatManager.authorized() && bot != null && bot.isEnabled()
+                && bot.whileEating.getValue() && !bot.paused() && bot.isValid(bot.target)
+                && !mc.player.onGround() && !mc.player.isInWater() && !mc.player.isInLava()
+                && !mc.player.isPassenger() && !mc.player.isSpectator() && EatUtil.isEatingGoldenApple();
     }
 
     private boolean paused() {
@@ -339,12 +359,14 @@ public class GuangxiElytraChaseModule extends Module {
     public static String hudIntent() {
         GuangxiElytraChaseModule m = INSTANCE;
         if (m == null || !m.isEnabled() || m.behavior == null || m.target == null) return "OFF";
+        if (m.eatingRetreat) return "EATING_RETREAT";
         if (m.combatAction != AerialCombatPolicy.Action.CHASE) return "EVADE";
         return m.behavior.hudLabel();
     }
 
     /** Flight seam: GuangxiElytra calls this every movement tick. */
     public static void onElytra(FlightVelocity fv) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
         GuangxiElytraChaseModule m = INSTANCE;
         if (m == null || !m.isEnabled() || m.behavior == null || !m.isValid(m.target)) return;
         if (m.paused()) {
@@ -359,12 +381,14 @@ public class GuangxiElytraChaseModule extends Module {
             }
             fv.set(m.defensiveHeading.normalize().scale(speed));
             // A coupled-cruise preview must not overwrite the chosen escape direction.
-            if (m.evadeCommitment.getValue() || m.pearlDefense.getValue()) fv.preserveDirection();
+            if (m.eatingRetreat || m.evadeCommitment.getValue() || m.pearlDefense.getValue()) fv.preserveDirection();
         } else {
             m.behavior.inject(fv);
             fv.set(m.flankApproachVector(fv.value()));
         }
-        if (m.avoidObstacles.getValue()) {
+        // Meal lanes already sweep the full escape and powered glide below. A generic
+        // detour may turn back toward a weapon or oscillate against a low ceiling.
+        if (m.avoidObstacles.getValue() && !m.eatingRetreat) {
             Vec3 requested = fv.value();
             Vec3 safe = m.safeFlightVector(requested);
             if (requested.lengthSqr() > 1.0E-6 && safe.lengthSqr() < 1.0E-9) fv.requestBraking();
@@ -397,7 +421,7 @@ public class GuangxiElytraChaseModule extends Module {
     @Subscribe(priority = 100)
     private void onPostMovement(UpdateWalkingPlayerEvent event) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
-        if (event.getStage() != Stage.POST || paused() || !isValid(target)) return;
+        if (event.getStage() != Stage.POST || paused() || !isValid(target) || eatingRetreat) return;
         if (spearPhase()) {
             tryPostMovementSpearAim();
             return;
@@ -443,6 +467,7 @@ public class GuangxiElytraChaseModule extends Module {
     }
 
     private void resetRuntime() {
+        eatingRetreat = false;
         releaseArmorControl();
         spearCommit.reset();
         clearDiveAim();
@@ -594,7 +619,10 @@ public class GuangxiElytraChaseModule extends Module {
 
     @Subscribe(priority = 100)
     private void onPreTick(PreTickEvent event) {
-        if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            endEatingRetreat();
+            dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return;
+        }
         clearDiveAim();
 if (nullCheck() || mc.player == null) {
             if (trackedLevel != null || trackedPlayer != null) resetRuntime();
@@ -661,6 +689,7 @@ if (nullCheck() || mc.player == null) {
         classifyTarget();
         weaponControlActive = false;
         if (paused() || target == null) {
+            endEatingRetreat();
             invalidatePlanning();
             maceDive.requestRecovery();
             weapons.release();
@@ -673,6 +702,7 @@ if (nullCheck() || mc.player == null) {
             resetEscape();
             return;
         }
+        if (updateEatingRetreat()) return;
         updateDuelPlanning();
         if (updateDefense()) return;
         if (maceDive.isActive() && spearPhase()) {
@@ -682,6 +712,82 @@ if (nullCheck() || mc.player == null) {
             return;
         }
         behavior.tick();
+    }
+
+    private boolean updateEatingRetreat() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized() || !isEatingRetreatRequested()) {
+            endEatingRetreat();
+            return false;
+        }
+        if (!eatingRetreat) {
+            eatingRetreat = true;
+            invalidatePlanning();
+            combatPhase++;
+            attackGeneration++;
+            maceFeedback.clear();
+            tactics.reset();
+            resetEscape();
+            behavior.enter();
+            ClientDiagnostics.count("air.eating.enter", 1);
+        }
+        // Keep the selected weapon throughout an offhand meal, so restoring an unrelated
+        // slot cannot revoke the user's food request. Only owned spear use is relinquished.
+        weapons.pauseUse();
+        weaponControlActive = false;
+        clearSpearAim();
+        clearDiveAim();
+        if (GuizhouWare.rotationManager != null) GuizhouWare.rotationManager.cancel("ElytraChase_attack");
+        maceDive.requestRecovery();
+        combatAction = AerialCombatPolicy.Action.RETREAT;
+        List<Entity> enemies = new ArrayList<>();
+        enemies.add(target);
+        for (Player enemy : mc.level.players()) {
+            if (enemy != target && isValid(enemy)) enemies.add(enemy);
+        }
+        enemies.sort(Comparator.comparingDouble(mc.player::distanceToSqr));
+        List<EatingRetreat.Threat> threats = new ArrayList<>();
+        for (int i = 0; i < Math.min(8, enemies.size()); i++) {
+            Entity enemy = enemies.get(i);
+            double reach = enemy instanceof Player player ? SpearCombat.isSpear(player.getMainHandItem())
+                    ? SpearCombat.maxRange(player, player.getMainHandItem()) : player.entityInteractionRange() : 3;
+            Vec3 position = enemy == target ? enemy.position().add(targetPacketOffset()) : enemy.position();
+            Vec3 velocity = enemy == target ? targetHistory.predictionVelocity(enemy.getDeltaMovement()) : enemy.getDeltaMovement();
+            threats.add(new EatingRetreat.Threat(position, velocity, reach));
+        }
+        Vec3 escape = EatingRetreat.direction(mc.player.position(), combatVelocity(), threats,
+                mc.player.getLookAngle().scale(-1), eatingDistance.getValue(), eatingHeight.getValue(),
+                latencyTicks, this::eatingPathClear);
+        defensiveHeading = escape.scale(10);
+        return true;
+    }
+
+    private boolean eatingPathClear(Vec3 step) {
+        var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        if (flight == null || step.lengthSqr() < 1.0E-9) return false;
+        Vec3 origin = mc.player.position();
+        Vec3 direction = step.normalize();
+        return flight.clearNavigationPath(origin, origin.add(direction.scale(10)))
+                && FlightTerrainSafety.trajectoryClear(mc.player.getDeltaMovement(), direction,
+                mc.player.getAttributeValue(Attributes.GRAVITY),
+                12, flight.isBoostAttached(), (from, to) -> flight.clearNavigationPath(
+                        origin.add(from), origin.add(to)));
+    }
+
+    /** Cleanup is allowed after revocation, and never releases somebody else's meal. */
+    private void endEatingRetreat() {
+        if (!eatingRetreat) return;
+        eatingRetreat = false;
+        invalidatePlanning();
+        combatPhase++;
+        attackGeneration++;
+        defensiveHeading = Vec3.ZERO;
+        combatAction = AerialCombatPolicy.Action.CHASE;
+        tactics.reset();
+        resetEscape();
+        clearSpearAim();
+        clearDiveAim();
+        if (behavior != null) behavior.enter();
+        ClientDiagnostics.count("air.eating.exit", 1);
     }
 
     private boolean updateDefense() {

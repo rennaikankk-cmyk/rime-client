@@ -11,6 +11,7 @@ import dev.guizhou.util.combat.TotemSafety;
 import dev.guizhou.util.elytra.SpearCombat;
 import dev.guizhou.util.inventory.InventoryUtil;
 import dev.guizhou.util.player.ItemUseOwnership;
+import dev.guizhou.util.player.GappleSelection;
 import dev.guizhou.util.player.ScreenGate;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
@@ -40,6 +41,8 @@ public class AutoTotemModule extends Module {
     private final Setting<Integer> delay = num("Delay", 0, 0, 10);
     private final Setting<Boolean> gappleOnUse = bool("GappleOnUse", false);
     private final Setting<Boolean> crapple = bool("Crapple", false);
+    private final Setting<Boolean> gappleFallback = bool("GappleFallback", true);
+    private final Setting<Boolean> gapPickaxe = bool("GapPickaxe", false);
     private final Setting<Boolean> combatSync = bool("CombatSync", true);
 
     private final Setting<Boolean> lethal = bool("Lethal", true).setPage("Lethal");
@@ -65,6 +68,8 @@ public class AutoTotemModule extends Module {
                 Category.COMBAT);
         safeHealth.setVisibility(v -> gappleOnUse.getValue());
         crapple.setVisibility(v -> item.getValue() == ItemMode.GAPPLE || gappleOnUse.getValue());
+        gappleFallback.setVisibility(v -> item.getValue() == ItemMode.GAPPLE || gappleOnUse.getValue());
+        gapPickaxe.setVisibility(v -> gappleOnUse.getValue());
         for (Setting<?> setting : java.util.List.of(lethalMargin, lethalCrystals, lethalPlaceable, lethalBlocks,
                 lethalFall, lethalElytra, lethalMelee, enemyRange)) {
             setting.setVisibility(v -> lethal.getValue());
@@ -106,13 +111,20 @@ public class AutoTotemModule extends Module {
         if (nullCheck()) return;
         if (!(event.getPacket() instanceof ClientboundEntityEventPacket packet)) return;
         if (packet.getEventId() != 35 || packet.getEntity(mc.level) != mc.player) return;
-
+        var poppedPlayer = mc.player;
+        var poppedLevel = mc.level;
+        ItemStack observedOffhand = mc.player.getOffhandItem();
+        // Vanilla consumes a main-hand totem first; status 35 carries no hand field.
+        boolean offhandPop = observedOffhand.is(Items.TOTEM_OF_UNDYING)
+                && !mc.player.getMainHandItem().is(Items.TOTEM_OF_UNDYING);
         mc.execute(() -> {
-            if (!isEnabled() || nullCheck()) return;
+            if (!isEnabled() || nullCheck() || mc.player != poppedPlayer || mc.level != poppedLevel) return;
             if (mc.player.containerMenu.containerId != 0) return;
             // The server clears the popped totem itself; dropping it client-side now stops us from
             // seeing a ghost totem and skipping the refill.
-            mc.player.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+            if (offhandPop && mc.player.getOffhandItem() == observedOffhand) {
+                mc.player.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+            }
             if (!dev.guizhou.manager.HeartbeatManager.authorized()) return;
             lastSwapTick = Integer.MIN_VALUE;
             sync(true);
@@ -235,7 +247,19 @@ public class AutoTotemModule extends Module {
     }
 
     private Item gappleItem() {
-        return crapple.getValue() ? Items.GOLDEN_APPLE : Items.ENCHANTED_GOLDEN_APPLE;
+        GappleSelection.Apple eating = null;
+        if (mc.player.isUsingItem() && mc.player.getUsedItemHand() == InteractionHand.OFF_HAND
+                && mc.player.getUseItem() == mc.player.getOffhandItem()) {
+            if (mc.player.getUseItem().is(Items.GOLDEN_APPLE)) eating = GappleSelection.Apple.NORMAL;
+            else if (mc.player.getUseItem().is(Items.ENCHANTED_GOLDEN_APPLE)) eating = GappleSelection.Apple.ENCHANTED;
+        }
+        return GappleSelection.choose(crapple.getValue(), gappleFallback.getValue(),
+                available(Items.GOLDEN_APPLE), available(Items.ENCHANTED_GOLDEN_APPLE), eating)
+                == GappleSelection.Apple.NORMAL ? Items.GOLDEN_APPLE : Items.ENCHANTED_GOLDEN_APPLE;
+    }
+
+    private boolean available(Item apple) {
+        return mc.player.getOffhandItem().is(apple) || find(apple) >= 0;
     }
 
     private boolean mainHandAllowsGapple() {
@@ -243,15 +267,13 @@ public class AutoTotemModule extends Module {
         return held == Items.END_CRYSTAL || held == Items.TOTEM_OF_UNDYING
                 || held == Items.MACE || SpearCombat.isSpear(mc.player.getMainHandItem())
                 || mc.player.getMainHandItem().is(ItemTags.SWORDS)
-                || mc.player.getMainHandItem().is(ItemTags.AXES);
+                || mc.player.getMainHandItem().is(ItemTags.AXES)
+                || gapPickaxe.getValue() && mc.player.getMainHandItem().is(ItemTags.PICKAXES);
     }
 
     private boolean holding(Item wanted) {
         ItemStack stack = mc.player.getOffhandItem();
         if (wanted == BED) return stack.is(ItemTags.BEDS);
-        if (wanted == Items.ENCHANTED_GOLDEN_APPLE) {
-            return stack.is(Items.ENCHANTED_GOLDEN_APPLE) || (crapple.getValue() && stack.is(Items.GOLDEN_APPLE));
-        }
         return stack.is(wanted);
     }
 

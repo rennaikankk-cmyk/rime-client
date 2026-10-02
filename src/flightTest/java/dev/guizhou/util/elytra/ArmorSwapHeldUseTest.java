@@ -10,7 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Chest-only swaps must preserve a held spear, without widening other inventory permissions. */
+/** Chest-only swaps preserve a held spear and allow apple retreat recovery without changing either hand. */
 public final class ArmorSwapHeldUseTest {
     private static int checks;
 
@@ -54,7 +54,9 @@ public final class ArmorSwapHeldUseTest {
             check(adapter.contains(read), "Use eligibility must read live hand/stack state: " + read);
         }
         check(fields.get("canSwapWhileUsing").contains("KINETIC_WEAPON"),
-                "Only native kinetic weapons qualify for the held-use exception");
+                "Native kinetic weapons retain the held-use exception");
+        check(adapter.containsAll(List.of("isEatingRetreatRequested", "isGoldenApple")),
+                "A non-kinetic use must be a real apple meal with authorized eating retreat requested");
         check(calls.get("swapPair").containsAll(List.of("safeInventory", "ownsPair", "mayPickup", "mayPlace")),
                 "Every chest click still requires the intact pair and slot permissions");
         check(calls.get("acquire").contains("selected"), "Acquisition must still exclude the held hotbar slot");

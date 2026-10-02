@@ -104,6 +104,11 @@ public final class LicenseActionHookTest {
         guarded(offhand, "sync", null, "swapToOffhand");
         guarded(offhand, "tryUseOffhandGapple", null, "useGappleOnUse");
         guarded(offhand, "useGappleOnUse", null, "useItem");
+        String chase = BASE + "combat/GuangxiElytraChaseModule";
+        guarded(chase, "updateEatingRetreat", null, "pauseUse", "requestRecovery", "direction");
+        guarded(chase, "onElytra", null, "set");
+        check(method(chase, "isEatingRetreatRequested", null).hasAuthorization(), "Eating flight requests require authorization");
+        check(!method(chase, "endEatingRetreat", null).hasAuthorization(), "Eating flight cleanup remains available after revocation");
         Code gappleCleanup = method(offhand, "stopGappleUse", null);
         check(!gappleCleanup.hasAuthorization() && !gappleCleanup.calls("releaseUsingItem").isEmpty(),
                 "Offhand meal cleanup survives authorization revocation");

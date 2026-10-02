@@ -1781,5 +1781,17 @@
   "默认拦截附近可反弹的火球、风弹和潜影贝子弹，不等待武器、设置冷却或 TPS 同步。": "Intercept nearby redirectable fireballs, wind charges and shulker bullets without waiting for weapon, configured cooldown or TPS sync.",
   "NoAC 为无反作弊服直接取消减速，不补发换槽、移动或转头包；其他模式保留原有行为。": "NoAC removes slowdown directly without extra slot, movement or look packets. Other modes retain their existing behaviour.",
   "NoAC 为无反作弊服直接设置下落移动包的落地标志，不等待转头、TPS 或附近地面；仍遵守重锤暂停设置。": "NoAC sets the ground flag on falling movement packets without waiting for rotation, TPS or nearby ground. The mace pause setting still applies.",
-  "拥有独立目标开关并即时拦截投掷物的近战杀戮。": "Melee aura with an independent target policy and immediate projectile defence."
+  "拥有独立目标开关并即时拦截投掷物的近战杀戮。": "Melee aura with an independent target policy and immediate projectile defence.",
+  "吃苹果时": "WhileEating",
+  "进食安全距离": "EatingDistance",
+  "进食拉升高度": "EatingHeight",
+  "苹果缺货回退": "GappleFallback",
+  "拿镐吃果": "GapPickaxe",
+  "进食脱离": "EATING_RETREAT",
+  "开启时优先普通金苹果，关闭时优先附魔金苹果；正在吃的苹果保持到本次进食结束。": "Prefer ordinary golden apples when enabled, enchanted golden apples otherwise. Keep the current apple until this meal ends.",
+  "首选苹果缺货时自动改用另一种金苹果，两种都没有时保留原副手。": "Use the other golden apple type when the preferred type is unavailable. Keep the current offhand when neither is available.",
+  "主手拿镐时也允许安全右键副手进食。默认关闭。": "Allow safe right-click offhand meals while holding a pickaxe. Disabled by default.",
+  "吃普通或附魔金苹果时暂停进攻，恢复鞘翅、拉升并远离敌人；松键、吃完或取消后恢复空战。手动接管、地形和回弹保护优先。": "While eating either golden apple, pause attacks, recover wings, gain height and separate from enemies. Resume combat after release, completion or cancellation. Manual control, terrain and correction protection take priority.",
+  "进食期间希望保持的安全距离，单位是方块；敌人的武器距离和接近速度会扩大避让距离。": "Desired separation while eating, in blocks. Enemy weapon reach and closing speed can increase the clearance needed.",
+  "进食时希望高出附近敌人的高度；达到后停止继续拉高，遇到顶障时优先横向脱离。": "Desired height above nearby enemies while eating. Stop climbing once reached; escape horizontally below a ceiling."
 }
