@@ -33,6 +33,7 @@ public final class FlatBaseProbe implements ClientModInitializer {
     private volatile float health;
     private BlockPos chosen;
     private float predicted;
+    private boolean centerVerified;
     private final List<String> rows = new ArrayList<>(List.of("case,value"));
 
     @Override public void onInitializeClient() {
@@ -87,6 +88,13 @@ public final class FlatBaseProbe implements ClientModInitializer {
             }
             if(stage==1) {
                 if(!ready||++wait<50||mc.level.getEntity(target.getId())==null)return;
+                if (!centerVerified) {
+                    mc.getSingleplayerServer().execute(() -> {
+                        var p = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
+                        p.teleportTo(p.serverLevel(), .2, 101, .2, Set.of(), 0, 0);
+                    });
+                    stage=10;wait=0;return;
+                }
                 call(c,"ensureSession",new Class<?>[0]);
                 check(Math.abs(mc.player.getY()-target.getY())<.01,"player and target stand on same grass plane");
                 check(mc.player.distanceToSqr(mc.level.getEntity(target.getId()))>=35.9,"target six blocks away");
@@ -112,6 +120,18 @@ public final class FlatBaseProbe implements ClientModInitializer {
                     +" defer="+dev.guizhou.util.player.EatUtil.shouldDefer()+" screen="+mc.screen+" main="+mc.player.getMainHandItem());
                 check((boolean)call(c,"doBasePlace",new Class<?>[]{candidate.getClass()},candidate),"real obsidian placement submitted");
                 stage=2;wait=0;return;
+            }
+            if (stage==10) {
+                if (++wait < 10) return;
+                var surround=GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.combat.SurroundModule.class);
+                setting(surround,"Center",true);surround.enable();stage=11;wait=0;return;
+            }
+            if (stage==11) {
+                if (++wait < 20) return;
+                double dx=mc.player.getX()-.5,dz=mc.player.getZ()-.5;
+                check(dx*dx+dz*dz < .12*.12,"native input hook actually centers surround player");
+                GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.combat.SurroundModule.class).disable();
+                centerVerified=true;ready=false;setup(mc);stage=1;wait=0;return;
             }
             if(stage==2) {
                 if(++wait>120)throw new AssertionError("Server did not accept base");

@@ -50,6 +50,26 @@ public class MixinClientPlayerEntity {
         method = "aiStep",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/Input;tick(ZF)V", shift = At.Shift.AFTER)
     )
+    private void guizhouware$surroundCenter(CallbackInfo ci) {
+        LocalPlayer self = (LocalPlayer) (Object) this;
+        var real = self.input;
+        var centered = dev.guizhou.features.modules.combat.SurroundModule.centerInput(real);
+        if (centered == real) return;
+        // Keep KeyboardInput attached so vanilla continues polling the user's keys.
+        real.leftImpulse = centered.leftImpulse;
+        real.forwardImpulse = centered.forwardImpulse;
+        real.left = centered.left;
+        real.right = centered.right;
+        real.up = centered.up;
+        real.down = centered.down;
+        real.jumping = centered.jumping;
+        real.shiftKeyDown = centered.shiftKeyDown;
+    }
+
+    @Inject(
+        method = "aiStep",
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/Input;tick(ZF)V", shift = At.Shift.AFTER)
+    )
     private void scaffold$suppressSneakAfterInputTick(CallbackInfo ci) {
         ScaffoldModule scaffold = GuizhouWare.moduleManager.getModuleByClass(ScaffoldModule.class);
         if (scaffold == null || !scaffold.isEnabled()) return;

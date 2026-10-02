@@ -11,6 +11,18 @@ public final class CompatibilityHookTest {
         boolean modern = CompatibilityHookTest.class.getClassLoader().getResource(MC + "client/renderer/ShaderManager.class") != null;
         String resource = MC + "resources/" + (modern ? "ResourceLocation" : "ResourceLocation");
         if (!modern) {
+            MethodNode center = read("dev/guizhou/mixin/entity/MixinClientPlayerEntity").methods.stream()
+                    .filter(m -> m.name.equals("guizhouware$surroundCenter")).findFirst().orElseThrow();
+            int centers = 0, impulses = 0;
+            for (AbstractInsnNode insn : center.instructions) {
+                if (insn instanceof MethodInsnNode c && c.owner.equals("dev/guizhou/features/modules/combat/SurroundModule")
+                        && c.name.equals("centerInput")) centers++;
+                if (insn instanceof FieldInsnNode f && f.getOpcode() == org.objectweb.asm.Opcodes.PUTFIELD) {
+                    if (f.name.equals("input")) throw new AssertionError("Centering must retain live KeyboardInput");
+                    if (f.owner.equals(MC + "client/player/Input") && f.name.endsWith("Impulse")) impulses++;
+                }
+            }
+            if (centers != 1 || impulses != 2) throw new AssertionError("Native surround centering hook disconnected");
             String send = "(L" + MC + "network/protocol/Packet;L" + MC + "network/PacketSendListener;Z)V";
             if (read(MC + "network/Connection").methods.stream().noneMatch(m -> m.name.equals("sendPacket") && m.desc.equals(send)))
                 throw new AssertionError("Native network callback changed");
