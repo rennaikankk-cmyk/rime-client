@@ -341,7 +341,11 @@ public class GuangxiElytraModule extends Module {
         return ArmorFlyModule.requested();
     }
 
-    public void monitorArmorFly() { armorSwap.monitor(); }
+    public void monitorArmorFly() {
+        // Independent flight has no enabled flight listener to expire this per-tick result.
+        if (!isEnabled()) rocketSentThisTick = false;
+        armorSwap.monitor();
+    }
 
     public void releaseArmorFly() {
         if (!armorFlyRequested()) {
@@ -368,13 +372,13 @@ public class GuangxiElytraModule extends Module {
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
         checkFlightSession();
         if (nullCheck() || mc.player == null || mc.gameMode == null) return;
-        if (SLMArmorFlyModule.autoEquip()) equipElytraIfNeeded();
         if (correctionPending.getAndSet(false)) {
             resetFlightState();
             boostRetryTick = (long) mc.player.tickCount + correctionPauseTicks.getValue();
         }
         scanAttachedBoosts();
         if (mc.player.tickCount < boostRetryTick) return;
+        if (ArmorFlyModule.autoEquip()) equipElytraIfNeeded();
         if (ticksSinceRocket < Integer.MAX_VALUE) ticksSinceRocket++;
         if (resumeAfterYield && canSwapChest()) resumeGliding();
         if (!mc.player.isFallFlying()) maybeTakeoff();
@@ -1227,6 +1231,8 @@ public class GuangxiElytraModule extends Module {
         }
         boolean chaseWantsFlight = chaseWantsFlight();
         boolean wantTakeoff = chaseWantsFlight
+                || dev.guizhou.util.elytra.ArmorTakeoff.ready(!isEnabled() && ArmorFlyModule.requested(),
+                        mc.options.keyJump.isDown(), mc.player.onGround(), mc.player.getDeltaMovement().y)
                 || (holdJumpTicks >= takeoffTicks.getValue() && !mc.player.onGround());
         if (!wantTakeoff || mc.player.onGround()) {
             if (wantTakeoff && mc.player.onGround()) {
@@ -1853,14 +1859,15 @@ public class GuangxiElytraModule extends Module {
     // ---------------------------------------------------------------
 
     private void equipElytraIfNeeded() {
-        if (foreignFlight() || !autoEquip.getValue() && !SLMArmorFlyModule.autoEquip()) return;
+        if (foreignFlight() || !(isEnabled() ? autoEquip.getValue() || ArmorFlyModule.autoEquip()
+                : ArmorFlyModule.autoEquip())) return;
         if (armorSwap.active()) return;
         if (dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive()) return;
         if (usableElytra(mc.player.getItemBySlot(EquipmentSlot.CHEST))) return;
         if (!canSwapChest()) return;
 
         Result elytra = InventoryUtil.find(GuangxiElytraModule::usableElytra,
-                SLMArmorFlyModule.selected() ? InventoryUtil.PLACE_SCOPE : FULL_SCOPE);
+                ArmorFlyModule.requested() ? InventoryUtil.PLACE_SCOPE : FULL_SCOPE);
         if (!elytra.found()) return;
 
         int slot = containerSlotOf(elytra);
@@ -1875,7 +1882,7 @@ public class GuangxiElytraModule extends Module {
 
     private static boolean usableElytra(ItemStack stack) {
         return stack.is(Items.ELYTRA)
-                && (!stack.isDamageableItem() || stack.getMaxDamage() - stack.getDamageValue() >= SLMArmorFlyModule.minimumDurability());
+                && (!stack.isDamageableItem() || stack.getMaxDamage() - stack.getDamageValue() >= ArmorFlyModule.minimumDurability());
     }
 
     /** Complete deferred module cleanup after the dive controller returns its owned equipment pair. */

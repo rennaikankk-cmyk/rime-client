@@ -1351,6 +1351,7 @@
   "地形保护": "TerrainGuard",
   "自动装备": "AutoEquip",
   "自动烟花": "AutoRocket",
+  "服务器同步": "ServerSync",
   "滑翔延迟": "GlideTrackerDelay",
   "浆果丛减速": "BerryBush",
   "匍匐减速": "Crawl",

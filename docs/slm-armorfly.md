@@ -1,6 +1,6 @@
 # SLM ArmorFly 与同装兼容
 
-参考 [SlimefunHelper](https://github.com/m1919810/SlimefunHelper/tree/326ada8b16d579534e35cba0b60b8f47d0ca3213) 的 `ElytraExtra`（CC0-1.0）。移植其按滑翔状态恢复甲飞、背包装备查找和耐久保留思路，接入 Rime 原有装备控制器；没有替换原甲飞或 GZBoost 的默认参数。
+参考 [SlimefunHelper](https://github.com/m1919810/SlimefunHelper/tree/326ada8b16d579534e35cba0b60b8f47d0ca3213) 的 `ElytraExtra`（CC0-1.0）。移植其按滑翔状态恢复甲飞、背包装备查找和耐久保留思路，接入 Rime 原有装备控制器。1.2.8 原甲飞也默认采用服务器同步节奏，并支持背包和独立装备设置；SLM 仍保留自己的设置与落地关闭选项。详见[甲飞服务器兼容修复](armor-flight-1.2.8.md)。
 
 ## 使用
 
@@ -12,7 +12,7 @@
 - `LandAutoDisable=false`：可选落地自动关闭。关闭甲飞时先恢复自有鞘翅；空中不直接拆掉鞘翅。
 - 独立使用时仍按住跳跃起飞，不接管方向。空战开启前可先启用 SLM ArmorFly，空战不会再自动启用原甲飞替换它。
 
-本模式在胸甲仍维持滑翔时保留胸甲，观察到滑翔结束才恢复鞘翅并重新起飞；不使用原甲飞的 `GlideTrackerDelay`。本次没有移植上游所有实验模式、包延迟或环境绕过选项，也不承诺相同反作弊通过率。
+本模式在胸甲仍维持滑翔时保留胸甲，观察到滑翔结束才恢复鞘翅并重新起飞；不使用原甲飞的 `GlideTrackerDelay`。原甲飞 `ServerSync` 开启时使用同样节奏；关闭后恢复原换装时序。没有移植上游所有实验模式、包延迟或环境绕过选项，也不承诺相同反作弊通过率。
 
 ## 两种同装组合
 

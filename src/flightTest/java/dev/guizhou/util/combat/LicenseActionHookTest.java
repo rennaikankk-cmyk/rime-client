@@ -86,6 +86,12 @@ public final class LicenseActionHookTest {
         guarded(armor, "onTick", null, "equip");
         guarded(armor, "equip", null, "click");
 
+        String originalArmor = BASE + "movement/ArmorFlyModule";
+        guarded(originalArmor, "onPreTick", null, "monitorArmorFly", "observe");
+        guarded(originalArmor, "onFlightWindow", null, "serviceIndependentArmorFly");
+        check(method(originalArmor, "requested", null).hasAuthorization(), "Independent armor requests need authorization");
+        check(!method(originalArmor, "resetSession", null).hasAuthorization(), "Denied armor can discard its old flight and metadata");
+
         String slm = BASE + "movement/SLMArmorFlyModule";
         guarded(slm, "onPreTick", null, "monitorArmorFly");
         guarded(slm, "onFlightWindow", null, "serviceIndependentArmorFly");

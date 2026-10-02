@@ -83,7 +83,7 @@ public final class ArmorSwapController {
             acquire();
         }
         cycle.beforeMovement(requested, safeInventory(), canGlide(), flight.holdChestplateForBoost(),
-                dev.guizhou.features.modules.movement.SLMArmorFlyModule.requested(), preserve);
+                dev.guizhou.features.modules.movement.ArmorFlyModule.serverPaced(), preserve);
         finishMonitoring();
     }
 
@@ -128,21 +128,19 @@ public final class ArmorSwapController {
     private void acquire() {
         ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
         if (!usableWings(chest)) return;
-        boolean slm = dev.guizhou.features.modules.movement.SLMArmorFlyModule.requested();
         int best = -1;
         double bestScore = -1;
-        for (int slot = 0; slot < (slm ? 36 : 9); slot++) {
+        for (int slot = 0; slot < 36; slot++) {
             if (slot == InventoryUtil.selected()) continue;
             ItemStack candidate = player.getInventory().getItem(slot);
             if (!chestArmor(candidate)) continue;
-            if (slm && candidate.isDamageableItem() && candidate.getMaxDamage() - candidate.getDamageValue()
-                    < dev.guizhou.features.modules.movement.SLMArmorFlyModule.minimumDurability()) continue;
+            if (candidate.isDamageableItem() && candidate.getMaxDamage() - candidate.getDamageValue()
+                    < dev.guizhou.features.modules.movement.ArmorFlyModule.minimumDurability()) continue;
             double score = candidate.getOrDefault(DataComponents.ATTRIBUTE_MODIFIERS,
                     net.minecraft.world.item.component.ItemAttributeModifiers.EMPTY)
                     .compute(net.minecraft.world.entity.ai.attributes.Attributes.ARMOR, 0, EquipmentSlot.CHEST);
-            if (slm && score <= bestScore) continue;
+            if (score <= bestScore) continue;
             best = slot; bestScore = score;
-            if (!slm) break;
         }
         if (best != -1) {
             armorSlot = best;
@@ -246,7 +244,7 @@ public final class ArmorSwapController {
     private boolean usableWings(ItemStack stack) {
         return wearableChest(stack) && stack.has(DataComponents.GLIDER)
                 && (!stack.isDamageableItem() || stack.getMaxDamage() - stack.getDamageValue()
-                    >= dev.guizhou.features.modules.movement.SLMArmorFlyModule.minimumDurability());
+                    >= dev.guizhou.features.modules.movement.ArmorFlyModule.minimumDurability());
     }
 
     private boolean chestArmor(ItemStack stack) {

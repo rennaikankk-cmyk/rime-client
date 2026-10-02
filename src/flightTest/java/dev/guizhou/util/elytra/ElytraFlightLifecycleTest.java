@@ -35,6 +35,7 @@ public final class ElytraFlightLifecycleTest {
         verifyDeferredDiveRestoration(methods);
         verifyDiveRecoveryPrerequisite(methods);
         verifyArmorSwapWiring(methods);
+        verifyIndependentArmorPreferences(methods);
         verifyGlideRestart(methods);
         verifyLandingRecovery(methods);
         verifyLowSpeedSteering(methods.get("alignLook"));
@@ -115,6 +116,46 @@ public final class ElytraFlightLifecycleTest {
         check(descending.opcode == Opcodes.IFNE,
                 "Armor cycling must yield to natural mace descent before attempting a glide restart");
         assertFalseReturn(requested, requested.target(descending), "Owned mace descent");
+    }
+
+    private static void verifyIndependentArmorPreferences(Map<String, Trace> methods) throws IOException {
+        String armorClass = "dev/guizhou/features/modules/movement/ArmorFlyModule";
+        var armor = readClass(armorClass);
+        Trace service = methods.get("serviceIndependentArmorFly");
+        check(service.hasCall(armorClass, "autoEquip"), "Independent equipment must use its own authorized preference");
+        Trace equip = methods.get("equipElytraIfNeeded");
+        check(equip.hasCall(armorClass, "autoEquip") && equip.hasCall(armorClass, "requested"),
+                "Both armor owners must share the safe inventory scope without borrowing a disabled controller's setting");
+        for (String preference : List.of("autoEquip", "minimumDurability", "serverPaced")) {
+            check(armor.get(preference).hasCall("dev/guizhou/features/modules/movement/SLMArmorFlyModule", "selected"),
+                    "The explicitly selected SLM module retains its own preferences: " + preference);
+        }
+        check(armor.get("autoEquip").hasCall("requested") && armor.get("serverPaced").hasCall("requested"),
+                "Equipment and server windows still require an authorized armor request");
+        check(armor.get("onFlightWindow").hasCall("resumeRequested") && armor.get("onPreTick").hasCall("observe")
+                        && armor.get("ensureMetadataSession").hasCall("reset"),
+                "Original armor must recover an observed foreign flight, discarding stale sessions");
+        check(armor.get("metadataEligible").fieldAfter(Opcodes.GETFIELD, "serverSync", -1) >= 0,
+                "Experimental glide metadata cannot delay the server-synchronized cycle");
+        Trace constructor = armor.get("<init>");
+        for (String preference : List.of("AutoEquip", "ServerSync")) {
+            int setting = -1;
+            for (int i = 0; i < constructor.steps.size(); i++) if (preference.equals(constructor.steps.get(i).operand)) setting = i;
+            check(setting >= 0 && constructor.steps.get(setting + 1).opcode == Opcodes.ICONST_1,
+                    "A saved preset missing the new setting receives the compatible default: " + preference);
+        }
+        Trace monitor = methods.get("monitorArmorFly");
+        int expiry = monitor.fieldAfter(Opcodes.PUTFIELD, "rocketSentThisTick", -1);
+        check(expiry >= 0 && monitor.steps.get(expiry - 1).opcode == Opcodes.ICONST_0 && expiry < monitor.call("monitor"),
+                "Independent armor must expire its previous rocket result before equipment preparation");
+        var controller = readClass("dev/guizhou/util/elytra/ArmorSwapController");
+        check(controller.get("onPreTick").hasCall(armorClass, "serverPaced"),
+                "The actual equipment adapter must use the selected mode's synchronization policy");
+        check(controller.get("acquire").hasCall(armorClass, "minimumDurability")
+                        && controller.get("usableWings").hasCall(armorClass, "minimumDurability"),
+                "Armor and elytra both respect the active owner's durability reserve");
+        check(methods.get("maybeTakeoff").hasCall("dev/guizhou/util/elytra/ArmorTakeoff", "ready"),
+                "The real takeoff path must open owned wings during the descending half of a held jump");
     }
 
     private static void verifyDurabilityBoundary(Trace usable) {
@@ -299,7 +340,7 @@ public final class ElytraFlightLifecycleTest {
             switch (step.opcode) {
                 case Opcodes.ALOAD -> stack.add(0);
                 case Opcodes.INVOKESTATIC -> {
-                    check("dev/guizhou/features/modules/movement/SLMArmorFlyModule".equals(step.owner)
+                    check("dev/guizhou/features/modules/movement/ArmorFlyModule".equals(step.owner)
                             && "minimumDurability".equals(step.name), "Only the configured durability reserve is sampled");
                     stack.add(reserve);
                 }

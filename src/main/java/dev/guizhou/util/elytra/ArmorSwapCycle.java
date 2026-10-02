@@ -52,7 +52,7 @@ public final class ArmorSwapCycle {
         beforeMovement(requested, inventorySafe, canGlide, boostOnWornGlide, false);
     }
 
-    /** SLM keeps the chestplate until the observed glide ends; restart only then. */
+    /** Server-synchronized armor keeps the chestplate until the observed glide ends. */
     public void beforeMovement(boolean requested, boolean inventorySafe, boolean canGlide,
                                boolean boostOnWornGlide, boolean serverPaced) {
         beforeMovement(requested, inventorySafe, canGlide, boostOnWornGlide, serverPaced, false);
