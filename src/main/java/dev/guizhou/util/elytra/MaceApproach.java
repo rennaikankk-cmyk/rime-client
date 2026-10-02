@@ -103,7 +103,10 @@ public final class MaceApproach {
         // do not command another full-height climb when the round trip cannot be caught.
         Vec3 shortLead = observed.add(velocity.scale(Math.min(2.0, horizon)));
         double rise = setupHeight > 0 && velocity.y > 0.15 && velocity.length() < speed ? floor : 0;
-        return new Plan(new Vec3(shortLead.x, Math.max(self.y, shortLead.y + rise), shortLead.z), floor, 0.0, false);
+        // A descending target must not leave pursuit parked at the previous apex.
+        // Approach its charge altitude; the separate drop solver still owns release.
+        double pursuitY = Math.min(Math.max(self.y, shortLead.y + rise), shortLead.y + height);
+        return new Plan(new Vec3(shortLead.x, pursuitY, shortLead.z), floor, 0.0, false);
     }
 
     public static Plan intercept(Vec3 self, Vec3 target, Vec3 velocity, double speed,

@@ -1,0 +1,144 @@
+{
+  "evidenceDirectory": "duel129-diagnostic-noac8",
+  "scope": "Reproduce noac6 rising attack stall with read-only attack gates; paired diagnostic only",
+  "referenceVersion": "1.2.8",
+  "referenceCommit": "88a4a09f3b5cad1c30a75a01e1c86d3cd155e763",
+  "serverProfile": "Paper 1.21.11 with no anticheat installed; both clients NoAC, same horizontal/vertical defaults",
+  "sourceAndRuntimeUnchanged": true,
+  "businessSourceDigest": "bb3b619ba4c884c299dcded0d92663504b7664cb15fc8cda39b25f67fc897156",
+  "countingRule": "Only actual server death wins; timeouts are draws. Damage/health advantage is not a win.",
+  "summary": {
+    "MACE": {
+      "win": 0,
+      "loss": 0,
+      "draw": 2,
+      "invalid": 0
+    }
+  },
+  "rounds": [
+    {
+      "tag": "129-diagnostic-noac8-mace-01",
+      "mode": "MACE",
+      "boost": false,
+      "swapped": false,
+      "scene": {
+        "halfGap": 22.59,
+        "spawnY": 185,
+        "axisDegrees": -24.54,
+        "heightDelta": 0
+      },
+      "result": "draw",
+      "ticks": 1200,
+      "reason": "timeout",
+      "averageTps": 20.017,
+      "observedHealthDecreases": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 30.690449714660645
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 20.0,
+          "finalAbsorption": 0.0,
+          "pops": 0,
+          "totemsRemaining": 2,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 0,
+          "rocketsAtLastAliveSample": 64,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 184.9824,
+          "maxY": 2506.0483,
+          "travelBlocks": 2338.18,
+          "fpsMedian": 59,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 1199,
+          "glidingTicks": 599,
+          "spearUseTicks": 0
+        },
+        "old": {
+          "finalHealth": 12.699,
+          "finalAbsorption": 0.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 0,
+          "rocketsAtLastAliveSample": 64,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 184.9824,
+          "maxY": 2508.6365,
+          "travelBlocks": 2342.02,
+          "fpsMedian": 60,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 1199,
+          "glidingTicks": 578,
+          "spearUseTicks": 0
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-diagnostic-noac8-mace-02",
+      "mode": "MACE",
+      "boost": false,
+      "swapped": true,
+      "scene": {
+        "halfGap": 22.59,
+        "spawnY": 185,
+        "axisDegrees": -24.54,
+        "heightDelta": 0
+      },
+      "result": "draw",
+      "ticks": 1200,
+      "reason": "timeout",
+      "averageTps": 20.003,
+      "observedHealthDecreases": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 40.339637756347656
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 20.0,
+          "finalAbsorption": 0.0,
+          "pops": 0,
+          "totemsRemaining": 2,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 0,
+          "rocketsAtLastAliveSample": 64,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 184.9824,
+          "maxY": 2508.7018,
+          "travelBlocks": 2336.53,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 1200,
+          "glidingTicks": 601,
+          "spearUseTicks": 0
+        },
+        "old": {
+          "finalHealth": 5.19,
+          "finalAbsorption": 0.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 0,
+          "rocketsAtLastAliveSample": 64,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 184.9824,
+          "maxY": 2507.3791,
+          "travelBlocks": 2336.02,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "player",
+          "clientRows": 1200,
+          "glidingTicks": 579,
+          "spearUseTicks": 0
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    }
+  ]
+}

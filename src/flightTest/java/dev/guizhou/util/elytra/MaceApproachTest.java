@@ -9,6 +9,7 @@ public final class MaceApproachTest {
     public static void main(String[] args) {
         minimumSmashHeight();
         stationaryRecovery();
+        descendingCatchUp();
         Vec3 overhead = new Vec3(0.06, 90.0, 0.03);
         Vec3 angled = MaceApproach.pullUpIntent(overhead, 45.0);
         close(6.0, Math.min(6.0, angled.length()),
@@ -114,6 +115,23 @@ public final class MaceApproachTest {
                 }
             }
         }
+    }
+
+    private static void descendingCatchUp() {
+        for (double altitude : new double[]{40, 100, 200}) {
+            for (double downward : new double[]{-.5, -2, -4}) {
+                Vec3 self = new Vec3(0, altitude, 0), target = new Vec3(3, 0, 0);
+                var plan = MaceApproach.climb(self, target, new Vec3(0, downward, 0),
+                        2.4, 10, 1.5, 0, false);
+                check(!plan.reachable(), "Distant falling target has no immediate round-trip intercept");
+                check(plan.aim().y < self.y, "Catch-up must descend from an abandoned apex");
+                close(target.y + downward * 2 + 10, plan.aim().y,
+                        "Catch-up retains charge room above the bounded predicted target");
+            }
+        }
+        var level = MaceApproach.climb(Vec3.ZERO, new Vec3(10, 0, 0), new Vec3(3, 0, 0),
+                2, 10, 1.5, 0, true);
+        close(0, level.aim().y, "Level catch-up does not manufacture a climb");
     }
 
     private static void stationaryRecovery() {

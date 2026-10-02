@@ -1,0 +1,175 @@
+{
+  "evidenceDirectory": "blast-lab/slm129-rotation1",
+  "scope": "Real integrated-server functional probe. Not competitive duels; recorded snapshot applies to this probe revision, not subsequent flight changes.",
+  "completion": "checks=76\nreal explosion oracle cases=18\nreal module packet chains=5\n",
+  "sourceRuntimeObservation": {
+    "unchangedSince": "2026-10-02T11:13:13.604262+00:00",
+    "files": 1469,
+    "snapshotDigest": "96c11742ffd39a18449e51b35c19b9a4d89e6db0e1b4dac1506afbe1b25af7ca",
+    "completed": "checks=76\nreal explosion oracle cases=18\nreal module packet chains=5\n",
+    "scope": "Functional probe only; observation begins at recorded timestamp, not a win-rate claim"
+  },
+  "damageCases": [
+    {
+      "family": "tp-and-piston-crystal",
+      "scene": "open",
+      "predicted": "47.412731",
+      "server_damage": "47.412720",
+      "error": "0.000011"
+    },
+    {
+      "family": "tp-and-piston-crystal",
+      "scene": "stone-wall",
+      "predicted": "1.000000",
+      "server_damage": "1.000000",
+      "error": "0.000000"
+    },
+    {
+      "family": "tp-and-piston-crystal",
+      "scene": "obsidian-wall",
+      "predicted": "1.000000",
+      "server_damage": "1.000000",
+      "error": "0.000000"
+    },
+    {
+      "family": "tp-and-piston-crystal",
+      "scene": "slab",
+      "predicted": "24.402435",
+      "server_damage": "24.402466",
+      "error": "0.000031"
+    },
+    {
+      "family": "tp-and-piston-crystal",
+      "scene": "armor",
+      "predicted": "44.378315",
+      "server_damage": "44.378296",
+      "error": "0.000019"
+    },
+    {
+      "family": "tp-and-piston-crystal",
+      "scene": "resistance",
+      "predicted": "28.447639",
+      "server_damage": "28.447632",
+      "error": "0.000008"
+    },
+    {
+      "family": "anchor",
+      "scene": "open",
+      "predicted": "34.360645",
+      "server_damage": "34.360657",
+      "error": "0.000011"
+    },
+    {
+      "family": "anchor",
+      "scene": "stone-wall",
+      "predicted": "1.000000",
+      "server_damage": "1.000000",
+      "error": "0.000000"
+    },
+    {
+      "family": "anchor",
+      "scene": "obsidian-wall",
+      "predicted": "1.000000",
+      "server_damage": "1.000000",
+      "error": "0.000000"
+    },
+    {
+      "family": "anchor",
+      "scene": "slab",
+      "predicted": "18.023685",
+      "server_damage": "18.023682",
+      "error": "0.000004"
+    },
+    {
+      "family": "anchor",
+      "scene": "armor",
+      "predicted": "32.161564",
+      "server_damage": "32.161560",
+      "error": "0.000004"
+    },
+    {
+      "family": "anchor",
+      "scene": "resistance",
+      "predicted": "20.616388",
+      "server_damage": "20.616394",
+      "error": "0.000006"
+    },
+    {
+      "family": "bed",
+      "scene": "open",
+      "predicted": "34.360645",
+      "server_damage": "34.360657",
+      "error": "0.000011"
+    },
+    {
+      "family": "bed",
+      "scene": "stone-wall",
+      "predicted": "1.000000",
+      "server_damage": "1.000000",
+      "error": "0.000000"
+    },
+    {
+      "family": "bed",
+      "scene": "obsidian-wall",
+      "predicted": "1.000000",
+      "server_damage": "1.000000",
+      "error": "0.000000"
+    },
+    {
+      "family": "bed",
+      "scene": "slab",
+      "predicted": "18.023685",
+      "server_damage": "18.023682",
+      "error": "0.000004"
+    },
+    {
+      "family": "bed",
+      "scene": "armor",
+      "predicted": "32.161564",
+      "server_damage": "32.161560",
+      "error": "0.000004"
+    },
+    {
+      "family": "bed",
+      "scene": "resistance",
+      "predicted": "20.616388",
+      "server_damage": "20.616394",
+      "error": "0.000006"
+    },
+    {
+      "family": "packet-chain",
+      "scene": "0",
+      "predicted": "",
+      "server_damage": "34.360657",
+      "error": "0"
+    },
+    {
+      "family": "packet-chain",
+      "scene": "1",
+      "predicted": "",
+      "server_damage": "34.360657",
+      "error": "0"
+    },
+    {
+      "family": "packet-chain",
+      "scene": "2",
+      "predicted": "",
+      "server_damage": "34.360657",
+      "error": "0"
+    },
+    {
+      "family": "packet-chain",
+      "scene": "3",
+      "predicted": "",
+      "server_damage": "47.666687",
+      "error": "0"
+    },
+    {
+      "family": "packet-chain",
+      "scene": "4",
+      "predicted": "",
+      "server_damage": "43.735046",
+      "error": "0"
+    }
+  ]
+}

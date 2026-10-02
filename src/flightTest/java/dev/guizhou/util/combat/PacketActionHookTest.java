@@ -61,16 +61,25 @@ public final class PacketActionHookTest {
         int guardedDispatch = silent.call(SEND, "send");
         silent.rejectedCannotReach(boost, true, guardedDispatch);
         int dispatch = silent.call(SEND, "send");
-        int yaw = silent.call(null, "getYRot");
-        int pitch = silent.call(null, "getXRot");
-        int setYaw = silent.call(ROTATION, "setServerYaw");
-        int setPitch = silent.call(ROTATION, "setServerPitch");
-        silent.dominates(dispatch, setYaw, "Server rotation changed without packet submission");
-        silent.dominates(yaw, setYaw, "Server yaw must come from the final packet");
-        silent.dominates(pitch, setPitch, "Server pitch must come from the final packet");
-        check(dispatch < yaw && dispatch < pitch, "Packet angles must be read after event policies mutate the packet");
-        silent.rejectedCannotReach(dispatch, false, setYaw);
-        silent.rejectedCannotReach(dispatch, false, setPitch);
+        silent.rejectedCannotReach(dispatch, false, silent.field("silentSyncRequired", Opcodes.PUTFIELD));
+        silent.call(ROTATION, "hasSubmittedRotation");
+        method(ROTATION,"init",null).call(SEND,"addSubmissionListener");
+        Code accepted = method(ROTATION,"observeSubmittedRotation",null);
+        int setYaw=accepted.call(ROTATION,"setServerYaw"), setPitch=accepted.call(ROTATION,"setServerPitch");
+        for(int update:new int[]{setYaw,setPitch}) {
+            accepted.rejectedCannotReach(accepted.call(null,"isSameThread"),false,update);
+            accepted.rejectedCannotReach(accepted.call(null,"hasRotation"),false,update);
+            accepted.dominates(accepted.call(null,"getYRot"),update,"Accepted packet yaw must be read before caching");
+            accepted.dominates(accepted.call(null,"getXRot"),update,"Accepted packet pitch must be read before caching");
+        }
+        for(Code code:new Code[]{silent,
+                method("dev/guizhou/features/modules/combat/AutoSwordModule","moveTo",null),
+                method("dev/guizhou/mixin/entity/MixinLocalPlayerRotation","guizhouware$spoofRotationHead",null),
+                method("dev/guizhou/mixin/entity/MixinLocalPlayerRotation","guizhouware$spoofRotationTail",null)}) {
+            check(code.steps.stream().noneMatch(s -> code.isCall(s,ROTATION,"setServerYaw")
+                    || code.isCall(s,ROTATION,"setServerPitch")),
+                    "Original/planned/cancelled rotation must not overwrite the accepted packet cache");
+        }
     }
 
     private static void placementAcceptance() throws IOException {

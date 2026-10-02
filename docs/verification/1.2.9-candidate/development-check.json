@@ -1,0 +1,23 @@
+{
+  "command": "gradlew.bat --offline --console=plain --max-workers=2 -PgzwDevelopmentBuild=true check",
+  "status": "BUILD SUCCESSFUL",
+  "actionableTasks": 120,
+  "executedTasks": 117,
+  "upToDateTasks": 3,
+  "elapsedSeconds": 69,
+  "developmentBuild": true,
+  "productionPackagingVerified": false,
+  "businessSourceDigest": "f4668ca0d30d3552afb4d9c07a0ca789626ccf2b4465d1356464b016111e0c3d",
+  "sourceMatchesDuelBatch": "duel129-diagnostic-noac-endurance4",
+  "logFile": "slm129-mxs-pass-full-check.log",
+  "logSha256": "ef6d6ec449ac238d91170d586bd765d62268daa14668ce6e8b8a63a250bfad9d",
+  "emptyOrSkippedInfrastructureTasks": [
+    "> Task :generateFlightTestBuildConfig SKIPPED",
+    "> Task :processFlightTestResources NO-SOURCE",
+    "> Task :generateTestBuildConfig SKIPPED",
+    "> Task :compileTestJava NO-SOURCE",
+    "> Task :processTestResources NO-SOURCE",
+    "> Task :test NO-SOURCE"
+  ],
+  "note": "Regression programs execute through the flightTest JavaExec tasks. The standard test source set is empty. This is not a production boot or competitive acceptance proof."
+}

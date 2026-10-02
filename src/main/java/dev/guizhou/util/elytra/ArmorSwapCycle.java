@@ -106,12 +106,13 @@ public final class ArmorSwapCycle {
         if (deferArmorReturn && rocketSent) boostHeldThisWindow = true;
         deferArmorReturn = false;
         restartedThisWindow = false;
-        if (boostHeldThisWindow) {
+        // A rocket hold must not mask disconnect, equipment takeover or disabled-flight cleanup.
+        if (!validate()) return;
+        if (!requested || !inventorySafe || !canGlide) recovering = true;
+        if (boostHeldThisWindow && !recovering) {
             returnArmor = false;
             return;
         }
-        if (!validate()) return;
-        if (!requested || !inventorySafe || !canGlide) recovering = true;
         if (recovering) {
             returnArmor = false;
             recover(inventorySafe);

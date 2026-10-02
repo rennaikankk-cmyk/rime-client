@@ -34,6 +34,8 @@ public class RotationManager {
     private float serverYaw, serverPitch;
     private float serverYaw0;
     private float serverDeltaYaw;
+    private net.minecraft.client.multiplayer.ClientPacketListener submittedConnection;
+    private net.minecraft.client.player.LocalPlayer submittedPlayer;
 
     private boolean bypassUseSpoof;
 
@@ -76,6 +78,25 @@ public class RotationManager {
 
     public void init() {
         EVENT_BUS.register(this, "RotationManager");
+        dev.guizhou.util.PacketSendUtil.addSubmissionListener(this::observeSubmittedRotation);
+    }
+
+    /** Track the final accepted packet, including ordinary camera restoration and
+     * forwarded replacements. Planned or cancelled rotations are not server state. */
+    private void observeSubmittedRotation(net.minecraft.network.protocol.Packet<?> packet) {
+        if (!mc.isSameThread() || mc.player == null || mc.getConnection() == null
+                || !(packet instanceof ServerboundMovePlayerPacket move) || !move.hasRotation()) return;
+        float yaw = move.getYRot(0), pitch = move.getXRot(0);
+        if (!Float.isFinite(yaw) || !Float.isFinite(pitch)) return;
+        setServerDeltaYaw(yaw - serverYaw);
+        setServerYaw(yaw);
+        setServerPitch(pitch);
+        submittedConnection = mc.getConnection();
+        submittedPlayer = mc.player;
+    }
+
+    private boolean hasSubmittedRotation() {
+        return submittedConnection == mc.getConnection() && submittedPlayer == mc.player;
     }
 
     public void submit(RotationRequest request) {
@@ -283,9 +304,10 @@ public class RotationManager {
                 : dev.guizhou.GuizhouWare.moduleManager.getModuleByClass(
                         dev.guizhou.features.modules.movement.GuangxiElytraModule.class);
         if (flight != null && flight.gzBoostControlsLook()) return false;
-        float nextYaw = stepYaw(serverYaw, yaw, STEP);
-        float nextPitch = stepPitch(serverPitch, pitch, STEP);
-        if (Math.abs(Mth.wrapDegrees(nextYaw - serverYaw)) < 0.05f
+        boolean known = hasSubmittedRotation();
+        float nextYaw = stepYaw(known ? serverYaw : mc.player.getYRot(), yaw, STEP);
+        float nextPitch = stepPitch(known ? serverPitch : mc.player.getXRot(), pitch, STEP);
+        if (known && Math.abs(Mth.wrapDegrees(nextYaw - serverYaw)) < 0.05f
                 && Math.abs(nextPitch - serverPitch) < 0.05f) {
             return true;
         }
@@ -293,8 +315,8 @@ public class RotationManager {
         ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.Rot(
                 nextYaw, nextPitch, mc.player.onGround(), horizontalCollision);
         if (!dev.guizhou.util.PacketSendUtil.send(packet)) return false;
-        setServerYaw(packet.getYRot(nextYaw));
-        setServerPitch(packet.getXRot(nextPitch));
+        // The submission observer already recorded the actual accepted packet.
+        // Reading this original packet here would overwrite a forwarded replacement.
         silentSyncRequired = true;
         lastSilentMs = System.currentTimeMillis();
         return true;

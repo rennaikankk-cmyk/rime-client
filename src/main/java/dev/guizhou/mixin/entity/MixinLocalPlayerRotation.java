@@ -39,9 +39,6 @@ public class MixinLocalPlayerRotation {
         if (motion) {
             outYaw = rm.getRotationYaw();
             outPitch = rm.getRotationPitch();
-            rm.setServerDeltaYaw(outYaw - rm.getServerYaw());
-            rm.setServerYaw(outYaw);
-            rm.setServerPitch(outPitch);
         } else {
             xRotLast -= 4;
             float f = (float) ((Math.random() * 2.0 - 1.0) * 0.001f);
@@ -57,11 +54,6 @@ public class MixinLocalPlayerRotation {
     private void guizhouware$spoofRotationTail(CallbackInfo ci) {
         RotationManager rm = GuizhouWare.rotationManager;
         if (rm == null) return;
-
-        if (rm.isRotating()) {
-            rm.setServerYaw(mc.player.getYRot());
-            rm.setServerPitch(mc.player.getXRot());
-        }
 
         if (guizhouware$spoofed) {
             mc.player.setYRot(guizhouware$savedYaw);

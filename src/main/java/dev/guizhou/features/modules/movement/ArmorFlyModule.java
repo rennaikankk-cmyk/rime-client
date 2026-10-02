@@ -122,12 +122,23 @@ public final class ArmorFlyModule extends Module {
         }
     }
 
+    @Subscribe
+    private void onTotemPop(dev.guizhou.event.impl.entity.TotemPopEvent event) {
+        if (event.getEntity() != mc.player || !mc.isSameThread()) return;
+        // A self-pop ends the delayed window immediately, before another equipment action.
+        handoff.reset();
+        flushMetadata();
+        lastStartTick = Integer.MIN_VALUE;
+    }
+
     private boolean metadataEligible() {
         var flight = GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
         return isEnabled() && requested() && !serverSync.getValue() && !delayBlocked && glideTrackerDelay.getValue() > 0 && mc.player != null
                 && (flight == null || !flight.isEnabled())
                 && !mc.player.onGround() && !mc.player.isDeadOrDying()
                 && !mc.player.isInWater() && !mc.player.isInLava()
+                && !mc.player.isPassenger() && !mc.player.getAbilities().flying
+                && !mc.player.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION)
                 && !dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.preservesMaceDescent()
                 && !dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.isMaceDiveActive();
     }

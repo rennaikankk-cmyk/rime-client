@@ -155,6 +155,15 @@ public final class ElytraCombatHookTest {
         check(method(chase, "aimSpear").hasCall(CHASE, "spearAttackEye")
                         && method(chase, "tryPostMovementSpearAim").hasCall(CHASE, "spearAttackEye"),
                 "Pre and post movement spear aim must share the same pose-aware attack origin");
+        for (String name : List.of("spearCounterPass", "aimDefensiveSpear", "tryPostMovementSpearAim", "spearApproachWindow")) {
+            Trace owned = method(chase, name);
+            check(owned.hasCall("dev/guizhou/util/elytra/ElytraWeaponController", "isHoldingUse")
+                            && owned.hasCall("dev/guizhou/util/elytra/SpearCombat", "isReady")
+                            && !owned.hasCall("dev/guizhou/util/player/EatUtil", "shouldDefer"),
+                    "Owned ready spear aim must not reject its own main-hand charge: " + name);
+        }
+        check(method(chase,"tryPostMovementSpearAim").hasCall("dev/guizhou/util/elytra/SpearAimSweep","applySweep"),
+                "Moved-eye aim must retain the active uncertainty sweep");
         Trace spearEye = method(chase, "spearAttackEye");
         check(spearEye.hasCall("net/minecraft/client/player/LocalPlayer", "getEyePosition")
                         && !spearEye.hasCall(FLIGHT, "isArmorSwapActive"),
@@ -648,7 +657,7 @@ public final class ElytraCombatHookTest {
         Trace movement = method(movementMethods, "onPreTick");
         int chaseRequest = movement.call(CHASE, "onElytra");
         int terrainSafety = movement.call(FLIGHT, "applyTerrainSafety");
-        int brake = movement.call("dev/guizhou/util/elytra/FlightVelocity", "isBraking");
+        int brake = movement.callAfter("dev/guizhou/util/elytra/FlightVelocity", "isBraking", terrainSafety);
         int turn = movement.callAfter(FLIGHT, "alignLook", brake);
         int rocket = movement.callAfter(FLIGHT, "tryRocket", brake);
         check(chaseRequest < terrainSafety && terrainSafety < brake

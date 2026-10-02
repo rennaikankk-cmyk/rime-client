@@ -65,6 +65,9 @@ public class AutoAnchorModule extends Module {
     private final Setting<Double> wallRange = num("WallRange", 5.0, 0.0, 6.0).setPage("General");
     private final Setting<Boolean> airPlace = bool("AirPlace", true).setPage("General");
     private final Setting<Boolean> rotate = bool("Rotate", true).setPage("General");
+    private final Setting<Boolean> selfShield = bool("SelfShield", false).setPage("General")
+            .described("黑曜石掩体需服务器确认，减少自伤至少30%并保留至少90%目标伤害；原有自伤限制仍有效。");
+    private final dev.guizhou.util.combat.BlastShieldController shieldController = new dev.guizhou.util.combat.BlastShieldController();
     private final Setting<Boolean> assumeBestArmor = bool("AssumeBestArmor", false).setPage("General");
     private enum AnchorSwap { SILENT, INVENTORY }
     private final Setting<AnchorSwap> autoSwap = mode("AutoSwap", AnchorSwap.SILENT).setPage("General");
@@ -144,6 +147,7 @@ public class AutoAnchorModule extends Module {
 
     private void resetSession() {
         lifecycleGeneration++;
+        shieldController.reset();
         reactiveScheduled = false;
         repeatPos = null;
         repeatUntil = 0;
@@ -280,6 +284,10 @@ public class AutoAnchorModule extends Module {
             if (mc.level.environmentAttributes().getValue(EnvironmentAttributes.RESPAWN_ANCHOR_WORKS, activePos)
                     || !canSupply(action, anchor ? state.getValue(RespawnAnchorBlock.CHARGE) : 0)) {
                 stageDiagnostics.blocked("materialOrDimension"); abandonActive(); return;
+            }
+            if (selfShield.getValue() && !shieldController.beforeBlast(center, activePos, 10,
+                    targets, placeRange.getValue(), rotate.getValue(), "AutoAnchor")) {
+                stageDiagnostics.blocked("shieldConfirmation"); return;
             }
             if (perform(action, activePos)) {
                 sequence.sent(action, tick);

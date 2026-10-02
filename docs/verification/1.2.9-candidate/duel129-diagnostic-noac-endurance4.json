@@ -1,0 +1,152 @@
+{
+  "evidenceDirectory": "duel129-diagnostic-noac-endurance4",
+  "scope": "Paired MXS kinetic-pass regression on both endurance3 sides with old-first join order. Height tracking yields during a ready attack. Three-minute tuning, not held-out acceptance.",
+  "referenceVersion": "1.2.8",
+  "referenceCommit": "88a4a09f3b5cad1c30a75a01e1c86d3cd155e763",
+  "serverProfile": "Paper 1.21.11 with no anticheat installed; both clients NoAC, same horizontal/vertical defaults",
+  "sourceAndRuntimeUnchanged": true,
+  "fullMatrixComplete": true,
+  "plannedRounds": 2,
+  "roundTicksLimit": 3600,
+  "joinOrder": {
+    "policy": "Wait for first client connected flag before launching second",
+    "first": "old"
+  },
+  "stopReason": null,
+  "businessSourceDigest": "f4668ca0d30d3552afb4d9c07a0ca789626ccf2b4465d1356464b016111e0c3d",
+  "countingRule": "Only actual server death wins; timeouts are draws. Damage/health advantage is not a win.",
+  "summary": {
+    "MXS": {
+      "win": 2,
+      "loss": 0,
+      "draw": 0,
+      "invalid": 0
+    }
+  },
+  "rounds": [
+    {
+      "tag": "129-diagnostic-noac-endurance4-mxs-01",
+      "mode": "MXS",
+      "boost": false,
+      "swapped": false,
+      "scene": {
+        "halfGap": 23.61,
+        "spawnY": 125,
+        "axisDegrees": 70.94,
+        "heightDelta": 15
+      },
+      "result": "win",
+      "ticks": 3117,
+      "reason": "death",
+      "averageTps": 20.005,
+      "observedHealthDecreases": {
+        "NewCandidate": 21.769412994384766,
+        "LegacyReference": 96.85106325149536
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 3.564,
+          "finalAbsorption": 0.0,
+          "pops": 0,
+          "totemsRemaining": 2,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 0,
+          "rocketsAtLastAliveSample": 64,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 126.6787,
+          "maxY": 5121.4747,
+          "travelBlocks": 6386.92,
+          "fpsMedian": 59.0,
+          "fpsP10": 59,
+          "lastDamageSource": "player",
+          "clientRows": 3116,
+          "glidingTicks": 2203,
+          "spearUseTicks": 1242
+        },
+        "old": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 0,
+          "rocketsAtLastAliveSample": 64,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 117.4824,
+          "maxY": 5121.9134,
+          "travelBlocks": 6137.95,
+          "fpsMedian": 59.0,
+          "fpsP10": 59,
+          "lastDamageSource": "spear",
+          "clientRows": 3116,
+          "glidingTicks": 1600,
+          "spearUseTicks": 48
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-diagnostic-noac-endurance4-mxs-02",
+      "mode": "MXS",
+      "boost": false,
+      "swapped": true,
+      "scene": {
+        "halfGap": 23.61,
+        "spawnY": 125,
+        "axisDegrees": 70.94,
+        "heightDelta": 15
+      },
+      "result": "win",
+      "ticks": 1490,
+      "reason": "death",
+      "averageTps": 20.002,
+      "observedHealthDecreases": {
+        "NewCandidate": 24.333332538604736,
+        "LegacyReference": 73.2396297454834
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 4.0,
+          "finalAbsorption": 8.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 0,
+          "rocketsAtLastAliveSample": 64,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 117.4824,
+          "maxY": 2318.5132,
+          "travelBlocks": 3012.24,
+          "fpsMedian": 59.0,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 1490,
+          "glidingTicks": 1060,
+          "spearUseTicks": 596
+        },
+        "old": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 0,
+          "rocketsAtLastAliveSample": 64,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 132.4824,
+          "maxY": 2319.0176,
+          "travelBlocks": 2919.81,
+          "fpsMedian": 59.0,
+          "fpsP10": 59,
+          "lastDamageSource": "spear",
+          "clientRows": 1490,
+          "glidingTicks": 787,
+          "spearUseTicks": 61
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    }
+  ]
+}

@@ -7,6 +7,7 @@ public final class ArmorSwapCycleTest {
     private static int checks;
 
     public static void main(String[] args) {
+        heldBoostStillObservesCleanup();
         continuousExchange();
         serverPacedWindows();
         switchingServerSynchronizationPreservesOwnership();
@@ -28,6 +29,21 @@ public final class ArmorSwapCycleTest {
         naturalStrikeStillHonorsRecoveryAndManualChanges();
         explicitDiveOwnsEquipmentUntilRecovery();
         System.out.println("ArmorSwapCycleTest passed: " + checks + " checks");
+    }
+
+    private static void heldBoostStillObservesCleanup() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        cycle.beforeMovement(true, true, true, true);
+        cycle.afterMovement(true, true, true, true);
+        cycle.afterMovement(false, true, true, true);
+        check(!cycle.active() && player.restorations == 1, "Disabling during rocket hold completes recovery at the tail hook");
+        cycle = begin(player);
+        cycle.beforeMovement(true, true, true, true);
+        cycle.afterMovement(true, true, true, true);
+        player.reserve = new Object();
+        cycle.afterMovement(true, true, true, true);
+        check(!cycle.active(), "Rocket hold cannot retain an equipment pair replaced by a server inventory update");
     }
 
     private static void continuousExchange() {

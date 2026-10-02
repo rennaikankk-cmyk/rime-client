@@ -31,6 +31,16 @@ public final class BlastProbe implements ClientModInitializer {
     static final Vec3 SOURCE=Vec3.atCenterOf(HEAD);
     static final String[] SCENES={"open","stone-wall","obsidian-wall","slab","armor","resistance"};
     int tick,stage,wait,trial,checks,chain,step,oracleCases,packetChains;
+    int inventoryStage, inventoryWait;
+    int rotationStage;
+    volatile int inventoryRevision;
+    ItemStack acknowledgedMain, acknowledgedOff;
+    int shieldStage, shieldWait;
+    float uncoveredSelf, uncoveredTarget;
+    volatile BlockPos shieldPosition;
+    volatile boolean serverShieldSeen;
+    final Vec3 shieldSource=new Vec3(4.5,101,.5);
+    final dev.guizhou.util.combat.BlastShieldController shield=new dev.guizhou.util.combat.BlastShieldController();
     volatile boolean ready;
     volatile Throwable failure;
     volatile Zombie target;
@@ -46,6 +56,7 @@ public final class BlastProbe implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(server->{
             if(target!=null)health=target.getHealth();
+            if(shieldPosition!=null)serverShieldSeen=server.overworld().getBlockState(shieldPosition).is(Blocks.OBSIDIAN);
             var p=server.getPlayerList().getPlayers().stream().findFirst().orElse(null);
             if(p!=null){serverPos=p.position();serverYaw=p.getYRot();serverPitch=p.getXRot();}
         });
@@ -54,6 +65,135 @@ public final class BlastProbe implements ClientModInitializer {
     static void field(Object o,String n,Object v)throws Exception {var f=o.getClass().getDeclaredField(n);f.setAccessible(true);f.set(o,v);}
     @SuppressWarnings({"rawtypes","unchecked"}) static void setting(Module m,String n,Object v){for(Setting s:m.getSettings())if(s.getName().equals(n)){if(s.getValue() instanceof Enum e&&v instanceof String t)v=Enum.valueOf(e.getDeclaringClass(),t);s.setValue(v);return;}throw new IllegalArgumentException(n);}
     void check(boolean v,String n){checks++;if(!v)throw new AssertionError(n);System.out.println("BLAST_CHECK "+n);}
+    /** Real server packets: equal stacks preserve use identity but still advance menu revision. */
+    boolean checkInventoryAcknowledgements(Minecraft mc) {
+        if (inventoryStage == 0) {
+            mc.setScreen(null);
+            for(var module:GuizhouWare.moduleManager.getModules())if(module.isEnabled())module.disable();
+            mc.player.getInventory().setSelectedSlot(0);
+            mc.getSingleplayerServer().execute(()->{
+                var player=mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
+                player.getInventory().setSelectedSlot(0);
+                player.getInventory().setItem(0,new ItemStack(Items.APPLE,4));
+                player.setItemInHand(InteractionHand.OFF_HAND,new ItemStack(Items.GOLDEN_APPLE,4));
+                player.inventoryMenu.broadcastFullState();
+            });
+            inventoryStage=1; inventoryWait=0; return true;
+        }
+        if (++inventoryWait < 15) return true;
+        inventoryWait=0;
+        if (inventoryStage == 1) {
+            acknowledgedMain=mc.player.getMainHandItem();acknowledgedOff=mc.player.getOffhandItem();
+            check(acknowledgedMain.is(Items.APPLE)&&acknowledgedOff.is(Items.GOLDEN_APPLE),"server supplies inventory acknowledgment fixture");
+            mc.getSingleplayerServer().execute(()->{
+                var player=mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
+                player.connection.send(new net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(0,
+                        player.inventoryMenu.incrementStateId(),36,player.getMainHandItem().copy()));
+                inventoryRevision=player.inventoryMenu.incrementStateId();
+                player.connection.send(new net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(0,
+                        inventoryRevision,45,player.getOffhandItem().copy()));
+            });
+            inventoryStage=2;return true;
+        }
+        if(inventoryStage==2){
+            check(mc.player.getMainHandItem()==acknowledgedMain&&mc.player.getOffhandItem()==acknowledgedOff,
+                    "identical server acknowledgments preserve both hand identities");
+            check(mc.player.inventoryMenu.getStateId()==inventoryRevision,"identical contents still apply the authoritative menu revision");
+            mc.getSingleplayerServer().execute(()->{
+                var player=mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
+                player.getMainHandItem().setCount(3);player.getOffhandItem().setCount(2);
+                player.inventoryMenu.broadcastChanges();inventoryRevision=player.inventoryMenu.getStateId();
+            });
+            inventoryStage=3;return true;
+        }
+        check(mc.player.getMainHandItem().getCount()==3&&mc.player.getOffhandItem().getCount()==2,
+                "changed food counts apply on both hands");
+        check(mc.player.inventoryMenu.getStateId()==inventoryRevision,"changed contents retain server revision");
+        inventoryStage=4;return false;
+    }
+
+    boolean checkShieldConfirmation(Minecraft mc) throws Exception {
+        if(shieldStage==0){
+            ready=false;
+            mc.getSingleplayerServer().execute(()->{try{
+                var server=mc.getSingleplayerServer();var level=server.overworld();
+                var player=server.getPlayerList().getPlayer(mc.player.getUUID());
+                server.setDifficulty(Difficulty.NORMAL,true);level.setDayTime(18000);
+                for(int x=-5;x<=8;x++)for(int z=-3;z<=3;z++){
+                    level.setBlock(new BlockPos(x,100,z),Blocks.OBSIDIAN.defaultBlockState(),3);
+                    for(int y=101;y<=105;y++)level.setBlock(new BlockPos(x,y,z),Blocks.AIR.defaultBlockState(),3);
+                }
+                player.removeAllEffects();player.setGameMode(GameType.SURVIVAL);player.getAbilities().flying=false;player.onUpdateAbilities();
+                player.getInventory().clearContent();player.getInventory().setItem(0,new ItemStack(Items.OBSIDIAN,64));
+                player.getInventory().setSelectedSlot(0);player.inventoryMenu.broadcastFullState();
+                player.teleportTo(level,.5,101,.5,Set.of(),0,0,false);
+                target=new Zombie(EntityType.ZOMBIE,level);target.setNoAi(true);target.setNoGravity(true);target.setSilent(true);
+                target.setPersistenceRequired();target.setPos(5.5,101,.5);level.addFreshEntity(target);ready=true;
+            }catch(Throwable t){failure=t;}});
+            shieldStage=1;shieldWait=0;return true;
+        }
+        if(!ready||++shieldWait<40||!(mc.level.getEntity(target.getId()) instanceof LivingEntity live))return true;
+        var calculation=new AnchorDamageUtil.Calculation();
+        var targets=List.of(AnchorDamageUtil.Target.of(live));
+        if(shieldStage==1){
+            uncoveredSelf=calculation.damage(AnchorDamageUtil.Target.of(mc.player),shieldSource,12,null,null,null);
+            uncoveredTarget=calculation.damage(targets.getFirst(),shieldSource,12,null,null,null);
+            check(uncoveredSelf>1&&uncoveredTarget>1,"shield fixture has measurable self and target exposure");
+            check(!shield.beforeBlast(shieldSource,null,12,targets,5,false,"BlastProbe"),"shield submits placement and defers the explosive");
+            var pending=shield.getClass().getDeclaredField("pending");pending.setAccessible(true);shieldPosition=(BlockPos)pending.get(shield);
+            check(shieldPosition!=null,"shield is pending, not assumed confirmed after sending");
+            shieldStage=2;shieldWait=0;return true;
+        }
+        check(serverShieldSeen,"real server accepted cover placement");
+        check(mc.level.getBlockState(shieldPosition).is(Blocks.OBSIDIAN),"client observed cover block acknowledgment");
+        check(shield.beforeBlast(shieldSource,null,12,targets,5,false,"BlastProbe"),"acknowledged cover releases the explosive gate");
+        check(calculation.damage(AnchorDamageUtil.Target.of(mc.player),shieldSource,12,null,null,null)<uncoveredSelf*.7,
+                "observed cover reduces self damage by at least thirty percent");
+        check(calculation.damage(targets.getFirst(),shieldSource,12,null,null,null)>=uncoveredTarget*.9,
+                "observed cover retains target exposure");
+        shieldStage=3;return false;
+    }
+
+    /** Actual dispatch, cancellation, and replacement through the production event chain. */
+    void checkRotationAcknowledgements(Minecraft mc) {
+        var rotation=GuizhouWare.rotationManager;
+        check(rotation.look(44,-65),"initial silent look submitted");
+        check(Math.abs(rotation.getServerPitch()+65)<.01,"silent look cache follows accepted packet");
+        check(dev.guizhou.util.PacketSendUtil.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Rot(
+                10,0,mc.player.onGround(),mc.player.horizontalCollision)),"ordinary camera restoration submitted");
+        check(Math.abs(rotation.getServerPitch())<.01,"ordinary movement replaces stale silent pitch");
+        check(rotation.look(44,-65)&&Math.abs(rotation.getServerPitch()+65)<.01,
+                "repeated silent aim is sent again after ordinary camera restoration");
+        var policy=new RotationProbePolicy();
+        dev.guizhou.util.traits.Util.EVENT_BUS.register(policy,"BlastProbeRotationPolicy");
+        try {
+            policy.block=true;
+            check(!rotation.look(80,-35),"cancelled look reports rejection");
+            check(Math.abs(rotation.getServerPitch()+65)<.01&&Math.abs(rotation.getServerYaw()-44)<.01,
+                    "cancelled look preserves accepted rotation");
+            policy.block=false;policy.replace=true;
+            check(rotation.look(80,-35),"accepted forwarded rotation reports submission");
+            check(Math.abs(rotation.getServerPitch()-15)<.01&&Math.abs(rotation.getServerYaw()+30)<.01,
+                    "replacement angles survive original look completion");
+        } finally { dev.guizhou.util.traits.Util.EVENT_BUS.unregister(policy); }
+        rotation.look(mc.player.getYRot(),mc.player.getXRot());
+        rotationStage=1;
+    }
+    static final class RotationProbePolicy {
+        boolean block,replace,forwarding;
+        @dev.guizhou.event.system.Subscribe(priority=1000)
+        void send(dev.guizhou.event.impl.network.PacketEvent.Send event) {
+            if(forwarding||!(event.getPacket() instanceof net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Rot move))return;
+            if(block){event.cancel();return;}
+            if(replace){
+                forwarding=true;
+                try {dev.guizhou.util.PacketSendUtil.forward(event,new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Rot(
+                        -30,15,move.isOnGround(),false));}
+                finally {forwarding=false;}
+            }
+        }
+    }
+
     void tick(Minecraft mc){
         if(stage==99)return;
         if(++tick>5000){fail(mc,new AssertionError("timeout stage="+stage+" trial="+trial+" chain="+chain+" step="+step));return;}
@@ -61,6 +201,9 @@ public final class BlastProbe implements ClientModInitializer {
         mc.options.pauseOnLostFocus=false;
         try{
             if(failure!=null)throw new AssertionError(failure);
+            if (inventoryStage < 4 && checkInventoryAcknowledgements(mc)) return;
+            if(rotationStage==0)checkRotationAcknowledgements(mc);
+            if (shieldStage < 3 && checkShieldConfirmation(mc)) return;
             var tp=GuizhouWare.moduleManager.getModuleByClass(GuangxiTPModule.class);
             var piston=GuizhouWare.moduleManager.getModuleByClass(GuangxiPistonModule.class);
             var bed=GuizhouWare.moduleManager.getModuleByClass(GuangxiBedModule.class);

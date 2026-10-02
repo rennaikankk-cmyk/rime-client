@@ -37,6 +37,8 @@ public final class CrystalProbe implements ClientModInitializer {
     private volatile Zombie target;
     private float predicted, legacy;
     private int checks;
+    private int ledgerStage, ledgerWait;
+    private volatile EndCrystal ledgerOwned, ledgerOther;
     private volatile float serverHealth;
     private float actionStartHealth;
     private int placements, attacks;
@@ -97,6 +99,7 @@ public final class CrystalProbe implements ClientModInitializer {
             }
             if (stage==1) {
                 if(ready!=trial || ++wait<50 || mc.level.getEntity(target.getId())==null)return;
+                if(trial==0 && ledgerStage<4 && checkSpawnLedger(mc,c))return;
                 call(c,"ensureSession",new Class<?>[0]);call(c,"ensureSelfCache",new Class<?>[0]);
                 Object cache=targetCache(mc,c);
                 predicted=(float)call(c,"calcDamage",new Class<?>[]{cache.getClass(),Vec3.class},cache,SOURCE);
@@ -144,10 +147,16 @@ public final class CrystalProbe implements ClientModInitializer {
                 setting(c,"Logic","RUSHER");setting(c,"PlaceTimeout",1000);
                 setField(field(c,"placeRank"),"hint",stale.asLong());
                 setField(c,"lastPlaceAir",stale);
+                float staleDamage=(float)field(warmCandidates.getLast(),"bound");
+                setField(c,"lastPlaceDamage",staleDamage);
                 ((it.unimi.dsi.fastutil.longs.Long2LongMap)field(c,"crystalPlaces")).put(stale.asLong(),System.currentTimeMillis());
                 Object oldPick=call(c,"findBestPlace",new Class<?>[]{List.class},List.of(cache));
                 System.out.println("CRYSTAL_LOCK stale="+stale+" legacy="+oldPick+" first="+field(((List<?>)field(c,"candidates")).getFirst(),"airPos"));
-                check(oldPick==null,"retained legacy sorting reproduces stale hint lockout");
+                // 9c18b2c5 fixed lock release for both modes; the older probe still
+                // expected RUSHER to reproduce the pre-fix bug. Check the repaired rule.
+                check(oldPick!=null,"Rusher stale hint cannot block an executable stronger candidate");
+                check((float)field(oldPick,"damage")>staleDamage+1,
+                        "Rusher challenger beats remembered final damage before releasing the lock");
                 setting(c,"Logic","DEFAULT");
                 Object picked=call(c,"findBestPlace",new Class<?>[]{List.class},List.of(cache));
                 check(picked!=null,"stale low bound hint cannot lock out stronger current placement");
@@ -207,6 +216,33 @@ public final class CrystalProbe implements ClientModInitializer {
                 level.addFreshEntity(target);ready=index;
             }catch(Throwable e){serverFailure=e;}
         });
+    }
+    private boolean checkSpawnLedger(Minecraft mc,GuangxiCrystalModule c) throws Exception {
+        BlockPos owned=BlockPos.containing(SOURCE),other=new BlockPos(8,101,0);
+        if(ledgerStage==0) {
+            setting(c,"Place",false);setting(c,"Break",false);c.enable();
+            mc.getSingleplayerServer().execute(()->{
+                var level=mc.getSingleplayerServer().overworld();
+                ledgerOwned=new EndCrystal(level,SOURCE.x,SOURCE.y,SOURCE.z);level.addFreshEntity(ledgerOwned);
+                ledgerOther=new EndCrystal(level,8.5,101,.5);level.addFreshEntity(ledgerOther);
+            });
+            ledgerStage=1;ledgerWait=0;return true;
+        }
+        if(++ledgerWait<15)return true;
+        ledgerWait=0;
+        var ledger=(dev.guizhou.util.combat.CrystalSpawnLedger)field(c,"spawnLedger");
+        if(ledgerStage==1) {
+            check(ledger.occupied(owned)&&ledger.occupied(other),"received server spawns populate both crystal identities");
+            mc.getSingleplayerServer().execute(()->ledgerOther.discard());
+            ledgerStage=2;return true;
+        }
+        if(ledgerStage==2) {
+            check(ledger.occupied(owned)&&!ledger.occupied(other),"unrelated server removal preserves owned crystal occupancy");
+            mc.getSingleplayerServer().execute(()->ledgerOwned.discard());
+            ledgerStage=3;return true;
+        }
+        check(!ledger.occupied(owned),"owned crystal is released after its actual server removal");
+        c.disable();setting(c,"Place",true);setting(c,"Break",true);ledgerStage=4;return false;
     }
     private void extraChecks(Minecraft mc, GuangxiCrystalModule c) throws Exception {
         var start=mc.player.position();

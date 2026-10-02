@@ -33,6 +33,11 @@ public class AutoEatModule extends Module {
     private final Setting<Integer> hunger = num("Hunger", 14, 1, 19);
     private final Setting<Integer> health = num("Health", 0, 0, 20);
     private final Setting<Boolean> gapples = bool("Gapples", false);
+    private final Setting<Boolean> safeFoodOnly = bool("SafeFoodOnly", false)
+            .described("仅自动食用金胡萝卜、熟肉、面包和允许的两种金苹果。");
+    private static final Set<net.minecraft.world.item.Item> SAFE = Set.of(Items.GOLDEN_CARROT, Items.COOKED_BEEF,
+            Items.COOKED_PORKCHOP, Items.COOKED_CHICKEN, Items.COOKED_MUTTON, Items.COOKED_RABBIT,
+            Items.COOKED_COD, Items.COOKED_SALMON, Items.BREAD, Items.GOLDEN_APPLE, Items.ENCHANTED_GOLDEN_APPLE);
     private final Setting<Boolean> pauseInCombat = bool("PauseInCombat", true);
     private final Setting<Double> combatRange = num("CombatRange", 8.0, 2.0, 24.0);
 
@@ -148,7 +153,8 @@ public class AutoEatModule extends Module {
     }
 
     private boolean edible(ItemStack stack) {
-        if (stack.isEmpty() || NEVER.contains(stack.getItem())) return false;
+        if (stack.isEmpty() || NEVER.contains(stack.getItem())
+                || safeFoodOnly.getValue() && !SAFE.contains(stack.getItem())) return false;
         if (!gapples.getValue() && (stack.is(Items.GOLDEN_APPLE) || stack.is(Items.ENCHANTED_GOLDEN_APPLE))) return false;
         FoodProperties food = stack.get(DataComponents.FOOD);
         return food != null && mc.player.canEat(food.canAlwaysEat()) && !mc.player.getCooldowns().isOnCooldown(stack);

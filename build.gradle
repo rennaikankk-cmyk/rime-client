@@ -169,6 +169,10 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        directFlightControlTest: 'dev.guizhou.util.elytra.DirectFlightControlTest',
+        observedTargetPositionTest: 'dev.guizhou.util.elytra.ObservedTargetPositionTest',
+        travelCruiseTest: 'dev.guizhou.util.elytra.TravelCruiseTest',
+        crystalSpawnLedgerTest: 'dev.guizhou.util.combat.CrystalSpawnLedgerTest',
         explosionSamplingTest: 'dev.guizhou.util.combat.ExplosionSamplingTest',
         maceCombatTest: 'dev.guizhou.util.elytra.MaceCombatTest',
         evadeCommitmentTest: 'dev.guizhou.util.elytra.EvadeCommitmentTest',

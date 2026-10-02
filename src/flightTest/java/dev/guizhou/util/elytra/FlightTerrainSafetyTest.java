@@ -132,6 +132,12 @@ public final class FlightTerrainSafetyTest {
                 "Baseline reproduces low-altitude launch refusal when unboosted glide reaches the floor");
         check(FlightTerrainSafety.rocketLaunchClear(slow, up, GRAVITY, 16, 2, 10, floor(-1)),
                 "A new rocket can recover low-speed flight when its delayed, finite burn clears the floor");
+        var takeoff = FlightTerrainSafety.takeoffRocketLook(slow, FORWARD, GRAVITY, 2, floor(-1));
+        check(takeoff.isPresent() && takeoff.get().y > 0, "takeoff can select a clear powered pull-up when coasting cannot escape");
+        check(!FlightTerrainSafety.takeoffRocketLook(slow, FORWARD, GRAVITY, 2,
+                obstacle(-100,0.8,-100,100,2,100)).isPresent(), "powered takeoff still respects a low ceiling");
+        check(!FlightTerrainSafety.takeoffRocketLook(new Vec3(0,-1,.1), FORWARD, GRAVITY, 2, floor(-1)).isPresent(),
+                "takeoff refuses a collision before the rocket can arrive");
         check(!FlightTerrainSafety.rocketLaunchClear(new Vec3(0,-1,0.1), up, GRAVITY, 16, 2, 10, floor(-1)),
                 "Do not assume thrust arrives before a delayed launch would hit the floor");
         check(!FlightTerrainSafety.rocketLaunchClear(slow, up, GRAVITY, 16, 2, 10,
