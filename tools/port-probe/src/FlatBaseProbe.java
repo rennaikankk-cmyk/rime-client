@@ -127,6 +127,8 @@ public final class FlatBaseProbe implements ClientModInitializer {
                 setting(surround,"Center",true);surround.enable();stage=11;wait=0;return;
             }
             if (stage==11) {
+                var surround=GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.combat.SurroundModule.class);
+                System.out.println("CENTER_TRACE tick="+wait+" pos="+mc.player.position()+" vel="+mc.player.getDeltaMovement()+" ground="+mc.player.onGround()+" enabled="+surround.isEnabled()+" remaining="+field(surround,"centerTicks")+" input="+mc.player.input.leftImpulse+","+mc.player.input.forwardImpulse);
                 if (++wait < 20) return;
                 double dx=mc.player.getX()-.5,dz=mc.player.getZ()-.5;
                 check(dx*dx+dz*dz < .12*.12,"native input hook actually centers surround player");

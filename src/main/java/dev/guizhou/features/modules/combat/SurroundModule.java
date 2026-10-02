@@ -181,7 +181,9 @@ public class SurroundModule extends Module {
         fixed.up = forward > dead; fixed.down = forward < -dead;
         fixed.left = left > dead; fixed.right = left < -dead;
         fixed.shiftKeyDown = real.shiftKeyDown;
-        float magnitude = real.shiftKeyDown ? (float) mc.player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SNEAKING_SPEED) : 1f;
+        // Native 1.21.1 permits analog impulses. Full-speed taps coast past the
+        // center after the threshold is reached; a short walking step settles there.
+        float magnitude = 0.3f * (real.shiftKeyDown ? (float) mc.player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SNEAKING_SPEED) : 1f);
         fixed.forwardImpulse = ((fixed.up ? 1 : 0) - (fixed.down ? 1 : 0)) * magnitude;
         fixed.leftImpulse = ((fixed.left ? 1 : 0) - (fixed.right ? 1 : 0)) * magnitude;
         return fixed;
