@@ -55,6 +55,24 @@ public final class AerialEngagement {
         return new Step(request, true);
     }
 
+    /** Approach the drop setup altitude while matching horizontal drift.
+     * Used only when a natural drop is not yet reachable: keeping Y=0 at a high,
+     * aligned position otherwise hovers forever above a target that has fallen away. */
+    public static Vec3 maceStagingStep(Vec3 feetOffset, Vec3 targetVelocity, double preferredHeight, double speed) {
+        if (!finite(feetOffset) || !motion(targetVelocity) || !Double.isFinite(preferredHeight)
+                || !Double.isFinite(speed) || speed <= 0 || speed > 20) return Vec3.ZERO;
+        double height = Math.clamp(preferredHeight + 2, 4, 64);
+        double verticalError = feetOffset.y + height;
+        // Keep an acquired, nearby height advantage against a rising target.
+        // Closing that reserve prematurely shortens the natural fall; only a
+        // substantial excess height (or a falling target) needs altitude correction.
+        boolean retainRise = targetVelocity.y > .15 && verticalError >= -Math.max(12, height);
+        Vec3 result = new Vec3(targetVelocity.x + feetOffset.x * .5,
+                retainRise ? targetVelocity.y : targetVelocity.y + Math.clamp(verticalError * .25, -3, 3),
+                targetVelocity.z + feetOffset.z * .5);
+        return result.length() > speed ? result.normalize().scale(speed) : result;
+    }
+
     /** A falling mace can reach upward too; compare its standing eye with the victim's box.
      * The short margin predicts danger only and never authorizes an attack. */
     public static boolean maceThreatWindow(Vec3 attackerEye, Vec3 attackerVelocity,

@@ -1,0 +1,25 @@
+allprojects {
+ afterEvaluate {
+  if (!plugins.hasPlugin('fabric-loom')) return
+  def probe = project.file('tools/clickgui-probe')
+  def lab = project.file('../clickgui-1211-lab')
+  sourceSets.create('clickGuiProbe') {
+   java.srcDir(new File(probe, 'src'))
+   resources.srcDir(new File(probe, 'resources'))
+   compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+   runtimeClasspath += output + compileClasspath
+  }
+  tasks.register('clickGuiProbeJar', Jar) {
+   dependsOn tasks.named('clickGuiProbeClasses')
+   from sourceSets.clickGuiProbe.output
+   archiveFileName = 'clickgui-probe.jar'
+   destinationDirectory = lab
+  }
+  loom.runs.client {
+   runDir('../clickgui-1211-lab/' + (project.findProperty('probeRun') ?: 'ui01'))
+   programArgs('--username', 'GuiReview', '--width', '1440', '--height', '900')
+   vmArg('-Dfabric.addMods=' + new File(lab, 'clickgui-probe.jar').path)
+  }
+  tasks.named('runClient') { dependsOn tasks.named('clickGuiProbeClasses') }
+ }
+}

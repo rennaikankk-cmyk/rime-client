@@ -7,8 +7,10 @@ public final class ArmorSwapCycleTest {
     private static int checks;
 
     public static void main(String[] args) {
+        heldBoostStillObservesCleanup();
         continuousExchange();
         serverPacedWindows();
+        switchingServerSynchronizationPreservesOwnership();
         earlyReturnAndTailAreIdempotent();
         delayedServerClearKeepsWingsOnEveryMove();
         rocketWaitsForRestartWindow();
@@ -27,6 +29,21 @@ public final class ArmorSwapCycleTest {
         naturalStrikeStillHonorsRecoveryAndManualChanges();
         explicitDiveOwnsEquipmentUntilRecovery();
         System.out.println("ArmorSwapCycleTest passed: " + checks + " checks");
+    }
+
+    private static void heldBoostStillObservesCleanup() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        cycle.beforeMovement(true, true, true, true);
+        cycle.afterMovement(true, true, true, true);
+        cycle.afterMovement(false, true, true, true);
+        check(!cycle.active() && player.restorations == 1, "Disabling during rocket hold completes recovery at the tail hook");
+        cycle = begin(player);
+        cycle.beforeMovement(true, true, true, true);
+        cycle.afterMovement(true, true, true, true);
+        player.reserve = new Object();
+        cycle.afterMovement(true, true, true, true);
+        check(!cycle.active(), "Rocket hold cannot retain an equipment pair replaced by a server inventory update");
     }
 
     private static void continuousExchange() {
@@ -81,6 +98,33 @@ public final class ArmorSwapCycleTest {
         player.newTick(false);
         cycle.beforeMovement(true, true, true, false, true);
         check(!cycle.active() && player.events.isEmpty(), "Manual equipment replacement cancels stale SLM swaps");
+    }
+
+    private static void switchingServerSynchronizationPreservesOwnership() {
+        Model player = new Model();
+        ArmorSwapCycle cycle = begin(player);
+        cycle.beforeMovement(true, true, true, false, true);
+        player.move(); cycle.afterMovement(true, true, true);
+        player.newTick(false);
+        cycle.beforeMovement(true, true, true, false, false);
+        check(player.chest == player.wings && player.gliding && player.startsThisTick == 0,
+                "Disabling synchronization reopens the owned wing window without toggling an existing glide");
+        player.move(); cycle.afterMovement(true, true, true);
+        for (int delay = 0; delay < 80; delay++) {
+            player.newTick(false);
+            cycle.beforeMovement(true, true, true, false, true);
+            cycle.afterMovement(true, true, true);
+            check(cycle.active() && player.chest == player.armor && player.events.isEmpty(),
+                    "Enabling synchronization waits on the same pair without packet spam");
+        }
+        player.newTick(true);
+        cycle.beforeMovement(true, true, true, false, true);
+        check(player.startsThisTick == 1 && cycle.rocketWindowOpen(), "Observed flight end restarts exactly once");
+        player.move(); cycle.afterMovement(true, true, true); cycle.afterMovement(true, true, true);
+        player.assertTickBounds();
+        cycle.stop(true);
+        check(!cycle.active() && player.chest == player.wings && player.duplicateStarts == 0,
+                "Switching synchronization keeps safe disable and equipment ownership");
     }
 
     private static void earlyReturnAndTailAreIdempotent() {

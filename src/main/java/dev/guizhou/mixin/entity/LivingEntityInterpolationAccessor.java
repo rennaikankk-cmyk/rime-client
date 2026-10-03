@@ -10,5 +10,7 @@ public interface LivingEntityInterpolationAccessor {
     @Accessor("lerpSteps") int guizhouware$lerpSteps();
     @Accessor("lerpX") double guizhouware$lerpX();
     @Accessor("lerpY") double guizhouware$lerpY();
+    @Accessor("lerpYRot") double guizhouware$lerpYRot();
+    @Accessor("lerpXRot") double guizhouware$lerpXRot();
     @Accessor("lerpZ") double guizhouware$lerpZ();
 }

@@ -9,7 +9,7 @@
 [![Java CI with Gradle](https://github.com/rennaikankk-cmyk/rime-client/actions/workflows/gradle-upload.yml/badge.svg?branch=codex%2Fminecraft-1.21.1)](https://github.com/rennaikankk-cmyk/rime-client/actions/workflows/gradle-upload.yml)
 [![Security Review](https://github.com/rennaikankk-cmyk/rime-client/actions/workflows/security-review.yml/badge.svg?branch=codex%2Fminecraft-1.21.1)](https://github.com/rennaikankk-cmyk/rime-client/actions/workflows/security-review.yml)
 
-**Rime** (formerly GuizhouWare) is a Minecraft 1.21.1 Fabric PvP client (the on-demand port of Rime 1.2.7) maintained by **renna**.
+**Rime** (formerly GuizhouWare) is a Minecraft 1.21.1 Fabric PvP client (the on-demand port of Rime 1.2.10) maintained by **renna**.
 It is a fork of **Homovore**, originally developed by **Leonetic and WiderThanEurasia**,
 with AutoCrystal enhancements ported from **AlienV4**.
 

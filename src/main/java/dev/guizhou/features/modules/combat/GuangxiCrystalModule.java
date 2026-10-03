@@ -347,6 +347,10 @@ public class GuangxiCrystalModule extends Module {
     }
 
     private final Long2LongOpenHashMap crystalPlaces = new Long2LongOpenHashMap();
+    private final Setting<Boolean> selfShield = bool("SelfShield", false)
+            .described("尝试以黑曜石减少自伤至少30%，保留至少90%目标伤害；等待服务器确认，不会放宽原有自伤限制。");
+    private final dev.guizhou.util.combat.BlastShieldController shieldController = new dev.guizhou.util.combat.BlastShieldController();
+    private final dev.guizhou.util.combat.CrystalSpawnLedger spawnLedger = new dev.guizhou.util.combat.CrystalSpawnLedger();
 
     private float lastBestDamage    = 0;
 
@@ -418,6 +422,8 @@ public class GuangxiCrystalModule extends Module {
 
     private void resetSessionState() {
         crystalPlaces.clear();
+        spawnLedger.clear();
+        shieldController.reset();
         deadIds.clear();
         attackWindow.clear();
         attackRetries.clear();
@@ -665,15 +671,27 @@ public class GuangxiCrystalModule extends Module {
         if (packet instanceof ClientboundRemoveEntitiesPacket removed) {
             entitySnapshotTick = -1;
             entitySnapshot = List.of();
-            for (int id : removed.getEntityIds()) attackRetries.removed(id);
-            // Obelisk-style entity-destroy echo: if the crystal on our placed slot is
-            // gone after an entity-remove packet (broken without an explosion echo,
-            // suppressed blast, or server cleanup), the slot is free again — zero the
-            // place cooldown so the next PreTick re-seeds immediately.
-            if (lastPlaceAir != null && !hasLiveCrystalAt(lastPlaceAir)) {
+            boolean ownedRemoved = false;
+            for (int id : removed.getEntityIds()) {
+                attackRetries.removed(id);
+                BlockPos position = spawnLedger.removed(id);
+                if (position == null && mc.level.getEntity(id) instanceof EndCrystal crystal)
+                    position = crystal.blockPosition();
+                if (lastPlaceAir != null && lastPlaceAir.equals(position)) ownedRemoved = true;
+            }
+            if (ownedRemoved && !spawnLedger.occupied(lastPlaceAir)) {
                 placeTimer.reset();
                 crystalPlaces.remove(lastPlaceAir.asLong());
             }
+            // Receive listeners precede vanilla application. Invalidate again after its
+            // queued handler, so a reactive scan cannot retain a removed entity for a tick.
+            long generation = lifecycleGeneration;
+            var level = mc.level;
+            mc.tell(() -> {
+                if (generation != lifecycleGeneration || mc.level != level || !isEnabled()) return;
+                entitySnapshotTick = -1;
+                entitySnapshot = List.of();
+            });
             return;
         }
         if (packet instanceof ClientboundPlayerPositionPacket) {
@@ -685,17 +703,10 @@ public class GuangxiCrystalModule extends Module {
             long now = System.currentTimeMillis();
             explodeTimes.addLast(now);
             while (!explodeTimes.isEmpty() && now - explodeTimes.peekFirst() > 1000) explodeTimes.removeFirst();
-            // Explosion-echo placement: when the blast centre matches our last placed
-            // crystal slot (Obelisk uses dist^2 <= 144), the slot is confirmed free —
-            // zero the place cooldown so the next PreTick re-seeds immediately.
-            if (lastPlaceAir != null && Double.isFinite(explode.getX()) && Double.isFinite(explode.getY()) && Double.isFinite(explode.getZ())) {
-                double dx = explode.getX() - (lastPlaceAir.getX() + 0.5);
-                double dy = explode.getY() - (lastPlaceAir.getY() + 1.0);
-                double dz = explode.getZ() - (lastPlaceAir.getZ() + 0.5);
-                if (dx * dx + dy * dy + dz * dz <= 144.0) {
-                    placeTimer.reset();
-                    crystalPlaces.remove(lastPlaceAir.asLong());
-                }
+            if (dev.guizhou.util.combat.CrystalSpawnLedger.matchesBlast(lastPlaceAir, new Vec3(explode.getX(), explode.getY(), explode.getZ()))
+                    && !spawnLedger.occupied(lastPlaceAir)) {
+                placeTimer.reset();
+                crystalPlaces.remove(lastPlaceAir.asLong());
             }
             return;
         }
@@ -719,6 +730,9 @@ public class GuangxiCrystalModule extends Module {
                         String.format("%.1f", pkt.getX()), String.format("%.1f", pkt.getY()),
                         String.format("%.1f", pkt.getZ()));
             }
+            spawnLedger.removed(pkt.getId());
+            if (pkt.getType() == EntityType.END_CRYSTAL)
+                spawnLedger.spawned(pkt.getId(), new Vec3(pkt.getX(), pkt.getY(), pkt.getZ()));
             onCrystalSpawn(pkt);
         }
     }
@@ -1983,6 +1997,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     private boolean doPlace(PlaceTarget target, boolean trustBase) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (selfShield.getValue() && !trustBase) {
+            TargetsModule targetModule = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
+            var targets = collectTargets(targetModule, placeRangeValue() + 12).stream()
+                    .map(t -> dev.guizhou.util.AnchorDamageUtil.Target.of(t.entity())).toList();
+            if (!shieldController.beforeBlast(new Vec3(target.base.getX() + .5, target.base.getY() + 1,
+                    target.base.getZ() + .5), null, 12, targets, placeRangeValue(), rotate.getValue(), "GuangxiCrystal")) return false;
+        }
         AutoTotemModule.holdForCombat(Items.END_CRYSTAL);
         boolean holdingCrystal = mc.player.getMainHandItem().is(Items.END_CRYSTAL)
                 || mc.player.getOffhandItem().is(Items.END_CRYSTAL);
@@ -2233,6 +2254,12 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private float calcDamageSelf(Vec3 explosionPos, BlockPos phantomObsidianPos) {
+        return calcDamageSelf(explosionPos, phantomObsidianPos, Double.POSITIVE_INFINITY, Float.POSITIVE_INFINITY, 0);
+    }
+
+    /** A rejected partial maximum is never stored as an exact damage value. */
+    private float calcDamageSelf(Vec3 explosionPos, BlockPos phantomObsidianPos,
+                                 double maximum, float health, double reserve) {
         SelfCache sc = selfNow();
         SelfDamageKey key = new SelfDamageKey(explosionPos,
                 phantomObsidianPos == null ? null : phantomObsidianPos.immutable());
@@ -2241,11 +2268,22 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         float damage = selfDamageAt(sc, sc.currentPos(), sc.currentBox(), explosionPos, phantomObsidianPos);
         if (!rusherLogic()) {
             for (int i = 1; i < selfPath.size(); i++) {
+                if (damage > maximum || damage + reserve >= health) {
+                    ClientDiagnostics.count("combat.GuangxiCrystal.selfEarlyReject", 1);
+                    return damage;
+                }
                 Vec3 point = selfPath.get(i);
+                double distance = point.distanceTo(explosionPos);
+                // Exposure is at most one. This pose cannot increase the exact maximum.
+                if (distance > 12.0 || selfDamage(distance, 1.0, sc) <= damage) {
+                    ClientDiagnostics.count("combat.GuangxiCrystal.selfBoundSkip", 1);
+                    continue;
+                }
                 damage = Math.max(damage, selfDamageAt(sc, point,
                         sc.currentBox().move(point.subtract(sc.currentPos())), explosionPos, phantomObsidianPos));
             }
         } else if (!sc.pos().equals(sc.currentPos())) {
+            if (damage > maximum || damage + reserve >= health) return damage;
             damage = Math.max(damage, selfDamageAt(sc, sc.pos(), sc.box(), explosionPos, phantomObsidianPos));
         }
         selfDamageCache.put(key, damage);
@@ -2396,7 +2434,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         float optimistic = maxDamageSelf(crystalCenter);
         if (CrystalSelectionPolicy.isSelfDamageSafe(optimistic, maxSelf, playerHealth, reserve)) return true;
 
-        float real = calcDamageSelf(crystalCenter, phantomObsidianPos);
+        float real = calcDamageSelf(crystalCenter, phantomObsidianPos, maxSelf, playerHealth, reserve);
         return CrystalSelectionPolicy.isSelfDamageSafe(real, maxSelf, playerHealth, reserve);
     }
 

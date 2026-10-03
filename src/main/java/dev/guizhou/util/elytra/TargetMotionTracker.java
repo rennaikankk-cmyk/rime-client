@@ -99,6 +99,17 @@ public final class TargetMotionTracker {
 
     public void sample(Vec3 nextPosition, int nextTick, boolean onGround, boolean isGliding,
                        Equipment observedEquipment, int observedEquipmentId) {
+        sample(nextPosition, nextTick, onGround, isGliding, observedEquipment, observedEquipmentId, false);
+    }
+
+    /** Packet endpoints can arrive in bursts; never classify a single burst as rocket acceleration. */
+    public void sampleServer(Vec3 nextPosition, int nextTick, boolean onGround, boolean isGliding,
+                             Equipment observedEquipment, int observedEquipmentId) {
+        sample(nextPosition, nextTick, onGround, isGliding, observedEquipment, observedEquipmentId, true);
+    }
+
+    private void sample(Vec3 nextPosition, int nextTick, boolean onGround, boolean isGliding,
+                        Equipment observedEquipment, int observedEquipmentId, boolean serverSample) {
         if (!isFinite(nextPosition) || observedEquipment == null) { clear(); return; }
         long elapsed = (long) nextTick - tick;
         boolean flagsChanged = position != null && (grounded != onGround || gliding != isGliding
@@ -127,7 +138,13 @@ public final class TargetMotionTracker {
                 candidateSamples = 0;
             } else {
                 previousVelocity = velocity;
-                velocity = nextVelocity;
+                // Same-direction packet bursts need smoothing; a real reversal must
+                // invalidate the old plan immediately, including a vertical turn.
+                boolean sharpTurn = serverSample && velocityCount > 0 && previousVelocity.lengthSqr() > .0025
+                        && nextVelocity.lengthSqr() > .0025
+                        && previousVelocity.dot(nextVelocity) <= .5 * previousVelocity.length() * nextVelocity.length();
+                velocity = serverSample && velocityCount > 0 && !sharpTurn
+                        ? previousVelocity.scale(.65).add(nextVelocity.scale(.35)) : nextVelocity;
                 sampleTicks = (int) elapsed;
                 previousAcceleration = acceleration;
                 acceleration = velocityCount > 0 ? velocity.subtract(previousVelocity).scale(1.0 / elapsed) : Vec3.ZERO;
@@ -139,7 +156,7 @@ public final class TargetMotionTracker {
                 velocityCount = Math.min(4, velocityCount + 1);
                 suppressFallback = false;
                 if (unstableTicks > 0) unstableTicks--;
-                if (Math.abs(turn) > Math.PI / 3 || acceleration.lengthSqr() > 2.25) {
+                if (sharpTurn || Math.abs(turn) > Math.PI / 3 || acceleration.lengthSqr() > 2.25) {
                     unstableTicks = 2;
                     revision++;
                 }

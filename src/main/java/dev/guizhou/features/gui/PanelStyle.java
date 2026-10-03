@@ -34,8 +34,7 @@ import static org.lwjgl.glfw.GLFW.*;
 
 /**
  * Classic multi-column ClickGUI: one draggable panel per category, modules as
- * compact rows, settings expanded inline under a module. Two presets share the
- * implementation: a purple filled look and a dense blue framed look.
+ * aligned rows and inline settings. Glass and category-list views keep independent geometry.
  */
 final class PanelStyle extends ShellStyle {
     enum Preset { HACHIMI }
@@ -46,20 +45,22 @@ final class PanelStyle extends ShellStyle {
                         boolean descriptionPanel, boolean icons, boolean glassHeader, float radius, int dim) {}
 
     /** Hachimi-style glass: translucent panels, tinted header strip, category icons, enabled left bar. */
-    private static final Look HACHIMI_LOOK = new Look(110, 18, 16, 9.5f, 0xFFE08A6C, 0xC01F1E1C, 0xA030302E, 0x00000000,
-            0x14FFFFFF, false, true, 0xFFFAF9F5, 0xFFC2C0B6, true, true, true, true, 5f, 0x66000000);
+    private static final Look HACHIMI_LOOK = new Look(ClickGuiLayout.WIDTH, ClickGuiLayout.HEADER, ClickGuiLayout.ROW, 9.5f, 0xFFE08A6C, 0xEB242320, 0xF02D2C28, 0x00000000,
+            0x0FFFFFFF, false, true, 0xFFFAF9F5, 0xFFC2C0B6, true, true, true, true, 3f, 0x78000000);
 
     private static final String DESCRIPTION = "DESCRIPTION";
 
     private final class Panel {
         final Module.Category category;
         final String key;
-        float x, y, scroll, scrollTarget, bodyHeight;
-        boolean collapsed;
+        final int slot;
+        float x, y, drawX, drawY, maxBody, scroll, scrollTarget, bodyHeight;
+        boolean collapsed, renderCollapsed, customPosition;
 
         Panel(Module.Category category, String key) {
             this.category = category;
             this.key = key;
+            this.slot = panels.size();
         }
     }
 
@@ -89,8 +90,10 @@ final class PanelStyle extends ShellStyle {
     private Object hoverTarget;
     private long hoverSince;
     private float scale = 1, vw, vh;
+    private ClickGuiLayout.View viewport;
     private long opened;
     private int clickModifiers;
+    private double clickX, clickY;
 
     PanelStyle(GuizhouWareGui screen, Preset preset) {
         super(screen);
@@ -105,8 +108,9 @@ final class PanelStyle extends ShellStyle {
         opened = System.currentTimeMillis();
         anim.clear();
         closePopovers();
+        grabbed = null;
         search = new ShadcnTextField(query, s -> query = s);
-        search.padLeft = 12;
+        search.padLeft = 6;
         rebuildPanels();
     }
 
@@ -137,24 +141,49 @@ final class PanelStyle extends ShellStyle {
         for (Module.Category c : categories()) panels.add(new Panel(c, c.name()));
         if (look.descriptionPanel) panels.add(new Panel(null, DESCRIPTION));
         computeScale();
-        float x = 8;
-        for (Panel p : panels) {
-            p.x = x;
-            p.y = 26;
-            x += look.width + 4;
-        }
         loadLayout();
     }
 
     private void computeScale() {
         ClickGuiModule gui = ClickGuiModule.getInstance();
         double requested = gui == null ? 1 : gui.menuScale.getValue() / 100;
-        requested = Double.isFinite(requested) ? Math.clamp(requested, .6, 1.5) : 1;
-        float needed = list() ? panelWidth() + 24 : 16 + panels.size() * (look.width + 4);
-        float fit = Math.min(1, width / Math.max(1f, needed));
-        scale = (float) Math.max(.35, requested * fit);
+        if (list()) requested = Math.min(requested, height / (ClickGuiLayout.TOP + ClickGuiLayout.FOOTER
+                + (panels.size() - 1) * (look.header + 4) + look.row * 3));
+        int count = query.isBlank() ? panels.size() : (int) panels.stream().filter(p -> p.category == null || !modules(p.category).isEmpty()).count();
+        viewport = ClickGuiLayout.calculate(width, height, requested, list() ? 1 : count);
+        scale = viewport.scale();
+        if (list()) scale = Math.min(scale, height / (ClickGuiLayout.TOP + ClickGuiLayout.FOOTER
+                + (panels.size() - 1) * (look.header + 4) + look.row * 3));
         vw = width / scale;
         vh = height / scale;
+    }
+
+    private void layoutPanels() {
+        int matched = 0;
+        for (int i = 0; i < panels.size(); i++) {
+            Panel p = panels.get(i);
+            if (query.isBlank() && !p.customPosition) { p.x = viewport.x(p.slot); p.y = viewport.y(p.slot); }
+            p.drawX = ClickGuiLayout.visibleX(p.x, vw);
+            p.drawY = ClickGuiLayout.visibleY(p.y, vh);
+            if (!query.isBlank() && (p.category == null || !modules(p.category).isEmpty())) {
+                p.drawX = viewport.x(matched); p.drawY = viewport.y(matched++);
+            }
+            p.renderCollapsed = query.isBlank() && p.collapsed;
+            float available = vh - p.drawY - look.header - ClickGuiLayout.FOOTER;
+            p.maxBody = Math.max(0, query.isBlank() && p.customPosition ? available : Math.min(available, viewport.cellHeight() - look.header));
+            p.maxBody = (float) Math.floor(p.maxBody / look.row) * look.row;
+        }
+    }
+
+    private void arrangePanels() {
+        closePopovers();
+        grabbed = null;
+        for (Panel p : panels) {
+            p.customPosition = p.collapsed = false;
+            p.scroll = p.scrollTarget = 0;
+        }
+        anim.clear();
+        saveLayout();
     }
 
     private void loadLayout() {
@@ -166,8 +195,10 @@ final class PanelStyle extends ShellStyle {
             if (v == null) continue;
             String[] parts = v.split(",");
             try {
-                p.x = Float.parseFloat(parts[0]);
-                p.y = Float.parseFloat(parts[1]);
+                float x = Float.parseFloat(parts[0]), y = Float.parseFloat(parts[1]);
+                if (!Float.isFinite(x) || !Float.isFinite(y)) continue;
+                p.x = x; p.y = y;
+                p.customPosition = parts.length < 4 || !parts[3].equals("auto");
                 p.collapsed = parts.length > 2 && parts[2].equals("1");
             } catch (RuntimeException ignored) {
                 // Malformed entries fall back to the default column.
@@ -179,8 +210,12 @@ final class PanelStyle extends ShellStyle {
         ClickGuiModule gui = ClickGuiModule.getInstance();
         if (gui == null) return;
         Map<String, String> map = layoutMap(gui.panelLayout.getValue());
-        for (Panel p : panels)
-            map.put(preset.name() + "." + p.key, String.format(Locale.ROOT, "%.1f,%.1f,%d", p.x, p.y, p.collapsed ? 1 : 0));
+        for (Panel p : panels) {
+            String key = preset.name() + "." + p.key;
+            if (!p.customPosition && !p.collapsed) map.remove(key);
+            else map.put(key, String.format(Locale.ROOT, "%.1f,%.1f,%d,%s", p.x, p.y, p.collapsed ? 1 : 0,
+                    p.customPosition ? "manual" : "auto"));
+        }
         StringBuilder out = new StringBuilder();
         for (var e : map.entrySet()) {
             if (out.length() > 0) out.append(';');
@@ -203,28 +238,33 @@ final class PanelStyle extends ShellStyle {
         return gui != null && gui.frame.getValue() == ClickGuiModule.Frame.LIST;
     }
 
-    private float panelWidth() { return list() ? 118 : look.width; }
+    private float panelWidth() { return look.width; }
 
     private void toggleFrame() {
         ClickGuiModule gui = ClickGuiModule.getInstance();
         if (gui == null) return;
+        closePopovers();
+        grabbed = null;
         gui.frame.setValue(list() ? ClickGuiModule.Frame.GLASS : ClickGuiModule.Frame.LIST);
     }
 
     private void layoutList() {
-        float y = 28;
+        float y = ClickGuiLayout.TOP;
+        long visible = panels.stream().filter(p -> p.category != null && (query.isBlank() || !modules(p.category).isEmpty())).count();
+        float available = Math.max(0, vh - ClickGuiLayout.TOP - ClickGuiLayout.FOOTER - visible * (look.header + 4));
         for (Panel p : panels) {
-            if (p.category == null) { p.y = -400; p.collapsed = true; continue; }
-            p.x = 8;
-            p.y = y;
-            p.collapsed = p.category != listOpen;
+            p.bodyHeight = 0;
+            if (p.category == null || !query.isBlank() && modules(p.category).isEmpty()) { p.drawY = -400; continue; }
+            p.drawX = ClickGuiLayout.MARGIN;
+            p.drawY = y;
+            p.renderCollapsed = p.category != listOpen;
+            p.maxBody = available;
             float content = 0;
-            if (!p.collapsed) {
+            if (!p.renderCollapsed) {
                 for (Module m : modules(p.category))
                     content += look.row + (expanded.contains(m) ? expandedHeight(m) : 0);
             }
-            float maxBody = Math.max(look.row * 3, vh - (y + look.header) - 16);
-            y += look.header + (p.collapsed ? 0 : Math.min(content, maxBody)) + 1;
+            y += look.header + Math.min(content, available) + 4;
         }
     }
 
@@ -269,22 +309,24 @@ final class PanelStyle extends ShellStyle {
         // Dim the world in place. Vanilla renderBlurredBackground copies the
         // whole framebuffer and blurs it every frame; that is the open-GUI stall.
         if (world) g.fill(0, 0, width, height, look.dim);
-        else RenderUtil.gradient(g, 0, 0, width, height, 0xFF0B0B10, 0xFF07070A, 0xFF07070A, 0xFF0B0B10);
+        else RenderUtil.gradient(g, 0, 0, width, height, 0xFF181817, 0xFF10100F, 0xFF10100F, 0xFF181817);
 
         double mx = mouseX / scale, my = mouseY / scale;
         var pose = g.pose();
         pose.pushPose();
         pose.scale(scale, scale, 1);
-        float open = anim.to("open", 1, 12);
-        pose.translate(0, (1 - open) * -6, 0);
-        my += (1 - open) * 6;
+        // Keep drawing and input coordinates identical.
 
-        if (list()) layoutList();
+        if (list()) layoutList(); else layoutPanels();
         drawToolbar(g, mx, my);
-        for (Panel p : panels) drawPanel(g, p, mx, my);
+        for (Panel p : panels) {
+            if (p.category == null && hovered != null) tooltipModule = hovered;
+            drawPanel(g, p, mx, my);
+        }
         if (!look.descriptionPanel) drawTooltip(g, mx, my);
-        if (!hint.isEmpty()) text(g, fit(hint, vw - 20, 7.5f), 8, vh - 12, 7.5f, SUBTLE);
-        else text(g, dev.guizhou.util.lang.ClientLanguage.text("左键开关 · 右键展开设置 · 拖动标题移动 · 单击标题折叠 · 直接输入即可搜索"), 8, vh - 12, 7.5f, SUBTLE);
+        round(g, ClickGuiLayout.MARGIN, vh - 21, vw - ClickGuiLayout.MARGIN * 2, 1, 0, alpha(BORDER, .7f));
+        String help = hint.isEmpty() ? dev.guizhou.util.lang.ClientLanguage.text("左键开关 · 右键展开设置 · 拖动标题移动 · 单击标题折叠 · 直接输入即可搜索") : hint;
+        text(g, fit(help, vw - 24, 7.5f), 12, vh - 14, 7.5f, MUTED);
 
         modalFrom = hits.size();
         if (picker.active()) {
@@ -296,52 +338,46 @@ final class PanelStyle extends ShellStyle {
     }
 
     private void drawToolbar(GuiGraphics g, double mx, double my) {
-        float sw = 160, sh = 15, sx = (vw - sw) / 2, sy = 5;
+        round(g, 12, 8, vw - 24, 30, 3, 0xF02D2C28);
+        outline(g, 12, 8, vw - 24, 30, 3, 1, alpha(BORDER, .85f));
+        text(g, "Rime", 22, 18, 11, HudFonts.SEMI, TEXT);
+        float sx = 66, sy = 13, sh = 20, sw = Math.min(240, vw - sx - 164);
         search.bounds(sx, sy, sw, sh);
         drawSearchField(g, sx, sy, sw, sh);
         hit(sx, sy, sw, sh, b -> { if (b == 0) search.focused = true; });
 
-        float bx = vw - 8 - 16;
+        float bx = vw - 38;
         toolButton(g, Icon.CLOSE, bx, sy, dev.guizhou.util.lang.ClientLanguage.text("关闭"), mx, my, screen::onClose);
-        bx -= 19;
+        bx -= 24;
         boolean inWorld = mc.level != null;
         toolButton(g, Icon.HUD, bx, sy, inWorld ? dev.guizhou.util.lang.ClientLanguage.text("编辑 HUD") : dev.guizhou.util.lang.ClientLanguage.text("进入世界后可编辑 HUD"), mx, my, () -> {
             if (!inWorld) return;
             HudClientModule hud = GuizhouWare.moduleManager.getModuleByClass(HudClientModule.class);
             if (hud != null) { save(); hud.openEditor(screen); }
         });
-        bx -= 19;
+        bx -= 24;
         toolButton(g, Icon.FOLDER, bx, sy, dev.guizhou.util.lang.ClientLanguage.text("配置管理"), mx, my, screen::openConfigs);
-        bx -= 19;
+        bx -= 24;
         toolButton(g, Icon.EXTERNAL, bx, sy, dev.guizhou.util.lang.ClientLanguage.text("云参数"), mx, my, screen::openCloudConfigs);
-        bx -= 19;
+        bx -= 24;
         toolButton(g, Icon.LIST, bx, sy, list() ? dev.guizhou.util.lang.ClientLanguage.text("切换为玻璃面板") : dev.guizhou.util.lang.ClientLanguage.text("切换为分类列"), mx, my, this::toggleFrame);
+        bx -= 24;
+        toolButton(g, Icon.GRID, bx, sy, dev.guizhou.util.lang.ClientLanguage.isChinese() ? "整理面板：恢复整齐排列" : "Arrange panels: restore grid", mx, my, this::arrangePanels);
     }
 
     private void drawSearchField(GuiGraphics g, float sx, float sy, float sw, float sh) {
-        boolean focused = search.focused;
-        round(g, sx, sy, sw, sh, look.radius + 1, focused ? 0xE0121118 : 0x900C0C12);
-        outline(g, sx, sy, sw, sh, look.radius + 1, 1, focused ? accent(null) : 0x50FFFFFF);
-        icon(g, Icon.SEARCH, sx + 4, sy + 3.5f, 8, focused ? accent(null) : 0x90FFFFFF);
-        String value = search.value();
-        if (value.isEmpty() && !focused) {
-            text(g, dev.guizhou.util.lang.ClientLanguage.text("搜索模块… (Ctrl+F)"), sx + 15, sy + 3.5f, 8, 0x80FFFFFF);
-            return;
-        }
-        text(g, fit(value, sw - 22, 8), sx + 15, sy + 3.5f, 8, 0xFFFFFFFF);
-        if (focused && (System.currentTimeMillis() / 500) % 2 == 0) {
-            float cx = sx + 15 + Math.min(width(value, 8), sw - 22);
-            g.fill((int) cx, (int) sy + 3, (int) cx + 1, (int) (sy + sh - 3), accent(null));
-        }
+        search.drawCompact(g, dev.guizhou.util.lang.ClientLanguage.text("搜索模块… (Ctrl+F)"), 8, look.radius,
+                search.focused ? SURFACE : 0xB01F1E1C, search.focused ? alpha(accent(null), .7f) : BORDER);
+        icon(g, Icon.SEARCH, sx + 4, sy + 6, 8, search.focused ? accent(null) : SUBTLE);
     }
 
     private void toolButton(GuiGraphics g, Icon icon, float bx, float by, String tip, double mx, double my, Runnable action) {
-        boolean hover = contains(mx, my, bx, by, 15, 15);
+        boolean hover = contains(mx, my, bx, by, 20, 20);
         if (hover) { hint = tip; hoverTarget = icon; }
-        round(g, bx, by, 15, 15, look.radius + 1, hover ? 0xE0222030 : 0x900C0C12);
-        outline(g, bx, by, 15, 15, look.radius + 1, 1, hover ? accent(null) : 0x50FFFFFF);
-        icon(g, icon, bx + 3.5f, by + 3.5f, 8, hover ? 0xFFFFFFFF : 0xB0FFFFFF);
-        hit(bx, by, 15, 15, b -> { if (b == 0) { UiSounds.click(); action.run(); } });
+        round(g, bx, by, 20, 20, look.radius, hover ? RAISED : 0x002D2C28);
+        outline(g, bx, by, 20, 20, look.radius, 1, hover ? alpha(accent(null), .6f) : 0x00000000);
+        icon(g, icon, bx + 5, by + 5, 10, hover ? 0xFFFFFFFF : 0xB0FFFFFF);
+        hit(bx, by, 20, 20, b -> { if (b == 0) { UiSounds.click(); action.run(); } });
     }
 
     // ------------------------------------------------------------ panels
@@ -357,6 +393,7 @@ final class PanelStyle extends ShellStyle {
             moduleChinese = dev.guizhou.util.lang.ClientLanguage.isChinese();
             moduleQuery = q;
             moduleCache.clear();
+            tooltipModule = null;
         }
         List<Module> cached = moduleCache.get(c);
         if (cached != null) return cached;
@@ -380,11 +417,13 @@ final class PanelStyle extends ShellStyle {
     }
 
     private void drawPanel(GuiGraphics g, Panel p, double mx, double my) {
-        if (list() && (p.category == null || p.y < 0)) return;
+        p.bodyHeight = 0;
+        if (list() && (p.category == null || p.drawY < 0)) return;
         boolean description = p.category == null;
+        if (description && ClickGuiModule.getInstance() != null && !ClickGuiModule.getInstance().descriptions.getValue()) return;
         List<Module> mods = description ? List.of() : modules(p.category);
         if (!description && !query.isBlank() && mods.isEmpty()) return;
-        float x = p.x, y = p.y, W = panelWidth(), H = look.header, r = list() ? 2f : look.radius;
+        float x = p.drawX, y = p.drawY, W = panelWidth(), H = look.header, r = look.radius;
         int accent = accent(p.category);
 
         float content;
@@ -393,39 +432,40 @@ final class PanelStyle extends ShellStyle {
             content = 0;
             for (Module m : mods) content += look.row + anim.to("exp:" + m.getName(), expanded.contains(m) ? expandedHeight(m) : 0, 16);
         }
-        float open = list() ? (p.collapsed ? 0 : 1) : anim.to("panel:" + p.key, p.collapsed ? 0 : 1, 14);
-        float maxBody = Math.max(look.row * 3, vh - (y + H) - 16);
+        float open = list() ? (p.renderCollapsed ? 0 : 1) : anim.to("panel:" + p.key, p.renderCollapsed ? 0 : 1, 14);
+        float maxBody = p.maxBody;
         float body = Math.min(content, maxBody) * open;
         p.bodyHeight = body;
         float maxScroll = Math.max(0, content - maxBody);
         p.scrollTarget = Math.clamp(p.scrollTarget, 0, maxScroll);
         p.scroll = anim.to("scroll:" + p.key, p.scrollTarget, 18);
 
-        boolean selected = list() && !p.collapsed;
-        int headerColor = list() ? (selected ? accent : 0xF014151C) : (look.glassHeader ? mix(accent, look.body, .70f) : accent);
+        boolean selected = list() && !p.renderCollapsed;
+        int headerColor = selected ? mix(look.body2, accent, .16f) : look.body2;
         if (look.fillEnabled) shadow(g, x, y, W, H + body, r, 6, 0x90000000);
-        if (body > .5f) round(g, x, y, W, H + body, r, list() ? 0xF0101118 : look.body);
+        if (body > .5f) round(g, x, y, W, H + body, r, look.body);
         else if (list()) round(g, x, y, W, H, r, headerColor);
         if (!list()) {
             round(g, x, y, W, H, r, headerColor);
             if (body > .5f && r > 0) round(g, x, y + H - r, W, r, 0, headerColor);
-            if (body > .5f && look.glassHeader) round(g, x + 1, y + H - 1, W - 2, 1, 0, alpha(accent, .45f));
-            if (look.border) outline(g, x, y, W, H + body, r, 0.5f, alpha(0xFFFFFFFF, .22f));
+            if (body > .5f && look.glassHeader) round(g, x + 1, y + H - 1, W - 2, 1, 0, alpha(BORDER, .85f));
+            if (look.border) outline(g, x, y, W, H + body, r, 1f, alpha(BORDER, .85f));
         } else if (selected) {
-            round(g, x, y, W, H, r, accent);
+            round(g, x, y, W, H, r, headerColor);
+            round(g, x, y + 5, 2, H - 10, 0, accent);
         }
 
         String title = description ? dev.guizhou.util.lang.ClientLanguage.text("描述") : categoryName(p.category);
-        float titleX = x + 5;
+        float titleX = x + 8;
         if (look.icons && !description) {
             Icon ci = p.category == Module.Category.FUNNY ? Icon.FUN : Icon.valueOf(p.category.name());
-            icon(g, ci, x + 4, y + (H - 8) / 2, 8, 0xFFE8ECFF);
-            titleX = x + 14;
+            icon(g, ci, x + 8, y + (H - 10) / 2, 10, accent);
+            titleX = x + 23;
         }
         text(g, title, titleX, y + (H - look.text) / 2 + .5f, look.text + .5f, HudFonts.SEMI, 0xFFFFFFFF);
         if (!description) {
             String count = mods.stream().filter(Module::isEnabled).count() + "/" + mods.size();
-            textRight(g, count, x + W - 5, y + (H - 7) / 2 + .5f, 7, HudFonts.REGULAR, 0xC0FFFFFF);
+            textRight(g, count, x + W - 8, y + (H - 8) / 2 + .5f, 8, HudFonts.REGULAR, MUTED);
         }
         hit(x, y, W, H, b -> {
             if (list()) {
@@ -434,10 +474,10 @@ final class PanelStyle extends ShellStyle {
             }
             if (b == 0) {
                 grabbed = p;
-                grabDX = (float) (mx - p.x);
-                grabDY = (float) (my - p.y);
-                pressX = (float) mx;
-                pressY = (float) my;
+                grabDX = (float) (clickX - p.drawX);
+                grabDY = (float) (clickY - p.drawY);
+                pressX = (float) clickX;
+                pressY = (float) clickY;
                 moved = false;
                 panels.remove(p);
                 panels.add(p);
@@ -471,8 +511,8 @@ final class PanelStyle extends ShellStyle {
             }
         }
         g.disableScissor();
-        if (maxScroll > 0 && !p.collapsed) {
-            float track = body - 4, thumb = Math.max(10, track * track / (track + maxScroll));
+        if (maxScroll > 0 && !p.renderCollapsed) {
+            float track = Math.max(0, body - 4), thumb = Math.min(track, Math.max(10, track * track / (track + maxScroll)));
             round(g, x + W - 2.5f, top + 2 + (track - thumb) * p.scroll / maxScroll, 1.5f, thumb, .75f, 0x90FFFFFF);
         }
     }
@@ -495,13 +535,16 @@ final class PanelStyle extends ShellStyle {
                     alpha(mix(accent, 0xFFFFFFFF, hover ? .08f : 0), .88f));
         } else if (look.barEnabled) {
             if (hover) round(g, x + 1, ry, W - 2, rh, 0, look.rowHover);
-            if (onP > .01f) roundGradient(g, x + 1, ry, (W - 2) * Math.min(1, onP), rh, 0, alpha(accent, .42f), alpha(accent, 0f));
+            if (onP > .01f) {
+                round(g, x + 1, ry, W - 2, rh, 0, alpha(accent, .10f * onP));
+                round(g, x + 1, ry + 5, 2, rh - 10, 0, alpha(accent, onP));
+            }
         } else if (hover) {
             g.fill((int) x + 1, (int) ry, (int) (x + W - 1), (int) (ry + rh), look.rowHover);
         }
         int color = mix(look.offText, onText(m.getCategory()), onP);
         float ty = ry + (rh - look.text) / 2 + .5f;
-        float right = x + W - 4;
+        float right = x + W - 8;
         boolean hasSettings = !settingsOf(m).isEmpty();
         if (hasSettings) {
             String sign = expanded.contains(m) ? "-" : "+";
@@ -513,7 +556,7 @@ final class PanelStyle extends ShellStyle {
             textRight(g, bind, right, ty + 1, look.text - 1.5f, HudFonts.REGULAR, alpha(0xFFFFFFFF, .5f));
             right -= width(bind, look.text - 1.5f) + 4;
         }
-        text(g, fit(m.getDisplayName(), right - x - 6, look.text), x + 5, ty, look.text, on ? HudFonts.SEMI : HudFonts.REGULAR, color);
+        text(g, fit(m.getDisplayName(), right - x - 12, look.text, on ? HudFonts.SEMI : HudFonts.REGULAR), x + 8, ty, look.text, on ? HudFonts.SEMI : HudFonts.REGULAR, color);
         if (inside) hit(x, Math.max(ry, top), W, Math.min(ry + rh, bottom) - Math.max(ry, top), b -> {
             if (b == 0) m.toggleByUser();
             else if (b == 1 && hasSettings) {
@@ -527,12 +570,12 @@ final class PanelStyle extends ShellStyle {
     private void drawSettings(GuiGraphics g, Module m, float x, float sy, float W, double mx, double my,
                               float top, float bottom, int accent) {
         float rh = look.row;
-        int bg = look.fillEnabled ? 0xC00B0A10 : 0x60000000;
+        int bg = 0xD01C1B19;
         round(g, x + 1, sy, W - 2, expandedHeight(m), 0, bg);
-        round(g, x + 1, sy, 1.5f, Math.max(0, expandedHeight(m) - 2), 0, alpha(accent, .9f));
+        round(g, x + 1, sy, 1.5f, Math.max(0, expandedHeight(m) - 2), 0, alpha(accent, .35f));
         float ry = sy + 1;
         for (Setting<?> s : settingsOf(m)) {
-            if (ry + rh > top && ry < bottom) drawSetting(g, m, s, x + 3, ry, W - 5, rh, mx, my, top, bottom, accent);
+            if (ry + rh > top && ry < bottom) drawSetting(g, m, s, x + 8, ry, W - 16, rh, mx, my, top, bottom, accent);
             ry += rh;
         }
     }
@@ -546,21 +589,24 @@ final class PanelStyle extends ShellStyle {
         if (hover) { g.fill((int) sx, (int) sy, (int) (sx + sw), (int) (sy + sh), 0x14FFFFFF); hoverTarget = s; }
         float size = look.text - .5f, ty = sy + (sh - size) / 2 + .5f;
         String label = settingLabel(owner, s);
-        int labelColor = 0xFFE4E2EC;
+        int labelColor = MUTED;
 
         if (v instanceof Number n && s.hasRestriction()) {
             float a = ((Number) s.getMin()).floatValue(), b = ((Number) s.getMax()).floatValue();
             float ratio = b <= a ? 0 : Math.clamp((n.floatValue() - a) / (b - a), 0, 1);
             float shown = anim.to("slide:" + System.identityHashCode(s), ratio, 22);
-            g.fill((int) sx, (int) (sy + 1), (int) (sx + sw * shown), (int) (sy + sh - 1), alpha(accent, look.fillEnabled ? .55f : .38f));
-            if (!look.fillEnabled) g.fill((int) sx, (int) (sy + sh - 2), (int) (sx + sw * shown), (int) (sy + sh - 1), accent);
+            round(g, sx, sy + sh - 3, sw, 1.5f, .5f, BORDER);
+            round(g, sx, sy + sh - 3, sw * shown, 1.5f, .5f, alpha(accent, .85f));
         }
         if (editing == s && editor != null) {
             editX = sx; editY = sy; editW = sw; editH = sh;
             drawInlineEditor(g, sx, sy, sw, sh, size, accent);
             return;
         }
-        text(g, fit(label, sw * .6f, size), sx + 2, ty, size, labelColor);
+        float valueWidth = v instanceof Boolean ? 12 : v instanceof Color ? 20
+                : v instanceof Number n ? Math.min(sw * .42f, Math.max(24, width(number(n), size, HudFonts.SEMI) + 2))
+                : Math.max(30, sw * .4f);
+        text(g, fit(label, sw - valueWidth - 8, size), sx + 2, ty, size, labelColor);
         float right = sx + sw - 2;
         if (v instanceof Boolean on) {
             float bs = Math.min(sh - 5, 7), by = sy + (sh - bs) / 2;
@@ -580,7 +626,7 @@ final class PanelStyle extends ShellStyle {
             else if (v instanceof Number n) value = number(n);
             else value = String.valueOf(v);
             int valueColor = binding == s ? accent : 0xFFFFFFFF;
-            textRight(g, fit(value, sw * .42f, size), right, ty, size, HudFonts.SEMI, alpha(valueColor, .92f));
+            textRight(g, fit(value, valueWidth, size, HudFonts.SEMI), right, ty, size, HudFonts.SEMI, alpha(valueColor, .92f));
         }
         if (!inside || sy < top - 1 || sy + sh > bottom + 1) return;
         final float fx = sx, fw = sw, fy = sy;
@@ -592,7 +638,7 @@ final class PanelStyle extends ShellStyle {
             if (v instanceof Number && s.hasRestriction()) {
                 if (button != 0) return;
                 if (shift) beginEdit(s);
-                else { sliding = s; slideX = fx; slideW = fw; setSlider(mx); }
+                else { sliding = s; slideX = fx; slideW = fw; setSlider(clickX); }
             } else if (v instanceof Enum<?> e) {
                 Object[] values = e.getClass().getEnumConstants();
                 int dir = button == 1 ? -1 : 1;
@@ -606,7 +652,7 @@ final class PanelStyle extends ShellStyle {
     }
 
     private void drawInlineEditor(GuiGraphics g, float sx, float sy, float sw, float sh, float size, int accent) {
-        g.fill((int) sx, (int) sy, (int) (sx + sw), (int) (sy + sh), 0xF0101018);
+        g.fill((int) sx, (int) sy, (int) (sx + sw), (int) (sy + sh), 0xF01F1E1C);
         outline(g, sx, sy, sw, sh, 1, 1, accent);
         String value = editor.value();
         text(g, fit(value, sw - 8, size), sx + 3, sy + (sh - size) / 2 + .5f, size, 0xFFFFFFFF);
@@ -626,7 +672,7 @@ final class PanelStyle extends ShellStyle {
         if (hovered != null) tooltipModule = hovered;
         Module m = tooltipModule;
         if (m == null) {
-            text(g, dev.guizhou.util.lang.ClientLanguage.text("悬停模块查看描述"), x + 5, top + 4, look.text - .5f, 0x90FFFFFF);
+            text(g, fit(dev.guizhou.util.lang.ClientLanguage.text("悬停模块查看描述"), W - 16, look.text - .5f), x + 8, top + 6, look.text - .5f, MUTED);
             return;
         }
         text(g, fit(m.getDisplayName(), W - 10, look.text), x + 5, top + 4, look.text, HudFonts.SEMI, 0xFFFFFFFF);
@@ -728,6 +774,7 @@ final class PanelStyle extends ShellStyle {
         double mx = e.x() / scale, my = e.y() / scale;
         int b = e.button();
         clickModifiers = e.modifiers();
+        clickX = mx; clickY = my;
         if (binding != null) {
             assign(binding, Bind.fromMouseButton(b));
             binding = null;
@@ -741,6 +788,7 @@ final class PanelStyle extends ShellStyle {
         if (editor != null && !contains(mx, my, editX, editY, editW, editH)) commitEdit();
         if (editor != null) return true;
         search.focused = contains(mx, my, search.x, search.y, search.w, search.h) && b == 0;
+        if (search.focused) { search.click(mx, my, (clickModifiers & GLFW_MOD_SHIFT) != 0); return true; }
         for (int i = hits.size() - 1; i >= 0; i--) {
             if (hits.get(i).at(mx, my)) { hits.get(i).action.accept(b); return true; }
         }
@@ -755,8 +803,9 @@ final class PanelStyle extends ShellStyle {
         if (grabbed != null) {
             if (Math.abs(mx - pressX) + Math.abs(my - pressY) > 3) moved = true;
             if (moved) {
-                grabbed.x = (float) Math.clamp(mx - grabDX, -look.width + 20, vw - 20);
-                grabbed.y = (float) Math.clamp(my - grabDY, 0, vh - look.header);
+                grabbed.customPosition = true;
+                grabbed.x = ClickGuiLayout.visibleX((float) (mx - grabDX), vw);
+                grabbed.y = ClickGuiLayout.visibleY((float) (my - grabDY), vh);
             }
             return true;
         }
@@ -769,6 +818,10 @@ final class PanelStyle extends ShellStyle {
         sliding = null;
         if (grabbed != null) {
             if (!moved) { UiSounds.click(); grabbed.collapsed = !grabbed.collapsed; }
+            else {
+                grabbed.x = ClickGuiLayout.visibleX(ClickGuiLayout.snap(grabbed.x, ClickGuiLayout.MARGIN), vw);
+                grabbed.y = ClickGuiLayout.visibleY(ClickGuiLayout.snap(grabbed.y, ClickGuiLayout.TOP), vh);
+            }
             grabbed = null;
             saveLayout();
         }
@@ -781,12 +834,13 @@ final class PanelStyle extends ShellStyle {
         if (picker.active() || editor != null) return true;
         for (int i = panels.size() - 1; i >= 0; i--) {
             Panel p = panels.get(i);
-            if (contains(mx, my, p.x, p.y, panelWidth(), look.header + p.bodyHeight)) {
+            if ((!list() || p.category != null) && (query.isBlank() || p.category == null || !modules(p.category).isEmpty())
+                    && contains(mx, my, p.drawX, p.drawY, panelWidth(), look.header + p.bodyHeight)) {
                 p.scrollTarget -= (float) (vertical * look.row * 2);
                 return true;
             }
         }
-        for (Panel p : panels) p.y += (float) (vertical * look.row * 2);
+        // Scrolling empty space must not displace every category.
         return true;
     }
 
@@ -817,7 +871,7 @@ final class PanelStyle extends ShellStyle {
         if (search.focused) {
             if (k == GLFW_KEY_ESCAPE) {
                 if (search.value().isEmpty()) search.focused = false;
-                else { search = new ShadcnTextField("", s -> query = s); search.padLeft = 12; search.focused = true; query = ""; }
+                else { search = new ShadcnTextField("", s -> query = s); search.padLeft = 6; search.focused = true; query = ""; }
             } else if (k == GLFW_KEY_ENTER || k == GLFW_KEY_KP_ENTER) search.focused = false;
             else search.key(e);
             return true;
@@ -871,7 +925,8 @@ final class PanelStyle extends ShellStyle {
     private static String bindLabel(Bind bind) {
         if (bind == null || bind.isEmpty()) return null;
         String s = bind.toString();
-        return s == null || s.isBlank() ? null : s.toUpperCase(Locale.ROOT);
+        if (s == null || s.isBlank()) return null;
+        return s.toUpperCase(Locale.ROOT).replace("RIGHT ", "R").replace("LEFT ", "L").replace("CONTROL", "CTRL");
     }
 
     private static String number(Number n) {

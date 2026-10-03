@@ -36,6 +36,7 @@ public class NotificationsModule extends Module {
     public Setting<Boolean> deaths = bool("Deaths", true);
     public Setting<Boolean> totemPops = bool("TotemPops", true);
     public Setting<Boolean> gear = bool("Gear", false);
+    public Setting<Boolean> sound = bool("Sound", false).described("爆图腾、阵亡和补给不足时播放提示音，受界面音效音量控制。");
 
     private final Set<UUID> lastTickAlive = ConcurrentHashMap.newKeySet();
 
@@ -93,6 +94,7 @@ public class NotificationsModule extends Module {
                             .append(Component.literal(String.valueOf(pops)).withColor(ChatPalette.WARNING))
                             .append(Component.literal(dev.guizhou.util.lang.ClientLanguage.text(" 个图腾")));
                     ChatFeed.send(ChatTone.ERROR, "☠", message);
+                    if (sound.getValue()) dev.guizhou.util.render.UiSounds.error();
                     NotifierHudModule.push("death:"+id, NotifierHudModule.Icon.SKULL, message);
                 }
             } else {
@@ -114,6 +116,10 @@ public class NotificationsModule extends Module {
         UUID id = player.getUUID();
         int pops = GuizhouWare.playerInfoManager.getTotemPops(id);
         boolean self = player == mc.player;
+        if (sound.getValue()) {
+            if (self) dev.guizhou.util.render.UiSounds.error();
+            else dev.guizhou.util.render.UiSounds.success();
+        }
         String subject = self ? dev.guizhou.util.lang.ClientLanguage.text("你") : player.getGameProfile().getName();
 
         Component body = Component.empty()
@@ -144,6 +150,7 @@ public class NotificationsModule extends Module {
             }
 
             if (!gearWarned.add(gi.item())) continue;
+            if (sound.getValue()) dev.guizhou.util.render.UiSounds.error();
 
             Component body = Component.empty()
                     .append(Component.literal("Low on " + gi.label() + ": "))

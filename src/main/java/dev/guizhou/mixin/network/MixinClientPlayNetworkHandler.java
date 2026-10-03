@@ -80,11 +80,18 @@ public class MixinClientPlayNetworkHandler {
     private void silentSwapFix(ClientboundContainerSetSlotPacket packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getInstance();
         if (!mc.isSameThread() || mc.player == null) return;
-        if (packet.getContainerId() != 0 || packet.getSlot() - 36 != mc.player.getInventory().selected) return;
+        if (packet.getContainerId() != 0) return;
+        boolean offhand = packet.getSlot() == 45;
+        if (!offhand && packet.getSlot() - 36 != mc.player.getInventory().selected) return;
         ItemStack packetStack = packet.getItem();
-        ItemStack handStack = mc.player.getMainHandItem();
+        ItemStack handStack = offhand ? mc.player.getOffhandItem() : mc.player.getMainHandItem();
         if (packetStack.isEmpty() || handStack.isEmpty()) return;
-        if (ItemStack.matches(packetStack, handStack)) ci.cancel();
+        if (mc.player.containerMenu == mc.player.inventoryMenu && ItemStack.matches(packetStack, handStack)) {
+            // Identical contents still carry an authoritative revision used by the next click.
+            // Keep this exact server value; predicting/incrementing revisions creates desync.
+            mc.player.inventoryMenu.setItem(packet.getSlot(), packet.getStateId(), handStack);
+            ci.cancel();
+        }
     }
 
     @Inject(method = "handleExplosion", at = @At("HEAD"))

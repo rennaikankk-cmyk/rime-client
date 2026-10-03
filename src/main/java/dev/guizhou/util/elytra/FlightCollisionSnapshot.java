@@ -77,6 +77,9 @@ public final class FlightCollisionSnapshot implements FlightRoutePlanner.Clearan
         long volume = (long) (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
         if (volume <= 0 || volume > MAX_BLOCKS) return null;
         List<AABB> obstacles = new ArrayList<>();
+        // Shapes are resolved with the live context at each position; only their immutable
+        // box decomposition is reused within this capture (never across world updates).
+        var shapeBoxes = new java.util.IdentityHashMap<net.minecraft.world.phys.shapes.VoxelShape, List<AABB>>();
         CollisionContext context = CollisionContext.of(player);
         BlockPos.MutableBlockPos position = new BlockPos.MutableBlockPos();
         int visited = 0;
@@ -88,15 +91,31 @@ public final class FlightCollisionSnapshot implements FlightRoutePlanner.Clearan
                     if (obstacles.size() > MAX_BOXES) return null;
                     continue;
                 }
+                var chunk = level.getChunk(chunkX, chunkZ);
+                var sections = chunk.getSections();
                 for (int x = Math.max(minX, chunkX << 4); x <= Math.min(maxX, ((chunkX + 1) << 4) - 1); x++) {
                     for (int z = Math.max(minZ, chunkZ << 4); z <= Math.min(maxZ, ((chunkZ + 1) << 4) - 1); z++) {
                         int solidStart = Integer.MIN_VALUE;
                         for (int y = minY; y <= maxY; y++) {
                             if ((visited++ & 127) == 0 && System.nanoTime() - started > CAPTURE_BUDGET_NANOS) return null;
+                            int sectionIndex = level.getSectionIndex(y);
+                            if (sectionIndex < 0 || sectionIndex >= sections.length || sections[sectionIndex].hasOnlyAir()) {
+                                if (solidStart != Integer.MIN_VALUE) {
+                                    addSolidColumn(obstacles, bounds, x, z, solidStart, y);
+                                    solidStart = Integer.MIN_VALUE;
+                                }
+                                y = Math.min(maxY, (y | 15));
+                                continue;
+                            }
                             position.set(x, y, z);
-                            var state = level.getBlockState(position);
-                            List<AABB> boxes = state.isAir() ? List.of()
-                                    : state.getCollisionShape(level, position, context).toAabbs();
+                            var state = chunk.getBlockState(position);
+                            var shape = state.isAir() ? net.minecraft.world.phys.shapes.Shapes.empty()
+                                    : state.getCollisionShape(level, position, context);
+                            List<AABB> boxes = shapeBoxes.get(shape);
+                            if (boxes == null) {
+                                boxes = shape.toAabbs();
+                                if (shapeBoxes.size() < 128) shapeBoxes.put(shape, boxes);
+                            }
                             if (boxes.size() == 1 && fullCube(boxes.getFirst())) {
                                 if (solidStart == Integer.MIN_VALUE) solidStart = y;
                                 continue;

@@ -52,6 +52,20 @@ public final class AerialEngagementTest {
                 "One-tick descending entry remains a threat");
         check(!AerialEngagement.maceThreatWindow(new Vec3(0,3,0),new Vec3(0,.8,0),victim,Vec3.ZERO,3,1),
                 "A climbing mace cannot create a falling smash window");
+        Vec3 staging = AerialEngagement.maceStagingStep(new Vec3(0,-150,0),Vec3.ZERO,10,6);
+        check(staging.y < 0 && staging.length() <= 6, "High aligned mace closes height instead of hovering indefinitely");
+        double height = 150;
+        for(int tick=0;tick<100;tick++) height += AerialEngagement.maceStagingStep(new Vec3(0,-height,0),Vec3.ZERO,10,6).y;
+        check(height>=12 && height<12.01, "Direct flight converges to setup height without crossing below the drop reserve");
+        check(AerialEngagement.maceStagingStep(new Vec3(0,-12,0),new Vec3(2,1,-1),10,6).equals(new Vec3(2,1,-1)),
+                "At setup altitude retain the target's horizontal and vertical drift");
+        check(AerialEngagement.maceStagingStep(new Vec3(0,-20,0),new Vec3(2,1,-1),10,6).equals(new Vec3(2,1,-1)),
+                "A rising target must not consume an acquired nearby charge-height advantage");
+        check(AerialEngagement.maceStagingStep(new Vec3(0,-150,0),new Vec3(0,1,0),10,6).y<0,
+                "Retaining a rising-target lane cannot strand pursuit at an excessively high apex");
+        check(AerialEngagement.maceStagingStep(new Vec3(1000,-150,0),Vec3.ZERO,10,3).length()<=3.000001,
+                "Staging obeys the actual flight budget");
+        check(AerialEngagement.maceStagingStep(new Vec3(Double.NaN,0,0),Vec3.ZERO,10,6).equals(Vec3.ZERO), "Invalid staging observations rejected");
         Random random = new Random(20261001);
         for (int i=0;i<1000;i++) {
             double angle = random.nextDouble()*Math.PI*2;

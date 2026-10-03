@@ -135,6 +135,24 @@ public final class FlightTerrainSafety {
         return Optional.empty();
     }
 
+    /** A newly opened wing may need a rocket to make any takeoff path viable. */
+    public static Optional<Vec3> takeoffRocketLook(Vec3 velocity, Vec3 preferred, double gravity,
+                                                  int arrivalTicks, Clearance space) {
+        if (!finite(velocity) || !finite(preferred) || space == null) return Optional.empty();
+        Vec3 flat = new Vec3(preferred.x, 0, preferred.z);
+        if (flat.lengthSqr() < EPSILON) flat = new Vec3(velocity.x, 0, velocity.z);
+        if (flat.lengthSqr() < EPSILON) flat = new Vec3(0,0,1);
+        float yaw = ElytraPhysics.rotationToYaw(flat);
+        for (float pitch : new float[]{-35,-55,-75}) {
+            for (float turn : new float[]{0,30,-30}) {
+                Vec3 look = ElytraPhysics.pitchYawToRotation(pitch,yaw+turn);
+                if (space.clear(Vec3.ZERO,look.scale(.75))
+                        && rocketLaunchClear(velocity,look,gravity,16,arrivalTicks,10,space)) return Optional.of(look);
+            }
+        }
+        return Optional.empty();
+    }
+
     private static boolean valid(Vec3 velocity, double gravity, int horizonTicks, Clearance space) {
         return finite(velocity) && Double.isFinite(gravity) && gravity >= 0.0
                 && horizonTicks > 0 && space != null;

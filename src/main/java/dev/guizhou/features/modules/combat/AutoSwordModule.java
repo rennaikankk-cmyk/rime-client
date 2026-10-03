@@ -719,10 +719,7 @@ public class AutoSwordModule extends Module {
         if (nullCheck() || !sameSession()) return false;
         boolean sent = PacketSendUtil.send(new ServerboundMovePlayerPacket.PosRot(
                 point.x, point.y, point.z, yaw, pitch, false));
-        if (sent && GuizhouWare.rotationManager != null) {
-            GuizhouWare.rotationManager.setServerYaw(yaw);
-            GuizhouWare.rotationManager.setServerPitch(pitch);
-        }
+        // RotationManager observes the final submitted packet, including any replacement.
         return sent && submittedPosition != null && submittedPosition.distanceToSqr(point) < 1e-10;
     }
 

@@ -1,6 +1,7 @@
 package dev.guizhou.util.elytra;
 
 import net.minecraft.world.phys.Vec3;
+import dev.guizhou.util.elytra.TargetMotionTracker.Equipment;
 
 public final class TargetMotionTrackerTest {
     private static int assertions;
@@ -17,7 +18,39 @@ public final class TargetMotionTrackerTest {
         modeDebounceAndEquipmentInvalidation();
         discontinuitiesNeverRestoreStaleFallback();
         repeatedEquipmentCyclingKeepsContinuousMotion();
+        serverBurstsDoNotInventPersistentAcceleration();
+        serverReversalInvalidatesSmoothedHeading();
         System.out.println("TargetMotionTrackerTest passed: " + assertions + " assertions");
+    }
+
+    private static void serverReversalInvalidatesSmoothedHeading() {
+        for (Vec3 direction : new Vec3[]{new Vec3(1,0,0),new Vec3(0,1,0),new Vec3(0,0,1)}) {
+            TargetMotionTracker tracker = new TargetMotionTracker();
+            Vec3 origin = new Vec3(0,100,0);
+            for (int tick = 0; tick <= 6; tick++)
+                tracker.sampleServer(origin.add(direction.scale(tick)),tick,false,true,Equipment.ELYTRA,1);
+            long revision = tracker.revision();
+            tracker.sampleServer(origin.add(direction.scale(5)),7,false,true,Equipment.ELYTRA,1);
+            var snapshot = tracker.snapshot(Vec3.ZERO);
+            vector(direction.scale(-1),snapshot.velocity(),"server reversal takes effect on its first observation");
+            check(snapshot.revision()!=revision && snapshot.maxLeadTicks()<=1,
+                    "horizontal and vertical server reversals invalidate pending long predictions");
+            check(snapshot.acceleration().equals(Vec3.ZERO) && snapshot.turnRate()==0,
+                    "old derivatives cannot continue through the observed reversal");
+        }
+    }
+
+    private static void serverBurstsDoNotInventPersistentAcceleration() {
+        TargetMotionTracker tracker = new TargetMotionTracker();
+        for (int tick = 0; tick <= 30; tick++)
+            tracker.sampleServer(new Vec3((tick / 2) * 4, 100, 0), tick, false, true, Equipment.ELYTRA, 1);
+        check(tracker.velocity().x > 1.5 && tracker.velocity().x < 2.5, "bursted endpoints keep bounded average speed");
+        check(tracker.snapshot(Vec3.ZERO).acceleration().length() < .5, "one packet burst cannot imply unbounded acceleration");
+        for (int tick = 31; tick <= 60; tick++)
+            tracker.sampleServer(new Vec3(60 + (tick - 30) * 2, 100, 0), tick, false, true, Equipment.ELYTRA, 1);
+        check(Math.abs(tracker.velocity().x - 2) < .001, "steady server speed converges without permanent underleading");
+        tracker.sampleServer(new Vec3(400, 100, 0), 61, false, true, Equipment.ELYTRA, 1);
+        check(tracker.velocity().equals(Vec3.ZERO), "teleport still discards smoothed motion");
     }
 
     private static void measuredVelocityUsesElapsedTicks() {
