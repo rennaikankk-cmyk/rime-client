@@ -490,7 +490,7 @@ final class PanelStyle extends ShellStyle {
         if (body <= .5f) return;
 
         float top = y + H, bottom = y + H + body;
-        g.enableScissor((int) x, (int) top, (int) (x + W), (int) Math.ceil(bottom));
+        dev.guizhou.util.render.ScissorUtil.enableTransformed(g,(int) x, (int) top, (int) (x + W), (int) Math.ceil(bottom));
         if (description) drawDescription(g, x, top, W);
         else {
             float ry = top - p.scroll;
@@ -501,7 +501,7 @@ final class PanelStyle extends ShellStyle {
                     if (exp > .5f) {
                         float sTop = Math.max(top, ry + look.row), sBottom = Math.min(bottom, ry + look.row + exp);
                         if (sBottom > sTop) {
-                            g.enableScissor((int) x, (int) sTop, (int) (x + W), (int) Math.ceil(sBottom));
+                            dev.guizhou.util.render.ScissorUtil.enableTransformed(g,(int) x, (int) sTop, (int) (x + W), (int) Math.ceil(sBottom));
                             drawSettings(g, m, x, ry + look.row, W, mx, my, sTop, sBottom, accent);
                             g.disableScissor();
                         }
