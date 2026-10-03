@@ -9,6 +9,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
+import net.minecraft.locale.Language;
 import net.minecraft.util.FormattedCharSequence;
 
 import java.awt.Font;
@@ -31,6 +32,7 @@ public class FontRenderer implements Closeable {
     private final Map<Identifier, ObjectList<DrawEntry>> glyphPages = new HashMap<>();
     private final GlyphMap.PageCache maps;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final FontTextCache<FormattedCharSequence> textCache = new FontTextCache<>(512, 256);
 
     private final int padding;
     /** Glyph bake ascent in GUI px; bigger values bake sharper large text. */
@@ -65,7 +67,17 @@ public class FontRenderer implements Closeable {
     }
 
     public void drawString(GuiGraphics graphics, String text, float x, float y, int color, boolean dropShadow) {
-        drawText(graphics, parse(text, color).getVisualOrderText(), x, y, color, dropShadow);
+        rebuildIfScaleChanged();
+        drawText(graphics, visualText(text, color), x, y, color, dropShadow);
+    }
+
+    private FormattedCharSequence visualText(String text, int color) {
+        Language language = Language.getInstance();
+        FormattedCharSequence cached = textCache.layout(text, color, language);
+        if (cached != null) return cached;
+        FormattedCharSequence result = parse(text, color).getVisualOrderText();
+        textCache.layout(text, color, language, result);
+        return result;
     }
 
     public void drawText(GuiGraphics graphics, FormattedCharSequence text, float x, float y, int color, boolean dropShadow) {
@@ -90,7 +102,10 @@ public class FontRenderer implements Closeable {
                 }
                 int argb = (alpha << 24) | rgb;
 
-                for (char ch : Character.toChars(codePoint)) {
+                int units = Character.charCount(codePoint);
+                for (int unit = 0; unit < units; unit++) {
+                    char ch = units == 1 ? (char) codePoint
+                            : unit == 0 ? Character.highSurrogate(codePoint) : Character.lowSurrogate(codePoint);
                     GlyphMap.Glyph glyph = locateGlyph(ch);
                     if (glyph == null) continue;
                     if (glyph.width() > 0 && glyph.height() > 0 && ch != ' ') {
@@ -148,20 +163,27 @@ public class FontRenderer implements Closeable {
 
     public float getTextWidth(String text) {
         rebuildIfScaleChanged();
+        Float cached = textCache.width(text);
+        if (cached != null) return cached;
         String stripped = stripControlCodes(text);
         float adv = 0f;
         for (int i = 0; i < stripped.length(); i++) {
             GlyphMap.Glyph g = locateGlyph(stripped.charAt(i));
             if (g != null) adv += g.advance();
         }
-        return adv / multiplier;
+        float width = adv / multiplier;
+        textCache.width(text, width);
+        return width;
     }
 
     public float getTextWidth(FormattedCharSequence text) {
         rebuildIfScaleChanged();
         float[] adv = { 0f };
         text.accept((index, style, codePoint) -> {
-            for (char ch : Character.toChars(codePoint)) {
+            int units = Character.charCount(codePoint);
+            for (int unit = 0; unit < units; unit++) {
+                char ch = units == 1 ? (char) codePoint
+                        : unit == 0 ? Character.highSurrogate(codePoint) : Character.lowSurrogate(codePoint);
                 GlyphMap.Glyph g = locateGlyph(ch);
                 if (g != null) adv[0] += g.advance();
             }
@@ -236,12 +258,18 @@ public class FontRenderer implements Closeable {
 
     @Override
     public void close() {
-        lock.writeLock().lock();
-        try {
-            maps.clear();
-            initialized = false;
-        } finally {
-            lock.writeLock().unlock();
+        // drawText takes the page monitor before the glyph read lock: keep that order.
+        synchronized (glyphPages) {
+            lock.writeLock().lock();
+            try {
+                maps.clear();
+                glyphPages.clear();
+                textCache.clear();
+                initialized = false;
+                previousGameScale = -1;
+            } finally {
+                lock.writeLock().unlock();
+            }
         }
     }
 

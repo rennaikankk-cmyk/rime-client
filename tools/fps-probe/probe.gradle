@@ -19,6 +19,7 @@ allprojects {
    runDir('../fps-lab/' + (project.findProperty('probeRun') ?: 'baseline'))
    programArgs('--quickPlaySingleplayer','ProbeWorld','--username','FpsProbe','--width','854','--height','480')
    vmArg('-Dfabric.addMods=' + new File(lab,'fps-probe.jar').path)
+   if (project.findProperty('probeHud') == 'true') vmArg('-Drime.probe.hud=true')
   }
  }
 }

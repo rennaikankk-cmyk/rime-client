@@ -35,7 +35,13 @@ public final class FpsProbe implements ClientModInitializer {
  void tick(Minecraft mc)throws Exception {
   if(mc.player==null||mc.getSingleplayerServer()==null)return;
   mc.options.pauseOnLostFocus=false;mc.options.enableVsync().set(false);mc.options.framerateLimit().set(260);
-  if(!queued){queued=true;mc.setScreen(null);mc.getSingleplayerServer().execute(()->{
+  if(!queued){queued=true;mc.setScreen(null);
+   if(Boolean.getBoolean("rime.probe.hud")) {
+    var hud=GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.client.HudClientModule.class);
+    if(!hud.isEnabled())hud.enable();
+    mc.options.hideGui=false;
+   }
+   mc.getSingleplayerServer().execute(()->{
    var s=mc.getSingleplayerServer();var p=s.getPlayerList().getPlayer(mc.player.getUUID());var l=p.level();
    s.setDifficulty(net.minecraft.world.Difficulty.NORMAL,true);
    s.getCommands().performPrefixedCommand(s.createCommandSourceStack(),"gamerule minecraft:spawn_mobs false");
@@ -45,6 +51,12 @@ public final class FpsProbe implements ClientModInitializer {
    p.teleportTo(l,.5,121,.5,Set.of(),0,0,false);ready=true;
   });return;}
   if(!ready||++ticks<100)return;
+  if(ticks==240 && Boolean.getBoolean("rime.probe.hud")) {
+   var hud=GuizhouWare.moduleManager.getModuleByClass(dev.guizhou.features.modules.client.HudClientModule.class);
+   require(hud.getElement(dev.guizhou.features.modules.hud.CoordinatesHudModule.class).wasRendered());
+   require(hud.getElement(dev.guizhou.features.modules.hud.PingHudModule.class).wasRendered());
+   net.minecraft.client.Screenshot.grab(mc.gameDirectory,"hud-world.png",mc.getMainRenderTarget(),1,message->{});
+  }
   if(ticks==100)ClientDiagnostics.start(60);
   var crystal=GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
   var flight=GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);

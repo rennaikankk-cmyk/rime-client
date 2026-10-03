@@ -541,7 +541,7 @@ public class PlacementManager extends Feature {
                 || trace.getBlockPos().equals(hit.getBlockPos()) && trace.getDirection() == hit.getDirection();
     }
 
-    private static boolean isInteractable(Block block) {
+    public static boolean isInteractable(Block block) {
         return block instanceof BaseEntityBlock
             || block instanceof DoorBlock
             || block instanceof TrapDoorBlock
@@ -589,6 +589,12 @@ public class PlacementManager extends Feature {
     public boolean sendUseItemOnDirect(BlockHitResult hit, InteractionHand hand, Vec3 eye,
                                        double range, double wallRange) {
         return send(hit, hand, eye, range, wallRange, false);
+    }
+
+    /** Bypass a support block's use action while placing, restoring the prior input afterward. */
+    public boolean sendUseItemOnDirect(BlockHitResult hit, InteractionHand hand, Vec3 eye,
+                                       double range, double wallRange, boolean sneak) {
+        return send(hit, hand, eye, range, wallRange, sneak);
     }
 
     // ---------------------------------------------------------------- block updates

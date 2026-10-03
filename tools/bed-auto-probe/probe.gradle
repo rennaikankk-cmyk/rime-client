@@ -1,0 +1,27 @@
+allprojects {
+ afterEvaluate {
+  if (!plugins.hasPlugin('fabric-loom')) return
+  def lab = project.file('../bed-auto-lab')
+  sourceSets.create('bedAutoProbe') {
+   java.srcDir('tools/bed-auto-probe/src')
+   resources.srcDir('tools/bed-auto-probe/resources')
+   compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+   runtimeClasspath += output + compileClasspath
+  }
+  tasks.register('bedAutoProbeJar', Jar) {
+   dependsOn tasks.named('bedAutoProbeClasses')
+   from sourceSets.bedAutoProbe.output
+   archiveFileName = 'bed-auto-probe.jar'
+   destinationDirectory = lab
+  }
+  loom.runs.client {
+   runDir('../bed-auto-lab/' + (project.findProperty('probeRun') ?: 'baseline'))
+   programArgs('--quickPlaySingleplayer','ProbeWorld','--username','BedProbe','--width','854','--height','480')
+   vmArg('-Dfabric.addMods=' + new File(lab,'bed-auto-probe.jar').path)
+   if (project.findProperty('expectBeds') == 'true') vmArg('-Dbed.expect=true')
+   if (project.findProperty('extended') == 'true') vmArg('-Dbed.extended=true')
+   if (project.hasProperty('probeStart')) vmArg('-Dbed.start=' + project.property('probeStart'))
+   if (project.hasProperty('probeEnd')) vmArg('-Dbed.end=' + project.property('probeEnd'))
+  }
+ }
+}

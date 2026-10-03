@@ -12,3 +12,7 @@ own client. Never point it at a personal world. It must not be included in produ
 equivalence, not production code. Performance comparison uses the same probe before/after
 the business changes; real-world equivalence also compares the old segmented path algorithm
 and exhaustive self damage, including precise damage after early safety rejection.
+
+Add `-PprobeHud=true` to the native run for a HUD integration pass. This explicitly enables
+the real HUD, checks that coordinates and ping rendered, and saves `screenshots/hud-world.png`.
+The flag adds two render checks; the combat workload and decision output are unchanged.

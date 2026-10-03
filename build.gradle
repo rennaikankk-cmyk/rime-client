@@ -224,6 +224,7 @@ def clientRegressionTests = [
         spearPassThroughHeadingTest: 'dev.guizhou.util.elytra.SpearPassThroughHeadingTest',
         glideMetadataDelayTest: 'dev.guizhou.util.elytra.GlideMetadataDelayTest',
         fontPageTest: 'dev.guizhou.util.render.font.FontPageTest',
+        fontTextCacheTest: 'dev.guizhou.util.render.font.FontTextCacheTest',
         fontRecoveryTest: 'dev.guizhou.util.render.font.FontRecoveryTest',
         fontFacesTest: 'dev.guizhou.util.render.font.FontFacesTest',
         targetMotionTrackerTest: 'dev.guizhou.util.elytra.TargetMotionTrackerTest',

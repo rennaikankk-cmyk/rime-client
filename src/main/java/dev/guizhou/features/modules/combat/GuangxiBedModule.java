@@ -15,10 +15,8 @@ import dev.guizhou.util.combat.BedSequence;
 import dev.guizhou.util.combat.BlastStageDiagnostics;
 import dev.guizhou.util.diagnostics.ClientDiagnostics;
 import dev.guizhou.util.player.EatUtil;
-import dev.guizhou.mixin.client.ClientLevelAccessor;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import java.util.HashMap;
@@ -41,15 +39,17 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 
 import java.awt.Color;
 
@@ -227,7 +227,7 @@ public class GuangxiBedModule extends Module {
         TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
         if (pendingTarget == null || pendingTarget.isRemoved() || pendingTarget.isDeadOrDying()
                 || targets != null && !targets.isValidPlayerTarget(pendingTarget)
-                || !mc.level.environmentAttributes().getValue(EnvironmentAttributes.BED_RULE, pendingHead).explodes()
+                || !bedsExplodeAt(pendingHead)
                 || !(fresh == null ? safeDamage(pendingTarget, pendingFoot, pendingHead)
                         : fresh.damage() > 0f && fresh.damage() >= minDamage.getValue() && safeSelfDamage(fresh.selfDamage()))) {
             stageDiagnostics.blocked("targetOrSafety");
@@ -477,7 +477,7 @@ public class GuangxiBedModule extends Module {
                         if (candidateWatch.avoided(foot.asLong(), scanTick)) { sCellRej++; continue; }
                         for (Direction dir : HORIZONTAL) {
                             BlockPos head = foot.relative(dir);
-                            if (!mc.level.environmentAttributes().getValue(EnvironmentAttributes.BED_RULE, head).explodes()) { sDimRej++; continue; }
+                            if (!bedsExplodeAt(head)) { sDimRej++; continue; }
                             BlockState footState = mc.level.getBlockState(foot);
                             BlockState headState = mc.level.getBlockState(head);
                             boolean existing = footState.getBlock() instanceof BedBlock
@@ -491,22 +491,22 @@ public class GuangxiBedModule extends Module {
                                     || !validCells.computeIfAbsent(head.asLong(), k -> cellStillValid(head)))) { sCellRej++; continue; }
                             // Vanilla redirects the foot interaction to the head before exploding.
                             Vec3 center = Vec3.atCenterOf(head);
-                            if (!tpMode.getValue() && (mc.player.getEyePosition().distanceToSqr(center) > bedRange.getValue() * bedRange.getValue()
-                                    || !existing && mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(foot)) > bedRange.getValue() * bedRange.getValue())) { sRangeRej++; continue; }
                             float upper = AnchorDamageUtil.maxDamage(damageTarget, center);
                             if (upper < minDamage.getValue() || best != null && upper <= best.damage()) { sDmgRej++; continue; }
+                            if (!existing && !canPlaceFoot(foot, dir)) { sCellRej++; continue; }
+                            Vec3 eye = tpMode.getValue()
+                                    ? Vec3.atCenterOf(foot).add(0, 1.5 + mc.player.getEyeHeight(), 0)
+                                    : mc.player.getEyePosition();
+                            double reach = tpMode.getValue() ? 6 : bedRange.getValue();
+                            // Reach is measured to the clicked face, not both block centers.
+                            if ((existing ? prepareBedBreakHit(foot, head, eye, reach)
+                                    : prepareBedPlaceHit(foot, head, eye, reach)) == null) { sRangeRej++; continue; }
                             float damage = calc.damage(damageTarget, center, AnchorDamageUtil.DIAMETER, foot, head, null);
                             if (damage <= 0f || damage < minDamage.getValue() || best != null && damage <= best.damage()) { sDmgRej++; continue; }
                             // Both removed halves matter when replacing snow or other collision shapes.
                             float local = calc.damage(self, center, AnchorDamageUtil.DIAMETER, foot, head, null);
                             if (!safeSelfDamage(local)) { sSelfRej++; continue; }
                             if (tpMode.getValue() && safeTpFeet(foot, head, calc) == null) { sTpFeetRej++; continue; }
-                            Vec3 eye = tpMode.getValue()
-                                    ? Vec3.atCenterOf(foot).add(0, 1.5 + mc.player.getEyeHeight(), 0)
-                                    : mc.player.getEyePosition();
-                            double reach = tpMode.getValue() ? 6 : bedRange.getValue();
-                            if (GuizhouWare.placementManager.prepareInteractionHit(existing ? head : foot.below(),
-                                    existing ? null : Direction.UP, eye, reach, reach, false) == null) continue;
                             best = new BedSpot(foot, head, dir, center, damage, local, target);
                         }
                     }
@@ -514,6 +514,17 @@ public class GuangxiBedModule extends Module {
             }
         }
         return best;
+    }
+
+    private boolean bedsExplodeAt(BlockPos pos) {
+        // 1.21.11 does NOT synchronize BED_RULE. On a client even the Nether reports
+        // CAN_SLEEP_WHEN_DARK (the attribute default). Use the registered dimension TYPE,
+        // including custom worlds using vanilla types; unknown custom types stay disabled.
+        if (EnvironmentAttributes.BED_RULE.isSyncable()) {
+            return mc.level.environmentAttributes().getValue(EnvironmentAttributes.BED_RULE, pos).explodes();
+        }
+        var type = mc.level.dimensionTypeRegistration();
+        return type.is(BuiltinDimensionTypes.NETHER) || type.is(BuiltinDimensionTypes.END);
     }
 
     private boolean safeDamage(Player target, BlockPos foot, BlockPos head) {
@@ -530,27 +541,46 @@ public class GuangxiBedModule extends Module {
 
     private boolean cellStillValid(BlockPos cell) {
         if (mc.level.isOutsideBuildHeight(cell) || !mc.level.getWorldBorder().isWithinBounds(cell)) return false;
-        if (!mc.level.getBlockState(cell).canBeReplaced()) return false;
-        BlockPos below = cell.below();
-        BlockState belowState = mc.level.getBlockState(below);
-        if (belowState.isAir() || belowState.getCollisionShape(mc.level, below).isEmpty()) return false;
-        // Bed collision height is 9/16; a player standing above the bed need not block it.
-        AABB bedBox = new AABB(cell.getX(), cell.getY(), cell.getZ(), cell.getX() + 1,
-                cell.getY() + 9.0 / 16.0, cell.getZ() + 1);
-        for (Entity e : mc.level.getEntities(null, bedBox)) {
-            if (e.blocksBuilding && !e.isRemoved() && !e.isSpectator()) return false;
-        }
-        return true;
+        return mc.level.getBlockState(cell).canBeReplaced();
+    }
+
+    private boolean canPlaceFoot(BlockPos foot, Direction dir) {
+        // Vanilla validates entity collision for the placed FOOT only. BedBlock then writes
+        // the replaceable HEAD; neither half requires a floor in vanilla 1.21.11.
+        BlockState state = Blocks.RED_BED.defaultBlockState().setValue(BedBlock.PART, BedPart.FOOT)
+                .setValue(BedBlock.FACING, dir);
+        return state.canSurvive(mc.level, foot)
+                && mc.level.isUnobstructed(state, foot, CollisionContext.placementContext(mc.player));
     }
 
     private boolean spotStillValid(BlockPos foot, BlockPos head) {
-        return cellStillValid(foot) && cellStillValid(head);
+        return cellStillValid(foot) && cellStillValid(head) && canPlaceFoot(foot, facingFromYaw(desiredYaw));
+    }
+
+    private BlockHitResult prepareBedPlaceHit(BlockPos foot, BlockPos head, Vec3 eye, double reach) {
+        for (Direction side : Direction.values()) {
+            BlockPos neighbor = foot.relative(side);
+            // A replaceable clicked block would receive the bed itself instead of the foot cell.
+            if (mc.level.getBlockState(neighbor).canBeReplaced()) continue;
+            BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(neighbor,
+                    side.getOpposite(), eye, reach, reach, false);
+            if (hit == null) continue;
+            BlockPlaceContext context = new BlockPlaceContext(mc.player, InteractionHand.MAIN_HAND,
+                    new ItemStack(Items.RED_BED), hit);
+            if (context.getClickedPos().equals(foot) && context.canPlace()
+                    && mc.level.getBlockState(head).canBeReplaced(context)) return hit;
+        }
+        return null;
+    }
+
+    private BlockHitResult prepareBedBreakHit(BlockPos foot, BlockPos head, Vec3 eye, double reach) {
+        BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(head, null, eye, reach, reach, false);
+        return hit != null ? hit : GuizhouWare.placementManager.prepareInteractionHit(foot, null, eye, reach, reach, false);
     }
 
     private boolean placeBed() {
-        BlockPos floor = pendingFoot.below();
-        BlockHitResult placeHit = GuizhouWare.placementManager.prepareInteractionHit(floor, Direction.UP,
-                interactionEye(), interactionRange(), interactionRange(), false);
+        if (!spotStillValid(pendingFoot, pendingHead)) return false;
+        BlockHitResult placeHit = prepareBedPlaceHit(pendingFoot, pendingHead, interactionEye(), interactionRange());
         if (placeHit == null) return false;
         if (!prepareAction(placeHit, true)) return false;
         AutoTotemModule.holdForCombat(AutoTotemModule.BED);
@@ -594,8 +624,7 @@ public class GuangxiBedModule extends Module {
     }
 
     private boolean detonateAtSpot() {
-        BlockHitResult hit = GuizhouWare.placementManager.prepareInteractionHit(pendingHead, null,
-                interactionEye(), interactionRange(), interactionRange(), false);
+        BlockHitResult hit = prepareBedBreakHit(pendingFoot, pendingHead, interactionEye(), interactionRange());
         if (hit == null) return false;
         if (!prepareAction(hit, false)) return false;
         boolean sent = sendAtSpot(hit, InteractionHand.MAIN_HAND, false);
@@ -629,7 +658,8 @@ public class GuangxiBedModule extends Module {
     private boolean sendAtSpot(BlockHitResult hit, InteractionHand hand, boolean placing) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
         java.util.function.BooleanSupplier action = () -> GuizhouWare.placementManager.sendUseItemOnDirect(
-                hit, hand, interactionEye(), interactionRange(), interactionRange());
+                hit, hand, interactionEye(), interactionRange(), interactionRange(),
+                placing && dev.guizhou.manager.PlacementManager.isInteractable(mc.level.getBlockState(hit.getBlockPos()).getBlock()));
         if (!tpMode.getValue()) return action.getAsBoolean();
         Vec3 feet = interactionFeet();
         if (!placing && !safeSelfDamage(AnchorDamageUtil.damage(AnchorDamageUtil.Target.of(mc.player).at(feet),

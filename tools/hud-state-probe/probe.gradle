@@ -1,0 +1,24 @@
+allprojects {
+ afterEvaluate {
+  if (!plugins.hasPlugin('fabric-loom')) return
+  def probe = project.file('tools/hud-state-probe')
+  def lab = project.file('../hud-state-lab')
+  sourceSets.create('hudStateProbe') {
+   java.srcDir(new File(probe, 'src'))
+   resources.srcDir(new File(probe, 'resources'))
+   compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+   runtimeClasspath += output + compileClasspath
+  }
+  tasks.register('hudStateProbeJar', Jar) {
+   dependsOn tasks.named('hudStateProbeClasses')
+   from sourceSets.hudStateProbe.output
+   archiveFileName = 'hud-state-probe.jar'
+   destinationDirectory = lab
+  }
+  loom.runs.client {
+   runDir('../hud-state-lab/' + (project.findProperty('probeRun') ?: 'baseline'))
+   programArgs('--username', 'HudStateProbe', '--width', '854', '--height', '480')
+   vmArg('-Dfabric.addMods=' + new File(lab, 'hud-state-probe.jar').path)
+  }
+ }
+}

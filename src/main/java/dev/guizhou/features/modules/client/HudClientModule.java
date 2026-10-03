@@ -1,6 +1,9 @@
 package dev.guizhou.features.modules.client;
 
+import com.google.gson.JsonElement;
+import dev.guizhou.event.impl.ClientEvent;
 import dev.guizhou.event.impl.render.Render2DEvent;
+import dev.guizhou.event.system.Subscribe;
 import dev.guizhou.features.modules.Module;
 import dev.guizhou.features.modules.hud.ActiveModulesHudModule;
 import dev.guizhou.features.modules.hud.ArmorHudModule;
@@ -14,9 +17,11 @@ import dev.guizhou.features.modules.hud.SpeedHudModule;
 import dev.guizhou.features.modules.hud.TargetHudModule;
 import dev.guizhou.features.modules.hud.TotemsHudModule;
 import dev.guizhou.features.settings.Setting;
+import dev.guizhou.util.render.HudAppearance;
 import net.minecraft.client.gui.screens.Screen;
 
 import java.awt.Color;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +35,10 @@ public class HudClientModule extends Module {
             ActiveModulesHudModule.class);
 
     private final Map<HudModule, Setting<Boolean>> elements = new LinkedHashMap<>();
+    private final Map<Class<?>, HudModule> elementLookup = new HashMap<>();
+    private final Map<HudModule, HudAppearance> appearances = new HashMap<>();
+    private List<HudModule> elementList;
+    private boolean paletteMigrationPending = true;
     // Per-element custom layout, saved through the normal module config.
     private final Map<HudModule, Setting<Boolean>> customPos = new LinkedHashMap<>();
     private final Map<HudModule, Setting<Double>> posX = new LinkedHashMap<>();
@@ -88,6 +97,8 @@ public class HudClientModule extends Module {
 
     private void register(HudModule element, boolean defaultOn) {
         elements.put(element, bool(element.getName(), defaultOn).setPage("Elements"));
+        elementLookup.clear();
+        elementList = null;
         String id = element.getName();
         customPos.put(element, bool(id + " CustomPos", false).setPage("Layout"));
         posX.put(element, num(id + " X", 0.5, 0.0, 1.0).setPage("Layout"));
@@ -102,10 +113,18 @@ public class HudClientModule extends Module {
 
     public float scaleOf(HudModule element) { return sizes.get(element).getValue().floatValue()/100f; }
     public void resizeElement(HudModule element, double percent) { sizes.get(element).setValue(percent); }
-    public dev.guizhou.util.render.HudAppearance appearanceOf(HudModule element) {
-        return new dev.guizhou.util.render.HudAppearance(backgrounds.get(element).getValue().getRGB(),
-                foregrounds.get(element).getValue().getRGB(), accents.get(element).getValue().getRGB(),
-                opacity.get(element).getValue().floatValue()/100f);
+    public HudAppearance appearanceOf(HudModule element) {
+        int background = backgrounds.get(element).getValue().getRGB();
+        int foreground = foregrounds.get(element).getValue().getRGB();
+        int accent = accents.get(element).getValue().getRGB();
+        float alpha = opacity.get(element).getValue().floatValue()/100f;
+        HudAppearance cached = appearances.get(element);
+        // Read actual settings on every access: even silent config changes must be visible immediately.
+        if (cached != null && cached.background() == background && cached.foreground() == foreground
+                && cached.accent() == accent && cached.backgroundOpacity() == alpha) return cached;
+        HudAppearance appearance = new HudAppearance(background, foreground, accent, alpha);
+        appearances.put(element, appearance);
+        return appearance;
     }
 
     // Opaque colours that shipped as defaults before the graphite + iris palette.
@@ -119,6 +138,8 @@ public class HudClientModule extends Module {
      * so a user who only recoloured the accent keeps it and still gets the new card.
      */
     public void migrateLegacyPalette() {
+        if (!paletteMigrationPending) return;
+        paletteMigrationPending = false;
         for (HudModule element : elements.keySet()) {
             migrate(backgrounds.get(element), LEGACY_BG);
             migrate(foregrounds.get(element), LEGACY_FG);
@@ -128,6 +149,19 @@ public class HudClientModule extends Module {
         migrate(radarFriendColor, 0xFF00FF64, 0xFF4ADE80);
         migrate(radarSelfColor, 0xFFFFFFFF, 0xFF8B7CFF);
         migrate(activeModuleColor, 0xFFAF0000, 0xFF8B7CFF);
+    }
+
+    @Subscribe
+    private void paletteChanged(ClientEvent event) {
+        if (event.getFeature() == this && event.getSetting() != null
+                && event.getSetting().getDefaultValue() instanceof Color) paletteMigrationPending = true;
+    }
+
+    @Override public void onEnable() { paletteMigrationPending = true; }
+
+    @Override public void fromJson(JsonElement element) {
+        try { super.fromJson(element); }
+        finally { paletteMigrationPending = true; }
     }
 
     private static void migrate(Setting<Color> setting, int... legacy) {
@@ -201,19 +235,21 @@ public class HudClientModule extends Module {
         return lines;
     }
 
-    @SuppressWarnings("unchecked")
     public <T extends HudModule> T getElement(Class<T> type) {
+        HudModule cached = elementLookup.get(type);
+        if (cached != null) return type.cast(cached);
         for (HudModule element : elements.keySet()) {
-            if (type.isInstance(element)) return (T) element;
+            if (type.isInstance(element)) {
+                elementLookup.put(type, element);
+                return type.cast(element);
+            }
         }
         return null;
     }
 
     public boolean isElementEnabled(Class<? extends HudModule> type) {
-        for (Map.Entry<HudModule, Setting<Boolean>> entry : elements.entrySet()) {
-            if (type.isInstance(entry.getKey())) return entry.getValue().getValue();
-        }
-        return false;
+        HudModule element = getElement(type);
+        return element != null && elements.get(element).getValue();
     }
 
     // ------------------------------------------------------------ editor & layout
@@ -235,7 +271,8 @@ public class HudClientModule extends Module {
     }
 
     public List<HudModule> elementList() {
-        return List.copyOf(elements.keySet());
+        if (elementList == null) elementList = List.copyOf(elements.keySet());
+        return elementList;
     }
 
     public Setting<Boolean> elementToggle(HudModule element) {
