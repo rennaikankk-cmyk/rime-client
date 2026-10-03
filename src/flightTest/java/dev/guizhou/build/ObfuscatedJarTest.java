@@ -281,7 +281,7 @@ public final class ObfuscatedJarTest {
                 Map.entry("KillAuraModule", List.of("onPreTick")),
                 Map.entry("GuangxiCrystalModule", List.of("onPreTick", "onCrystalSpawn", "onBlockUpdate",
                         "lambda$onBlockUpdate$", "scanBlockUpdate", "preplaceCrystal", "breakCrystal",
-                        "sendCrystalAttack", "sendGhostAttack", "doPlace", "placeCrystalShared")),
+                        "sendCrystalAttack", "sendGhostAttack", "doPlace", "placeCrystalShared", "withCrystalWeapon")),
                 Map.entry("GuangxiMineModule", List.of("onTick", "onAttackBlock", "requestBreak", "startMine",
                         "begin", "stopBreak", "sendAction", "isAvailable", "fireFinish", "fireSubmitted")),
                 Map.entry("AutoMineModule", List.of("onPreTick", "onMineFinish", "onPacket", "lambda$onPacket$", "placeGlass")),

@@ -90,6 +90,12 @@ public class GuangxiMineModule extends Module implements MineApi {
     private final Object secondaryToolOwner = new Object();
     private int primaryHeldTicks;
     private int secondaryHeldTicks;
+    private boolean temporaryToolSwap;
+
+    /** True only during the synchronous silent tool/restore transaction, never a visible hold. */
+    public boolean isTemporaryToolSwap() {
+        return mc.isSameThread() && temporaryToolSwap;
+    }
     private net.minecraft.client.multiplayer.ClientLevel sessionLevel;
     private net.minecraft.client.player.LocalPlayer sessionPlayer;
 
@@ -712,7 +718,13 @@ public class GuangxiMineModule extends Module implements MineApi {
             if (!GuizhouWare.swapManager.latch(primaryToolOwner, result)) return false;
             action.run();
         } else {
-            if (!GuizhouWare.swapManager.withSwap(result, SwapMode.SILENT, SwapPriority.MINING, action)) return false;
+            boolean previous = temporaryToolSwap;
+            temporaryToolSwap = true;
+            try {
+                if (!GuizhouWare.swapManager.withSwap(result, SwapMode.SILENT, SwapPriority.MINING, action)) return false;
+            } finally {
+                temporaryToolSwap = previous;
+            }
         }
         return sent[0];
     }

@@ -10,7 +10,6 @@ import dev.guizhou.features.modules.client.TargetsModule;
 import dev.guizhou.features.settings.Setting;
 import dev.guizhou.util.AnchorDamageUtil;
 import dev.guizhou.util.combat.TeleportBlastPosition;
-import dev.guizhou.util.combat.CrystalWeaponDamage;
 import dev.guizhou.util.MathUtil;
 import dev.guizhou.util.PacketSendUtil;
 import java.util.function.BooleanSupplier;
@@ -21,10 +20,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -289,7 +287,9 @@ public class GuangxiTPModule extends Module {
     private boolean cellBlocked(BlockPos pos) {
         AABB box = useLegacy112() ? new AABB(pos) : new AABB(pos).expandTowards(0, 1, 0);
         for (Entity e : mc.level.getEntities(null, box)) {
-            if (e instanceof ItemEntity || !e.isAlive()) continue;
+            // Modern EndCrystalItem checks every non-spectator entity, including drops
+            // and dying mobs. Match the final placement check before ranking this base.
+            if (e.isRemoved()) continue;
             if (useLegacy112()) {
                 if (e instanceof EndCrystal) return true;
             } else return true;
@@ -412,14 +412,15 @@ public class GuangxiTPModule extends Module {
         ensureAttackSession();
         long now = System.currentTimeMillis();
         if (!attacks.canAttempt(crystal.getId(), now, 100, 3, 500)) return false;
-        if (!safeSelf(crystal.position(), null) || !CrystalWeaponDamage.canDamage(
-                mc.player.getAttribute(Attributes.ATTACK_DAMAGE), mc.player.getMainHandItem(), mc.player.getMainHandItem())) return false;
+        if (!safeSelf(crystal.position(), null)) return false;
+        GuangxiCrystalModule shared = GuizhouWare.moduleManager.getModuleByClass(GuangxiCrystalModule.class);
+        if (shared == null) return false;
         Vec3 cp = crystal.position();
         Vec3 fake = useLegacy112() ? mc.player.position() : breakFeet(crystal);
         if (fake == null) return false;
         float[] look = lookAt(fake, cp);
-        boolean sent = sandwich(fake, look[0], look[1], () -> PacketSendUtil.send(
-                ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown())));
+        boolean sent = shared.withCrystalWeapon(() -> sandwich(fake, look[0], look[1], () -> PacketSendUtil.send(
+                ServerboundInteractPacket.createAttackPacket(crystal, mc.player.isShiftKeyDown()))));
         if (sent) { attacks.markSent(crystal.getId(), now, 500); dBreakSent++; }
         return sent;
     }
@@ -484,7 +485,9 @@ public class GuangxiTPModule extends Module {
     private boolean detonatableFromSafe(Vec3 crystalCenter, BlockPos airPos, AnchorDamageUtil.Calculation calc) {
         if (useLegacy112()) return true;
         var self = calc.target(mc.player);
-        return TeleportBlastPosition.find(crystalCenter, new AABB(airPos), 3.0,
+        // Placement occupancy is 1 x 2 x 1; the attackable crystal itself is 2 x 2 x 2.
+        // Use exactly the same box as breakFeet, otherwise safe reachable plans get rejected.
+        return TeleportBlastPosition.find(crystalCenter, EntityType.END_CRYSTAL.getDimensions().makeBoundingBox(crystalCenter), 3.0,
                 feet -> safeDamage(calc.damage(self.at(feet), crystalCenter, 12, null, null, null))) != null;
     }
 
