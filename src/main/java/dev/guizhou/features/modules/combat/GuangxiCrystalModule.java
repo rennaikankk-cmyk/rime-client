@@ -752,8 +752,11 @@ public class GuangxiCrystalModule extends Module {
         boolean ownSwap = packet instanceof ServerboundSetCarriedItemPacket
                 && ownSwapPackets.getAndUpdate(v -> v > 0 ? v - 1 : 0) > 0;
         if (!(packet instanceof ServerboundSetCarriedItemPacket) && !packetLog.getValue()) return;
+        var mine = packet instanceof ServerboundSetCarriedItemPacket
+                ? GuizhouWare.moduleManager.getModuleByClass(GuangxiMineModule.class) : null;
+        boolean miningSwap = mine != null && mine.isTemporaryToolSwap();
         executeForSession(() -> {
-            if (!event.isCancelled()) recordOutgoingPacket(packet, ownSwap);
+            if (!event.isCancelled()) recordOutgoingPacket(packet, ownSwap || miningSwap);
         });
     }
 
@@ -1430,6 +1433,15 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
 
     private boolean attackWithDefaultWeapon(EndCrystal crystal, boolean instant) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (defaultWeaponSwapActive) return false;
+        return withCrystalWeapon(() -> sendCrystalAttack(crystal, instant));
+    }
+
+    /** TP shares the ordinary crystal weapon policy and restores the held item after the attack. */
+    public boolean withCrystalWeapon(java.util.function.BooleanSupplier action) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) return false;
+        if (nullCheck() || weaponControlBusy()) return false;
+        if (defaultHandCanDamage(mc.player.getMainHandItem())) return action.getAsBoolean();
         if (defaultWeaponSwapActive || autoSwap.getValue() == AutoSwapMode.NONE) return false;
         EnumSet<ResultType> scope = autoSwap.getValue() == AutoSwapMode.INVENTORY
                 ? EnumSet.of(ResultType.HOTBAR, ResultType.INVENTORY) : EnumSet.of(ResultType.HOTBAR);
@@ -1442,7 +1454,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         try {
             SwapMode mode = autoSwap.getValue() == AutoSwapMode.INVENTORY ? SwapMode.ALTSILENT : SwapMode.SILENT;
             GuizhouWare.swapManager.withSwap(weapon, mode, SwapPriority.CRYSTAL,
-                    () -> sent[0] = sendCrystalAttack(crystal, instant));
+                    () -> sent[0] = action.getAsBoolean());
         } finally {
             ownSwapPackets.set(previousOwnSwaps);
             defaultWeaponSwapActive = false;
@@ -1455,7 +1467,9 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         Vec3 eyePos = bestReachEye(bb);
         if (bb.contains(eyePos)) return true;
         Vec3 look = getLookVector(yaw, pitch);
-        Vec3 reachEnd = eyePos.add(look.scale(breakRangeValue()));
+        // AABB.clip excludes the segment endpoint. Include the legal range boundary
+        // despite float yaw/pitch rounding, without extending reach by a gameplay margin.
+        Vec3 reachEnd = eyePos.add(look.normalize().scale(breakRangeValue() + 1.0E-6));
         var hit = bb.clip(eyePos, reachEnd);
         if (hit.isEmpty()) return false;
         BlockHitResult obstruction = mc.level.clip(new ClipContext(eyePos, hit.get(),
@@ -1466,6 +1480,7 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
     }
 
     private PlaceTarget findBestPlace(List<TargetCache> potentialTargets) {
+        placeSearchWaiting = false;
         if (potentialTargets.isEmpty()) return null;
         Vec3 eyePos = mc.player.getEyePosition(1.0f);
         BlockPos playerPos = mc.player.blockPosition();
@@ -2132,10 +2147,13 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         if (nullCheck() || !place.getValue() || weaponControlBusy()) return false;
         ensureSession();
         if (!rubberbandQuiet()) return false;
+        if (!canSupplyCrystal() || !placeTimer.passedMs(tpsMs(placeDelay.getValue()))) return false;
 
         BlockPos base = airPos.below();
         var baseState = mc.level.getBlockState(base);
         if (!baseState.is(Blocks.OBSIDIAN) && !baseState.is(Blocks.BEDROCK)) return false;
+        if (!mc.level.getBlockState(airPos).isAir()
+                || useLegacy112() && !mc.level.getBlockState(airPos.above()).isAir()) return false;
         if (isBlocked(airPos)) return false;
 
         long now = System.currentTimeMillis();
@@ -2145,8 +2163,19 @@ if (nullCheck() || mc.player.isDeadOrDying()) return;
         ensureSelfCache();
         updateSeeThrough();
         Vec3 center = new Vec3(airPos.getX() + 0.5, airPos.getY(), airPos.getZ() + 0.5);
+        if (bestReachSq(EntityType.END_CRYSTAL.getDimensions().makeBoundingBox(center)) > breakRangeSq()) return false;
         if (!selfDamageOk(center, null, maxSelfDamage.getValue(), selfNow().health())) return false;
-        return doPlace(new PlaceTarget(base, 0f), false);
+        TargetsModule targets = GuizhouWare.moduleManager.getModuleByClass(TargetsModule.class);
+        float damage = 0;
+        for (TargetCache tc : collectTargets(targets, placeRangeValue() + 12.0)) {
+            if (tc.pos.distanceToSqr(center) > 144.0) continue;
+            float dealt = calcDamage(tc, center);
+            if (dealt > 0 && dealt >= getPlaceMin(tc)) damage += dealt;
+        }
+        if (damage <= 0 || !balanceOk(damage, center, null)) return false;
+        boolean sent = doPlace(new PlaceTarget(base, damage), false);
+        if (sent) placeTimer.reset();
+        return sent;
     }
 
     private boolean weaponControlBusy() {

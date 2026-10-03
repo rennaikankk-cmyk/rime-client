@@ -152,7 +152,8 @@ public final class LicenseActionHookTest {
         guarded(CRYSTAL, "breakCrystal", null, "aimBreakNow", "sendCrystalAttack");
         guarded(CRYSTAL, "sendCrystalAttack", null, "send", "attack", "markSent");
         guarded(CRYSTAL, "sendGhostAttack", null, "send");
-        guarded(CRYSTAL, "attackWithDefaultWeapon", null, "withSwap");
+        guarded(CRYSTAL, "attackWithDefaultWeapon", null, "withCrystalWeapon");
+        guarded(CRYSTAL, "withCrystalWeapon", null, "getAsBoolean", "withSwap");
         guarded(CRYSTAL, "doPlace", ";Z)Z", "send", "placeCrystalShared", "recordPlace");
         guarded(CRYSTAL, "placeCrystalShared", "$CrystalOptions;", "placeCrystalDirect", "placeCrystal");
         Code delegate = method(CRYSTAL, "placeCrystalShared", ";Z)Z");
