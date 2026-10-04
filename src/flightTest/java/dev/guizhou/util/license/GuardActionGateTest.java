@@ -16,8 +16,8 @@ public final class GuardActionGateTest {
                         if (!method.getName().equals("containsCustomValue")) throw new AssertionError("Unexpected metadata access");
                         return values[0].equals("rimeguard") ? current : values[0].equals("dickguard") && legacy;
                     });
-            if (GuardStatus.requiresGuard(metadata) != (current || legacy))
-                throw new AssertionError("Current and legacy guard metadata must both require authorization");
+            if (!GuardStatus.requiresGuard(metadata))
+                throw new AssertionError("Removing both metadata markers must never waive production authorization");
         }
         ClassNode cls = new ClassNode();
         try (var in = GuardActionGateTest.class.getClassLoader().getResourceAsStream(
@@ -48,6 +48,6 @@ public final class GuardActionGateTest {
             }
             if (!returned) throw new AssertionError("Gate did not return");
         }
-        System.out.println("GuardActionGateTest: four metadata aliases and four lease/guard authorization combinations passed");
+        System.out.println("GuardActionGateTest: metadata deletion cannot waive authorization; four lease/guard combinations passed");
     }
 }

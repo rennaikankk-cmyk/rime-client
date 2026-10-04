@@ -169,6 +169,7 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        businessAuthorizationTest: 'dev.guizhou.util.license.BusinessAuthorizationTest',
         directFlightControlTest: 'dev.guizhou.util.elytra.DirectFlightControlTest',
         observedTargetPositionTest: 'dev.guizhou.util.elytra.ObservedTargetPositionTest',
         travelCruiseTest: 'dev.guizhou.util.elytra.TravelCruiseTest',

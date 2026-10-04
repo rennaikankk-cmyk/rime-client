@@ -21,6 +21,8 @@ import org.joml.Vector2f;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_UNKNOWN;
 
 public class Module extends Feature implements Jsonable, Toggleable {
+    // Preserve configuration intent while an initial lease is pending or authorization is revoked.
+    private boolean enableWhenAuthorized;
     private final String description;
     private final Category category;
 
@@ -71,6 +73,11 @@ public class Module extends Feature implements Jsonable, Toggleable {
     }
 
     public void enable() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
+            return;
+        }
+        enableWhenAuthorized = false;
         this.enabled.setValue(true);
         EVENT_BUS.register(this, getName());
         EVENT_BUS.post(new ClientEvent(ClientEvent.Type.TOGGLE_MODULE, this));
@@ -79,6 +86,7 @@ public class Module extends Feature implements Jsonable, Toggleable {
     }
 
     public void disable() {
+        enableWhenAuthorized = false;
         this.enabled.setValue(false);
         EVENT_BUS.unregister(this);
         EVENT_BUS.post(new ClientEvent(ClientEvent.Type.TOGGLE_MODULE, this));
@@ -95,11 +103,23 @@ public class Module extends Feature implements Jsonable, Toggleable {
     }
 
     public void setEnabledByUser(boolean on) {
-        if (isEnabled() == on) return;
+        if (!on) enableWhenAuthorized = false;
+        if (on ? isEnabled() : !enabled.getValue()) return;
         if (on) enable();
         else disable();
         // Modules may refuse to enable (not in a world, unmet requirements); only confirm real changes.
         if (isEnabled() == on && !(this instanceof ClickGuiModule)) UiSounds.moduleToggle(on);
+    }
+
+    /** Revocation must run normal cleanup, including release of temporary gameplay state. */
+    public void suspendForAuthorization() {
+        if (!enabled.getValue()) return;
+        disable();
+        enableWhenAuthorized = true;
+    }
+
+    public void resumeAfterAuthorization() {
+        if (enableWhenAuthorized && dev.guizhou.manager.HeartbeatManager.authorized()) enable();
     }
 
     public String getDisplayName() {
@@ -119,7 +139,8 @@ public class Module extends Feature implements Jsonable, Toggleable {
 
     @Override
     public boolean isEnabled() {
-        return enabled.getValue();
+        // Mixins and event listeners query this too; dispatch-loop checks alone leave gaps.
+        return enabled.getValue() && dev.guizhou.manager.HeartbeatManager.authorized();
     }
 
     @Override
@@ -163,7 +184,8 @@ public class Module extends Feature implements Jsonable, Toggleable {
                 } else if (setting.getValue() instanceof Vector2f pos) {
                     object.addProperty(setting.getName(), pos.x() + "," + pos.y());
                 } else {
-                    object.addProperty(setting.getName(), setting.getValueAsString());
+                    object.addProperty(setting.getName(), setting == enabled
+                            ? Boolean.toString(enabled.getValue() || enableWhenAuthorized) : setting.getValueAsString());
                 }
             } catch (Throwable e) {
                 GuizhouWare.LOGGER.error("Failed to create JSON field", e);
@@ -193,10 +215,13 @@ public class Module extends Feature implements Jsonable, Toggleable {
         if (object.has("Enabled") && !object.get("Enabled").isJsonNull()) {
             try {
                 boolean requested = object.get("Enabled").getAsBoolean();
-                if (requested != isEnabled()) {
-                    if (requested) enable();
-                    else disable();
-                }
+                if (!requested) {
+                    if (enabled.getValue()) disable();
+                    enableWhenAuthorized = false;
+                } else if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+                    if (enabled.getValue()) disable();
+                    enableWhenAuthorized = true;
+                } else if (!isEnabled()) enable();
             } catch (Throwable e) {
                 GuizhouWare.LOGGER.error("Failed to restore module {} state during load", getName(), e);
             }

@@ -219,6 +219,11 @@ public class ModuleManager implements Jsonable, Util {
     }
 
     public void onTick() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            modules.forEach(Module::suspendForAuthorization);
+            return;
+        }
+        modules.forEach(Module::resumeAfterAuthorization);
         for (Module module : modules) {
             if (!module.isEnabled()) continue;
             long started = ClientDiagnostics.startTimer();
@@ -234,6 +239,10 @@ public class ModuleManager implements Jsonable, Util {
     }
 
     public void onRender2D(Render2DEvent event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            modules.forEach(Module::suspendForAuthorization);
+            return;
+        }
         for (Module module : modules) {
             if (!module.isEnabled()) continue;
             long started = ClientDiagnostics.startTimer();
@@ -244,6 +253,10 @@ public class ModuleManager implements Jsonable, Util {
     }
 
     public void onRender3D(Render3DEvent event) {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            modules.forEach(Module::suspendForAuthorization);
+            return;
+        }
         for (Module module : modules) {
             if (!module.isEnabled()) continue;
             long started = ClientDiagnostics.startTimer();
