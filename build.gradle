@@ -251,6 +251,8 @@ def clientRegressionTests = [
         foreignClientProbeTest: 'dev.guizhou.util.compat.ForeignClientProbeTest',
         armorSwapHeldUseTest: 'dev.guizhou.util.elytra.ArmorSwapHeldUseTest',
         flightRoutePlannerTest: 'dev.guizhou.util.elytra.FlightRoutePlannerTest',
+        flightEscapeTrailTest: 'dev.guizhou.util.elytra.FlightEscapeTrailTest',
+        groundPassageTest: 'dev.guizhou.util.elytra.GroundPassageTest',
         flightTerrainSafetyTest: 'dev.guizhou.util.elytra.FlightTerrainSafetyTest',
         flightViewAnchorTest: 'dev.guizhou.util.elytra.FlightViewAnchorTest',
         coupledCruiseTest: 'dev.guizhou.util.elytra.CoupledCruiseTest',

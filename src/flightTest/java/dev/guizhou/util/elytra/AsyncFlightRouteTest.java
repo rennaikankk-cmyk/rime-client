@@ -20,6 +20,14 @@ public final class AsyncFlightRouteTest {
         traverse(List.of(new AABB(3, -30, -4, 4, 30, 4), new AABB(3, -30, -4, 9, 30, -3)),
                 new Vec3(12, 0, 0), "Two-segment corner");
         traverse(List.of(new AABB(8, -30, -2, 16, 30, 2)), new Vec3(24, 0, 0), "Thick wall crossing snapshot boundary");
+        var mine = new java.util.ArrayList<AABB>();
+        mine.add(new AABB(-2,.7,-2,9,3,6));
+        mine.add(new AABB(-2,-3,-2,9,-.4,6));
+        for(int x=-1;x<=7;x++) for(int z=-1;z<=4;z++) {
+            boolean passage=z==0 && x>=0 && x<=3 || x==3 && z>=0 && z<=3 || z==3 && x>=3 && x<=6;
+            if(!passage)mine.add(new AABB(x-.5,-.4,z-.5,x+.5,.7,z+.5));
+        }
+        traverse(mine,new Vec3(6,0,3),"One-block mine bends with full body snapshots");
         System.out.println("AsyncFlightRouteTest passed: " + checks + " checks");
     }
 

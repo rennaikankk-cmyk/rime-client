@@ -111,6 +111,8 @@ public final class LicenseActionHookTest {
         guarded(offhand, "tryUseOffhandGapple", null, "useGappleOnUse");
         guarded(offhand, "useGappleOnUse", null, "useItem");
         String chase = BASE + "combat/GuangxiElytraChaseModule";
+        guarded(chase, "groundCoverDestination", null, "observedTargetPosition");
+        guarded(BASE + "movement/GuangxiElytraModule", "groundPassageInput", null, "steer");
         guarded(chase, "updateEatingRetreat", null, "pauseUse", "requestRecovery", "direction");
         guarded(chase, "onElytra", null, "set");
         check(method(chase, "isEatingRetreatRequested", null).hasAuthorization(), "Eating flight requests require authorization");

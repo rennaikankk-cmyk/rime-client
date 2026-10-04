@@ -71,6 +71,15 @@ public final class AsyncFlightRoute {
             Vec3 segment = waypoint.subtract(segmentStart);
             Vec3 remaining = waypoint.subtract(position);
             if (remaining.lengthSqr() <= REACHED * REACHED || remaining.dot(segment) <= 0.0) {
+                if (waypoints.size() > 1 && remaining.lengthSqr() > 1e-8) {
+                    var points = waypoints.iterator();
+                    points.next();
+                    if (!live.clear(position, points.next())) {
+                        if (live.clear(position, waypoint)) return toward(position, waypoint, true);
+                        waypoints.clear();
+                        break;
+                    }
+                }
                 segmentStart = waypoints.removeFirst();
                 continue;
             }

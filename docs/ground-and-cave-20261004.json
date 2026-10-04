@@ -1,0 +1,1077 @@
+{
+  "baseline": "8cab789d402d9f25afd781b2605645d36244e5c0",
+  "baselineVersion": "1.2.13",
+  "published": false,
+  "synced1211": false,
+  "purpose": "Non-retaliating ground-target functional diagnostics; not PvP or FPS comparison",
+  "environment": {
+    "server": "Paper 1.21.11 build 132",
+    "grim": "2.3.73",
+    "packetEvents": "2.14.0",
+    "via": "5.12.0",
+    "viaFabricPlus": "4.4.15",
+    "selectedProtocol": 765,
+    "diagnosticFpsCap": 60
+  },
+  "runs": [
+    {
+      "directory": "../duel129-ground134",
+      "stage": "initial_no_ground_fallback",
+      "tickCap": 600,
+      "runtimeUnchanged": {
+        "verified": true
+      },
+      "results": [
+        {
+          "tag": "ground134-mace-static",
+          "ticks": 141,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 8.0,
+            "LegacyReference": 27.333332777023315
+          },
+          "averageTps": 20.15702378713222,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 43,
+              "decrease": 11.337071,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 71,
+              "decrease": 9.162929,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 124,
+              "decrease": 4.666666,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 141,
+              "decrease": 2.1666667,
+              "source": "mace_smash"
+            }
+          ],
+          "damageTotal": 27.3333327,
+          "targetHorizontalTravel": 3.610768117017371,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 60,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-mace-moving",
+          "ticks": 154,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 8.0,
+            "LegacyReference": 26.833333015441895
+          },
+          "averageTps": 20.015691782469357,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 48,
+              "decrease": 12.404693,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 60,
+              "decrease": 7.4286404,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 154,
+              "decrease": 7.0,
+              "source": "mace_smash"
+            }
+          ],
+          "damageTotal": 26.8333334,
+          "targetHorizontalTravel": 40.156446147073794,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 70,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-spear-static",
+          "ticks": 95,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 0.0,
+            "LegacyReference": 25.666666626930237
+          },
+          "averageTps": 20.055624591472206,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 40,
+              "decrease": 19.0,
+              "source": "spear"
+            },
+            {
+              "tick": 72,
+              "decrease": 4.0,
+              "source": "spear"
+            },
+            {
+              "tick": 83,
+              "decrease": 1.9176464,
+              "source": "spear"
+            },
+            {
+              "tick": 95,
+              "decrease": 0.7490202,
+              "source": "spear"
+            }
+          ],
+          "damageTotal": 25.6666666,
+          "targetHorizontalTravel": 3.572800052192496,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 77,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-spear-moving",
+          "ticks": 86,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 0.0,
+            "LegacyReference": 24.333333492279053
+          },
+          "averageTps": 20.038685381152224,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 42,
+              "decrease": 19.0,
+              "source": "spear"
+            },
+            {
+              "tick": 86,
+              "decrease": 5.3333335,
+              "source": "spear"
+            }
+          ],
+          "damageTotal": 24.333333500000002,
+          "targetHorizontalTravel": 22.206522949108326,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 67,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-mace-cover",
+          "ticks": 600,
+          "alive": [
+            "NewCandidate",
+            "LegacyReference"
+          ],
+          "reason": "timeout",
+          "observedHealthDecreases": {
+            "NewCandidate": 6.498382568359375,
+            "LegacyReference": 4.526542663574219
+          },
+          "averageTps": 20.00836676534115,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 46,
+              "decrease": 2.6573334,
+              "source": "player"
+            },
+            {
+              "tick": 78,
+              "decrease": 1.8692093,
+              "source": "player"
+            }
+          ],
+          "damageTotal": 4.5265427,
+          "targetHorizontalTravel": 1.7588000000000008,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 208,
+          "targetHeightRange": [
+            155.0,
+            155.2
+          ]
+        },
+        {
+          "tag": "ground134-mace-wall",
+          "ticks": 102,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 8.0,
+            "LegacyReference": 25.666666269302368
+          },
+          "averageTps": 20.01757503838223,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 44,
+              "decrease": 10.438949,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 60,
+              "decrease": 9.394384,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 75,
+              "decrease": 2.1666667,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 102,
+              "decrease": 3.6666665,
+              "source": "mace_smash"
+            }
+          ],
+          "damageTotal": 25.666666199999998,
+          "targetHorizontalTravel": 4.00177547472685,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 50,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        }
+      ],
+      "paperMovedWronglyWarnings": 3
+    },
+    {
+      "directory": "../duel129-ground134b",
+      "stage": "ground_fallback",
+      "tickCap": 600,
+      "runtimeUnchanged": {
+        "verified": true
+      },
+      "results": [
+        {
+          "tag": "ground134-mace-cover",
+          "ticks": 600,
+          "alive": [
+            "LegacyReference",
+            "NewCandidate"
+          ],
+          "reason": "timeout",
+          "observedHealthDecreases": {
+            "NewCandidate": 0.0,
+            "LegacyReference": 23.314884662628174
+          },
+          "averageTps": 20.036819994368653,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 164,
+              "decrease": 3.4588242,
+              "source": "player"
+            },
+            {
+              "tick": 196,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 228,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 260,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 292,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 324,
+              "decrease": 3.3093436,
+              "source": "player"
+            },
+            {
+              "tick": 356,
+              "decrease": 3.3093436,
+              "source": "player"
+            }
+          ],
+          "damageTotal": 23.3148846,
+          "targetHorizontalTravel": 5.927399999999999,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 36,
+          "targetHeightRange": [
+            155.0,
+            155.2
+          ]
+        },
+        {
+          "tag": "ground134-mace-cover-repeat",
+          "ticks": 600,
+          "alive": [
+            "LegacyReference",
+            "NewCandidate"
+          ],
+          "reason": "timeout",
+          "observedHealthDecreases": {
+            "NewCandidate": 0.0,
+            "LegacyReference": 23.314884662628174
+          },
+          "averageTps": 20.01201908524914,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 165,
+              "decrease": 3.4588242,
+              "source": "player"
+            },
+            {
+              "tick": 197,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 229,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 261,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 293,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 325,
+              "decrease": 3.3093436,
+              "source": "player"
+            },
+            {
+              "tick": 357,
+              "decrease": 3.3093436,
+              "source": "player"
+            }
+          ],
+          "damageTotal": 23.3148846,
+          "targetHorizontalTravel": 5.927399999999999,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 36,
+          "targetHeightRange": [
+            155.0,
+            155.2
+          ]
+        }
+      ],
+      "paperMovedWronglyWarnings": 0
+    },
+    {
+      "directory": "../duel129-ground134c",
+      "stage": "own_roof_detection",
+      "tickCap": 600,
+      "runtimeUnchanged": {
+        "verified": true
+      },
+      "results": [
+        {
+          "tag": "ground134-mace-static",
+          "ticks": 165,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 0.0,
+            "LegacyReference": 29.333333015441895
+          },
+          "averageTps": 20.12550238895202,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 32,
+              "decrease": 19.0,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 48,
+              "decrease": 1.4980507,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 64,
+              "decrease": 2.5019493,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 129,
+              "decrease": 2.8475485,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 165,
+              "decrease": 3.4857845,
+              "source": "mace_smash"
+            }
+          ],
+          "damageTotal": 29.333333,
+          "targetHorizontalTravel": 5.110400000000002,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 89,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-mace-moving",
+          "ticks": 95,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 8.0,
+            "LegacyReference": 23.333333015441895
+          },
+          "averageTps": 20.063358819994036,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 49,
+              "decrease": 9.558068,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 66,
+              "decrease": 11.068669,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 82,
+              "decrease": 0.37326217,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 95,
+              "decrease": 2.3333333,
+              "source": "mace_smash"
+            }
+          ],
+          "damageTotal": 23.333332470000002,
+          "targetHorizontalTravel": 24.72942781675636,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 46,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-spear-static",
+          "ticks": 69,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 0.0,
+            "LegacyReference": 23.333333253860474
+          },
+          "averageTps": 20.077732249822507,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 38,
+              "decrease": 19.0,
+              "source": "spear"
+            },
+            {
+              "tick": 58,
+              "decrease": 1.8333333,
+              "source": "spear"
+            },
+            {
+              "tick": 69,
+              "decrease": 2.5,
+              "source": "spear"
+            }
+          ],
+          "damageTotal": 23.3333333,
+          "targetHorizontalTravel": 2.387019285657495,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 53,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-spear-moving",
+          "ticks": 73,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 0.0,
+            "LegacyReference": 24.0
+          },
+          "averageTps": 20.045771911463483,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 38,
+              "decrease": 19.0,
+              "source": "spear"
+            },
+            {
+              "tick": 73,
+              "decrease": 5.0,
+              "source": "spear"
+            }
+          ],
+          "damageTotal": 24.0,
+          "targetHorizontalTravel": 18.53456136942022,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 58,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-mace-cover",
+          "ticks": 600,
+          "alive": [
+            "NewCandidate",
+            "LegacyReference"
+          ],
+          "reason": "timeout",
+          "observedHealthDecreases": {
+            "NewCandidate": 5.419546127319336,
+            "LegacyReference": 31.314884305000305
+          },
+          "averageTps": 20.003659336081213,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 163,
+              "decrease": 3.4588242,
+              "source": "player"
+            },
+            {
+              "tick": 195,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 227,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 259,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 291,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 323,
+              "decrease": 2.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 355,
+              "decrease": 3.3093436,
+              "source": "player"
+            },
+            {
+              "tick": 426,
+              "decrease": 3.4193583,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 478,
+              "decrease": 0.8981117,
+              "source": "player"
+            },
+            {
+              "tick": 534,
+              "decrease": 3.4588237,
+              "source": "player"
+            },
+            {
+              "tick": 566,
+              "decrease": 1.2237062,
+              "source": "player"
+            }
+          ],
+          "damageTotal": 31.3148842,
+          "targetHorizontalTravel": 11.412790870357759,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 94,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-mace-wall",
+          "ticks": 182,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 8.0,
+            "LegacyReference": 29.166666269302368
+          },
+          "averageTps": 20.012462046008363,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 44,
+              "decrease": 11.817139,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 58,
+              "decrease": 8.016194,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 73,
+              "decrease": 1.6666667,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 87,
+              "decrease": 1.3631506,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 182,
+              "decrease": 6.303516,
+              "source": "mace_smash"
+            }
+          ],
+          "damageTotal": 29.1666663,
+          "targetHorizontalTravel": 5.178353216495632,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 101,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-mace-cover-repeat",
+          "ticks": 482,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 0.0,
+            "LegacyReference": 29.314884424209595
+          },
+          "averageTps": 20.006099619036547,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 163,
+              "decrease": 3.4588242,
+              "source": "player"
+            },
+            {
+              "tick": 195,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 227,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 259,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 291,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 323,
+              "decrease": 2.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 355,
+              "decrease": 3.3093436,
+              "source": "player"
+            },
+            {
+              "tick": 455,
+              "decrease": 4.0,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 482,
+              "decrease": 3.0,
+              "source": "mace_smash"
+            }
+          ],
+          "damageTotal": 29.3148843,
+          "targetHorizontalTravel": 9.759794844738495,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 25,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        }
+      ],
+      "paperMovedWronglyWarnings": 4
+    },
+    {
+      "directory": "../duel129-ground134d",
+      "stage": "doorway_hold_and_swept_walking",
+      "tickCap": 1200,
+      "runtimeUnchanged": {
+        "verified": true
+      },
+      "results": [
+        {
+          "tag": "ground134-mace-cover",
+          "ticks": 730,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 1.0,
+            "LegacyReference": 40.33333349227905
+          },
+          "averageTps": 20.034035466082834,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 166,
+              "decrease": 3.4588242,
+              "source": "player"
+            },
+            {
+              "tick": 198,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 230,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 262,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 294,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 326,
+              "decrease": 3.3093436,
+              "source": "player"
+            },
+            {
+              "tick": 358,
+              "decrease": 3.3093436,
+              "source": "player"
+            },
+            {
+              "tick": 390,
+              "decrease": 0.018448591,
+              "source": "player"
+            },
+            {
+              "tick": 469,
+              "decrease": 0.41383028,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 519,
+              "decrease": 6.5861697,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 640,
+              "decrease": 1.2887206,
+              "source": "player"
+            },
+            {
+              "tick": 667,
+              "decrease": 2.5106428,
+              "source": "player"
+            },
+            {
+              "tick": 698,
+              "decrease": 3.1363013,
+              "source": "player"
+            },
+            {
+              "tick": 730,
+              "decrease": 3.0643356,
+              "source": "player"
+            }
+          ],
+          "damageTotal": 40.333333471,
+          "targetHorizontalTravel": 15.946508040016477,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 134,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        },
+        {
+          "tag": "ground134-mace-cover-repeat",
+          "ticks": 517,
+          "alive": [
+            "NewCandidate"
+          ],
+          "reason": "death",
+          "observedHealthDecreases": {
+            "NewCandidate": 0.0,
+            "LegacyReference": 31.333333253860474
+          },
+          "averageTps": 20.01243403106278,
+          "actualOpponentHealthLossEvents": [
+            {
+              "tick": 165,
+              "decrease": 3.4588242,
+              "source": "player"
+            },
+            {
+              "tick": 197,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 229,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 261,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 293,
+              "decrease": 3.3093433,
+              "source": "player"
+            },
+            {
+              "tick": 325,
+              "decrease": 3.3093436,
+              "source": "player"
+            },
+            {
+              "tick": 357,
+              "decrease": 3.3093436,
+              "source": "player"
+            },
+            {
+              "tick": 389,
+              "decrease": 0.018448591,
+              "source": "player"
+            },
+            {
+              "tick": 462,
+              "decrease": 4.0,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 503,
+              "decrease": 2.8175898,
+              "source": "mace_smash"
+            },
+            {
+              "tick": 517,
+              "decrease": 1.1824102,
+              "source": "mace_smash"
+            }
+          ],
+          "damageTotal": 31.333333191,
+          "targetHorizontalTravel": 10.799816432206388,
+          "targetGlidingTicks": 0,
+          "attackerGlidingTicks": 49,
+          "targetHeightRange": [
+            155.0,
+            155.4742
+          ]
+        }
+      ],
+      "paperMovedWronglyWarnings": 1
+    }
+  ],
+  "afterLastRuntimeFreeze": [
+    "FlightEscapeTrail retains off-grid bends; validated with passage simulation and full regression, not a live cave run"
+  ],
+  "validation": {
+    "command": "gradlew.bat --offline --console=plain --max-workers=2 check",
+    "successful": true,
+    "tasks": 125,
+    "elapsedSeconds": 57,
+    "checks": {
+      "AerialCombatPolicyTest": 92,
+      "AerialDuelPredictorTest": 165,
+      "AerialEngagementTest": 6572,
+      "AerialInterceptTest": 1059,
+      "ArmorFlightHandoffTest": 6,
+      "ArmorFlyConfigMigrationTest": 55,
+      "ArmorScoreTest": 15,
+      "ArmorSwapCycleTest": 1376,
+      "ArmorSwapHeldUseTest": 62,
+      "ArmorTakeoffTest": 82,
+      "AsyncFlightRouteTest": 151,
+      "AutoUseWhitelistTest": 114,
+      "BedCandidateWatchTest": 12,
+      "BlastSequenceTest": 36,
+      "BlastStageDiagnosticsTest": 7,
+      "BundleFilterTest": 6,
+      "ClickGuiLayoutTest": 2478,
+      "ClientDiagnosticsTest": 34,
+      "ClientLanguageTest": 3607,
+      "CombatHitWindowTest": 27,
+      "CombatPlannerTest": 38,
+      "CombatPlanningWiringTest": 29,
+      "CommandFuzzyTest": 35,
+      "CommandPresentationTest": 82,
+      "ContainerHistoryStoreTest": 29,
+      "CoupledCruiseTest": 44032,
+      "CrystalMotionPredictionTest": 69,
+      "CrystalSpawnLedgerTest": 10,
+      "DiagnosticsWiringTest": 35,
+      "DirectFlightControlTest": 391,
+      "DualViewSupportTest": 24,
+      "EatingRetreatTest": 158,
+      "ElytraCombatHookTest": 653,
+      "ElytraFlightLifecycleTest": 343,
+      "ElytraPhysicsTest": 60179,
+      "ElytraWeaponControllerTest": 33,
+      "EntityAimTest": 18,
+      "EventBusTest": 16,
+      "ExplosionDamageModelTest": 3012,
+      "ExplosionSamplingTest": 301,
+      "FlightCollisionSnapshotTest": 23,
+      "FlightEscapeTrailTest": 59,
+      "FlightMotionSampleTest": 9,
+      "FlightPlanningTaskTest": 19,
+      "FlightRecoveryPlanTest": 25,
+      "FlightRoutePlannerTest": 315,
+      "FlightSummaryTest": 33,
+      "FlightTelemetryWiringTest": 27,
+      "FlightTerrainSafetyTest": 75,
+      "FlightViewAnchorTest": 53,
+      "FontRecoveryTest": 41,
+      "ForeignClientProbeTest": 27,
+      "GappleSelectionTest": 38,
+      "GlideMetadataDelayTest": 138,
+      "GroundPassageTest": 1207,
+      "GuiMeshWindingTest": 276,
+      "HudAppearanceTest": 62,
+      "HudLayoutTest": 36,
+      "ItemUseOwnershipTest": 28,
+      "JarIntegrityTest": 12,
+      "KitDemandTest": 15,
+      "LicenseActionHookTest": 815,
+      "LicenseLeaseTest": 59,
+      "MaceApproachTest": 631,
+      "MaceCombatTest": 8,
+      "MaceDamageScoreTest": 21,
+      "MaceDiveStateTest": 40,
+      "MaceDropStepClampTest": 6,
+      "MacePassTrackerTest": 182,
+      "MaceStrikeTimingTest": 1023,
+      "ObservedTargetPositionTest": 8,
+      "ParallelFlightIntegrationTest": 1834,
+      "PearlOwnershipTest": 11,
+      "PendingSequencesTest": 8,
+      "ProjectileSimTest": 25,
+      "ReconnectPlanTest": 19,
+      "ReplenishPlanningTest": 25,
+      "ShadcnTextFieldTest": 16,
+      "SignalHysteresisTest": 30,
+      "SignedHeartbeatTest": 29,
+      "SpearAimSweepTest": 135,
+      "SpearApproachTest": 68,
+      "SpearPassThroughHeadingTest": 15,
+      "TargetHudMathTest": 29,
+      "TargetMotionTrackerTest": 117,
+      "TargetsArmorStandHookTest": 6,
+      "ThreadHandoffHookTest": 21,
+      "TotemSafetyTest": 103,
+      "TravelCruiseTest": 27,
+      "WorldUtilityTest": 22
+    },
+    "developmentBuild": false,
+    "productionGuardMarkerRestored": true,
+    "ownedRuntimeProcessesExited": true,
+    "diffCheck": true
+  },
+  "limitations": [
+    "No retaliating opponent or old-client baseline in this experiment",
+    "Full cave escape was geometry tested, not validated in a natural cave on server",
+    "Wall scenario attacker starts above wall; does not prove same-height routing",
+    "Some scenarios include fall/wall damage and Paper movement warnings",
+    "Low-cover final cap differs from earlier 600-tick cap; cumulative damage is not a paired DPS metric",
+    "Flight trail can only retrace still-clear recorded space; ground recovery requires a level supported standing passage"
+  ],
+  "sourceSha256": {
+    "build.gradle": "a3b3a104b696b773feb8a9e3bd9198dee3af6b6d85dd40263b9068c58f571d18",
+    "src/flightTest/java/dev/guizhou/util/combat/LicenseActionHookTest.java": "bd547c5eb28b2111f6f6bc73e6ad394e7650229ba08c3ea39dac3ba89e903a4b",
+    "src/flightTest/java/dev/guizhou/util/elytra/AerialEngagementTest.java": "f7cad2fa8f70497a806293146bcbc353d4e12969f2f27e652d6be69d351c8e43",
+    "src/flightTest/java/dev/guizhou/util/elytra/AsyncFlightRouteTest.java": "c422cd14d0b2b23c30e8e930ad565e00a04809acaa49ece2ad81734f5954fee9",
+    "src/flightTest/java/dev/guizhou/util/elytra/ElytraCombatHookTest.java": "fc1046a1c1c5fc26343ce7aa13f1fec248eea43738894b6af6435eafbebcd90a",
+    "src/flightTest/java/dev/guizhou/util/elytra/FlightEscapeTrailTest.java": "0c4d9a30d5f0fadf3d62ca6db93287d43092389e947331f12f41b66d9213d169",
+    "src/flightTest/java/dev/guizhou/util/elytra/FlightRoutePlannerTest.java": "04ead196613f0cb1af2acf061e68c0fb2131c571b716f8a0efdf8cc89d4c4e24",
+    "src/flightTest/java/dev/guizhou/util/elytra/FlightTerrainSafetyTest.java": "635d28821a2696a89208e21b4e207f3e1f2fc29ed0ed46e62d3885e8b1550852",
+    "src/flightTest/java/dev/guizhou/util/elytra/GroundPassageTest.java": "e227cd0befa135618453d56db0dc459ea80455f13e8890c0fd55ee78f0a3b720",
+    "src/flightTest/java/dev/guizhou/util/elytra/MaceStrikeTimingTest.java": "4d612c297f6dd712985b37898d83eac032bc99d262cda10e2b5d141b8d9e1dce",
+    "src/main/java/dev/guizhou/features/modules/combat/GuangxiElytraChaseModule.java": "20f99775941b94b996fb6034ae6dde6e2c75975716a96c158b5d9e554e269fbe",
+    "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java": "d2d72895f220e1f116c39d2467b67d7244e4344b96606de2d01ad237d2d9ff96",
+    "src/main/java/dev/guizhou/mixin/entity/MixinClientPlayerEntity.java": "faa6ad80583a021673e22b1e3f03b15ee88346d21d2814b8d30315c141c0a88b",
+    "src/main/java/dev/guizhou/util/elytra/AerialEngagement.java": "06fce6577643df87a5a021f77f86067ceefaf3ed7a1950b375f0d7a552c87325",
+    "src/main/java/dev/guizhou/util/elytra/AsyncFlightRoute.java": "dbfc55d485967e6eafee834c075206e084ad6f82835354f29e70c719719e8bb8",
+    "src/main/java/dev/guizhou/util/elytra/FlightEscapeTrail.java": "8e61b9ae7715d6c06faa574a757a9df88d272fd70fbfa9af054853e21ce73b6f",
+    "src/main/java/dev/guizhou/util/elytra/FlightRoutePlanner.java": "e49054258c39779dd648eb446497010d02d479b200699c9724095f505c1aaf1d",
+    "src/main/java/dev/guizhou/util/elytra/FlightTerrainSafety.java": "11e329886a13043298714647c2f3f6504e4ae0e2434c4d1d7820e1f06b183817",
+    "src/main/java/dev/guizhou/util/elytra/GroundPassage.java": "df3aa3ea4280fa086fd97aa161ee40d0d95ff414195deb2a3e9c112a3b113e58",
+    "src/main/java/dev/guizhou/util/elytra/MaceStrikeTiming.java": "095f40444b6bb112854d1c8d8c971490e19a9da7e957d7f0d9e628232aaf1005"
+  }
+}

@@ -116,6 +116,7 @@ public class MixinClientPlayerEntity {
             replaced = Input.EMPTY;
         } else {
             replaced = dev.guizhou.features.modules.combat.SurroundModule.centerInput(keys);
+            if (replaced == keys) replaced = dev.guizhou.features.modules.movement.GuangxiElytraModule.groundPassageInput(keys);
         }
         if (replaced == keys) return;
         self.input.keyPresses = replaced;

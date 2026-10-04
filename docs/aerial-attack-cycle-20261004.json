@@ -1,0 +1,549 @@
+{
+  "baseline": "Rime 1.2.13 / 8cab789d402d9f25afd781b2605645d36244e5c0",
+  "environment": "Local Paper 1.21.11 build 132, Grim 2.3.73, PacketEvents 2.14.0, ViaVersion/ViaBackwards 5.12.0, ViaFabricPlus 4.4.15 protocol 765; fixture frame cap 60 on both clients",
+  "invalidRun": "duel129-diagnostic134-cycle: production resource marker in dev runtime, no combat; excluded, logs retained",
+  "limitations": [
+    "Two side-swapped rounds per weapon per candidate; tuning diagnostic, not a win-rate estimate.",
+    "Server health decreases attributable to opposing players; excludes environmental falls. Absorption, overkill and totem restoration mean these are not raw attack damage.",
+    "Different round lengths; compare each candidate against its simultaneous opponent, not totals across candidate iterations.",
+    "No 1.21.1 port or production release."
+  ],
+  "candidates": [
+    {
+      "lab": "duel129-diagnostic134-cycle2",
+      "changes": "pursuit/retreat/apex",
+      "rounds": [
+        {
+          "tag": "cycle134-mace-0",
+          "mode": "MACE",
+          "serverTicks": 887,
+          "averageTps": 20.014978334271095,
+          "outcome": "loss",
+          "roles": {
+            "new": {
+              "healthLossEvents": 12,
+              "opponentHealthLost": 31.333331147,
+              "hitTicks": [
+                73,
+                244,
+                268,
+                297,
+                472,
+                504,
+                548,
+                598,
+                640,
+                663,
+                767,
+                813
+              ],
+              "sources": [
+                "mace_smash",
+                "player",
+                "player",
+                "player",
+                "mace_smash",
+                "mace_smash",
+                "player",
+                "player",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash"
+              ],
+              "fpsMedian": 59,
+              "activeClientRows": 886,
+              "maxY": 985.5226
+            },
+            "old": {
+              "healthLossEvents": 12,
+              "opponentHealthLost": 42.30009576,
+              "hitTicks": [
+                81,
+                82,
+                90,
+                138,
+                268,
+                277,
+                449,
+                518,
+                631,
+                664,
+                803,
+                887
+              ],
+              "sources": [
+                "player",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "player",
+                "mace_smash",
+                "mace_smash",
+                "player",
+                "mace_smash",
+                "mace_smash"
+              ],
+              "fpsMedian": 59.0,
+              "activeClientRows": 887,
+              "maxY": 990.9474
+            }
+          }
+        },
+        {
+          "tag": "cycle134-mace-1",
+          "mode": "MACE",
+          "serverTicks": 1200,
+          "averageTps": 20.00254872475851,
+          "outcome": "draw",
+          "roles": {
+            "new": {
+              "healthLossEvents": 13,
+              "opponentHealthLost": 50.23014141,
+              "hitTicks": [
+                59,
+                79,
+                214,
+                232,
+                239,
+                312,
+                509,
+                576,
+                693,
+                729,
+                861,
+                998,
+                1166
+              ],
+              "sources": [
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "player",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash"
+              ],
+              "fpsMedian": 59,
+              "activeClientRows": 1200,
+              "maxY": 1371.7992
+            },
+            "old": {
+              "healthLossEvents": 10,
+              "opponentHealthLost": 39.089636,
+              "hitTicks": [
+                22,
+                31,
+                157,
+                248,
+                292,
+                319,
+                384,
+                696,
+                794,
+                1178
+              ],
+              "sources": [
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "player",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "player",
+                "mace_smash"
+              ],
+              "fpsMedian": 59,
+              "activeClientRows": 1200,
+              "maxY": 1368.247
+            }
+          }
+        },
+        {
+          "tag": "cycle134-spear-0",
+          "mode": "SPEAR",
+          "serverTicks": 176,
+          "averageTps": 20.02466355891473,
+          "outcome": "win",
+          "roles": {
+            "new": {
+              "healthLossEvents": 4,
+              "opponentHealthLost": 25.3333342,
+              "hitTicks": [
+                64,
+                104,
+                140,
+                176
+              ],
+              "sources": [
+                "spear",
+                "spear",
+                "spear",
+                "spear"
+              ],
+              "fpsMedian": 59,
+              "activeClientRows": 176,
+              "maxY": 157.4824
+            },
+            "old": {
+              "healthLossEvents": 1,
+              "opponentHealthLost": 4.368,
+              "hitTicks": [
+                119
+              ],
+              "sources": [
+                "spear"
+              ],
+              "fpsMedian": 59.0,
+              "activeClientRows": 175,
+              "maxY": 157.0743
+            }
+          }
+        },
+        {
+          "tag": "cycle134-spear-1",
+          "mode": "SPEAR",
+          "serverTicks": 158,
+          "averageTps": 20.01429476668247,
+          "outcome": "loss",
+          "roles": {
+            "new": {
+              "healthLossEvents": 2,
+              "opponentHealthLost": 21.0,
+              "hitTicks": [
+                71,
+                104
+              ],
+              "sources": [
+                "spear",
+                "spear"
+              ],
+              "fpsMedian": 59,
+              "activeClientRows": 158,
+              "maxY": 152.4824
+            },
+            "old": {
+              "healthLossEvents": 3,
+              "opponentHealthLost": 29.333333500000002,
+              "hitTicks": [
+                30,
+                75,
+                158
+              ],
+              "sources": [
+                "spear",
+                "spear",
+                "spear"
+              ],
+              "fpsMedian": 60,
+              "activeClientRows": 158,
+              "maxY": 157.5
+            }
+          }
+        }
+      ],
+      "modes": {
+        "MACE": {
+          "outcomes": [
+            "loss",
+            "draw"
+          ],
+          "serverTicks": 2087,
+          "roles": {
+            "new": {
+              "healthLossEvents": 25,
+              "opponentHealthLost": 81.563,
+              "meanHealthLossPerEvent": 3.263,
+              "medianIntervalTicks": 50
+            },
+            "old": {
+              "healthLossEvents": 22,
+              "opponentHealthLost": 81.39,
+              "meanHealthLossPerEvent": 3.7,
+              "medianIntervalTicks": 76.5
+            }
+          }
+        },
+        "SPEAR": {
+          "outcomes": [
+            "win",
+            "loss"
+          ],
+          "serverTicks": 334,
+          "roles": {
+            "new": {
+              "healthLossEvents": 6,
+              "opponentHealthLost": 46.333,
+              "meanHealthLossPerEvent": 7.722,
+              "medianIntervalTicks": 36.0
+            },
+            "old": {
+              "healthLossEvents": 4,
+              "opponentHealthLost": 33.701,
+              "meanHealthLossPerEvent": 8.425,
+              "medianIntervalTicks": 64.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "lab": "duel129-diagnostic134-cycle3",
+      "changes": "pursuit/retreat/apex plus bounded stable second charge tick",
+      "rounds": [
+        {
+          "tag": "cycle134-mace-0",
+          "mode": "MACE",
+          "serverTicks": 126,
+          "averageTps": 20.1320698936255,
+          "outcome": "win",
+          "roles": {
+            "new": {
+              "healthLossEvents": 4,
+              "opponentHealthLost": 26.0000001,
+              "hitTicks": [
+                48,
+                87,
+                115,
+                126
+              ],
+              "sources": [
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash"
+              ],
+              "fpsMedian": 59.0,
+              "activeClientRows": 125,
+              "maxY": 200.3712
+            },
+            "old": {
+              "healthLossEvents": 2,
+              "opponentHealthLost": 5.98997106,
+              "hitTicks": [
+                74,
+                114
+              ],
+              "sources": [
+                "mace_smash",
+                "player"
+              ],
+              "fpsMedian": 59.0,
+              "activeClientRows": 125,
+              "maxY": 200.2713
+            }
+          }
+        },
+        {
+          "tag": "cycle134-mace-1",
+          "mode": "MACE",
+          "serverTicks": 768,
+          "averageTps": 20.003235002344052,
+          "outcome": "win",
+          "roles": {
+            "new": {
+              "healthLossEvents": 9,
+              "opponentHealthLost": 39.3333339,
+              "hitTicks": [
+                57,
+                266,
+                394,
+                417,
+                584,
+                603,
+                643,
+                743,
+                768
+              ],
+              "sources": [
+                "mace_smash",
+                "player",
+                "mace_smash",
+                "mace_smash",
+                "player",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash"
+              ],
+              "fpsMedian": 59,
+              "activeClientRows": 768,
+              "maxY": 900.6318
+            },
+            "old": {
+              "healthLossEvents": 10,
+              "opponentHealthLost": 38.02881207,
+              "hitTicks": [
+                49,
+                117,
+                156,
+                295,
+                345,
+                405,
+                453,
+                606,
+                644,
+                676
+              ],
+              "sources": [
+                "mace_smash",
+                "mace_smash",
+                "player",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "mace_smash",
+                "player",
+                "player",
+                "mace_smash"
+              ],
+              "fpsMedian": 59,
+              "activeClientRows": 768,
+              "maxY": 897.0876
+            }
+          }
+        },
+        {
+          "tag": "cycle134-spear-0",
+          "mode": "SPEAR",
+          "serverTicks": 88,
+          "averageTps": 20.028681071294095,
+          "outcome": "loss",
+          "roles": {
+            "new": {
+              "healthLossEvents": 2,
+              "opponentHealthLost": 23.333333500000002,
+              "hitTicks": [
+                28,
+                73
+              ],
+              "sources": [
+                "spear",
+                "spear"
+              ],
+              "fpsMedian": 59.0,
+              "activeClientRows": 87,
+              "maxY": 157.4824
+            },
+            "old": {
+              "healthLossEvents": 3,
+              "opponentHealthLost": 24.8333333,
+              "hitTicks": [
+                28,
+                60,
+                88
+              ],
+              "sources": [
+                "spear",
+                "spear",
+                "spear"
+              ],
+              "fpsMedian": 59.0,
+              "activeClientRows": 87,
+              "maxY": 158.0596
+            }
+          }
+        },
+        {
+          "tag": "cycle134-spear-1",
+          "mode": "SPEAR",
+          "serverTicks": 205,
+          "averageTps": 20.009880976835536,
+          "outcome": "win",
+          "roles": {
+            "new": {
+              "healthLossEvents": 5,
+              "opponentHealthLost": 32.333333,
+              "hitTicks": [
+                20,
+                77,
+                137,
+                166,
+                205
+              ],
+              "sources": [
+                "spear",
+                "spear",
+                "spear",
+                "spear",
+                "spear"
+              ],
+              "fpsMedian": 60.0,
+              "activeClientRows": 205,
+              "maxY": 153.433
+            },
+            "old": {
+              "healthLossEvents": 2,
+              "opponentHealthLost": 18.833333,
+              "hitTicks": [
+                154,
+                166
+              ],
+              "sources": [
+                "spear",
+                "spear"
+              ],
+              "fpsMedian": 60.0,
+              "activeClientRows": 205,
+              "maxY": 157.5
+            }
+          }
+        }
+      ],
+      "modes": {
+        "MACE": {
+          "outcomes": [
+            "win",
+            "win"
+          ],
+          "serverTicks": 894,
+          "roles": {
+            "new": {
+              "healthLossEvents": 13,
+              "opponentHealthLost": 65.333,
+              "meanHealthLossPerEvent": 5.026,
+              "medianIntervalTicks": 39
+            },
+            "old": {
+              "healthLossEvents": 12,
+              "opponentHealthLost": 44.019,
+              "meanHealthLossPerEvent": 3.668,
+              "medianIntervalTicks": 49.0
+            }
+          }
+        },
+        "SPEAR": {
+          "outcomes": [
+            "loss",
+            "win"
+          ],
+          "serverTicks": 293,
+          "roles": {
+            "new": {
+              "healthLossEvents": 7,
+              "opponentHealthLost": 55.667,
+              "meanHealthLossPerEvent": 7.952,
+              "medianIntervalTicks": 45
+            },
+            "old": {
+              "healthLossEvents": 5,
+              "opponentHealthLost": 43.667,
+              "meanHealthLossPerEvent": 8.733,
+              "medianIntervalTicks": 28
+            }
+          }
+        }
+      }
+    }
+  ]
+}

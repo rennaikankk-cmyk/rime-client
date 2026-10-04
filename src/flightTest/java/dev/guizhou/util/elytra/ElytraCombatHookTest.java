@@ -105,6 +105,23 @@ public final class ElytraCombatHookTest {
         Map<String, Trace> chase = read(CHASE);
         Map<String, Trace> spear = read(CHASE + "$SpearBehavior");
         String engagement = "dev/guizhou/util/elytra/AerialEngagement";
+        check(method(chase,"predictedTarget").hasCall(CHASE,"groundPursuitAim")
+                        && method(chase,"groundPursuitAim").hasCall(engagement,"groundLead"),
+                "Ground prediction is wired to pursuit, with actual hit queries kept separate");
+        check(method(chase,"attack").hasCall(CHASE,"terrainEscaping")
+                        && method(chase,"onElytra").hasCall(CHASE,"terrainEscaping"),
+                "A cave retreat owns motion and suspends the competing attack path");
+        var flightMethods=read(FLIGHT);
+        check(method(flightMethods,"applyTerrainSafety").hasCall("dev/guizhou/util/elytra/FlightEscapeTrail","update")
+                        && method(flightMethods,"resetFlightState").hasCall("dev/guizhou/util/elytra/FlightEscapeTrail","reset"),
+                "Live terrain safety uses the bounded trail and discards it across flight sessions");
+        check(method(flightMethods,"onPreTick").hasCall(FLIGHT,"updateGroundPassage")
+                        && method(flightMethods,"updateGroundPassage").hasCall("dev/guizhou/util/elytra/FlightEscapeTrail","updateGround"),
+                "Landing retains escape history instead of retrying a roof-blocked takeoff forever");
+        check(method(flightMethods,"groundPassageInput").hasCall("dev/guizhou/util/elytra/GroundPassage","steer")
+                        && method(read("dev/guizhou/mixin/entity/MixinClientPlayerEntity"),"guizhouware$inputOverrides")
+                        .hasCall(FLIGHT,"groundPassageInput"),
+                "Walking escape replaces only this tick's input, after manual and centering ownership");
         check(method(chase,"combatVelocity").hasCall(FLIGHT,"observedCombatVelocity"), "Chase uses fresh applied GZ motion");
         for (String name : List.of("updateDuelPlanning","updateDefense","predictedTarget","fallingMaceThreat"))
             check(method(chase,name).hasCall(CHASE,"combatVelocity"), "Planning and defense share the observed motion: "+name);
@@ -113,11 +130,21 @@ public final class ElytraCombatHookTest {
         for (String name : List.of("tickFollow","tickNearFollow"))
             check(method(spear,name).hasCall(CHASE+"$SpearBehavior","limitChargedApproach"), "Approach gate runs before fixed range entry: "+name);
         check(method(spear,"limitChargedApproach").hasCall(engagement,"spearStep"), "Actual pass uses precision decision");
+        check(method(spear,"tickPullOver").hasCall(engagement,"retreatStep")
+                        && method(spear,"tickPullOver").hasCall(CHASE+"$SpearBehavior","tickFollow"),
+                "Escape boundary replans the heading in the same tick and bounds boosted overshoot");
+        for (String type : List.of("$MaceBehavior", "$SpearBehavior")) {
+            Trace inject = method(read(CHASE+type), "inject");
+            check(inject.hasCall(engagement,"pursuitBoost")
+                            && !inject.hasCall("dev/guizhou/util/elytra/ElytraPhysics","diagonalGzBoost"),
+                    "Combat boost cannot turn a shallow intercept into an unrelated climb: "+type);
+        }
         check(method(read(CHASE+"$MaceBehavior"),"inject").hasCall(engagement,"climbStep"), "Mace aligns at the moving apex");
         Trace attack = method(chase, "attack");
         check(attack.hasCall("dev/guizhou/util/elytra/MaceStrikeTiming", "reserveOneTick")
                         && attack.field(CHASE + "$MaceBehavior", "chargeDeferredTick", Opcodes.GETFIELD) >= 0
-                        && attack.field(CHASE + "$MaceBehavior", "chargeDeferredForPass", Opcodes.GETFIELD) >= 0,
+                        && attack.field(CHASE + "$MaceBehavior", "chargeDeferredTicks", Opcodes.GETFIELD) >= 0
+                        && attack.hasCall("dev/guizhou/util/elytra/MaceStrikeTiming", "mayReserve"),
                 "A charge reservation must remain bounded across both attack callbacks in one tick");
         check(method(chase, "hasMaceDescentIntent").hasCall(CHASE, "realMaceHitWindow"),
                 "A genuine close smash may retain its natural fall even below the target's feet");

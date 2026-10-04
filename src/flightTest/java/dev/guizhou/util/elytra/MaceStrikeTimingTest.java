@@ -6,6 +6,13 @@ import net.minecraft.world.phys.Vec3;
 public final class MaceStrikeTimingTest {
     private static int checks;
     public static void main(String[] args) {
+        check(MaceStrikeTiming.mayReserve(0, 100, 10, false), "First reachable charge tick keeps the original allowance");
+        check(MaceStrikeTiming.mayReserve(1, 101, 100, true), "Stable consecutive charge may buy one more fall tick");
+        check(!MaceStrikeTiming.mayReserve(1, 101, 100, false), "A turning target must be struck without a second reservation");
+        for (long tick : new long[]{99,100,102,1000})
+            check(!MaceStrikeTiming.mayReserve(1,tick,100,true), "Same callback, rollback and stale observation cannot extend a pass");
+        for (int used : new int[]{-1,2,3,100})
+            check(!MaceStrikeTiming.mayReserve(used,101,100,true), "Hard two-tick ceiling cannot be renewed");
         AABB body = new AABB(-.3, 0, -.3, .3, .6, .3);
         Vec3 eye = new Vec3(0, 2, 0), fall = new Vec3(0, -.8, 0);
         check(MaceStrikeTiming.reserveOneTick(eye, fall, body, Vec3.ZERO, 2, 3), "Retain a visible charge window");

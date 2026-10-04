@@ -9,6 +9,48 @@ public final class AerialEngagement {
 
     public record Step(Vec3 velocity, boolean precision) {}
 
+    /** Ground pursuit leads the rendezvous, while real hit queries still use the observed box. */
+    public static Vec3 groundLead(Vec3 offset, Vec3 velocity, Vec3 previous, boolean sampled,
+                                   double speed, double latency, double extraDistance) {
+        if (!finite(offset) || !motion(velocity) || !Double.isFinite(speed) || speed <= 0 || speed > 20
+                || !Double.isFinite(latency) || !Double.isFinite(extraDistance) || extraDistance < 0
+                || !MaceApproach.stable(velocity, previous, sampled)) return Vec3.ZERO;
+        Vec3 flat = new Vec3(velocity.x, 0, velocity.z);
+        double intercept = MaceApproach.interceptTime(offset, flat, speed, Math.min(20, extraDistance));
+        double ticks = Math.min(8, Double.isFinite(intercept) ? intercept + Math.clamp(latency * .5, 0, 1.5) : 1);
+        Vec3 lead = flat.scale(ticks);
+        return lead.lengthSqr() > 16 ? lead.normalize().scale(4) : lead;
+    }
+
+    /** Boost may reshape a long climb, but must not invent a climb on a level intercept.
+     * Reject a large pitch change too: speed perpendicular to the intercept buys no closure. */
+    public static Vec3 pursuitBoost(Vec3 request, Vec3 motion) {
+        if (!finite(request)) return Vec3.ZERO;
+        if (Math.abs(request.y) <= request.horizontalDistance() * .1) return request;
+        Vec3 shaped = ElytraPhysics.diagonalGzBoost(request, motion);
+        return shaped.normalize().dot(request.normalize()) >= Math.cos(Math.toRadians(15))
+                ? shaped : request;
+    }
+
+    /** Stop an escape at its chosen separation, rather than spending another boosted
+     * tick flying away. Target drift is retained; the flight envelope still owns motion. */
+    public static Step retreatStep(Vec3 request, Vec3 away, Vec3 targetVelocity,
+                                    Vec3 appliedVelocity, double separation, double speed) {
+        if (!finite(request) || !finite(away) || !motion(targetVelocity) || !motion(appliedVelocity)
+                || !Double.isFinite(separation) || separation <= 0 || separation > 64
+                || !Double.isFinite(speed) || speed <= 0 || speed > 20
+                || away.lengthSqr() < 1e-9) return new Step(request, false);
+        Vec3 axis = away.normalize();
+        if (request.normalize().dot(axis) < .8) return new Step(request, false);
+        double room = Math.max(0, separation - away.length());
+        double outgoing = Math.max(request.subtract(targetVelocity).dot(axis),
+                appliedVelocity.subtract(targetVelocity).dot(axis));
+        if (outgoing <= 0 || room > outgoing * 2) return new Step(request, false);
+        Vec3 result = targetVelocity.add(axis.scale(Math.min(speed, Math.max(.65, room))));
+        if (result.length() > speed) result = result.normalize().scale(speed);
+        return new Step(result, true);
+    }
+
     /** Reserve charge time at relative closing speed, including opposing passes. */
     public static double chargeRange(Vec3 offset, Vec3 selfVelocity, Vec3 targetVelocity,
                                       double reach, int chargeTicks, int latencyTicks) {

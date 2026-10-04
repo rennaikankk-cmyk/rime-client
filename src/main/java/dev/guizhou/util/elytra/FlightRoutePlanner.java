@@ -28,12 +28,14 @@ public final class FlightRoutePlanner {
 
     private final ArrayDeque<Vec3> waypoints = new ArrayDeque<>();
     private Vec3 plannedHeading = Vec3.ZERO;
+    private Vec3 segmentStart;
     private long plannedTick = Long.MIN_VALUE / 2;
     private int lastSearchNodes;
 
     public void reset() {
         waypoints.clear();
         plannedHeading = Vec3.ZERO;
+        segmentStart = null;
         plannedTick = Long.MIN_VALUE / 2;
         lastSearchNodes = 0;
     }
@@ -85,8 +87,15 @@ public final class FlightRoutePlanner {
         }
         if (tick < plannedTick || plannedHeading.lengthSqr() > 0.0 && heading.dot(plannedHeading) < 0.5) reset();
 
-        while (!waypoints.isEmpty() && position.distanceToSqr(waypoints.peekFirst()) < REACHED * REACHED) {
-            waypoints.removeFirst();
+        while (!waypoints.isEmpty() && (position.distanceToSqr(waypoints.peekFirst()) < REACHED * REACHED
+                || segmentStart != null && waypoints.peekFirst().subtract(position)
+                .dot(waypoints.peekFirst().subtract(segmentStart)) <= 0)) {
+            if (waypoints.size() > 1 && position.distanceToSqr(waypoints.peekFirst()) > 1e-8) {
+                var points = waypoints.iterator();
+                points.next();
+                if (!space.clear(position, points.next())) break;
+            }
+            segmentStart = waypoints.removeFirst();
         }
         if (!waypoints.isEmpty()) {
             Vec3 next = waypoints.peekFirst();
@@ -108,17 +117,29 @@ public final class FlightRoutePlanner {
         List<Vec3> route = search(position, goal, horizon, space);
         if (route.isEmpty()) return stopped(true);
         waypoints.addAll(route);
+        segmentStart = position;
         return toward(position, waypoints.peekFirst(), true);
     }
 
     private List<Vec3> search(Vec3 origin, Vec3 goal, double horizon, Clearance space) {
         lastSearchNodes = 0;
         if (!space.clear(origin, origin) || !space.clear(goal, goal)) return List.of();
+        // Two-block cells can skip the only one-block turn in a mine passage.
+        // Use the same node budget on a finer grid only under a low ceiling.
+        double gridStep = space.clear(origin, origin.add(0, GRID_STEP, 0))
+                && space.clear(goal, goal.add(0, GRID_STEP, 0)) ? GRID_STEP : 1.0;
+        Vec3 gridOrigin = origin;
+        if (gridStep == 1.0) {
+            Vec3 centered = new Vec3(Math.floor(origin.x) + .5, origin.y, Math.floor(origin.z) + .5);
+            if (space.clear(origin, centered)) gridOrigin = centered;
+        }
         double radius = Math.min(40.0, Math.max(12.0, horizon + 6.0));
         Map<Cell, Node> known = new HashMap<>();
         PriorityQueue<Open> open = new PriorityQueue<>(Comparator.comparingDouble(Open::score)
                 .thenComparingLong(Open::order));
-        Node start = new Node(new Cell(0, 0, 0), origin, 0.0, null);
+        Node entrance = gridOrigin.distanceToSqr(origin) > 1e-8
+                ? new Node(new Cell(0, 0, 0), origin, 0, null) : null;
+        Node start = new Node(new Cell(0, 0, 0), gridOrigin, gridOrigin.distanceTo(origin), entrance);
         known.put(start.cell, start);
         long order = 0;
         open.add(new Open(start, start.cost, heuristic(origin, goal), order++));
@@ -133,7 +154,7 @@ public final class FlightRoutePlanner {
             }
             for (int[] offset : NEIGHBORS) {
                 Cell cell = new Cell(current.cell.x + offset[0], current.cell.y + offset[1], current.cell.z + offset[2]);
-                Vec3 position = origin.add(cell.x * GRID_STEP, cell.y * GRID_STEP, cell.z * GRID_STEP);
+                Vec3 position = gridOrigin.add(cell.x * gridStep, cell.y * gridStep, cell.z * gridStep);
                 if (position.distanceToSqr(origin) > radius * radius) continue;
                 Node previous = known.get(cell);
                 if (previous != null && previous.closed || previous == null && known.size() >= MAX_NODES) continue;
