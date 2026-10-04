@@ -1064,7 +1064,7 @@
     "src/flightTest/java/dev/guizhou/util/elytra/GroundPassageTest.java": "e227cd0befa135618453d56db0dc459ea80455f13e8890c0fd55ee78f0a3b720",
     "src/flightTest/java/dev/guizhou/util/elytra/MaceStrikeTimingTest.java": "4d612c297f6dd712985b37898d83eac032bc99d262cda10e2b5d141b8d9e1dce",
     "src/main/java/dev/guizhou/features/modules/combat/GuangxiElytraChaseModule.java": "20f99775941b94b996fb6034ae6dde6e2c75975716a96c158b5d9e554e269fbe",
-    "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java": "d2d72895f220e1f116c39d2467b67d7244e4344b96606de2d01ad237d2d9ff96",
+    "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java": "3e770eccac623dd460f9c1261dfd3da362dc0363f9aff6e252d8ce5b8577b26c",
     "src/main/java/dev/guizhou/mixin/entity/MixinClientPlayerEntity.java": "faa6ad80583a021673e22b1e3f03b15ee88346d21d2814b8d30315c141c0a88b",
     "src/main/java/dev/guizhou/util/elytra/AerialEngagement.java": "06fce6577643df87a5a021f77f86067ceefaf3ed7a1950b375f0d7a552c87325",
     "src/main/java/dev/guizhou/util/elytra/AsyncFlightRoute.java": "dbfc55d485967e6eafee834c075206e084ad6f82835354f29e70c719719e8bb8",
@@ -1073,5 +1073,6 @@
     "src/main/java/dev/guizhou/util/elytra/FlightTerrainSafety.java": "11e329886a13043298714647c2f3f6504e4ae0e2434c4d1d7820e1f06b183817",
     "src/main/java/dev/guizhou/util/elytra/GroundPassage.java": "df3aa3ea4280fa086fd97aa161ee40d0d95ff414195deb2a3e9c112a3b113e58",
     "src/main/java/dev/guizhou/util/elytra/MaceStrikeTiming.java": "095f40444b6bb112854d1c8d8c971490e19a9da7e957d7f0d9e628232aaf1005"
-  }
+  },
+  "releaseFollowUp": "Moved ephemeral ground state clearing after the authorization prefix to satisfy the existing obfuscated release gate; final input hook remains independently authorized."
 }
