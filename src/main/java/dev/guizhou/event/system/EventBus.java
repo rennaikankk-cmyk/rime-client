@@ -51,6 +51,11 @@ public class EventBus {
             if (event.isCancelled()) {
                 return true;
             }
+            // Packet/input callbacks can arrive before the next module-manager tick.
+            // Keep disconnect cleanup available; normal disable cleanup is never gated.
+            if (listener.host() instanceof dev.guizhou.features.modules.Module
+                    && !dev.guizhou.manager.HeartbeatManager.authorized()
+                    && !(event instanceof dev.guizhou.event.impl.network.DisconnectEvent)) continue;
             long start = ClientDiagnostics.startTimer();
             try {
                 listener.invoke(event);

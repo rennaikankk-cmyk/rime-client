@@ -10,7 +10,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
 
-/** Dedicated trust store for the existing auth host, obtained through the owner's SSH connection.
+/** Dedicated trust store for the existing IP auth host, obtained through the owner's SSH connection.
  * No system trust override, trust-all manager, redirect, or plaintext fallback. Certificate
  * rotation requires shipping overlapping trusted certificates before changing the server.
  */
@@ -52,5 +52,22 @@ public final class AuthTransport {
             return HttpClient.newBuilder().sslContext(context).sslParameters(parameters)
                     .connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
         } catch (Exception e) { throw new IllegalStateException("Invalid bundled auth certificate", e); }
+    }
+
+    /** The website uses a public CA chain; retain ordinary HTTPS hostname verification.
+     * Its authorization responses are also verified against the pinned Ed25519 public key.
+     * Keep the IP-only certificate store above for the existing cloud-config endpoint.
+     */
+    public static HttpClient createPublicCa() {
+        try {
+            TrustManagerFactory trust = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            trust.init((KeyStore) null);
+            SSLContext context = SSLContext.getInstance("TLS");
+            context.init(null, trust.getTrustManagers(), null);
+            SSLParameters parameters = new SSLParameters();
+            parameters.setEndpointIdentificationAlgorithm("HTTPS");
+            return HttpClient.newBuilder().sslContext(context).sslParameters(parameters)
+                    .connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
+        } catch (Exception e) { throw new IllegalStateException("Cannot initialize website TLS trust", e); }
     }
 }

@@ -54,6 +54,7 @@ public final class ObfuscatedJarTest {
             verifyGuiOverrides(before, after, mapping);
             verifyHeartbeat(before, after, mapping);
             verifyReleaseLicense(before, after, mapping);
+            verifyBusinessAuthorization(before, after, mapping);
             System.out.println("ObfuscatedJarTest passed: " + checks + " checks; "
                     + enumCount + " enums audited, " + reflected + " isolated reflection checks, "
                     + (enumCount - reflected) + " complex enums ASM-only, "
@@ -331,6 +332,30 @@ public final class ObfuscatedJarTest {
     private static String methodMappingKey(MethodInfo method) {
         return method.name + "(" + String.join(",", Arrays.stream(Type.getArgumentTypes(method.descriptor))
                 .map(Type::getClassName).toList()) + ")";
+    }
+
+    private static void verifyBusinessAuthorization(Map<String, ClassInfo> before,
+                                                    Map<String, ClassInfo> after, Mapping mapping) {
+        String guard = "dev/guizhou/util/license/GuardStatus";
+        String requiredGuard = mapping.requiredClass(guard);
+        String requiredCall = mapping.requiredMember(guard, "requireAuthorized()");
+        ClassInfo business = required(after, ENTRYPOINT);
+        for (String name : List.of("onInitialize", "onInitializeClient")) {
+            Step first = executable(requiredMethod(business, name + "()V")).getFirst();
+            check(member(first, Opcodes.INVOKESTATIC, requiredGuard, requiredCall, "()V"),
+                    "Direct business entry lost its first authorization check: " + name);
+        }
+        String heartbeat = mapping.requiredClass(HEARTBEAT);
+        String authorized = mapping.requiredMember(HEARTBEAT, "authorized()");
+        for (String owner : List.of("dev/guizhou/features/modules/Module", "dev/guizhou/manager/ModuleManager",
+                "dev/guizhou/event/system/EventBus")) {
+            ClassInfo source = required(before, owner), output = required(after, mapping.requiredClass(owner));
+            for (MethodInfo method : source.methods.values()) {
+                if (method.steps.stream().noneMatch(step -> member(step, Opcodes.INVOKESTATIC, HEARTBEAT, "authorized", "()Z"))) continue;
+                MethodInfo retained = requiredMethod(output, mapping.requiredMember(owner, methodMappingKey(method)) + mapping.descriptor(method.descriptor));
+                verifyAuthorizationFlow(method, retained, heartbeat, authorized, owner);
+            }
+        }
     }
 
     /** Production uses -dontoptimize: preserve the complete guarded control flow, including cleanup paths. */

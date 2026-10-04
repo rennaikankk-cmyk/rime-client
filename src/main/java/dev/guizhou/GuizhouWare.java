@@ -52,6 +52,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
 
     @Override
     public void onInitialize() {
+        dev.guizhou.util.license.GuardStatus.requireAuthorized();
         LOGGER.info("Pre-initializing {} v{}",
                 BuildConfig.NAME, BuildConfig.VERSION);
         Registry.register(BuiltInRegistries.SOUND_EVENT, AUTOHORSE_SOUND_ID, AUTOHORSE_SOUND);
@@ -79,6 +80,7 @@ public class GuizhouWare implements ModInitializer, ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        dev.guizhou.util.license.GuardStatus.requireAuthorized();
         LOGGER.info("Initializing {}", BuildConfig.NAME);
         dev.guizhou.util.render.PortRenderResources.init();
 

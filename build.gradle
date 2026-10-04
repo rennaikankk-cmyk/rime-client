@@ -172,6 +172,7 @@ tasks.register('elytraHookTest', JavaExec) {
 }
 
 def clientRegressionTests = [
+        businessAuthorizationTest: 'dev.guizhou.util.license.BusinessAuthorizationTest',
         commandFuzzyTest: 'dev.guizhou.features.commands.ui.CommandFuzzyTest',
         commandPresentationTest: 'dev.guizhou.features.commands.ui.CommandPresentationTest',
         rotationMathTest: 'dev.guizhou.manager.RotationMathTest',
