@@ -703,6 +703,7 @@ public class GuangxiElytraModule extends Module {
             CoupledCruise.Selection selection = travelLook.lengthSqr() > .5
                     ? travelController.selection(gzBoost.getValue() && dualViewAvailable())
                     : cruiseController.select(config, cruiseInput(), viewAnchor.yaw(), mc.player.getY(), dualViewAvailable());
+            if (travelLook.lengthSqr() <= .5) selection = manualFastClimb(config, selection);
             if (selection.active()) {
                 pendingCruise = selection;
                 pendingCruiseConfig = config;
@@ -989,6 +990,17 @@ public class GuangxiElytraModule extends Module {
         return new CoupledCruise.Intent(horizontal, vertical, autoFly.getValue(), gzBoost.getValue(), gzBoostMode.getValue());
     }
 
+    private CoupledCruise.Selection manualFastClimb(CoupledCruise.Config config, CoupledCruise.Selection selection) {
+        if (!gzBoost.getValue()
+                || gzBoostMode.getValue() != CoupledCruise.BoostMode.Aggressive
+                || !mc.options.keyJump.isDown() || mc.options.keyShift.isDown()
+                || !cruiseEligible()) return selection;
+        Vec3 observed = recentAppliedVelocity();
+        return CoupledCruise.fastClimb(config, selection,
+                observed != null ? observed : mc.player.getDeltaMovement(),
+                mc.player.getAttributeValue(Attributes.GRAVITY));
+    }
+
     private CoupledCruise.Config cruiseConfig() {
         // An explicit large-altitude-swing cruise option. Keep both established
         // GZBoost climb profiles and the ordinary level path unchanged by default.
@@ -1127,6 +1139,7 @@ public class GuangxiElytraModule extends Module {
         CoupledCruise.Config config = cruiseConfig();
         CoupledCruise.Selection selection = cruiseController.previewSelection(config, cruiseInput(),
                 viewAnchor.yaw(), mc.player.getY(), dualViewAvailable());
+        selection = manualFastClimb(config, selection);
         if (!selection.active()) return incoming;
         Vec3 simulated = ElytraPhysics.simulateGlide(incoming, selection.look(),
                 mc.player.getAttributeValue(Attributes.GRAVITY));

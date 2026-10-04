@@ -1,0 +1,447 @@
+{
+  "scope": "Isolated manual climb, server wall-clock displacement; not PvP, armor flight, public-network or FPS validation.",
+  "baselineCommit": "6604120624f56615824ce95995f3dcc6d81326b9",
+  "slmCommit": "fe5ed1545d7b607746d038a8523da08f0b6753aa",
+  "slmJarSha256": "8ab9137b491435379ebb01c22dee01bad420e3203556ca27bdb255fbe7cca451",
+  "environment": {
+    "paper": "1.21.11-132",
+    "grim": "2.3.73",
+    "viaFabricPlus": "4.4.15",
+    "protocol": 765,
+    "clientFpsCap": 60,
+    "latency": "loopback"
+  },
+  "observer": {
+    "method": "Grim EventBus with BasicGrimPlugin overload; uncancelled FlagEvent",
+    "positiveControlEvents": 381,
+    "invalidEarlierObserver": "Object overload was a no-op; no zero-event claims for earlier runs"
+  },
+  "finalPairs": [
+    {
+      "case": "rime-final-0-Aggressive-0",
+      "samples": 400,
+      "tailSeconds": 9.998,
+      "serverVerticalBps": 214.496,
+      "serverHorizontalNetBps": 27.235,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "4a928658e3f642ccd21a8b2feb1582630fab6a9c1d2ea3501ea2a8b3ef9cd3d2",
+      "grimFlagEvents": 0,
+      "paperMovedTooQuicklyWarnings": 0
+    },
+    {
+      "case": "rime-final-0-Aggressive-45",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": 203.17,
+      "serverHorizontalNetBps": 45.008,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "aa6b0e6a6e0e1ced04f3cabd742cb6f3a974e86000887ec1e3842cb67df8223a",
+      "grimFlagEvents": 0,
+      "paperMovedTooQuicklyWarnings": 0
+    },
+    {
+      "case": "rime-final-1-Aggressive-0",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": 237.655,
+      "serverHorizontalNetBps": 31.426,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "c7e7a8449417baada7f1c52caa8c82de38b7063ee082ce8006a7b8463b98f625",
+      "grimFlagEvents": 0,
+      "paperMovedTooQuicklyWarnings": 0
+    },
+    {
+      "case": "rime-final-1-Aggressive-45",
+      "samples": 400,
+      "tailSeconds": 9.949,
+      "serverVerticalBps": 254.147,
+      "serverHorizontalNetBps": 27.899,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "c374be1a8bf4f11e0c2db45015a11bf2d0094c324cf14bd98882807c10961bad",
+      "grimFlagEvents": 0,
+      "paperMovedTooQuicklyWarnings": 0
+    }
+  ],
+  "allMeasurements": [
+    {
+      "case": "rime-Aggressive-0",
+      "samples": 400,
+      "tailSeconds": 9.95,
+      "serverVerticalBps": 213.582,
+      "serverHorizontalNetBps": 27.367,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "c1ef9bb2e211374c5d47bb4aba93b7a19419b1b12e87997552fff03f4cf0c52b"
+    },
+    {
+      "case": "rime-Aggressive-45",
+      "samples": 400,
+      "tailSeconds": 9.999,
+      "serverVerticalBps": 203.187,
+      "serverHorizontalNetBps": 45.012,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "db018cb3c940d95dadc308e27f1ecf6a8aeda7ba9288ecf94cbd7a5cd52ab272"
+    },
+    {
+      "case": "rime-fast-Aggressive-0",
+      "samples": 400,
+      "tailSeconds": 9.95,
+      "serverVerticalBps": 237.685,
+      "serverHorizontalNetBps": 31.37,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "6d76919deb4c4d7fbafd50974e7291253bec36dff51a0dd4b8e22c2c7b397b70"
+    },
+    {
+      "case": "rime-fast-Aggressive-45",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": 254.105,
+      "serverHorizontalNetBps": 28.027,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "84d6fbcf8dd1f2ff5836bb47f8cb04af61dc48bd41d1ea04a9cd41ce873f5259"
+    },
+    {
+      "case": "rime-fast-verify-Aggressive-0",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": 237.423,
+      "serverHorizontalNetBps": 30.939,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9993,
+      "traceSha256": "9ce265f1848a178a27877c5ea78d7db29ddfee61266db5bb16d61648a7788ace"
+    },
+    {
+      "case": "rime-fast-verify-Aggressive-45",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": 254.102,
+      "serverHorizontalNetBps": 28.027,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9992,
+      "traceSha256": "e4f42d6b5e9dbeb3917331343b9947751bad1102c13d3aa422b305ca2dbda6a6"
+    },
+    {
+      "case": "rime-final-0-Aggressive-0",
+      "samples": 400,
+      "tailSeconds": 9.998,
+      "serverVerticalBps": 214.496,
+      "serverHorizontalNetBps": 27.235,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "4a928658e3f642ccd21a8b2feb1582630fab6a9c1d2ea3501ea2a8b3ef9cd3d2",
+      "grimFlagEvents": 0,
+      "paperMovedTooQuicklyWarnings": 0
+    },
+    {
+      "case": "rime-final-0-Aggressive-45",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": 203.17,
+      "serverHorizontalNetBps": 45.008,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "aa6b0e6a6e0e1ced04f3cabd742cb6f3a974e86000887ec1e3842cb67df8223a",
+      "grimFlagEvents": 0,
+      "paperMovedTooQuicklyWarnings": 0
+    },
+    {
+      "case": "rime-final-1-Aggressive-0",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": 237.655,
+      "serverHorizontalNetBps": 31.426,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "c7e7a8449417baada7f1c52caa8c82de38b7063ee082ce8006a7b8463b98f625",
+      "grimFlagEvents": 0,
+      "paperMovedTooQuicklyWarnings": 0
+    },
+    {
+      "case": "rime-final-1-Aggressive-45",
+      "samples": 400,
+      "tailSeconds": 9.949,
+      "serverVerticalBps": 254.147,
+      "serverHorizontalNetBps": 27.899,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "c374be1a8bf4f11e0c2db45015a11bf2d0094c324cf14bd98882807c10961bad",
+      "grimFlagEvents": 0,
+      "paperMovedTooQuicklyWarnings": 0
+    },
+    {
+      "case": "rime-Gentle-0",
+      "samples": 398,
+      "tailSeconds": 9.951,
+      "serverVerticalBps": 146.125,
+      "serverHorizontalNetBps": 32.674,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9976,
+      "traceSha256": "2652c8e7291887340ee560c0d6968fadf745969135fb61a297b785e867507a64"
+    },
+    {
+      "case": "rime-Gentle-45",
+      "samples": 400,
+      "tailSeconds": 9.999,
+      "serverVerticalBps": 203.001,
+      "serverHorizontalNetBps": 45.008,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9972,
+      "traceSha256": "acd01bfb9e6565e20edbb8b14384c5b671142c51739d6beac4814d81fa2964d9"
+    },
+    {
+      "case": "rime-verify-Aggressive-0",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": 213.408,
+      "serverHorizontalNetBps": 27.095,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "01cd67f690d7d5ecd9ccc7e771f7fa65bd2b9df34eae0c2833b0f293ef288c3e"
+    },
+    {
+      "case": "rime-verify-Aggressive-45",
+      "samples": 400,
+      "tailSeconds": 9.951,
+      "serverVerticalBps": 204.166,
+      "serverHorizontalNetBps": 45.228,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "def2fb84505b29031daa191aa3f68891913437ec623fe7a6281ca93750bd43e4"
+    },
+    {
+      "case": "slm-final-control-0-V3-0",
+      "samples": 200,
+      "tailSeconds": 9.943,
+      "serverVerticalBps": -22.087,
+      "serverHorizontalNetBps": 11.472,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 11,
+      "minimumReportedTPS": 19.9475,
+      "traceSha256": "30923e666d3a5a461c128cd7e96c97c125fd8915efa8897ce9381f0be8f3b1b4",
+      "grimFlagEvents": 190,
+      "paperMovedTooQuicklyWarnings": 0
+    },
+    {
+      "case": "slm-final-control-0-V3-45",
+      "samples": 200,
+      "tailSeconds": 9.943,
+      "serverVerticalBps": -11.334,
+      "serverHorizontalNetBps": 13.713,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9823,
+      "traceSha256": "14b4c41c52e97ae21346a6f4ee674e057ea57d352ba87c641f601a2000e80cf1",
+      "grimFlagEvents": 191,
+      "paperMovedTooQuicklyWarnings": 0
+    },
+    {
+      "case": "slm-flag-control-V3-0",
+      "samples": 200,
+      "tailSeconds": 9.945,
+      "serverVerticalBps": -22.276,
+      "serverHorizontalNetBps": 11.606,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 1,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "68f98b13e922ba30e9ea208caac32a42067b77409a4404d1f086d0e32ea13197"
+    },
+    {
+      "case": "slm-flag-control-V3-45",
+      "samples": 200,
+      "tailSeconds": 9.941,
+      "serverVerticalBps": -11.479,
+      "serverHorizontalNetBps": 13.884,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9993,
+      "traceSha256": "e2134cf659154cc848d657941ff3bed472d1cb14c1abf81b0a7510512f3f7e57"
+    },
+    {
+      "case": "slm-V3-0",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": -13.162,
+      "serverHorizontalNetBps": 9.515,
+      "glidingFraction": 0.771,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.8659,
+      "traceSha256": "7b073aa63e65570b9060e6bb789a5c077221a0046897c96dcc4320a6675ff56f"
+    },
+    {
+      "case": "slm-V3-45",
+      "samples": 400,
+      "tailSeconds": 9.999,
+      "serverVerticalBps": -9.809,
+      "serverHorizontalNetBps": 13.718,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.8659,
+      "traceSha256": "4ec7b42857633fd3954f5719a55842115f978c2f71fcd9be144ad894c4c82ddc"
+    },
+    {
+      "case": "slm-V4-0",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": -0.05,
+      "serverHorizontalNetBps": 3.925,
+      "glidingFraction": 0.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.866,
+      "traceSha256": "f05273cd4185521717e1ee6b097f5a1fa77b714c6a6d6bf5f367338f20de8148"
+    },
+    {
+      "case": "slm-V4-45",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": -2.747,
+      "serverHorizontalNetBps": 4.962,
+      "glidingFraction": 0.224,
+      "largeDownwardJumps": 7,
+      "minimumReportedTPS": 19.9993,
+      "traceSha256": "f8d3739457473ac4bf883d81d45ed3b33e62b8cc0c69a2b8e509aa1785ebb8c1"
+    },
+    {
+      "case": "slm-V5-0",
+      "samples": 400,
+      "tailSeconds": 10.0,
+      "serverVerticalBps": 225.416,
+      "serverHorizontalNetBps": 29.976,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9993,
+      "traceSha256": "d216b490e172c3bdd7d08878e7a1925d0702468e0b00efb778fdc7ede65b7e1b"
+    },
+    {
+      "case": "slm-V5-45",
+      "samples": 400,
+      "tailSeconds": 9.951,
+      "serverVerticalBps": 240.346,
+      "serverHorizontalNetBps": 26.73,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9993,
+      "traceSha256": "d5061eabbb46c61da23b502f6b87a3bde85a53cfca9efec878ac3ef60132a45f"
+    },
+    {
+      "case": "slm-V5_PULLUP_ONLY-0",
+      "samples": 400,
+      "tailSeconds": 9.999,
+      "serverVerticalBps": 258.966,
+      "serverHorizontalNetBps": 1.109,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9993,
+      "traceSha256": "38ba5af74ec772b8e96120562de708201fbd800cd3a518f4dcd0b763209b7726"
+    },
+    {
+      "case": "slm-V5_PULLUP_ONLY-45",
+      "samples": 400,
+      "tailSeconds": 9.95,
+      "serverVerticalBps": 258.955,
+      "serverHorizontalNetBps": 0.245,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9994,
+      "traceSha256": "981e6ed1d71e471f6bc14c34e10fe210a125b36c7e3e6fd0fecbfc96a42888b1"
+    },
+    {
+      "case": "slm-verify-V5-0",
+      "samples": 400,
+      "tailSeconds": 9.952,
+      "serverVerticalBps": 188.849,
+      "serverHorizontalNetBps": 23.505,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9957,
+      "traceSha256": "aca761d5843e34538428fe531b356c44e614728d95fd67dfed46806c1c057ff2"
+    },
+    {
+      "case": "slm-verify-V5-45",
+      "samples": 400,
+      "tailSeconds": 9.95,
+      "serverVerticalBps": 176.614,
+      "serverHorizontalNetBps": 26.687,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9988,
+      "traceSha256": "9879fc16a25ff9732f9b34c87446730bf9beca8e0e692c44cf13dc319d190529"
+    },
+    {
+      "case": "slm-verify-V5_PULLUP_ONLY-0",
+      "samples": 400,
+      "tailSeconds": 9.999,
+      "serverVerticalBps": 258.789,
+      "serverHorizontalNetBps": 0.664,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9993,
+      "traceSha256": "304565d2d2fa759b97469753e68e7d4ae08e37fead278c2063f87199960942cc"
+    },
+    {
+      "case": "slm-verify-V5_PULLUP_ONLY-45",
+      "samples": 400,
+      "tailSeconds": 9.95,
+      "serverVerticalBps": 229.814,
+      "serverHorizontalNetBps": 1.406,
+      "glidingFraction": 1.0,
+      "largeDownwardJumps": 0,
+      "minimumReportedTPS": 19.9993,
+      "traceSha256": "4658b63e2dbbad7fbd672f19c8fa3fc4f98c54bd430f8e40dc3ccad90b092a7a"
+    }
+  ],
+  "sourceSha256": {
+    "src/main/java/dev/guizhou/util/elytra/CoupledCruise.java": "6ef5d268d11e8987f6cd7ef73413a6687b0f91ee418bf3b2bbea01c09c772ff2",
+    "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java": "07f49da08048ab1afbe47fdd6eca09e73fed15e16166403a651f0faca58fa885"
+  },
+  "fixtureSha256": {
+    "ClimbObserver.java": "304e7b2399fdc5007a42b9713f2517017b502a57251e92907888dfc71d349b92",
+    "client\\src\\main\\java\\probe\\ClimbProbe.java": "ee8354ea65b38eb90adbd10cff3f37747d909fd85c93ba18ccf6db543f896e5c",
+    "analyze.py": "4d3f9aef93bc40c595cb5ef9ffcce3a0029e2accdb1471dad0ff447fa7addbe5",
+    "grim-events-final.csv": "fbbedf8f3d53723ef57915f03eea8007f6d8615c34423bc8a09539327fac7393"
+  },
+  "verification": [
+    "gradlew check: passed, 123 tasks",
+    "production compileJava and licenseActionHookTest restored after development runs"
+  ],
+  "release": "Not published; 1.21.1 unchanged.",
+  "integration": {
+    "date": "2026-10-04",
+    "behavior": "Fast manual climb is integrated into Aggressive GZBoost; separate opt-in setting removed. Gentle, cruise, descent and combat ownership preserved.",
+    "sourceSha256": {
+      "src/main/java/dev/guizhou/util/elytra/CoupledCruise.java": "f17dba602a016e048e82b023a50dc37dac52c6f145d2b34584d028169bb058e5",
+      "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java": "1b080ad06c9b155386a05df36d205c25f5884150e5c804e476c958377b25b0b1"
+    },
+    "verification": [
+      "compileJava passed",
+      "coupledCruiseTest: 44032 checks passed",
+      "elytraCombatHookTest: 621 checks passed",
+      "licenseActionHookTest: 797 checks passed"
+    ],
+    "benchmarkScope": "Existing measurements apply to the same solver with its former option enabled; integrated default was validated by compilation and regression tests."
+  }
+}

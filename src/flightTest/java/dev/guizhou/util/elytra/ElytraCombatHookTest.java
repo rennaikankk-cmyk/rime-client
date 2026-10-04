@@ -805,6 +805,16 @@ public final class ElytraCombatHookTest {
         check(manual.steps.stream().anyMatch(step -> "gzBoostMode".equals(step.name))
                         && !manual.hasCall(FLIGHT, "combatBoostMode"),
                 "Manual cruise continues to use the configured high-speed profile");
+        Trace fastClimb = method(read(FLIGHT), "manualFastClimb");
+        check(fastClimb.hasCall(FLIGHT, "cruiseEligible")
+                        && fastClimb.steps.stream().anyMatch(step -> "gzBoost".equals(step.name))
+                        && fastClimb.steps.stream().anyMatch(step -> "Aggressive".equals(step.name)),
+                "Integrated fast climb retains manual ownership and the aggressive setting gate");
+        check(read(FLIGHT).values().stream().flatMap(trace -> trace.steps.stream())
+                        .noneMatch(step -> "gzBoostFastClimb".equals(step.name)),
+                "Aggressive GZBoost climb no longer requires a separate opt-in setting");
+        check(!method(read(FLIGHT), "combatBoostMode").hasCall(FLIGHT, "manualFastClimb"),
+                "Manual high-lift solver does not replace controlled combat climb");
         Trace ownership = method(chase, "preservesMaceDescent");
         check(ownership.steps.stream().anyMatch(step -> "isFallFlying".equals(step.name)),
                 "A powered mace approach must not suppress armor cycling and rocket refresh before glide ends");
