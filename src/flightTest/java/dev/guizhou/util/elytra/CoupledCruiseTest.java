@@ -23,7 +23,37 @@ public final class CoupledCruiseTest {
         longWaveWindow();
         forecastDoesNotAdvanceState();
         combatHeading();
+        fastManualClimb();
         System.out.println("CoupledCruiseTest passed: " + checks + " checks");
+    }
+
+    private static void fastManualClimb() {
+        Config config = Config.defaults();
+        for (double yaw : new double[]{0, 15, 45, 90, 135, 180, 225, 270, 315}) {
+            Vec3 heading = new Vec3(-Math.sin(Math.toRadians(yaw)), 0, Math.cos(Math.toRadians(yaw)));
+            CoupledCruise controller = new CoupledCruise();
+            Vec3 velocity = Vec3.ZERO;
+            for (int tick = 0; tick < 400; tick++) {
+                Selection original = controller.select(config, new Intent(heading, 1, false, true), yaw, 300, true);
+                Selection selected = CoupledCruise.fastClimb(config, original, velocity, .08);
+                Vec3 simulated = ElytraPhysics.simulateGlide(velocity, selected.look(), .08);
+                Result result = controller.apply(config, selected, velocity, simulated, selected.look(), original.look());
+                check(result.feasible(), "Fast climb stays feasible");
+                check(CoupledCruise.envelope(config, velocity, simulated, selected.look(), selected.boxLook())
+                        .contains(result.velocity(), 1e-8), "Fast climb remains in both reported views");
+                check(result.velocity().length() <= config.speedCap() + 1e-8, "Fast climb obeys speed cap");
+                velocity = result.velocity();
+            }
+            check(velocity.y > 10, "Fast climb sustains modeled lift across headings");
+            for (double vertical : new double[]{-1, 0, 1}) {
+                Selection single = controller.select(config, new Intent(heading, vertical, false, true), yaw, 300, false);
+                check(CoupledCruise.fastClimb(config, single, velocity, .08) == single, "Native protocol never gains dual view");
+                Selection pure = controller.select(config, new Intent(Vec3.ZERO, vertical, false, true), yaw, 300, true);
+                check(CoupledCruise.fastClimb(config, pure, velocity, .08) == pure, "Pure vertical remains direction preserving");
+            }
+        }
+        Selection climb = new CoupledCruise().select(config, new Intent(NORTH, 1, false, true), 0, 300, true);
+        check(CoupledCruise.fastClimb(config, climb, new Vec3(Double.NaN, 0, 0), .08) == climb, "Invalid motion falls back");
     }
 
     private static void combatHeading() {

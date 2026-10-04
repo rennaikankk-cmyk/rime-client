@@ -116,6 +116,8 @@ public class GuangxiElytraModule extends Module {
     private final Setting<Boolean> landAutoClose = fixed("LandAutoClose", false);
     private final Setting<Boolean> safeLanding = fixed("SafeLanding", true);
     private final Setting<Boolean> terrainGuard = bool("TerrainGuard", true);
+    private final Setting<Boolean> caveEscape = bool("CaveEscape", true)
+            .described("受阻时沿可通行的来路撤退；低顶盖落地后允许安全步行，需开启 TerrainGuard。");
     private final Setting<Integer> terrainLookahead = fixed("TerrainLookahead", 12, 8, 32);
     private final Setting<Boolean> parallelPlanning = fixed("ParallelPlanning", true);
 
@@ -225,6 +227,10 @@ public class GuangxiElytraModule extends Module {
     private ItemStack stowedChest = ItemStack.EMPTY;
     private final ArmorSwapController armorSwap = new ArmorSwapController(this);
     private final FlightRoutePlanner terrainRoute = new FlightRoutePlanner();
+    private final dev.guizhou.util.elytra.FlightEscapeTrail escapeTrail = new dev.guizhou.util.elytra.FlightEscapeTrail();
+    private final FlightRoutePlanner groundRoute = new FlightRoutePlanner();
+    private Vec3 groundDirection = Vec3.ZERO;
+    private int groundDirectionTick = Integer.MIN_VALUE;
     private final AsyncFlightRoute asyncTerrainRoute = new AsyncFlightRoute();
     private final FlightPlanningTask<FlightRecoveryPlan, Optional<Vec3>> recoveryTask =
             new FlightPlanningTask<>(FlightRecoveryPlan::calculate);
@@ -514,6 +520,10 @@ public class GuangxiElytraModule extends Module {
         landingHoldTicks = 0;
         landingDanger = false;
         terrainRoute.reset();
+        escapeTrail.reset();
+        groundRoute.reset();
+        groundDirection = Vec3.ZERO;
+        groundDirectionTick = Integer.MIN_VALUE;
         invalidatePlanning();
         wasFlying = false;
         holdJumpTicks = 0;
@@ -560,6 +570,8 @@ public class GuangxiElytraModule extends Module {
     @Subscribe(priority = -100)
     private void onPreTick(PreTickEvent event) {
         if (!dev.guizhou.manager.HeartbeatManager.authorized()) { dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce(); return; }
+        groundDirection = Vec3.ZERO;
+        groundDirectionTick = Integer.MIN_VALUE;
         synchronizeProfile();
         // Observation lifetime: a rocket-gate result is only valid for the tick that produced it.
         lastRocketBlock = dev.guizhou.util.telemetry.FlightSummary.BLOCK_NONE;
@@ -632,6 +644,7 @@ public class GuangxiElytraModule extends Module {
                 return;
             }
             wasFlying = false;
+            if (!coolingDown && updateGroundPassage()) return;
             if (!coolingDown && (!groundHop.getValue() || !tickGroundHop())) maybeTakeoff();
             return;
         }
@@ -703,6 +716,7 @@ public class GuangxiElytraModule extends Module {
             CoupledCruise.Selection selection = travelLook.lengthSqr() > .5
                     ? travelController.selection(gzBoost.getValue() && dualViewAvailable())
                     : cruiseController.select(config, cruiseInput(), viewAnchor.yaw(), mc.player.getY(), dualViewAvailable());
+            if (travelLook.lengthSqr() <= .5) selection = manualFastClimb(config, selection);
             if (selection.active()) {
                 pendingCruise = selection;
                 pendingCruiseConfig = config;
@@ -989,6 +1003,17 @@ public class GuangxiElytraModule extends Module {
         return new CoupledCruise.Intent(horizontal, vertical, autoFly.getValue(), gzBoost.getValue(), gzBoostMode.getValue());
     }
 
+    private CoupledCruise.Selection manualFastClimb(CoupledCruise.Config config, CoupledCruise.Selection selection) {
+        if (!gzBoost.getValue()
+                || gzBoostMode.getValue() != CoupledCruise.BoostMode.Aggressive
+                || !mc.options.keyJump.isDown() || mc.options.keyShift.isDown()
+                || !cruiseEligible()) return selection;
+        Vec3 observed = recentAppliedVelocity();
+        return CoupledCruise.fastClimb(config, selection,
+                observed != null ? observed : mc.player.getDeltaMovement(),
+                mc.player.getAttributeValue(Attributes.GRAVITY));
+    }
+
     private CoupledCruise.Config cruiseConfig() {
         // An explicit large-altitude-swing cruise option. Keep both established
         // GZBoost climb profiles and the ordinary level path unchanged by default.
@@ -1127,6 +1152,7 @@ public class GuangxiElytraModule extends Module {
         CoupledCruise.Config config = cruiseConfig();
         CoupledCruise.Selection selection = cruiseController.previewSelection(config, cruiseInput(),
                 viewAnchor.yaw(), mc.player.getY(), dualViewAvailable());
+        selection = manualFastClimb(config, selection);
         if (!selection.active()) return incoming;
         Vec3 simulated = ElytraPhysics.simulateGlide(incoming, selection.look(),
                 mc.player.getAttributeValue(Attributes.GRAVITY));
@@ -1334,6 +1360,74 @@ public class GuangxiElytraModule extends Module {
         return Math.min(48.0, Math.max(terrainLookahead.getValue(), speed * 10.0 + 2.0));
     }
 
+    public boolean isEscapingTerrain() {
+        return isEnabled() && terrainGuard.getValue() && caveEscape.getValue() && escapeTrail.active();
+    }
+
+    public boolean allowsGroundPassage() {
+        return isEnabled() && terrainGuard.getValue() && caveEscape.getValue() && !foreignFlight();
+    }
+
+    private boolean updateGroundPassage() {
+        if (!allowsGroundPassage() || mc.screen != null || !mc.player.onGround()
+                || mc.player.isInWater() || mc.player.isInLava() || mc.player.isPassenger()
+                || mc.player.isSpectator() || mc.options.keyJump.isDown() || mc.options.keyShift.isDown()) return false;
+        Vec3 origin = mc.player.position();
+        Vec3 destination = dev.guizhou.features.modules.combat.GuangxiElytraChaseModule.groundCoverDestination();
+        AABB standing = new AABB(origin.x - .36, origin.y + .01, origin.z - .36,
+                origin.x + .36, origin.y + 1.82, origin.z + .36);
+        boolean roof = mc.level.getBlockCollisions(mc.player, standing.expandTowards(0, 1, 0)).iterator().hasNext();
+        Vec3 escape = escapeTrail.updateGround(origin, mc.player.tickCount,
+                roof && destination == null || mc.player.horizontalCollision, this::clearGroundPath);
+        if (escape != null) {
+            groundDirection = escape;
+        } else if (destination != null) {
+            destination = new Vec3(destination.x, origin.y, destination.z);
+            var route = groundRoute.routeTo(origin, destination, 16, mc.player.tickCount, this::clearGroundPath);
+            groundDirection = route.blocked() ? Vec3.ZERO : route.direction().scale(route.distance());
+        } else if (!roof) return false;
+        // A low roof cannot accommodate the jump/glide cycle. Walk only through a checked corridor.
+        groundDirectionTick = mc.player.tickCount;
+        return true;
+    }
+
+    /** Standing-body sweep plus continuous floor support; walking never inherits an aerial shortcut. */
+    private boolean clearGroundPath(Vec3 from, Vec3 to) {
+        if (mc.player == null || mc.level == null || !finite(from) || !finite(to)
+                || Math.abs(from.y - to.y) > .01 || from.distanceToSqr(to) > 32 * 32) return false;
+        int steps = Math.max(1, (int) Math.ceil(from.distanceTo(to) / .25));
+        Vec3 step = to.subtract(from).scale(1.0 / steps);
+        for (int i = 0; i <= steps; i++) {
+            Vec3 p = from.add(step.scale(i));
+            AABB body = new AABB(p.x - .36, p.y + .01, p.z - .36, p.x + .36, p.y + 1.82, p.z + .36)
+                    .expandTowards(i < steps ? step : Vec3.ZERO);
+            if (!mc.level.hasChunkAt(BlockPos.containing(body.minX, body.minY, body.minZ))
+                    || !mc.level.hasChunkAt(BlockPos.containing(body.maxX, body.maxY, body.maxZ))
+                    || !mc.level.getWorldBorder().isWithinBounds(body)
+                    || mc.level.containsAnyLiquid(body)
+                    || mc.level.getBlockCollisions(mc.player, body).iterator().hasNext()) return false;
+            AABB floor = new AABB(p.x - .2, p.y - .15, p.z - .2, p.x + .2, p.y, p.z + .2);
+            if (!mc.level.getBlockCollisions(mc.player, floor).iterator().hasNext()) return false;
+        }
+        return true;
+    }
+
+    /** Ephemeral input replacement: releasing the module or touching movement keys takes over immediately. */
+    public static net.minecraft.client.player.Input groundPassageInput(net.minecraft.client.player.Input real) {
+        var module = GuizhouWare.moduleManager == null ? null
+                : GuizhouWare.moduleManager.getModuleByClass(GuangxiElytraModule.class);
+        if (!dev.guizhou.manager.HeartbeatManager.authorized() || module == null || !module.allowsGroundPassage()
+                || mc.player == null || mc.level == null || mc.screen != null || !mc.player.onGround()
+                || mc.player.isFallFlying() || mc.player.isInWater() || mc.player.isInLava()
+                || mc.player.isPassenger() || mc.player.isSpectator() || mc.player.isDeadOrDying()
+                || module.groundDirectionTick != mc.player.tickCount || mc.player.getDeltaMovement().horizontalDistance() > .6
+                || mc.options.keyUp.isDown() || mc.options.keyDown.isDown() || mc.options.keyLeft.isDown()
+                || mc.options.keyRight.isDown() || mc.options.keyJump.isDown() || mc.options.keyShift.isDown()) return real;
+        Vec3 origin = mc.player.position();
+        return dev.guizhou.util.elytra.GroundPassage.steer(real, module.groundDirection, mc.player.getYRot(),
+                (a, b) -> module.clearGroundPath(origin.add(a), origin.add(b)));
+    }
+
     /** Short swept segments avoid treating an entire diagonal route as a filled box. */
     public boolean clearNavigationPath(Vec3 from, Vec3 to) {
         if (mc.player == null || mc.level == null || !finite(from) || !finite(to)) return false;
@@ -1403,13 +1497,28 @@ public class GuangxiElytraModule extends Module {
         boolean momentumBlocked = terrainGuard.getValue() && !FlightTerrainSafety.trajectoryClear(
                 velocity, look, mc.player.getAttributeValue(Attributes.GRAVITY), attackDescent ? 1 : 8,
                 attachedBoost, this::clearRelativePath);
+        Vec3 escapeStep = null;
+        if (!terrainGuard.getValue() || !caveEscape.getValue()) escapeTrail.reset();
+        else if (!attackDescent) {
+            escapeStep = escapeTrail.update(mc.player.position(), mc.player.tickCount,
+                    intent.isBraking() || mc.player.horizontalCollision
+                            || !mc.player.onGround() && mc.player.verticalCollision, this::clearNavigationPath);
+            if (escapeStep != null) {
+                if (escapeStep.lengthSqr() > 1e-6 && (directFlightConfigured()
+                        || FlightTerrainSafety.trajectoryClear(velocity, escapeStep,
+                        mc.player.getAttributeValue(Attributes.GRAVITY), 2, attachedBoost, this::clearRelativePath))) {
+                    intent.requestAvoidance(escapeStep);
+                    intent.requestPrecision();
+                } else intent.requestBraking();
+            }
+        }
         Vec3 preferred = intent.isBraking() ? brakingLook() : look;
-        if ((terrainGuard.getValue() || safeLanding.getValue()) && !attackDescent
+        if (escapeStep == null && (terrainGuard.getValue() || safeLanding.getValue()) && !attackDescent
                 && (landing || momentumBlocked || intent.isAvoiding() || intent.isBraking()
                 || velocity.y < FlightTerrainSafety.FAST_DESCENT || look.y < -0.25)) {
             queueRecovery(velocity, preferred);
         }
-        if (landing || intent.isBraking() || momentumBlocked) {
+        if (escapeStep == null && (landing || intent.isBraking() || momentumBlocked)) {
             var recovery = recoveryLook(velocity, preferred);
             if (recovery.isPresent()) {
                 intent.requestAvoidance(recovery.get().scale(amount));
@@ -1432,7 +1541,7 @@ public class GuangxiElytraModule extends Module {
             accelerating = false;
             endFreeze();
             Vec3 escape = intent.value();
-            safetyRocketReady = danger && !intent.isBraking() && escape.lengthSqr() > 1.0E-6
+            safetyRocketReady = !escapeTrail.active() && danger && !intent.isBraking() && escape.lengthSqr() > 1.0E-6
                     && safetyRocketAligned(escape)
                     && rocketTrajectoryClear(escape);
         }

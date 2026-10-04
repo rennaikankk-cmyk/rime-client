@@ -65,7 +65,11 @@ public final class CoupledCruise {
 
     /** boxLook is the decoupled second view; null unless dualActive. */
     public record Selection(Vec3 look, Phase phase, int vertical, boolean pureVertical, boolean active,
-                            boolean dualActive, Vec3 boxLook, boolean banked) {
+                            boolean dualActive, Vec3 boxLook, boolean banked, boolean maximumLift) {
+        public Selection(Vec3 look, Phase phase, int vertical, boolean pureVertical, boolean active,
+                         boolean dualActive, Vec3 boxLook, boolean banked) {
+            this(look, phase, vertical, pureVertical, active, dualActive, boxLook, banked, false);
+        }
         public Selection(Vec3 look, Phase phase, int vertical, boolean pureVertical, boolean active,
                          boolean dualActive, Vec3 boxLook) {
             this(look, phase, vertical, pureVertical, active, dualActive, boxLook, false);
@@ -105,6 +109,36 @@ public final class CoupledCruise {
     }
 
     public Phase phase() { return phase; }
+
+    /**
+     * Aggressive manual climb: retain the pilot's heading and compare four cardinal
+     * secondary views. Horizontal support feeds next tick's glide lift. This is
+     * bounded work (four envelopes), not a full yaw sweep, and grants no thrust
+     * by itself: apply still requires the caller's actual glide and rocket gate.
+     */
+    public static Selection fastClimb(Config config, Selection selected, Vec3 previous, double gravity) {
+        if (config == null || selected == null || !selected.active() || !selected.dualActive()
+                || selected.vertical() <= 0 || selected.pureVertical() || !validMotion(previous)
+                || !finite(selected.look()) || Math.hypot(selected.look().x, selected.look().z) < 1e-9
+                || !Double.isFinite(gravity) || gravity < 0) return selected;
+        double yaw = Math.atan2(-selected.look().x, selected.look().z);
+        Vec3 look = lookAt(-89.9, yaw);
+        Vec3 simulated = ElytraPhysics.simulateGlide(previous, look, gravity);
+        Vec3 best = null;
+        double score = Double.NEGATIVE_INFINITY;
+        for (Vec3 axis : CLIMB_AXES) {
+            Envelope box = envelope(config, previous, simulated, look, axis);
+            if (box == null) return selected;
+            double x = farEdge(box.min.x, box.max.x), z = farEdge(box.min.z, box.max.z);
+            double candidate = x * x + z * z;
+            if (candidate > score + 1e-9) { score = candidate; best = axis; }
+        }
+        return new Selection(look, selected.phase(), 1, false, true, true, best, false, true);
+    }
+
+    private static final Vec3[] CLIMB_AXES = {
+            new Vec3(0, 0, 1), new Vec3(-1, 0, 0), new Vec3(0, 0, -1), new Vec3(1, 0, 0)
+    };
 
     /** Preview the next selection without advancing banking or height-cycle state. */
     public Selection previewSelection(Config config, Intent intent, double headingYaw, double playerY, boolean dualView) {
@@ -333,6 +367,10 @@ public final class CoupledCruise {
             if (Math.abs(selection.boxLook().x) > 1e-6 && (Math.abs(selection.look().x) < 1e-6 || selection.look().x * selection.boxLook().x <= 0)) x = edge(selection.boxLook().x, box.min.x, box.max.x);
             if (Math.abs(selection.boxLook().z) > 1e-6 && (Math.abs(selection.look().z) < 1e-6 || selection.look().z * selection.boxLook().z <= 0)) z = edge(selection.boxLook().z, box.min.z, box.max.z);
         }
+        if (selection.maximumLift()) {
+            x = farEdge(box.min.x, box.max.x);
+            z = farEdge(box.min.z, box.max.z);
+        }
         double y = selection.vertical() > 0 ? box.max.y
                 : selection.vertical() < 0 && selection.pureVertical() ? box.min.y
                 : clamp(selection.vertical() < 0 ? config.descentFloor() : 0, box.min.y, box.max.y);
@@ -426,6 +464,7 @@ public final class CoupledCruise {
     private static double edge(double direction, double lo, double hi) {
         return direction > 1e-6 ? hi : direction < -1e-6 ? lo : clamp(0, lo, hi);
     }
+    private static double farEdge(double lo, double hi) { return Math.abs(lo) > Math.abs(hi) ? lo : hi; }
     private static Vec3 clamp(Vec3 v, Envelope box) {
         return new Vec3(clamp(v.x, box.min.x, box.max.x), clamp(v.y, box.min.y, box.max.y),
                 clamp(v.z, box.min.z, box.max.z));

@@ -125,7 +125,9 @@ public final class FlightTerrainSafety {
         if (horizontal.lengthSqr() < EPSILON) horizontal = new Vec3(velocity.x, 0.0, velocity.z);
         if (horizontal.lengthSqr() < EPSILON) horizontal = new Vec3(0.0, 0.0, 1.0);
         float yaw = ElytraPhysics.rotationToYaw(horizontal);
-        for (float pitch : new float[]{0.0F, -20.0F, -35.0F}) {
+        // A descending tunnel can have no level or upward exit at all. Descending
+        // choices remain last, and require the same complete trajectory sweep.
+        for (float pitch : new float[]{0.0F, -20.0F, -35.0F, 20.0F, 35.0F}) {
             for (float turn : new float[]{0.0F, 30.0F, -30.0F, 60.0F, -60.0F, 90.0F, -90.0F, 180.0F}) {
                 Vec3 look = ElytraPhysics.pitchYawToRotation(pitch, yaw + turn).normalize();
                 if (space.clear(Vec3.ZERO, look.scale(0.75))

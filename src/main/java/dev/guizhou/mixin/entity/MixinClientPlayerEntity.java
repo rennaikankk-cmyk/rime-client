@@ -132,7 +132,19 @@ public class MixinClientPlayerEntity {
     )
     private void guizhouware$freecamInput(CallbackInfo ci) {
         LocalPlayer self = (LocalPlayer) (Object) this;
-        dev.guizhou.features.modules.render.FreecamModule.captureInput(self.input);
+        if (dev.guizhou.features.modules.render.FreecamModule.captureInput(self.input)) return;
+        var real = self.input;
+        var ground = dev.guizhou.features.modules.movement.GuangxiElytraModule.groundPassageInput(real);
+        if (ground == real) return;
+        // Preserve KeyboardInput so the next tick still polls real keys and manual takeover works.
+        real.leftImpulse = ground.leftImpulse;
+        real.forwardImpulse = ground.forwardImpulse;
+        real.left = ground.left;
+        real.right = ground.right;
+        real.up = ground.up;
+        real.down = ground.down;
+        real.jumping = ground.jumping;
+        real.shiftKeyDown = ground.shiftKeyDown;
     }
 
     @Inject(method = "moveTowardsClosestSpace", at = @At("HEAD"), cancellable = true)

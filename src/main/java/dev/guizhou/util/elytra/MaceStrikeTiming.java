@@ -7,6 +7,12 @@ import net.minecraft.world.phys.Vec3;
 public final class MaceStrikeTiming {
     private MaceStrikeTiming() {}
 
+    /** One extra charge tick is allowed only after a consecutive, stable observation.
+     * Never renew the budget on a second callback, a missed tick or a turn reversal. */
+    public static boolean mayReserve(int reserved, long tick, long previous, boolean stable) {
+        return reserved == 0 || reserved == 1 && stable && tick > previous && tick - previous == 1;
+    }
+
     public static boolean reserveOneTick(Vec3 eye, Vec3 motion, AABB target, Vec3 targetMotion,
                                           double fall, double reach) {
         if (!finite(eye) || !motion(motion) || !motion(targetMotion) || target == null

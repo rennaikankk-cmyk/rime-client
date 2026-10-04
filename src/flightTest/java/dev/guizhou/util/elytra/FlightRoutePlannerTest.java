@@ -15,7 +15,51 @@ public final class FlightRoutePlannerTest {
         lowWallAndCeiling();
         memoryResetAndMovingObstacle();
         enclosedAndBudget();
+        narrowMineTurns();
         System.out.println("FlightRoutePlannerTest passed: " + checks + " checks");
+    }
+
+    private static void narrowMineTurns() {
+        FlightRoutePlanner.Clearance tunnel = (from,to)-> {
+            int steps=Math.max(1,(int)Math.ceil(from.distanceTo(to)*20));
+            for(int i=0;i<=steps;i++) {
+                Vec3 p=from.lerp(to,(double)i/steps);
+                boolean corridor=p.x>=-.35 && p.x<=3.35 && Math.abs(p.z)<=.35
+                        || Math.abs(p.x-3)<=.35 && p.z>=-.35 && p.z<=3.35
+                        || p.x>=2.65 && p.x<=6.35 && Math.abs(p.z-3)<=.35;
+                if(!corridor || Math.abs(p.y)>.2)return false;
+            }
+            return true;
+        };
+        FlightRoutePlanner planner=new FlightRoutePlanner();
+        Vec3 at=Vec3.ZERO,goal=new Vec3(6,0,3);
+        for(int tick=0;tick<80 && at.distanceTo(goal)>.65;tick++) {
+            var route=planner.routeTo(at,goal,12,tick,tunnel);
+            check(!route.blocked(),"One-block lattice finds the odd-coordinate turn that a two-block lattice skips");
+            check(planner.lastSearchNodes()<=FlightRoutePlanner.MAX_NODES,"Fine grid retains the original node cap");
+            Vec3 next=at.add(route.direction().scale(Math.min(.5,route.distance())));
+            check(tunnel.clear(at,next),"Narrow mine movement cannot cut the inside corner");
+            at=next;
+        }
+        check(at.distanceTo(goal)<=.65,"Exit two narrow roofed bends");
+        FlightRoutePlanner.Clearance centeredTunnel=(from,to)-> {
+            int steps=Math.max(1,(int)Math.ceil(from.distanceTo(to)*20));
+            for(int i=0;i<=steps;i++) {
+                Vec3 p=from.lerp(to,(double)i/steps).subtract(.5,0,.5);
+                if(Math.abs(p.y)>.2 || !(p.x>=-.14 && p.x<=3.14 && Math.abs(p.z)<=.14
+                        || Math.abs(p.x-3)<=.14 && p.z>=-.14 && p.z<=3.14
+                        || p.x>=2.86 && p.x<=6.14 && Math.abs(p.z-3)<=.14))return false;
+            }
+            return true;
+        };
+        planner.reset();at=new Vec3(.7,0,.5);goal=new Vec3(6.5,0,3.5);
+        for(int tick=0;tick<80 && at.distanceTo(goal)>.65;tick++) {
+            var route=planner.routeTo(at,goal,12,tick,centeredTunnel);
+            check(!route.blocked(),"Off-center entry can align with block-centered one-block passages");
+            Vec3 next=at.add(route.direction().scale(Math.min(.5,route.distance())));
+            check(centeredTunnel.clear(at,next),"Centering step is swept too");at=next;
+        }
+        check(at.distanceTo(goal)<=.65,"Off-center mine entry reaches the exit");
     }
 
     private static void openSpaceAndEarlyLookahead() {

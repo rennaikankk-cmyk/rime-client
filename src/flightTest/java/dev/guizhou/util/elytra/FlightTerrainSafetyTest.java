@@ -15,6 +15,12 @@ public final class FlightTerrainSafetyTest {
         rocketTrajectories();
         rocketLaunchRecovery();
         recoveryHeadroom();
+        FlightTerrainSafety.Clearance downwardPassage=(from,to)->to.z>=-.01 && Math.abs(to.x)<.2
+                && to.y<=-.2*to.z+.05 && to.y>=-2-to.z;
+        var descending=FlightTerrainSafety.recoveryLook(new Vec3(0,-.2,.5),FORWARD,GRAVITY,4,downwardPassage);
+        check(descending.isPresent() && descending.get().y<0,"A downward-only passage is an escape when every level/upward probe is blocked");
+        check(FlightTerrainSafety.trajectoryClear(new Vec3(0,-.2,.5),descending.orElseThrow(),GRAVITY,4,downwardPassage),
+                "Descending escape still validates the full glide trajectory");
         invalidInputs();
         boundedHorizon();
         System.out.println("FlightTerrainSafetyTest passed: " + checks + " checks");

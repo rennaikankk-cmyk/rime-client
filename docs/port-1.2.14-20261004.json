@@ -1,0 +1,57 @@
+{
+  "mainSourceCommit": "228896d05ce6ccfa60d4568e33605ca30f1d0f4b",
+  "portParent": "d1ead7b30819be1d23d29bbc8ee2b7d7c40a6e78",
+  "sourceSha256": {
+    "src/flightTest/java/dev/guizhou/util/combat/LicenseActionHookTest.java": "eb9f71397ca1c0764e472f68380325096319ea1ab88b32253930d7d2a230afcc",
+    "src/flightTest/java/dev/guizhou/util/elytra/AerialEngagementTest.java": "4f1ae03804bcb9fb8875621d9d15eeb4c2d2180475237f46b1c0aae25ac5d26d",
+    "src/flightTest/java/dev/guizhou/util/elytra/AsyncFlightRouteTest.java": "c422cd14d0b2b23c30e8e930ad565e00a04809acaa49ece2ad81734f5954fee9",
+    "src/flightTest/java/dev/guizhou/util/elytra/CoupledCruiseTest.java": "b315a6ed45673864bbc1519467d10bdee3a282c8f9add44ccc1736946c3bc513",
+    "src/flightTest/java/dev/guizhou/util/elytra/ElytraCombatHookTest.java": "303582080f8f4395c6711664e2ecd888a449e688b4202fabd088112ec8e54989",
+    "src/flightTest/java/dev/guizhou/util/elytra/FlightEscapeTrailTest.java": "0c4d9a30d5f0fadf3d62ca6db93287d43092389e947331f12f41b66d9213d169",
+    "src/flightTest/java/dev/guizhou/util/elytra/FlightRoutePlannerTest.java": "04ead196613f0cb1af2acf061e68c0fb2131c571b716f8a0efdf8cc89d4c4e24",
+    "src/flightTest/java/dev/guizhou/util/elytra/FlightTerrainSafetyTest.java": "635d28821a2696a89208e21b4e207f3e1f2fc29ed0ed46e62d3885e8b1550852",
+    "src/flightTest/java/dev/guizhou/util/elytra/GroundPassageTest.java": "389ac116fe58db5dc1ed7d203159a657c040b00b47cc59dbb327a94a770ec102",
+    "src/flightTest/java/dev/guizhou/util/elytra/MaceStrikeTimingTest.java": "4d612c297f6dd712985b37898d83eac032bc99d262cda10e2b5d141b8d9e1dce",
+    "src/main/java/dev/guizhou/features/modules/combat/GuangxiElytraChaseModule.java": "cbd066739af69f63ab65731055497440a2931f3b897389179de5acabf44bf698",
+    "src/main/java/dev/guizhou/features/modules/movement/GuangxiElytraModule.java": "5112eb7d96b1876cbba9e9d18ff8de9e515097e68ca49d4deec17fade8593e4e",
+    "src/main/java/dev/guizhou/mixin/entity/MixinClientPlayerEntity.java": "a88c8c345b1be3f8d5c60f123716f9e39805b2a296c41ae77af33a35f960be78",
+    "src/main/java/dev/guizhou/util/elytra/AerialEngagement.java": "7a41da2363aa29fd47ffbf1f4271897b6ee7386b96a04d5dab98eba67f4ea012",
+    "src/main/java/dev/guizhou/util/elytra/AsyncFlightRoute.java": "dbfc55d485967e6eafee834c075206e084ad6f82835354f29e70c719719e8bb8",
+    "src/main/java/dev/guizhou/util/elytra/CoupledCruise.java": "f17dba602a016e048e82b023a50dc37dac52c6f145d2b34584d028169bb058e5",
+    "src/main/java/dev/guizhou/util/elytra/FlightEscapeTrail.java": "8e61b9ae7715d6c06faa574a757a9df88d272fd70fbfa9af054853e21ce73b6f",
+    "src/main/java/dev/guizhou/util/elytra/FlightRoutePlanner.java": "e49054258c39779dd648eb446497010d02d479b200699c9724095f505c1aaf1d",
+    "src/main/java/dev/guizhou/util/elytra/FlightTerrainSafety.java": "11e329886a13043298714647c2f3f6504e4ae0e2434c4d1d7820e1f06b183817",
+    "src/main/java/dev/guizhou/util/elytra/GroundPassage.java": "3d7a5b89e4696843c32ae89b7f769f366d3f9784d118c07d609fbb22560babad",
+    "src/main/java/dev/guizhou/util/elytra/MaceStrikeTiming.java": "095f40444b6bb112854d1c8d8c971490e19a9da7e957d7f0d9e628232aaf1005"
+  },
+  "identicalPureHelpersIgnoringLineEndings": [
+    "AerialEngagement",
+    "AsyncFlightRoute",
+    "CoupledCruise",
+    "FlightEscapeTrail",
+    "FlightRoutePlanner",
+    "FlightTerrainSafety",
+    "MaceStrikeTiming"
+  ],
+  "groundInput": {
+    "checks": 84,
+    "actualKeyboardInputPreserved": true,
+    "manualOverride": true,
+    "disableClearsInput": true,
+    "wallAndFloorChecks": true,
+    "injectedNavigationRequest": true
+  },
+  "mace": {
+    "ticks": 800,
+    "serverDamageEvents": 9,
+    "serverSmashEvents": 9,
+    "damage": 163.995849609375,
+    "serverEquipmentRestored": true,
+    "nonRetaliatingTarget": true
+  },
+  "limitations": [
+    "No PvP win-rate measurement",
+    "Natural cave end-to-end escape not tested",
+    "Native Minecraft 1.21.1 has no spear item"
+  ]
+}
