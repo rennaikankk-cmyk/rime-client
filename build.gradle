@@ -379,6 +379,10 @@ tasks.register('obfuscateJar', proguard.gradle.ProGuardTask) {
 
     keep 'class dev.guizhou.GuizhouWare { *; }'
     keep 'class dev.guizhou.mixin.** { *; }'
+    // 2026-10-06: title-screen mixins fire this class's static init before the guard lease
+    // exists; the rimeguard pool exemption prefix matches this name, so it must survive
+    // client obfuscation unrenamed for the language catalog to load while the pool is locked.
+    keep 'class dev.guizhou.util.lang.ClientLanguage { *; }'
     keep 'class dev.guizhou.features.settings.** { *; }'
     keep 'class dev.guizhou.event.system.Subscribe { *; }'
     keepclassmembers 'class * { @dev.guizhou.event.system.Subscribe <methods>; }'
