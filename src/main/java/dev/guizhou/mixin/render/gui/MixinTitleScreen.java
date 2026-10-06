@@ -90,6 +90,7 @@ public abstract class MixinTitleScreen extends Screen {
 
     @Inject(method = "init", at = @At("TAIL"))
     private void guizhouware$onInit(CallbackInfo ci) {
+        if (!dev.guizhou.util.GuardGate.businessAllowed()) return; // 2026-10-06 pool-locked mixin guard
         if (guizhouware$coffee == null) guizhouware$coffee = java.util.concurrent.ThreadLocalRandom.current().nextBoolean();
         guizhouware$backgroundButton = addRenderableWidget(Button.builder(Component.literal(dev.guizhou.util.lang.ClientLanguage.text("背景")), b -> {
             if (minecraft != null) minecraft.setScreen(new MenuBackgroundScreen((Screen) (Object) this));
@@ -176,6 +177,7 @@ public abstract class MixinTitleScreen extends Screen {
 
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
     private void guizhouware$render(GuiGraphics g, int mx, int my, float delta, CallbackInfo ci) {
+        if (!dev.guizhou.util.GuardGate.businessAllowed()) return;
         guizhouware$layout();
         float s = guizhouware$scale;
         g.fill(0, 0, width, height, 0xFF08080A);

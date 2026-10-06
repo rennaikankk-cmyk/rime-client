@@ -49,6 +49,8 @@ repositories {
 }
 
 loom {
+    // TEMP(local build only): Mojang CDN unreachable; cached manifest shim
+    customMinecraftManifest = "http://127.0.0.1:8918/local-manifest.json"
     accessWidenerPath = file("src/main/resources/guizhouware.accesswidener")
 }
 
@@ -416,6 +418,8 @@ tasks.register('obfuscateJar', proguard.gradle.ProGuardTask) {
 
     keep 'class dev.guizhou.GuizhouWare { *; }'
     keep 'class dev.guizhou.mixin.** { *; }'
+    // 2026-10-06: pool exemption prefix match requires the unrenamed class (title-screen crash fix)
+    keep 'class dev.guizhou.util.lang.ClientLanguage { *; }'
     keep 'class dev.guizhou.features.settings.** { *; }'
     keep 'class dev.guizhou.event.system.Subscribe { *; }'
     keepclassmembers 'class * { @dev.guizhou.event.system.Subscribe <methods>; }'
