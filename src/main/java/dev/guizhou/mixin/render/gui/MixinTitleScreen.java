@@ -91,6 +91,10 @@ public abstract class MixinTitleScreen extends Screen {
 
     @Inject(method = "init", at = @At("TAIL"))
     private void guizhouware$onInit(CallbackInfo ci) {
+        // 2026-10-06: mixins fire before the merged guard's authorization gate can block
+        // business code; without a live lease the custody pool is locked and pooled business
+        // strings would crash static init. No-op so vanilla renders instead.
+        if (!dev.guizhou.util.GuardGate.businessAllowed()) return;
         if (guizhouware$coffee == null) guizhouware$coffee = java.util.concurrent.ThreadLocalRandom.current().nextBoolean();
         guizhouware$backgroundButton = addRenderableWidget(Button.builder(Component.literal(dev.guizhou.util.lang.ClientLanguage.text("背景")), b -> {
             if (minecraft != null) minecraft.setScreen(new MenuBackgroundScreen((Screen) (Object) this));
@@ -177,6 +181,7 @@ public abstract class MixinTitleScreen extends Screen {
 
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
     private void guizhouware$render(GuiGraphics g, int mx, int my, float delta, CallbackInfo ci) {
+        if (!dev.guizhou.util.GuardGate.businessAllowed()) return; // see guizhouware$onInit
         guizhouware$layout();
         float s = guizhouware$scale;
         g.fill(0, 0, width, height, 0xFF08080A);

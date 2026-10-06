@@ -39,13 +39,22 @@ public final class ClientLanguage {
         return exact;
     }
     private static Map<String, String> load() {
+        // 2026-10-06: this static init runs from title-screen mixins and must never crash the
+        // game. If the catalog is missing or unreadable (guard pool locked, packaging issue),
+        // degrade to an empty catalog: text() falls through to the source string.
         try (var stream = ClientLanguage.class.getResourceAsStream("/assets/guizhouware/lang/client_en.json")) {
-            if (stream == null) throw new IllegalStateException("Missing client language catalog");
+            if (stream == null) {
+                System.err.println("[Rime] language catalog missing; translations disabled");
+                return Map.of();
+            }
             var result = new HashMap<String, String>();
             JsonParser.parseReader(new InputStreamReader(stream, StandardCharsets.UTF_8)).getAsJsonObject()
                     .entrySet().forEach(e -> result.put(e.getKey(), e.getValue().getAsString()));
             return Map.copyOf(result);
-        } catch (java.io.IOException e) { throw new IllegalStateException("Cannot load client language catalog", e); }
+        } catch (Exception e) {
+            System.err.println("[Rime] language catalog unavailable (" + e + "); translations disabled");
+            return Map.of();
+        }
     }
     private static Map<String, String> reverse() {
         var result = new HashMap<String, String>();
