@@ -33,3 +33,7 @@ forge*changelog.txt
 
 /CLAUDE.md
 .claude
+
+# skip CI workflows for private push
+.github/workflows/
+
