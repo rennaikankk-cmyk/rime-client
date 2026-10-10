@@ -1,0 +1,137 @@
+package dev.guizhou.util.elytra;
+
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.AABB;
+import java.util.Random;
+
+public final class AerialEngagementTest {
+    private static int checks;
+    public static void main(String[] args) {
+        verifyPursuitCycles();
+        Vec3 runner=new Vec3(.3,0,0);
+        Vec3 lead=AerialEngagement.groundLead(new Vec3(20,0,0),runner,runner,true,3,1,0);
+        check(lead.x>2 && lead.x<=2.4,"Moving ground approach anticipates arrival instead of following a one-tick-old lane");
+        check(AerialEngagement.groundLead(new Vec3(20,10,0),Vec3.ZERO,Vec3.ZERO,true,3,1,20).equals(Vec3.ZERO),
+                "Stationary flat-ground target is never replaced by a drifting prediction");
+        check(AerialEngagement.groundLead(new Vec3(20,0,0),runner,runner.scale(-1),true,3,1,0).equals(Vec3.ZERO),
+                "Strafing reversal immediately discards a long ground lead");
+        check(AerialEngagement.groundLead(new Vec3(200,0,0),new Vec3(2,0,0),new Vec3(2,0,0),true,3,1,20).length()<=4,
+                "Far or fast ground motion cannot manufacture a remote ghost target");
+        Vec3 vanilla = new Vec3(2, 0, 0), applied = new Vec3(15, 0, 0);
+        check(AerialEngagement.observedVelocity(vanilla, applied, 1, true).equals(applied), "Fresh GZ motion");
+        for (long age : new long[]{-1, 2, 50, Integer.MAX_VALUE})
+            check(AerialEngagement.observedVelocity(vanilla, applied, age, true).equals(vanilla), "Old/future sample rejected");
+        check(AerialEngagement.observedVelocity(vanilla, applied, 0, false).equals(vanilla), "Setback, impulse and collision invalidate sample");
+        check(AerialEngagement.observedVelocity(vanilla, null, 0, true).equals(vanilla), "Missing sample");
+        check(AerialEngagement.observedVelocity(vanilla, new Vec3(33,0,0), 0, true).equals(vanilla), "Teleport sample");
+        check(AerialEngagement.observedVelocity(null, null, 0, true).equals(Vec3.ZERO), "Invalid fallback");
+        Vec3 offset = new Vec3(16, 0, 0);
+        check(window(offset, applied, Vec3.ZERO, 16, 8), "Prepare before a 15-block step skips the fixed 8-block setup radius");
+        check(!window(offset, vanilla, Vec3.ZERO, 16, 8), "Slow approach remains cruising");
+        check(!window(offset, applied, applied, 16, 8), "Equal drift is not closing speed");
+        check(!window(offset, applied.scale(-1), Vec3.ZERO, 16, 8), "Moving away does not arm approach");
+        check(!window(new Vec3(16,0,20), applied, Vec3.ZERO, Math.hypot(16,20),8), "Lateral miss is not radial entry");
+        check(window(offset, vanilla, new Vec3(-10,0,0),16,8), "Opposing target counts toward closure");
+        check(AerialEngagement.chargeRange(offset, new Vec3(6,0,0), new Vec3(-6,0,0),4.5,10,1) == 160.5,
+                "Opposing passes start charging at relative speed");
+        check(AerialEngagement.chargeRange(offset, applied, Vec3.ZERO,4.5,40,3) == 256, "Charge setup remains bounded");
+        var precise = AerialEngagement.spearStep(new Vec3(6,0,0),offset,Vec3.ZERO,applied,16,2,4.5);
+        check(precise.precision() && precise.velocity().equals(new Vec3(6,0,0)),
+                "Preserve a six-block request before a boosted fifteen-block overrun even without shortening it");
+        var shortStep = AerialEngagement.spearStep(new Vec3(6,0,0),new Vec3(6,0,0),Vec3.ZERO,applied,6,2,4.5);
+        check(shortStep.precision() && 6-shortStep.velocity().x > 2.35, "Keep another query outside the inner band");
+        check(!AerialEngagement.spearStep(new Vec3(6,0,0),offset,applied,applied,16,2,4.5).precision(),
+                "Do not discard cruise speed when the target is fleeing equally fast");
+        check(!AerialEngagement.spearStep(new Vec3(0,0,6),offset,Vec3.ZERO,applied,16,2,4.5).precision(),
+                "Threat sidestep owns its direction");
+        check(!AerialEngagement.spearStep(new Vec3(-6,0,0),offset,Vec3.ZERO,applied,16,2,4.5).precision(),
+                "Escape does not become an approach");
+        var climb = AerialEngagement.climbStep(new Vec3(0,4,0), new Vec3(3,0,0),15);
+        check(climb.precision() && climb.velocity().equals(new Vec3(3,2,0)), "Keep target drift at the apex");
+        check(!AerialEngagement.climbStep(new Vec3(0,40,0),Vec3.ZERO,15).precision(), "Far climb retains boost");
+        check(!AerialEngagement.climbStep(new Vec3(0,10,0),new Vec3(0,2.5,0),15).precision(),
+                "Buying height over a rising opponent must keep powered climb thrust");
+        check(AerialEngagement.climbStep(new Vec3(0,4,0),new Vec3(0,-1,0),15).precision(),
+                "Falling apex still permits terminal control");
+        AABB victim = new AABB(-.3, 0, -.3, .3, 1.8, .3);
+        check(AerialEngagement.maceThreatWindow(new Vec3(0,-2.18,0),new Vec3(0,-.8,0),victim,Vec3.ZERO,3,1),
+                "A falling attacker below the victim can still reach upward from its standing eye");
+        check(!AerialEngagement.maceThreatWindow(new Vec3(0,-5,0),new Vec3(0,-.8,0),victim,Vec3.ZERO,3,1),
+                "A distant attacker falling away is not an upward threat");
+        check(AerialEngagement.maceThreatWindow(new Vec3(0,6,0),new Vec3(0,-2,0),victim,Vec3.ZERO,3,1),
+                "One-tick descending entry remains a threat");
+        check(!AerialEngagement.maceThreatWindow(new Vec3(0,3,0),new Vec3(0,.8,0),victim,Vec3.ZERO,3,1),
+                "A climbing mace cannot create a falling smash window");
+        Vec3 staging = AerialEngagement.maceStagingStep(new Vec3(0,-150,0),Vec3.ZERO,10,6);
+        check(staging.y < 0 && staging.length() <= 6, "High aligned mace closes height instead of hovering indefinitely");
+        double height = 150;
+        for(int tick=0;tick<100;tick++) height += AerialEngagement.maceStagingStep(new Vec3(0,-height,0),Vec3.ZERO,10,6).y;
+        check(height>=12 && height<12.01, "Direct flight converges to setup height without crossing below the drop reserve");
+        check(AerialEngagement.maceStagingStep(new Vec3(0,-12,0),new Vec3(2,1,-1),10,6).equals(new Vec3(2,1,-1)),
+                "At setup altitude retain the target's horizontal and vertical drift");
+        check(AerialEngagement.maceStagingStep(new Vec3(0,-20,0),new Vec3(2,1,-1),10,6).equals(new Vec3(2,1,-1)),
+                "A rising target must not consume an acquired nearby charge-height advantage");
+        check(AerialEngagement.maceStagingStep(new Vec3(0,-150,0),new Vec3(0,1,0),10,6).y<0,
+                "Retaining a rising-target lane cannot strand pursuit at an excessively high apex");
+        check(AerialEngagement.maceStagingStep(new Vec3(1000,-150,0),Vec3.ZERO,10,3).length()<=3.000001,
+                "Staging obeys the actual flight budget");
+        check(AerialEngagement.maceStagingStep(new Vec3(Double.NaN,0,0),Vec3.ZERO,10,6).equals(Vec3.ZERO), "Invalid staging observations rejected");
+        Random random = new Random(20261001);
+        for (int i=0;i<1000;i++) {
+            double angle = random.nextDouble()*Math.PI*2;
+            Vec3 axis = new Vec3(Math.cos(angle),0,Math.sin(angle));
+            check(window(axis.scale(16),axis.scale(15),Vec3.ZERO,16,8), "Rotated interception remains equivalent");
+            var step=AerialEngagement.spearStep(axis.scale(6),axis.scale(6),Vec3.ZERO,axis.scale(15),6,2,4.5);
+            check(step.precision() && step.velocity().length() <= 6 && step.velocity().normalize().dot(axis) > .999999,
+                    "Approach never reverses, accelerates or changes the attack lane");
+            var near=AerialEngagement.climbStep(axis.scale(random.nextDouble()*25),new Vec3(1,0,1),15);
+            check(near.precision() && near.velocity().length() <= 15+1e-9, "Moving apex respects flight cap");
+        }
+        System.out.println("AerialEngagementTest passed: " + checks + " checks");
+    }
+    private static void verifyPursuitCycles() {
+        for (double speed : new double[]{.5, 3, 6, 12, 15}) {
+            for (int i = 0; i < 72; i++) {
+                double angle = i * Math.PI / 36;
+                Vec3 axis = new Vec3(Math.cos(angle), 0, Math.sin(angle));
+                for (double slope : new double[]{-.1, -.01, 0, .01, .1}) {
+                    Vec3 request = axis.scale(speed).add(0, speed * slope, 0);
+                    Vec3 result = AerialEngagement.pursuitBoost(request, axis.scale(speed));
+                    check(result.distanceTo(request) < 1e-8, "Level pursuit must not manufacture vertical travel");
+                }
+                Vec3 diagonal = axis.scale(speed).add(0, speed, 0);
+                check(AerialEngagement.pursuitBoost(diagonal, axis).equals(diagonal), "Useful diagonal climb retains thrust intent");
+                Vec3 steep = axis.scale(.01).add(0, speed, 0);
+                check(AerialEngagement.pursuitBoost(steep, axis).normalize().dot(steep.normalize()) >= .9659,
+                        "Nearly vertical pursuit must not trade its apex for a large sideways detour");
+                Vec3 drift = new Vec3(.15, 0, -.1);
+                var retreat = AerialEngagement.retreatStep(axis.scale(6), axis.scale(7.5), drift,
+                        axis.scale(speed), 8, speed);
+                check(retreat.precision() && retreat.velocity().length() <= speed + 1e-8,
+                        "Near escape boundary uses bounded actual speed");
+                if (speed >= 3) check(axis.scale(7.5).add(retreat.velocity()).subtract(drift).length() <= 8.15 + 1e-8,
+                        "Escape ends at separation instead of wasting a full boosted tick moving away");
+                var evade = AerialEngagement.retreatStep(axis.scale(-6), axis.scale(7.5), drift,
+                        axis.scale(speed), 8, speed);
+                check(!evade.precision(), "Retreat limiter cannot reverse an avoidance or chase vector");
+            }
+        }
+        check(!AerialEngagement.retreatStep(new Vec3(6,0,0), new Vec3(2,0,0), Vec3.ZERO,
+                new Vec3(6,0,0), 64, 6).precision(), "Long disengagement retains boost");
+        check(!AerialEngagement.retreatStep(new Vec3(6,0,0), new Vec3(2,0,0), Vec3.ZERO,
+                new Vec3(Double.NaN,0,0), 8, 6).precision(), "Invalid motion cannot steer retreat");
+        // A simple command-space model, not Minecraft physics or a PvP win-rate test.
+        // Both runs begin 0.5 block short of the same turn boundary at 12 blocks/tick.
+        double oldTurn = 7.5 + 12 + 12; // old escape tick plus stale heading on FOLLOW entry
+        var newStep = AerialEngagement.retreatStep(new Vec3(7.5,0,0),new Vec3(7.5,0,0),
+                Vec3.ZERO,new Vec3(12,0,0),8,12);
+        double newTurn = 7.5 + newStep.velocity().x;
+        check(newTurn <= 8.15 && oldTurn - newTurn > 20,
+                "Bounded retreat plus immediate replanning removes unnecessary return distance");
+        System.out.printf("Retreat command-space comparison: old turn %.2f, new turn %.2f blocks (not server motion)%n",oldTurn,newTurn);
+    }
+    private static boolean window(Vec3 offset,Vec3 self,Vec3 target,double distance,double range) {
+        return AerialEngagement.closingWindow(offset,self,target,distance,range,1);
+    }
+    private static void check(boolean ok,String message) {checks++;if(!ok)throw new AssertionError(message);}
+}

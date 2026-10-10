@@ -1,0 +1,26 @@
+allprojects {
+ afterEvaluate {
+  if (!plugins.hasPlugin('fabric-loom')) return
+  def probe = project.file('tools/blast-probe')
+  def lab = project.file('../blast-lab')
+  sourceSets.create('blastProbe') {
+   java.srcDir(new File(probe, 'src'))
+   resources.srcDir(new File(probe, 'resources'))
+   compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+   runtimeClasspath += output + compileClasspath
+  }
+  tasks.register('blastProbeJar', Jar) {
+   dependsOn tasks.named('blastProbeClasses')
+   from sourceSets.blastProbe.output
+   archiveFileName = 'blast-probe.jar'
+   destinationDirectory = lab
+  }
+  loom.runs.client {
+   runDir('../blast-lab/' + (project.findProperty('probeRun') ?: 'candidate01'))
+   vmArg('-Dblast.startChain=' + (project.findProperty('probeStartChain') ?: '-1'))
+   programArgs('--quickPlaySingleplayer', 'ProbeWorld', '--username', 'BlastProbe', '--width', '854', '--height', '480')
+   vmArg('-Dfabric.addMods=' + new File(lab, 'blast-probe.jar').path)
+  }
+  tasks.named('runClient') { dependsOn tasks.named('blastProbeClasses') }
+ }
+}

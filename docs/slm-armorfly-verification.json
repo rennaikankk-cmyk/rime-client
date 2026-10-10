@@ -1,0 +1,64 @@
+{
+  "base_commit": "01dc2a3",
+  "changes": "uncommitted working tree",
+  "minecraft": "1.21.11",
+  "runtime": "JDK 21 local offline Fabric server; no anti-cheat",
+  "slimefun_release": "1.1.7.1",
+  "upstream_commit": "326ada8b16d579534e35cba0b60b8f47d0ca3213",
+  "rusher_runtime": "Not verified; user requested stopping this validation.",
+  "build": "gradlew --no-daemon build: passed",
+  "test_results": [
+    "ArmorFlightHandoffTest passed: 6 checks",
+    "ArmorSwapCycleTest passed: 1247 checks",
+    "ForeignClientProbeTest passed: 24 checks",
+    "LicenseActionHookTest passed: 556 authorization/action/cleanup checks",
+    "ObfuscatedJarTest passed: 36927 checks; 102 enums audited, 90 isolated reflection checks, 12 complex enums ASM-only, 0 unused input enums removed"
+  ],
+  "candidate_sha256": "9c7473f8598b2f45081cfa5aaca24a9f45f14e1930cd93ea2952af8058a72c4f",
+  "cases": [
+    {
+      "case": "none-slm-inventory",
+      "server_ticks": 210,
+      "result": "Armor cycle and return pair observed; hotbar selection unchanged; empty cursor at every sampled server tick."
+    },
+    {
+      "case": "none-slm-hotbar",
+      "server_ticks": 210,
+      "result": "Armor cycle and return pair observed; hotbar selection unchanged; empty cursor at every sampled server tick."
+    },
+    {
+      "case": "none-legacy-hotbar",
+      "server_ticks": 210,
+      "result": "Armor cycle and return pair observed; hotbar selection unchanged; empty cursor at every sampled server tick."
+    },
+    {
+      "case": "none-slm-reserve",
+      "server_ticks": 210,
+      "result": "Refused elytra below 5-point reserve; deliberate airborne negative case fell and died."
+    },
+    {
+      "case": "slm-slm-inventory",
+      "server_ticks": 210,
+      "result": "Armor cycle and return pair observed; hotbar selection unchanged; empty cursor at every sampled server tick."
+    },
+    {
+      "case": "slm-legacy-hotbar",
+      "server_ticks": 210,
+      "result": "Armor cycle and return pair observed; hotbar selection unchanged; empty cursor at every sampled server tick."
+    },
+    {
+      "case": "slm-slm-handoff-recovery",
+      "server_ticks": 210,
+      "result": "Armor cycle and return pair observed; hotbar selection unchanged; empty cursor at every sampled server tick.",
+      "foreign_active_samples": 55,
+      "resume_tick": 116,
+      "final_server_y": 59.367282013708675
+    }
+  ],
+  "limitations": [
+    "This is not a duel win-rate or GZBoost speed benchmark.",
+    "Production jar startup on two JDK versions and deployment were not performed.",
+    "Foreign-owned flight remains the responsibility of the other client."
+  ],
+  "fixed_failure": "Initial Slimefun takeover test fell after release. Final retest resumes glide at tick 116 after foreign toggle-off at tick 115."
+}

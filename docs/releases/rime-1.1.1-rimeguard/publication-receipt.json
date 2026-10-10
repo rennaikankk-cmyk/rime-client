@@ -1,0 +1,27 @@
+{
+  "release": {
+    "mod_version": "1.1.1",
+    "minecraft": "1.21.11",
+    "filename": "rime-7b26cc2-1.1.1-rimeguard3.1-obfuscated.jar",
+    "sha256": "a4ed83ba0bff79f9b81a3ecec001281393a7be4b9aa8ad9bfa6e06022313b1e1",
+    "size": 12841264,
+    "uploaded_by": "authorized-ssh-release",
+    "uploaded_at": "2026-09-27T16:38:02.898941+00:00"
+  },
+  "backup": "/var/backups/guizhouware-rimeguard31/20260928-release",
+  "priorSha256": "948f0d1af2adde4b29f0d1ad68792cbc32ee7f480663e300fa7723c87e9669ba",
+  "pages": [
+    {
+      "name": "download.html",
+      "before": "0f983055100cb65fc7e6a331e0fbc6c8acca9faa801cae0cda4cbb39113f60f2",
+      "after": "58603c553130158c5c168dc8b5e42c33a0f102726316b43985d84f145024ee5c"
+    },
+    {
+      "name": "index.html",
+      "before": "61e5a351d28f1a0ac7ace685d6056283596d5ced681781473a7779dab52a4907",
+      "after": "116270a5b0469d9f6211d34384f6884c468282e397c1bb28a973fa759b47d95c"
+    }
+  ],
+  "archive": "/var/www/guizhouware/files/rime-7b26cc2-1.1.1-rimeguard3.1-obfuscated.jar",
+  "sourceCommit": "7b26cc2"
+}

@@ -1,0 +1,26 @@
+allprojects {
+ afterEvaluate {
+  if (!plugins.hasPlugin('fabric-loom')) return
+  def probe = project.file('tools/crystal-probe')
+  def lab = project.file('../crystal-v2-lab')
+  sourceSets.create('crystalProbe') {
+   java.srcDir(new File(probe, 'src'))
+   resources.srcDir(new File(probe, 'resources'))
+   compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+   runtimeClasspath += output + compileClasspath
+  }
+  tasks.register('crystalProbeJar', Jar) {
+   dependsOn tasks.named('crystalProbeClasses')
+   from sourceSets.crystalProbe.output
+   archiveFileName = 'crystal-probe.jar'
+   destinationDirectory = lab
+  }
+  loom.runs.client {
+   runDir('../crystal-v2-lab/' + (project.findProperty('probeRun') ?: 'candidate01'))
+   programArgs('--quickPlaySingleplayer', 'ProbeWorld', '--username', 'CrystalProbe', '--width', '854', '--height', '480')
+   vmArg('-Dfabric.addMods=' + new File(lab, 'crystal-probe.jar').path)
+   vmArg('-Drime.probe.flatBase=' + (project.findProperty('probeFlatBase') ?: 'false'))
+  }
+  tasks.named('runClient') { dependsOn tasks.named('crystalProbeClasses') }
+ }
+}

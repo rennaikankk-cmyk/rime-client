@@ -1,0 +1,259 @@
+package dev.guizhou.features.modules;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import dev.guizhou.GuizhouWare;
+import dev.guizhou.event.impl.ClientEvent;
+import dev.guizhou.event.impl.render.Render2DEvent;
+import dev.guizhou.event.impl.render.Render3DEvent;
+import dev.guizhou.features.Feature;
+import dev.guizhou.features.commands.Command;
+import dev.guizhou.features.modules.client.ClickGuiModule;
+import dev.guizhou.features.settings.Bind;
+import dev.guizhou.features.settings.Setting;
+import dev.guizhou.manager.ConfigManager;
+import dev.guizhou.util.render.UiSounds;
+import dev.guizhou.util.traits.Jsonable;
+import dev.guizhou.util.traits.Toggleable;
+import net.minecraft.ChatFormatting;
+import org.joml.Vector2f;
+
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_UNKNOWN;
+
+public class Module extends Feature implements Jsonable, Toggleable {
+    // Preserve configuration intent while an initial lease is pending or authorization is revoked.
+    private boolean enableWhenAuthorized;
+    private final String description;
+    private final Category category;
+
+    public final Setting<Boolean> enabled = bool("Enabled", false).setPage("General");
+    public final Setting<Bind> bind = key("Keybind", new Bind(GLFW_KEY_UNKNOWN)).setPage("General");
+    public final Setting<BindMode> bindMode = mode("BindMode", BindMode.TOGGLE).setPage("General");
+    public final Setting<String> displayName;
+
+    public boolean hidden;
+
+    public Module(String name, String description, Category category) {
+        super(name);
+        this.displayName = str("DisplayName", ModuleNames.displayName(name)).setPage("General");
+        this.description = description;
+        this.category = category;
+    }
+
+    public void onEnable() {
+    }
+
+    public void onDisable() {
+    }
+
+    public void onToggle() {
+    }
+
+    public void onLoad() {
+    }
+
+    public void onTick() {
+    }
+
+    public void onRender2D(Render2DEvent event) {
+    }
+
+    public void onRender3D(Render3DEvent event) {
+    }
+
+    public void onUnload() {
+    }
+
+    public String getDisplayInfo() {
+        return null;
+    }
+
+    public String getMeta() {
+        return null;
+    }
+
+    public void enable() {
+        if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+            dev.guizhou.manager.HeartbeatManager.notifyDeniedOnce();
+            return;
+        }
+        enableWhenAuthorized = false;
+        this.enabled.setValue(true);
+        EVENT_BUS.register(this, getName());
+        EVENT_BUS.post(new ClientEvent(ClientEvent.Type.TOGGLE_MODULE, this));
+        this.onToggle();
+        this.onEnable();
+    }
+
+    public void disable() {
+        enableWhenAuthorized = false;
+        this.enabled.setValue(false);
+        EVENT_BUS.unregister(this);
+        EVENT_BUS.post(new ClientEvent(ClientEvent.Type.TOGGLE_MODULE, this));
+        this.onToggle();
+        this.onDisable();
+    }
+
+    /**
+     * Toggle requested by the player (keybind, GUI, command). Programmatic paths such as
+     * config loading or a module switching itself off keep using {@link #toggle()}.
+     */
+    public void toggleByUser() {
+        setEnabledByUser(!isEnabled());
+    }
+
+    public void setEnabledByUser(boolean on) {
+        if (!on) enableWhenAuthorized = false;
+        if (on ? isEnabled() : !enabled.getValue()) return;
+        if (on) enable();
+        else disable();
+        // Modules may refuse to enable (not in a world, unmet requirements); only confirm real changes.
+        if (isEnabled() == on && !(this instanceof ClickGuiModule)) UiSounds.moduleToggle(on);
+    }
+
+    /** Revocation must run normal cleanup, including release of temporary gameplay state. */
+    public void suspendForAuthorization() {
+        if (!enabled.getValue()) return;
+        disable();
+        enableWhenAuthorized = true;
+    }
+
+    public void resumeAfterAuthorization() {
+        if (enableWhenAuthorized && dev.guizhou.manager.HeartbeatManager.authorized()) enable();
+    }
+
+    public String getDisplayName() {
+        return ModuleNames.localizedDisplayName(getName(), this.displayName.getValue());
+    }
+
+    public void setDisplayName(String name) {
+        Module module = GuizhouWare.moduleManager.getModuleByDisplayName(name);
+        Module originalModule = GuizhouWare.moduleManager.getModuleByName(name);
+        if (module == null && originalModule == null) {
+            Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("已将 {text} %s {} 重命名为 {cyan} %s"), getDisplayName(), name);
+            this.displayName.setValue(name);
+            return;
+        }
+        Command.sendMessage(dev.guizhou.util.lang.ClientLanguage.text("{red} 已存在同名模块"));
+    }
+
+    @Override
+    public boolean isEnabled() {
+        // Mixins and event listeners query this too; dispatch-loop checks alone leave gaps.
+        return enabled.getValue() && dev.guizhou.manager.HeartbeatManager.authorized();
+    }
+
+    @Override
+    public boolean isToggled() {
+        return isEnabled();
+    }
+
+    public String getDescription() {
+        return dev.guizhou.util.lang.ClientLanguage.text(this.description);
+    }
+
+    public Category getCategory() {
+        return this.category;
+    }
+
+    public String getInfo() {
+        return null;
+    }
+
+    public Bind getBind() {
+        return this.bind.getValue();
+    }
+
+    public void setBind(int key) {
+        this.bind.setValue(new Bind(key));
+    }
+
+    public String getFullArrayString() {
+        return this.getDisplayName() + ChatFormatting.GRAY + (this.getDisplayInfo() != null ? " [" + ChatFormatting.WHITE + this.getDisplayInfo() + ChatFormatting.GRAY + "]" : "");
+    }
+
+    @Override
+    public JsonElement toJson() {
+        JsonObject object = new JsonObject();
+        for (Setting<?> setting : getSettings()) {
+            try {
+                if (setting.getValue() instanceof Bind keyBind) {
+                    object.addProperty(setting.getName(), keyBind.getKey());
+                } else if (setting.getValue() instanceof java.awt.Color color) {
+                    object.addProperty(setting.getName(), color.getRed() + "," + color.getGreen() + "," + color.getBlue() + "," + color.getAlpha());
+                } else if (setting.getValue() instanceof Vector2f pos) {
+                    object.addProperty(setting.getName(), pos.x() + "," + pos.y());
+                } else {
+                    object.addProperty(setting.getName(), setting == enabled
+                            ? Boolean.toString(enabled.getValue() || enableWhenAuthorized) : setting.getValueAsString());
+                }
+            } catch (Throwable e) {
+                GuizhouWare.LOGGER.error("Failed to create JSON field", e);
+            }
+        }
+        return object;
+    }
+
+    @Override
+    public void fromJson(JsonElement element) {
+        if (element == null || element.isJsonNull()) return;
+        JsonObject object = element.getAsJsonObject();
+        for (Setting<?> setting : getSettings()) {
+            if (setting == enabled) continue;
+            try {
+                JsonElement settingElement = object.get(setting.getName());
+                if (settingElement != null && !settingElement.isJsonNull()) {
+                    ConfigManager.setValueFromJson(this, setting, settingElement);
+                }
+            } catch (Throwable throwable) {
+                GuizhouWare.LOGGER.error("Failed to load from JSON", throwable);
+            }
+        }
+        displayName.setValue(ModuleNames.migrateDisplayName(getName(), displayName.getValue()));
+        // Preset loading is assignment, not a toggle. Apply settings first so onEnable
+        // sees the requested mode and values; loading the same profile twice is idempotent.
+        if (object.has("Enabled") && !object.get("Enabled").isJsonNull()) {
+            try {
+                boolean requested = object.get("Enabled").getAsBoolean();
+                if (!requested) {
+                    if (enabled.getValue()) disable();
+                    enableWhenAuthorized = false;
+                } else if (!dev.guizhou.manager.HeartbeatManager.authorized()) {
+                    if (enabled.getValue()) disable();
+                    enableWhenAuthorized = true;
+                } else if (!isEnabled()) enable();
+            } catch (Throwable e) {
+                GuizhouWare.LOGGER.error("Failed to restore module {} state during load", getName(), e);
+            }
+        }
+    }
+
+    public BindMode getBindMode() {
+        return this.bindMode.getValue();
+    }
+
+    public enum BindMode {
+        TOGGLE, HOLD
+    }
+
+    public enum Category {
+        COMBAT("Combat"),
+        WORLD("World"),
+        RENDER("Render"),
+        MOVEMENT("Movement"),
+        PLAYER("Player"),
+        FUNNY("Funny"),
+        CLIENT("Client"),
+        HUD("Hud");
+
+        private final String name;
+
+        Category(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return this.name;
+        }
+    }
+}

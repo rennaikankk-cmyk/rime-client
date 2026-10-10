@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"blast_probe","version":"1","environment":"client","entrypoints":{"client":["probe.BlastProbe"]}}

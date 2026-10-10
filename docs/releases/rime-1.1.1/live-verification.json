@@ -1,0 +1,22 @@
+[
+  {
+    "path": "download.html",
+    "sha256": "0f983055100cb65fc7e6a331e0fbc6c8acca9faa801cae0cda4cbb39113f60f2",
+    "http": 200
+  },
+  {
+    "path": "index.html",
+    "sha256": "61e5a351d28f1a0ac7ace685d6056283596d5ced681781473a7779dab52a4907",
+    "http": 200
+  },
+  {
+    "path": "files/guizhouware-1.21.11.jar",
+    "http": 404,
+    "expected": "raw JAR access stays blocked; use launcher"
+  },
+  {
+    "path": "files/rime-63e3b4b-1.1.1-dickguard3.1-obfuscated.jar",
+    "http": 404,
+    "expected": "raw JAR access stays blocked; use launcher"
+  }
+]

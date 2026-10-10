@@ -1,0 +1,108 @@
+{
+  "version": "1.1.9",
+  "guard": "rimeguard3.2",
+  "sourceCommit": "88f2a0d813ac856271fc3101192cb44b567201d4",
+  "artifact": "rime-88f2a0d-1.1.9-rimeguard3.2-obfuscated.jar",
+  "sha256": "d87ef6f85269af4267dc1044bf89d6c65be8af85e93fcffb2a4e529063b50435",
+  "startup": {
+    "candidateSha256": "d87ef6f85269af4267dc1044bf89d6c65be8af85e93fcffb2a4e529063b50435",
+    "signedValidationSha256": "5ed67ef902d3497fa2c3e86bb434505e619246b54c5ea2e5c8dd6dff7bb08345",
+    "bothSignedStartsPassed": true,
+    "guardBusinessHardening": {
+      "candidate": "rime-88f2a0d-1.1.9-rimeguard3.2-obfuscated.jar",
+      "verifyOk": true,
+      "pooledStrings": 2695,
+      "leakedPoolPlaintext": 0,
+      "roundTripMismatches": 0,
+      "renamedClasses": 660
+    },
+    "signedCopyAddsOnlyCredentials": true,
+    "runs": [
+      {
+        "runtime": "microsoft-21.0.7",
+        "durationSeconds": 40.5,
+        "passed": true
+      },
+      {
+        "runtime": "adoptium-21.0.12.1",
+        "durationSeconds": 42.5,
+        "passed": true
+      }
+    ]
+  },
+  "publication": {
+    "release": {
+      "mod_version": "1.1.9",
+      "minecraft": "1.21.11",
+      "filename": "rime-88f2a0d-1.1.9-rimeguard3.2-obfuscated.jar",
+      "sha256": "d87ef6f85269af4267dc1044bf89d6c65be8af85e93fcffb2a4e529063b50435",
+      "size": 15048196,
+      "uploaded_by": "authorized-ssh-release",
+      "uploaded_at": "2026-09-30T08:04:20.408618+00:00"
+    },
+    "backup": "/var/backups/guizhouware-rime119/20260930-release",
+    "priorSha256": "6b2060c1348a313d835fb7cb15af4d7e70b9b0bd41cb8ef381e2f09c231d03b0",
+    "pages": [
+      {
+        "name": "download.html",
+        "before": "16d667ec7f40ea7723cc83750e21d7503f9fdcfb12833a81f604fa23e2d31d12",
+        "after": "6ff57ae73cdbf5b34c31cdfb176a68407481aff961bf157369d4124f2bf2c62d"
+      },
+      {
+        "name": "index.html",
+        "before": "ba1be9b37d7e56573c6f1267c3e5f86e8145011221ba3ebdd4813844df5f68c4",
+        "after": "c0f50072601546f8c0429dcee6734cb2eaf7fb26041c9663055da542ad6243d0"
+      },
+      {
+        "name": "elytra.html",
+        "before": "7fd3548109f65bb515307d15d78a406fe76f3c272024130ebeea95f04dc10fa3",
+        "after": "7594691d20e55651d788b441ecd57f0459c0aba1ac259ae51feeeaa36110d3b6"
+      }
+    ],
+    "archive": "/var/www/guizhouware/files/rime-88f2a0d-1.1.9-rimeguard3.2-obfuscated.jar",
+    "sourceCommit": "88f2a0d813ac856271fc3101192cb44b567201d4",
+    "launcherSha256": "e1fdbff696b929603a14ffb58f7091ea965a4d69733970e4489cc3db7cb31178"
+  },
+  "http": [
+    {
+      "path": "download.html",
+      "sha256": "6ff57ae73cdbf5b34c31cdfb176a68407481aff961bf157369d4124f2bf2c62d",
+      "http": 200
+    },
+    {
+      "path": "index.html",
+      "sha256": "c0f50072601546f8c0429dcee6734cb2eaf7fb26041c9663055da542ad6243d0",
+      "http": 200
+    },
+    {
+      "path": "elytra.html",
+      "sha256": "7594691d20e55651d788b441ecd57f0459c0aba1ac259ae51feeeaa36110d3b6",
+      "http": 200
+    },
+    {
+      "path": "files/guizhouware-1.21.11.jar",
+      "http": 404,
+      "expected": "raw JAR access stays blocked; use launcher"
+    },
+    {
+      "path": "files/rime-88f2a0d-1.1.9-rimeguard3.2-obfuscated.jar",
+      "http": 404,
+      "expected": "raw JAR access stays blocked; use launcher"
+    }
+  ],
+  "desktopSha256": "d87ef6f85269af4267dc1044bf89d6c65be8af85e93fcffb2a4e529063b50435",
+  "validationAccountRevoked": true,
+  "guardBusinessHardening": {
+    "candidate": "rime-88f2a0d-1.1.9-rimeguard3.2-obfuscated.jar",
+    "verifyOk": true,
+    "pooledStrings": 2695,
+    "leakedPoolPlaintext": 0,
+    "roundTripMismatches": 0,
+    "renamedClasses": 660
+  },
+  "changes": [
+    "MP4 main-menu background playback (jcodec pure-Java, 640p/12fps loop, webm rejected with guidance, decode failure falls back)",
+    "Chinese default interface language with revision-2 migration; English remains a one-click option"
+  ],
+  "functionalTests": "startup-only smoke on two Java 21 runtimes; MP4 decode verified offline (36/36 frames, 27ms/frame at 1080p source)"
+}

@@ -1,0 +1,39 @@
+allprojects {
+ afterEvaluate {
+  if (plugins.hasPlugin('fabric-loom')) {
+   def probeRoot = project.file('tools/combat-probe').absolutePath.replace('\\', '/')
+   sourceSets.create('runtimeProbe') {
+    java.srcDir(probeRoot + '/src')
+    resources.srcDir(probeRoot + '/resources')
+    compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+    runtimeClasspath += output + compileClasspath
+   }
+   tasks.register('runtimeProbeJar', Jar) {
+    dependsOn tasks.named('runtimeProbeClasses')
+    from sourceSets.runtimeProbe.output
+    archiveFileName = 'combat-probe.jar'
+    destinationDirectory = file(probeRoot)
+   }
+   loom.runs.client {
+    runDir('tools/combat-probe/runs/' + (project.findProperty('probeRun') ?: 'baseline-spear'))
+    def ui = project.findProperty('probeMode') == 'UI'
+    programArgs('--quickPlaySingleplayer', 'ProbeWorld', '--username', 'CombatProbe', '--width', ui ? '1280' : '854', '--height', ui ? '900' : '480')
+    vmArg('-Dfabric.addMods=' + probeRoot + '/combat-probe.jar')
+    vmArg('-Dprobe.mode=' + (project.findProperty('probeMode') ?: 'SPEAR'))
+    vmArg('-Dprobe.armor=' + (project.findProperty('probeArmor') ?: 'false'))
+    vmArg('-Dprobe.air=' + (project.findProperty('probeAir') ?: 'false'))
+    vmArg('-Dprobe.high=' + (project.findProperty('probeHigh') ?: 'false'))
+    vmArg('-Dprobe.ground=' + (project.findProperty('probeGround') ?: 'false'))
+    vmArg('-Dprobe.ticks=' + (project.findProperty('probeTicks') ?: '800'))
+    vmArg('-Dprobe.gear=' + (project.findProperty('probeGear') ?: 'HOTBAR'))
+    vmArg('-Dprobe.height=' + (project.findProperty('probeHeight') ?: '10'))
+    vmArg('-Dprobe.terrain=' + (project.findProperty('probeTerrain') ?: 'true'))
+    vmArg('-Dprobe.requireDamage=' + (project.findProperty('probeRequireDamage') ?: 'false'))
+    vmArg('-Dprobe.adaptive=' + (project.findProperty('probeAdaptive') ?: 'false'))
+    vmArg('-Dprobe.flight=' + (project.findProperty('probeFlight') ?: 'Grim'))
+    vmArg('-Dprobe.boost=' + (project.findProperty('probeBoost') ?: 'false'))
+   }
+   // Build the fixture separately: development builds intentionally forbid Jar tasks.
+  }
+ }
+}

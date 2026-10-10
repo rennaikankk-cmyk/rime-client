@@ -1,0 +1,27 @@
+{
+  "release": {
+    "mod_version": "1.1.1",
+    "minecraft": "1.21.11",
+    "filename": "rime-63e3b4b-1.1.1-dickguard3.1-obfuscated.jar",
+    "sha256": "948f0d1af2adde4b29f0d1ad68792cbc32ee7f480663e300fa7723c87e9669ba",
+    "size": 12841203,
+    "uploaded_by": "authorized-ssh-release",
+    "uploaded_at": "2026-09-27T16:18:26.801497+00:00"
+  },
+  "backup": "/var/backups/guizhouware-guard31/20260928-release",
+  "priorSha256": "87d4a16781a9165a55906db6374b689e1cf5249b6eb6a155dc131fe8ce0dad85",
+  "pages": [
+    {
+      "name": "download.html",
+      "before": "456eed1d53c883960c0e3f8dadae18472383f324e3b2a657ba89cddf9ed49fb0",
+      "after": "0f983055100cb65fc7e6a331e0fbc6c8acca9faa801cae0cda4cbb39113f60f2"
+    },
+    {
+      "name": "index.html",
+      "before": "36aa62675f0fb65133761cfad0ee5b2d3c98689b48d4354b3fd4a3a5f4df184f",
+      "after": "61e5a351d28f1a0ac7ace685d6056283596d5ced681781473a7779dab52a4907"
+    }
+  ],
+  "archive": "/var/www/guizhouware/files/rime-63e3b4b-1.1.1-dickguard3.1-obfuscated.jar",
+  "sourceCommit": "63e3b4b"
+}

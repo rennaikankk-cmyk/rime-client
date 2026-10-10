@@ -1,0 +1,12 @@
+{
+  "backup": "/var/backups/guizhouware-rimeguard31/20260928-services",
+  "files": [
+    {
+      "source": "jar_release.py",
+      "target": "/opt/web-api/jar_release.py",
+      "before": "a2df0212649cdd3fae51e0d8572fcad34062317a2acc8fc69d591ff580bf2476",
+      "after": "136f8de943bcdffff3772259726c04ada387681bf7559380769d69182f7fac35"
+    }
+  ],
+  "health": "ok"
+}

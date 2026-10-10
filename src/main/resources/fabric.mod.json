@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "guizhouware",
+  "version": "${version}",
+  "name": "Rime",
+  "description": "Rime for Minecraft. Fork of Homovore (AGPL-3.0) by Leonetic & widerthaneurasia, with AutoCrystal enhancements ported from AlienV4.",
+  "authors": [
+    "renna"
+  ],
+  "contact": {},
+  "license": "AGPL-3.0-or-later",
+  "icon": "assets/guizhouware/icon.png",
+  "environment": "client",
+  "accessWidener": "guizhouware.accesswidener",
+  "entrypoints": {
+    "client": [
+      "dev.guizhou.GuizhouWare"
+    ],
+    "main": [
+      "dev.guizhou.GuizhouWare"
+    ]
+  },
+  "mixins": [
+    "guizhouware.mixins.json"
+  ],
+  "depends": {
+    "java": ">=21",
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  },
+  "custom": {
+    "rimeguard": "3.3"
+  }
+}

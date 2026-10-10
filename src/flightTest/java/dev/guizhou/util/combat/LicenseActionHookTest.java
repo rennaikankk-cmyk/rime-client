@@ -1,0 +1,327 @@
+package dev.guizhou.util.combat;
+
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.tree.*;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayDeque;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+/** Checks denied/allowed control-flow paths without initializing Minecraft or loading real credentials. */
+public final class LicenseActionHookTest {
+    private static final String BASE = "dev/guizhou/features/modules/";
+    private static final String CRYSTAL = BASE + "combat/GuangxiCrystalModule";
+    private static final String MINE = BASE + "world/GuangxiMineModule";
+    private static final String AUTO = BASE + "combat/AutoMineModule";
+    private static final String SWORD = BASE + "combat/AutoSwordModule";
+    private static final String HEARTBEAT = "dev/guizhou/manager/HeartbeatManager";
+    private static int checks;
+
+    public static void main(String[] args) throws IOException {
+        crystalActions();
+        miningActionsAndCleanup();
+        autoMineCallbacks();
+        anchorCallbacks();
+        swordAttack();
+        utilityActions();
+        System.out.println("LicenseActionHookTest passed: " + checks + " authorization/action/cleanup checks");
+    }
+
+    private static void anchorCallbacks() throws IOException {
+        String anchor = BASE + "combat/AutoAnchorModule";
+        guarded(anchor, "onPreTick", null, "runCycle");
+        guarded(anchor, "onBlockUpdate", null, "schedule");
+        guarded(anchor, "lambda$onBlockUpdate$", null, "runCycle");
+        guarded(anchor, "runCycle", null, "perform", "selectCandidate", "repeatCandidate");
+        guarded(anchor, "sendUseItemOn", null, "sendUseItemOnDirect");
+        check(!method(anchor, "onDisable", null).hasAuthorization(), "Anchor listener cleanup survives revocation");
+    }
+
+    private static void swordAttack() throws IOException {
+        guarded(SWORD, "onPreTick", null, "tryAttack");
+        guarded(SWORD, "tryAttack", null, "withSwap");
+        guarded(SWORD, "prepareAttackTick", null, "restorePosition");
+        guarded(SWORD, "tryDeflect", null, "strike", "trySubmit");
+        guarded(BASE + "combat/KillAuraModule", "onPreTick", null, "tryDeflect", "tryAttack");
+        int strikeCallbacks = 0;
+        for (Code callback : methods(SWORD, "lambda$tryAttack$")) {
+            if (callback.calls("strike").isEmpty()) continue;
+            strikeCallbacks++;
+            check(callback.hasAuthorization(), "tryAttack strike callback has no authorization check");
+            for (int call : callback.calls("strike")) {
+                check(!callback.reachable(call, false, null), "Denied path reaches tryAttack -> strike");
+                check(callback.reachable(call, true, null), "Authorized path cannot reach tryAttack -> strike");
+            }
+        }
+        check(strikeCallbacks >= 1, "tryAttack callback no longer strikes");
+        guarded(SWORD, "strike", null, "attack");
+        guarded(BASE + "combat/AutoSwordModule", "tickSwordGap", null, "latch");
+        check(!method(SWORD, "onDisable", null).hasAuthorization(), "Disabling AutoSword must stay able to drop its target");
+    }
+
+    /** Server-facing actions of the utility modules; their cleanup stays ungated. */
+    private static void utilityActions() throws IOException {
+        String extra = BASE + "extra/UtilityModule";
+        Code utilityTick = guarded(extra, "onTick", null, "tick");
+        check(utilityTick.calls("resetSession").stream().anyMatch(call -> utilityTick.reachable(call, false, null)),
+                "Denied utility ticks must clear pending actions and restore owned tools");
+        check(method(extra, "permitted", null).hasAuthorization(), "Input and packet utility hooks require authorization");
+        check(!method(extra, "onDisable", null).hasAuthorization(), "Utility cleanup survives revocation");
+
+        String surround = BASE + "combat/SurroundModule";
+        guarded(surround, "breakCrystal", null, "trySubmit", "attack", "swing");
+        guarded(surround, "centerInput", null, "sin", "cos");
+        check(!method(surround, "onDisable", null).hasAuthorization(), "Surround cleanup survives revocation");
+
+        String holeFill = BASE + "combat/HoleFillModule";
+        guarded(holeFill, "onTick", null, "fill");
+        guarded(holeFill, "fill", null, "placeBatch");
+        check(!method(holeFill, "onDisable", null).hasAuthorization(), "HoleFill cleanup survives revocation");
+
+        String armor = BASE + "player/AutoArmorModule";
+        guarded(armor, "onTick", null, "equip");
+        guarded(armor, "equip", null, "click");
+
+        String originalArmor = BASE + "movement/ArmorFlyModule";
+        guarded(originalArmor, "onPreTick", null, "monitorArmorFly", "observe");
+        guarded(originalArmor, "onFlightWindow", null, "serviceIndependentArmorFly");
+        check(method(originalArmor, "requested", null).hasAuthorization(), "Independent armor requests need authorization");
+        check(!method(originalArmor, "resetSession", null).hasAuthorization(), "Denied armor can discard its old flight and metadata");
+
+        String slm = BASE + "movement/SLMArmorFlyModule";
+        guarded(slm, "onPreTick", null, "monitorArmorFly");
+        guarded(slm, "onFlightWindow", null, "serviceIndependentArmorFly");
+        check(method(slm, "requested", null).hasAuthorization(), "SLM equipment requests need authorization");
+        check(!method(slm, "onDisable", null).hasAuthorization(), "SLM cleanup survives revocation");
+
+        String eat = BASE + "player/AutoEatModule";
+        guarded(eat, "onPreTick", null, "startMeal");
+        guarded(eat, "startMeal", null, "latch", "useItem");
+        guarded(eat, "shouldKeepEating", null, "ownsMeal");
+        Code eatCleanup = method(eat, "resetState", null);
+        check(!eatCleanup.hasAuthorization() && !eatCleanup.calls("release").isEmpty(),
+                "AutoEat must hand the hotbar back even when revoked");
+
+        String offhand = BASE + "combat/AutoTotemModule";
+        guarded(offhand, "sync", null, "swapToOffhand");
+        guarded(offhand, "tryUseOffhandGapple", null, "useGappleOnUse");
+        guarded(offhand, "useGappleOnUse", null, "useItem");
+        String chase = BASE + "combat/GuangxiElytraChaseModule";
+        guarded(chase, "groundCoverDestination", null, "observedTargetPosition");
+        guarded(BASE + "movement/GuangxiElytraModule", "groundPassageInput", null, "steer");
+        guarded(chase, "updateEatingRetreat", null, "pauseUse", "requestRecovery", "direction");
+        guarded(chase, "onElytra", null, "set");
+        check(method(chase, "isEatingRetreatRequested", null).hasAuthorization(), "Eating flight requests require authorization");
+        check(!method(chase, "endEatingRetreat", null).hasAuthorization(), "Eating flight cleanup remains available after revocation");
+        Code gappleCleanup = method(offhand, "stopGappleUse", null);
+        check(!gappleCleanup.hasAuthorization() && !gappleCleanup.calls("releaseUsingItem").isEmpty(),
+                "Offhand meal cleanup survives authorization revocation");
+
+        String replenish = BASE + "player/ReplenishModule";
+        guarded(replenish, "onTick", null);
+        guarded(replenish, "moveTo", null, "click");
+        guarded(replenish, "mergeInto", null, "click");
+        Code replenishCleanup = method(replenish, "resetState", null);
+        check(!replenishCleanup.hasAuthorization(), "Replenish cleanup survives revocation");
+
+        String kit = BASE + "player/KitReplenishModule";
+        guarded(kit, "onTick", null);
+        guarded(kit, "takeFromOpenContainer", null, "click");
+        guarded(kit, "placeShulker", null, "use");
+        guarded(kit, "breakPlacedShulker", null, "startDestroyBlock", "swing");
+        guarded(kit, "mergeInto", null, "click");
+        Code kitCleanup = method(kit, "finishChain", null);
+        check(!kitCleanup.hasAuthorization(), "KitReplenish cleanup survives revocation");
+
+        guarded(BASE + "client/AutoReconnectModule", "reconnect", null, "startConnecting");
+
+        String anti = BASE + "combat/AntiReplenishModule";
+        guarded(anti, "onTick", null);
+    }
+
+    private static void crystalActions() throws IOException {
+        guarded(CRYSTAL, "onCrystalSpawn", null, "sendCrystalAttack", "sendGhostAttacksAfter");
+        guarded(CRYSTAL, "onBlockUpdate", null, "schedule");
+        guarded(CRYSTAL, "lambda$onBlockUpdate$", null, "scanBlockUpdate");
+        guarded(CRYSTAL, "scanBlockUpdate", null, "findBestCrystal", "findBestPlace", "breakCrystal", "doPlace");
+        guarded(CRYSTAL, "preplaceCrystal", null, "doPlace");
+        guarded(CRYSTAL, "breakCrystal", null, "aimBreakNow", "sendCrystalAttack");
+        guarded(CRYSTAL, "sendCrystalAttack", null, "send", "attack", "markSent");
+        guarded(CRYSTAL, "sendGhostAttack", null, "send");
+        guarded(CRYSTAL, "attackWithDefaultWeapon", null, "withCrystalWeapon");
+        guarded(CRYSTAL, "withCrystalWeapon", null, "getAsBoolean", "withSwap");
+        guarded(CRYSTAL, "doPlace", ";Z)Z", "send", "placeCrystalShared", "recordPlace");
+        guarded(CRYSTAL, "placeCrystalShared", "$CrystalOptions;", "placeCrystalDirect", "placeCrystal");
+        Code delegate = method(CRYSTAL, "placeCrystalShared", ";Z)Z");
+        check(delegate.calls("placeCrystalShared").size() == 1,
+                "Two-argument shared placement must delegate to the guarded placement implementation");
+    }
+
+    private static void miningActionsAndCleanup() throws IOException {
+        // This cancellation is a user input boundary: denying the module must leave normal mining untouched.
+        guarded(MINE, "onAttackBlock", null, "cancel", "startMine");
+        guarded(MINE, "requestBreak", null, "startMine");
+        guarded(MINE, "requestBreakOnce", null, "requestBreak");
+        Code singleCleanup = method(MINE, "cancelBreakOnce", null);
+        check(!singleCleanup.hasAuthorization() && !singleCleanup.calls("clearMine").isEmpty()
+                && !singleCleanup.calls("abortBreak").isEmpty(), "Owned power mining cleanup must survive revocation");
+        guarded(MINE, "startMine", null, "demote", "begin");
+        guarded(MINE, "begin", null, "rotateFor", "sendAction");
+        guarded(MINE, "stopBreak", "(IZ)Z", "rotateFor", "withSwap", "latch");
+        guarded(MINE, "fireFinish", null, "onMineFinish");
+        guarded(MINE, "fireSubmitted", null, "onMineFinish");
+
+        Code action = method(MINE, "sendAction", null);
+        check(action.hasAuthorization(), "Mining packets need a final authorization boundary");
+        for (String startOrStop : List.of("START_DESTROY_BLOCK", "STOP_DESTROY_BLOCK")) {
+            for (int send : action.calls("send")) {
+                check(!action.reachable(send, false, startOrStop), "Denied " + startOrStop + " reached the packet sender");
+                check(action.reachable(send, true, startOrStop), "Authorized " + startOrStop + " was disabled");
+            }
+        }
+        check(!action.calls("send").isEmpty(), "Mining action sender must still exist");
+        for (int send : action.calls("send")) {
+            check(action.reachable(send, false, "ABORT_DESTROY_BLOCK"), "Revocation must not block ABORT cleanup");
+        }
+
+        Code tick = guarded(MINE, "onTick", null, "tickSecondary", "begin", "stopBreak");
+        for (int cleanup : tick.calls("stopUnauthorizedMining"))
+            check(tick.reachable(cleanup, false, null), "Denied mining must reach cleanup instead of stranding a held tool");
+        check(!tick.calls("stopUnauthorizedMining").isEmpty(), "Denied tick must explicitly clean up active work");
+        Code cleanup = method(MINE, "stopUnauthorizedMining", null);
+        check(!cleanup.hasAuthorization(), "Cleanup must not require an active license");
+        for (String operation : List.of("abortBreak", "clearSecondary", "clearMine")) {
+            check(!cleanup.calls(operation).isEmpty(), "Missing denied cleanup " + operation);
+            for (int call : cleanup.calls(operation)) check(cleanup.reachable(call, false, null), "Cleanup unreachable: " + operation);
+        }
+        for (String clear : List.of("clearSecondary", "clearMine")) {
+            Code slots = method(MINE, clear, null);
+            check(!slots.hasAuthorization() && !slots.calls("release").isEmpty(), "Tool restoration must remain ungated: " + clear);
+        }
+        check(!method(MINE, "onDisable", null).hasAuthorization(), "Disabling the miner must always remain able to clean up");
+    }
+
+    private static void autoMineCallbacks() throws IOException {
+        Code tick = guarded(AUTO, "onPreTick", null, "update");
+        check(tick.calls("resetGlass").stream().anyMatch(call -> tick.reachable(call, false, null)),
+                "Denied AutoMine must release its rebreak hold");
+        guarded(AUTO, "onMineFinish", null, "preplaceCrystal");
+        guarded(AUTO, "onPacket", null, "execute");
+        guarded(AUTO, "lambda$onPacket$", null, "update");
+        guarded(AUTO, "placeGlass", null, "placeDirect");
+        check(!method(AUTO, "resetGlass", null).hasAuthorization(), "Rebreak-hold cleanup must remain ungated");
+    }
+
+    private static Code guarded(String owner, String name, String descriptor, String... operations) throws IOException {
+        Code code = method(owner, name, descriptor);
+        check(code.hasAuthorization(), owner + "." + name + " has no direct authorization check");
+        for (String operation : operations) {
+            List<Integer> calls = code.calls(operation);
+            check(!calls.isEmpty(), name + " no longer exercises expected action " + operation);
+            for (int call : calls) {
+                check(!code.reachable(call, false, null), "Denied path reaches " + name + " -> " + operation);
+                check(code.reachable(call, true, null), "Authorized path cannot reach " + name + " -> " + operation);
+            }
+        }
+        return code;
+    }
+
+    private static Code method(String owner, String wanted, String descriptor) throws IOException {
+        var found = methods(owner, wanted, descriptor);
+        check(found.size() == 1, "Expected one method: " + owner + "." + wanted + ", got " + found.size());
+        return found.getFirst();
+    }
+
+    private static List<Code> methods(String owner, String wanted) throws IOException {
+        return methods(owner, wanted, null);
+    }
+
+    private static List<Code> methods(String owner, String wanted, String descriptor) throws IOException {
+        try (InputStream input = LicenseActionHookTest.class.getClassLoader().getResourceAsStream(owner + ".class")) {
+            if (input == null) throw new AssertionError("Missing compiled " + owner);
+            ClassNode klass = new ClassNode();
+            new ClassReader(input).accept(klass, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+            return klass.methods.stream().filter(method -> (wanted.endsWith("$")
+                    ? method.name.startsWith(wanted) : method.name.equals(wanted))
+                    && (descriptor == null || method.desc.contains(descriptor))).map(Code::new).toList();
+        }
+    }
+
+    private record Code(MethodNode method) {
+        boolean hasAuthorization() {
+            for (var instruction : method.instructions) {
+                if (isAuthorization(instruction)) return true;
+            }
+            return false;
+        }
+        List<Integer> calls(String name) {
+            var result = new java.util.ArrayList<Integer>();
+            for (var instruction : method.instructions) {
+                if (instruction instanceof MethodInsnNode call && call.name.equals(name))
+                    result.add(method.instructions.indexOf(instruction));
+            }
+            return result;
+        }
+        boolean reachable(int goal, boolean authorized, String action) {
+            var todo = new ArrayDeque<Integer>();
+            Set<Integer> seen = new HashSet<>();
+            todo.add(0);
+            while (!todo.isEmpty()) {
+                int index = todo.removeFirst();
+                if (index < 0 || index >= method.instructions.size() || !seen.add(index)) continue;
+                if (index == goal) return true;
+                AbstractInsnNode instruction = method.instructions.get(index);
+                int opcode = instruction.getOpcode();
+                if (instruction instanceof JumpInsnNode jump) {
+                    int target = method.instructions.indexOf(jump.label);
+                    AbstractInsnNode previous = previousReal(instruction);
+                    if (isAuthorization(previous)) {
+                        check(opcode == Opcodes.IFEQ || opcode == Opcodes.IFNE, "Authorization result must gate a boolean branch");
+                        boolean taken = opcode == Opcodes.IFEQ ? !authorized : authorized;
+                        todo.add(taken ? target : index + 1);
+                        continue;
+                    }
+                    if (action != null && previous instanceof FieldInsnNode field && field.getOpcode() == Opcodes.GETSTATIC
+                            && field.owner.equals("net/minecraft/network/protocol/game/ServerboundPlayerActionPacket$Action")) {
+                        check(opcode == Opcodes.IF_ACMPEQ || opcode == Opcodes.IF_ACMPNE, "Mining action must compare enum identity");
+                        boolean equal = action.equals(field.name);
+                        boolean taken = opcode == Opcodes.IF_ACMPEQ ? equal : !equal;
+                        todo.add(taken ? target : index + 1);
+                        continue;
+                    }
+                    todo.add(target);
+                    if (opcode == Opcodes.GOTO) continue;
+                } else if (instruction instanceof TableSwitchInsnNode table) {
+                    todo.add(method.instructions.indexOf(table.dflt));
+                    for (var label : table.labels) todo.add(method.instructions.indexOf(label));
+                    continue;
+                } else if (instruction instanceof LookupSwitchInsnNode lookup) {
+                    todo.add(method.instructions.indexOf(lookup.dflt));
+                    for (var label : lookup.labels) todo.add(method.instructions.indexOf(label));
+                    continue;
+                }
+                if (opcode >= Opcodes.IRETURN && opcode <= Opcodes.RETURN || opcode == Opcodes.ATHROW) continue;
+                todo.add(index + 1);
+            }
+            return false;
+        }
+        private static AbstractInsnNode previousReal(AbstractInsnNode instruction) {
+            var previous = instruction.getPrevious();
+            while (previous != null && previous.getOpcode() < 0) previous = previous.getPrevious();
+            return previous;
+        }
+        private static boolean isAuthorization(AbstractInsnNode instruction) {
+            return instruction instanceof MethodInsnNode call && call.owner.equals(HEARTBEAT)
+                    && call.name.equals("authorized") && call.desc.equals("()Z");
+        }
+    }
+
+    private static void check(boolean condition, String message) {
+        checks++;
+        if (!condition) throw new AssertionError(message);
+    }
+}

@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"rime_crystal_auto_probe","version":"1.0-test","environment":"client","entrypoints":{"client":["probe.CrystalAutoProbe"]},"depends":{"fabricloader":">=0.18.4","fabric-api":"*"}}

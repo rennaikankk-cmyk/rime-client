@@ -1,0 +1,24 @@
+allprojects {
+ afterEvaluate {
+  if (!plugins.hasPlugin('fabric-loom')) return
+  def probe = project.file('tools/font-cache-probe')
+  def lab = project.file('../font-lab')
+  sourceSets.create('fontProbe') {
+   java.srcDir(new File(probe, 'src'))
+   resources.srcDir(new File(probe, 'resources'))
+   compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+   runtimeClasspath += output + compileClasspath
+  }
+  tasks.register('fontProbeJar', Jar) {
+   dependsOn tasks.named('fontProbeClasses')
+   from sourceSets.fontProbe.output
+   archiveFileName = 'font-probe.jar'
+   destinationDirectory = lab
+  }
+  loom.runs.client {
+   runDir('../font-lab/' + (project.findProperty('probeRun') ?: 'baseline'))
+   programArgs('--username', 'FontProbe', '--width', '1280', '--height', '800')
+   vmArg('-Dfabric.addMods=' + new File(lab, 'font-probe.jar').path)
+  }
+ }
+}

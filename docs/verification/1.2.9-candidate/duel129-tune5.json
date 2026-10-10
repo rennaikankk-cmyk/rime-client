@@ -1,0 +1,773 @@
+{
+  "evidenceDirectory": "duel129-tune5",
+  "scope": "Controlled abrupt-reversal prediction regression; repeat every tune4 scene and side with same old-first join order. Tuning only.",
+  "referenceVersion": "1.2.8",
+  "referenceCommit": "88a4a09f3b5cad1c30a75a01e1c86d3cd155e763",
+  "serverProfile": "Paper 1.21.11 build 132 + GrimAC 2.3.73 + PacketEvents 2.14.0 + ViaVersion/ViaBackwards 5.12.0, isolated loopback",
+  "sourceAndRuntimeUnchanged": true,
+  "fullMatrixComplete": true,
+  "plannedRounds": 12,
+  "stopReason": null,
+  "businessSourceDigest": "634e78b1d7acea11e1e96124a45be3b687a3fed1762f426657941e2912bbc78c",
+  "countingRule": "Only actual server death wins; timeouts are draws. Damage/health advantage is not a win.",
+  "summary": {
+    "MACE": {
+      "win": 1,
+      "loss": 5,
+      "draw": 0,
+      "invalid": 0
+    },
+    "SPEAR": {
+      "win": 4,
+      "loss": 2,
+      "draw": 0,
+      "invalid": 0
+    }
+  },
+  "rounds": [
+    {
+      "tag": "129-tune5-mace-01",
+      "mode": "MACE",
+      "boost": true,
+      "swapped": false,
+      "scene": {
+        "halfGap": 33.63,
+        "spawnY": 125,
+        "axisDegrees": 99.93,
+        "heightDelta": 20
+      },
+      "result": "win",
+      "ticks": 579,
+      "reason": "death",
+      "averageTps": 20.048,
+      "observedHealthDecreases": {
+        "NewCandidate": 39.292028069496155,
+        "LegacyReference": 33.017608642578125
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 0.041,
+          "finalAbsorption": 0.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 22,
+          "rocketsAtLastAliveSample": 42,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 133.5136,
+          "maxY": 572.6562,
+          "travelBlocks": 1073.74,
+          "fpsMedian": 60,
+          "fpsP10": 59,
+          "lastDamageSource": "mace_smash",
+          "clientRows": 577,
+          "glidingTicks": 279,
+          "spearUseTicks": 0
+        },
+        "old": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 20,
+          "rocketsAtLastAliveSample": 44,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 113.463,
+          "maxY": 571.6354,
+          "travelBlocks": 1140.1,
+          "fpsMedian": 60,
+          "fpsP10": 59,
+          "lastDamageSource": "mace_smash",
+          "clientRows": 577,
+          "glidingTicks": 314,
+          "spearUseTicks": 0
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-mace-02",
+      "mode": "MACE",
+      "boost": true,
+      "swapped": true,
+      "scene": {
+        "halfGap": 33.63,
+        "spawnY": 125,
+        "axisDegrees": 99.93,
+        "heightDelta": 20
+      },
+      "result": "loss",
+      "ticks": 1152,
+      "reason": "death",
+      "averageTps": 20.002,
+      "observedHealthDecreases": {
+        "NewCandidate": 57.333335399627686,
+        "LegacyReference": 40.33333396911621
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 45,
+          "rocketsAtLastAliveSample": 19,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 114.1678,
+          "maxY": 865.86,
+          "travelBlocks": 2057.23,
+          "fpsMedian": 60,
+          "fpsP10": 59,
+          "lastDamageSource": "mace_smash",
+          "clientRows": 1151,
+          "glidingTicks": 645,
+          "spearUseTicks": 0
+        },
+        "old": {
+          "finalHealth": 3.0,
+          "finalAbsorption": 5.715,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 45,
+          "rocketsAtLastAliveSample": 19,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 134.3329,
+          "maxY": 870.0501,
+          "travelBlocks": 2277.83,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "mace_smash",
+          "clientRows": 1152,
+          "glidingTicks": 701,
+          "spearUseTicks": 0
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-spear-01",
+      "mode": "SPEAR",
+      "boost": true,
+      "swapped": false,
+      "scene": {
+        "halfGap": 33.63,
+        "spawnY": 125,
+        "axisDegrees": 99.93,
+        "heightDelta": 20
+      },
+      "result": "loss",
+      "ticks": 207,
+      "reason": "death",
+      "averageTps": 20.049,
+      "observedHealthDecreases": {
+        "NewCandidate": 28.33333396911621,
+        "LegacyReference": 21.0
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 9,
+          "rocketsAtLastAliveSample": 55,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 112.6934,
+          "maxY": 135.0,
+          "travelBlocks": 363.2,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "spear",
+          "clientRows": 206,
+          "glidingTicks": 188,
+          "spearUseTicks": 131
+        },
+        "old": {
+          "finalHealth": 6.333,
+          "finalAbsorption": 8.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 8,
+          "rocketsAtLastAliveSample": 56,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 111.3069,
+          "maxY": 135.3063,
+          "travelBlocks": 368.35,
+          "fpsMedian": 59,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 207,
+          "glidingTicks": 178,
+          "spearUseTicks": 123
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-spear-02",
+      "mode": "SPEAR",
+      "boost": true,
+      "swapped": true,
+      "scene": {
+        "halfGap": 33.63,
+        "spawnY": 125,
+        "axisDegrees": 99.93,
+        "heightDelta": 20
+      },
+      "result": "loss",
+      "ticks": 257,
+      "reason": "death",
+      "averageTps": 20.008,
+      "observedHealthDecreases": {
+        "NewCandidate": 27.166666507720947,
+        "LegacyReference": 20.5
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 13,
+          "rocketsAtLastAliveSample": 51,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 114.2533,
+          "maxY": 137.6967,
+          "travelBlocks": 432.51,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "spear",
+          "clientRows": 256,
+          "glidingTicks": 236,
+          "spearUseTicks": 175
+        },
+        "old": {
+          "finalHealth": 6.833,
+          "finalAbsorption": 8.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 11,
+          "rocketsAtLastAliveSample": 53,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 123.1028,
+          "maxY": 139.583,
+          "travelBlocks": 415.25,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 256,
+          "glidingTicks": 228,
+          "spearUseTicks": 139
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-spear-03",
+      "mode": "SPEAR",
+      "boost": true,
+      "swapped": false,
+      "scene": {
+        "halfGap": 18.26,
+        "spawnY": 125,
+        "axisDegrees": 1.37,
+        "heightDelta": 10
+      },
+      "result": "win",
+      "ticks": 178,
+      "reason": "death",
+      "averageTps": 20.008,
+      "observedHealthDecreases": {
+        "NewCandidate": 0.0,
+        "LegacyReference": 29.333333492279053
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 20.0,
+          "finalAbsorption": 0.0,
+          "pops": 0,
+          "totemsRemaining": 2,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 8,
+          "rocketsAtLastAliveSample": 56,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 113.0782,
+          "maxY": 142.919,
+          "travelBlocks": 309.63,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 178,
+          "glidingTicks": 167,
+          "spearUseTicks": 132
+        },
+        "old": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 9,
+          "rocketsAtLastAliveSample": 55,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 112.8455,
+          "maxY": 146.4594,
+          "travelBlocks": 291.68,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "spear",
+          "clientRows": 178,
+          "glidingTicks": 164,
+          "spearUseTicks": 97
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-spear-04",
+      "mode": "SPEAR",
+      "boost": true,
+      "swapped": true,
+      "scene": {
+        "halfGap": 18.26,
+        "spawnY": 125,
+        "axisDegrees": 1.37,
+        "heightDelta": 10
+      },
+      "result": "win",
+      "ticks": 90,
+      "reason": "death",
+      "averageTps": 20.021,
+      "observedHealthDecreases": {
+        "NewCandidate": 18.0,
+        "LegacyReference": 25.833333253860474
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 6.833,
+          "finalAbsorption": 8.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 3,
+          "rocketsAtLastAliveSample": 61,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 119.5454,
+          "maxY": 133.9279,
+          "travelBlocks": 143.3,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 90,
+          "glidingTicks": 82,
+          "spearUseTicks": 66
+        },
+        "old": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 4,
+          "rocketsAtLastAliveSample": 60,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 126.1262,
+          "maxY": 136.3215,
+          "travelBlocks": 138.85,
+          "fpsMedian": 59,
+          "fpsP10": 59,
+          "lastDamageSource": "spear",
+          "clientRows": 89,
+          "glidingTicks": 77,
+          "spearUseTicks": 51
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-mace-03",
+      "mode": "MACE",
+      "boost": true,
+      "swapped": false,
+      "scene": {
+        "halfGap": 18.26,
+        "spawnY": 125,
+        "axisDegrees": 1.37,
+        "heightDelta": 10
+      },
+      "result": "loss",
+      "ticks": 944,
+      "reason": "death",
+      "averageTps": 20.002,
+      "observedHealthDecreases": {
+        "NewCandidate": 59.500001549720764,
+        "LegacyReference": 48.33333396911621
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 36,
+          "rocketsAtLastAliveSample": 28,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 129.3329,
+          "maxY": 920.4738,
+          "travelBlocks": 1789.18,
+          "fpsMedian": 60,
+          "fpsP10": 59,
+          "lastDamageSource": "mace_smash",
+          "clientRows": 943,
+          "glidingTicks": 502,
+          "spearUseTicks": 0
+        },
+        "old": {
+          "finalHealth": 10.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 34,
+          "rocketsAtLastAliveSample": 30,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 119.2536,
+          "maxY": 926.8572,
+          "travelBlocks": 1971.46,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 944,
+          "glidingTicks": 551,
+          "spearUseTicks": 0
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-mace-04",
+      "mode": "MACE",
+      "boost": true,
+      "swapped": true,
+      "scene": {
+        "halfGap": 18.26,
+        "spawnY": 125,
+        "axisDegrees": 1.37,
+        "heightDelta": 10
+      },
+      "result": "loss",
+      "ticks": 688,
+      "reason": "death",
+      "averageTps": 20.004,
+      "observedHealthDecreases": {
+        "NewCandidate": 48.333333015441895,
+        "LegacyReference": 28.989988327026367
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 30,
+          "rocketsAtLastAliveSample": 34,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 119.2536,
+          "maxY": 656.3221,
+          "travelBlocks": 1242.12,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "mace_smash",
+          "clientRows": 688,
+          "glidingTicks": 372,
+          "spearUseTicks": 0
+        },
+        "old": {
+          "finalHealth": 10.01,
+          "finalAbsorption": 0.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 23,
+          "rocketsAtLastAliveSample": 41,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 129.1074,
+          "maxY": 662.1159,
+          "travelBlocks": 1424.43,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 688,
+          "glidingTicks": 408,
+          "spearUseTicks": 0
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-mace-05",
+      "mode": "MACE",
+      "boost": true,
+      "swapped": false,
+      "scene": {
+        "halfGap": 22.18,
+        "spawnY": 155,
+        "axisDegrees": -133.4,
+        "heightDelta": 5
+      },
+      "result": "loss",
+      "ticks": 743,
+      "reason": "death",
+      "averageTps": 20.005,
+      "observedHealthDecreases": {
+        "NewCandidate": 43.66666579246521,
+        "LegacyReference": 34.94606924057007
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 30,
+          "rocketsAtLastAliveSample": 34,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 156.7536,
+          "maxY": 437.2519,
+          "travelBlocks": 1292.09,
+          "fpsMedian": 60,
+          "fpsP10": 59,
+          "lastDamageSource": "mace_smash",
+          "clientRows": 743,
+          "glidingTicks": 431,
+          "spearUseTicks": 0
+        },
+        "old": {
+          "finalHealth": 11.387,
+          "finalAbsorption": 0.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 27,
+          "rocketsAtLastAliveSample": 37,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 151.6075,
+          "maxY": 441.9679,
+          "travelBlocks": 1366.43,
+          "fpsMedian": 60,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 743,
+          "glidingTicks": 491,
+          "spearUseTicks": 0
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-mace-06",
+      "mode": "MACE",
+      "boost": true,
+      "swapped": true,
+      "scene": {
+        "halfGap": 22.18,
+        "spawnY": 155,
+        "axisDegrees": -133.4,
+        "heightDelta": 5
+      },
+      "result": "loss",
+      "ticks": 594,
+      "reason": "death",
+      "averageTps": 20.002,
+      "observedHealthDecreases": {
+        "NewCandidate": 43.333332777023315,
+        "LegacyReference": 25.18312120437622
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 25,
+          "rocketsAtLastAliveSample": 39,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 151.8323,
+          "maxY": 488.0861,
+          "travelBlocks": 1067.25,
+          "fpsMedian": 60,
+          "fpsP10": 59,
+          "lastDamageSource": "mace_smash",
+          "clientRows": 593,
+          "glidingTicks": 347,
+          "spearUseTicks": 0
+        },
+        "old": {
+          "finalHealth": 7.15,
+          "finalAbsorption": 0.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 22,
+          "rocketsAtLastAliveSample": 42,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 156.5478,
+          "maxY": 496.7411,
+          "travelBlocks": 1137.13,
+          "fpsMedian": 60,
+          "fpsP10": 59,
+          "lastDamageSource": "player",
+          "clientRows": 593,
+          "glidingTicks": 345,
+          "spearUseTicks": 0
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-spear-05",
+      "mode": "SPEAR",
+      "boost": true,
+      "swapped": false,
+      "scene": {
+        "halfGap": 22.18,
+        "spawnY": 155,
+        "axisDegrees": -133.4,
+        "heightDelta": 5
+      },
+      "result": "win",
+      "ticks": 148,
+      "reason": "death",
+      "averageTps": 20.011,
+      "observedHealthDecreases": {
+        "NewCandidate": 18.0,
+        "LegacyReference": 28.33333396911621
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 8.167,
+          "finalAbsorption": 8.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 6,
+          "rocketsAtLastAliveSample": 58,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 142.3591,
+          "maxY": 157.5,
+          "travelBlocks": 243.94,
+          "fpsMedian": 60,
+          "fpsP10": 59,
+          "lastDamageSource": "none",
+          "clientRows": 147,
+          "glidingTicks": 136,
+          "spearUseTicks": 99
+        },
+        "old": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 6,
+          "rocketsAtLastAliveSample": 58,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 142.8261,
+          "maxY": 152.5,
+          "travelBlocks": 253.1,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "spear",
+          "clientRows": 148,
+          "glidingTicks": 135,
+          "spearUseTicks": 98
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    },
+    {
+      "tag": "129-tune5-spear-06",
+      "mode": "SPEAR",
+      "boost": true,
+      "swapped": true,
+      "scene": {
+        "halfGap": 22.18,
+        "spawnY": 155,
+        "axisDegrees": -133.4,
+        "heightDelta": 5
+      },
+      "result": "win",
+      "ticks": 154,
+      "reason": "death",
+      "averageTps": 20.016,
+      "observedHealthDecreases": {
+        "NewCandidate": 18.183921337127686,
+        "LegacyReference": 29.333333492279053
+      },
+      "stats": {
+        "new": {
+          "finalHealth": 7.816,
+          "finalAbsorption": 0.0,
+          "pops": 1,
+          "totemsRemaining": 1,
+          "deaths": 0,
+          "rocketsUsedObservedBeforeDeath": 7,
+          "rocketsAtLastAliveSample": 57,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 135.2493,
+          "maxY": 155.1939,
+          "travelBlocks": 258.77,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "spear",
+          "clientRows": 154,
+          "glidingTicks": 143,
+          "spearUseTicks": 109
+        },
+        "old": {
+          "finalHealth": 0.0,
+          "finalAbsorption": 0.0,
+          "pops": 2,
+          "totemsRemaining": 0,
+          "deaths": 1,
+          "rocketsUsedObservedBeforeDeath": 7,
+          "rocketsAtLastAliveSample": 57,
+          "resourceMetricCaveat": "Death drops inventory; last alive sample used, may omit use on final tick",
+          "minY": 134.434,
+          "maxY": 157.5,
+          "travelBlocks": 270.44,
+          "fpsMedian": 60.0,
+          "fpsP10": 59,
+          "lastDamageSource": "spear",
+          "clientRows": 154,
+          "glidingTicks": 137,
+          "spearUseTicks": 109
+        }
+      },
+      "issues": [],
+      "qualityFlags": []
+    }
+  ]
+}

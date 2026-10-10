@@ -1,0 +1,1 @@
+{"schemaVersion": 1, "id": "rime_clickgui_probe", "version": "1.0-test", "environment": "client", "entrypoints": {"client": ["probe.ClickGuiProbe"]}, "depends": {"fabricloader": ">=0.18.4", "fabric-api": "*"}}

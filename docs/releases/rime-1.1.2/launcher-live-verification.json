@@ -1,0 +1,16 @@
+[
+  {
+    "path": "GuizhouWareLauncher.exe",
+    "http": 200,
+    "sha256": "deac6fab4bf8e3dffe2ea378d66b6ad8e214c2043d1ca221f2caaa2ca532c707",
+    "size": 12054016,
+    "checksumMatches": true
+  },
+  {
+    "path": "RimeLauncher.exe",
+    "http": 200,
+    "sha256": "deac6fab4bf8e3dffe2ea378d66b6ad8e214c2043d1ca221f2caaa2ca532c707",
+    "size": 12054016,
+    "checksumMatches": true
+  }
+]

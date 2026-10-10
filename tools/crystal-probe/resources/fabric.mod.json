@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"crystal_probe","version":"1","environment":"client","entrypoints":{"client":["probe.CrystalProbe"]}}

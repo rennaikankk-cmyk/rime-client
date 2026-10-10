@@ -1,0 +1,25 @@
+allprojects {
+ afterEvaluate {
+  if (!plugins.hasPlugin('fabric-loom')) return
+  def probe = project.file('tools/language-probe')
+  def lab = project.file('../language-lab')
+  sourceSets.create('languageProbe') {
+   java.srcDir(new File(probe, 'src'))
+   resources.srcDir(new File(probe, 'resources'))
+   compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+   runtimeClasspath += output + compileClasspath
+  }
+  tasks.register('languageProbeJar', Jar) {
+   dependsOn tasks.named('languageProbeClasses')
+   from sourceSets.languageProbe.output
+   archiveFileName = 'language-probe.jar'
+   destinationDirectory = lab
+  }
+  loom.runs.client {
+   runDir('../language-lab/' + (project.findProperty('probeRun') ?: 'ui01'))
+   programArgs('--quickPlaySingleplayer', 'ProbeWorld', '--username', 'LanguageProbe', '--width', '1440', '--height', '960')
+   vmArg('-Dfabric.addMods=' + new File(lab, 'language-probe.jar').path)
+  }
+  tasks.named('runClient') { dependsOn tasks.named('languageProbeClasses') }
+ }
+}

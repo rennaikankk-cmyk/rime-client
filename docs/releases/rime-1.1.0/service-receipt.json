@@ -1,0 +1,24 @@
+{
+  "backup": "/var/backups/guizhouware-guard3/20260927-services-02",
+  "files": [
+    {
+      "source": "guard3.js",
+      "target": "/opt/gzwx-auth/guard3.js",
+      "before": null,
+      "after": "0abf5ca56491389cff6b5992fc446e609f61e8c30280de6409aade770ccce463"
+    },
+    {
+      "source": "server.js",
+      "target": "/opt/gzwx-auth/server.js",
+      "before": "52cf5ef3de36c586b0ece88281003d71a19020fcfb5455d1f85e08cc885d0eb4",
+      "after": "5a7cfcedfecf3fb9c62bca100e4ebea1ff483ada3ca7eaf53b51a2af09934951"
+    },
+    {
+      "source": "jar_release.py",
+      "target": "/opt/web-api/jar_release.py",
+      "before": "77a9b121b331bc30fcddf3d9090bfba70c7b79b5b0192d80acbde3f4d41392ac",
+      "after": "491936b9172d97936fac9c18bc8f1aaf938c9dcaa21f0351d847f0efce1e82fd"
+    }
+  ],
+  "health": "ok"
+}

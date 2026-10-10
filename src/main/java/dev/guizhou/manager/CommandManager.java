@@ -1,0 +1,145 @@
+package dev.guizhou.manager;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import dev.guizhou.GuizhouWare;
+import dev.guizhou.features.Feature;
+import dev.guizhou.features.commands.Command;
+import dev.guizhou.features.commands.impl.*;
+import dev.guizhou.util.traits.Jsonable;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.*;
+
+import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
+import static dev.guizhou.features.commands.Command.SINGLE_FAILURE;
+
+public class CommandManager extends Feature implements Jsonable {
+    private static final Logger LOGGER = LogManager.getLogger("Commands");
+
+    private final CommandDispatcher<CommandManager> dispatcher = new CommandDispatcher<>();
+    private final Map<String, Command> commandAliasMap = new LinkedHashMap<>();
+    private final List<Command> commandList = new LinkedList<>();
+
+    private String commandPrefix = "rime";
+    /** Older chats still type these; help and the GUI only show {@link #commandPrefix}. */
+    private static final String[] LEGACY_PREFIXES = {".", "gzw", "guizhouware"};
+    private boolean funnyVisible = false;
+
+    public CommandManager() {
+        super("Commands");
+    }
+
+    public void init() {
+        register(new BindCommand());
+        register(new FriendCommand());
+        register(new EnemyCommand());
+        register(new HelpCommand());
+        register(new PrefixCommand());
+        register(new ToggleCommand());
+        register(new ActiveModulesCommand());
+        register(new FunnyCommand());
+        register(new SaveKitCommand());
+        register(new ConfigsCommand());
+        register(new LoadKitCommand());
+        register(new dev.guizhou.features.commands.impl.KitReplenishCommand());
+        register(new FakePlayerCommand());
+        register(new DebugLimitsCommand());
+        register(new dev.guizhou.features.commands.impl.TimingsCommand());
+        register(new DiagnosticsCommand());
+        register(new TelemetryCommand());
+        register(new WaypointCommand());
+        register(new PanicCommand());
+        dev.guizhou.features.debug.MoveLimitDebug.get();
+
+        LOGGER.info("Registered {} commands", commandList.size());
+        GuizhouWare.configManager.addConfig(this);
+    }
+
+    public void onChatSent(String message) {
+        dev.guizhou.features.commands.ui.CommandRunner.run(this, message);
+    }
+
+    public void register(Command command) {
+        commandList.add(command);
+        for (String alias : command.getAliases()) {
+            commandAliasMap.put(alias, command);
+            LiteralArgumentBuilder<CommandManager> builder = Command.literal(alias);
+            command.createArgumentBuilder(builder);
+            dispatcher.register(builder);
+        }
+    }
+
+    public void setCommandPrefix(String commandPrefix) {
+        this.commandPrefix = commandPrefix;
+    }
+
+    public String getCommandPrefix() {
+        return commandPrefix;
+    }
+
+    /** Prefix that actually matched this chat line, including a hidden legacy alias. */
+    public String matchedPrefix(String message) {
+        if (message != null && message.startsWith(commandPrefix)) return commandPrefix;
+        if (message == null) return commandPrefix;
+        for (String legacy : LEGACY_PREFIXES) {
+            if (!legacy.equals(commandPrefix) && message.startsWith(legacy)) return legacy;
+        }
+        return null;
+    }
+
+    public boolean isFunnyVisible() {
+        return funnyVisible;
+    }
+
+    public void setFunnyVisible(boolean funnyVisible) {
+        this.funnyVisible = funnyVisible;
+    }
+
+    public Command getCommand(String alias) {
+        return commandAliasMap.get(alias);
+    }
+
+    public Set<String> getCommandAliases() {
+        return commandAliasMap.keySet();
+    }
+
+    public List<Command> getCommands() {
+        return commandList;
+    }
+
+    public CommandDispatcher<CommandManager> getDispatcher() {
+        return dispatcher;
+    }
+
+    @Override
+    public JsonElement toJson() {
+        JsonObject object = new JsonObject();
+        object.addProperty("prefix", commandPrefix);
+        object.addProperty("funnyVisible", funnyVisible);
+        return object;
+    }
+
+    @Override
+    public void fromJson(JsonElement element) {
+        if (element == null || !element.isJsonObject()) {
+            return;
+        }
+        JsonObject object = element.getAsJsonObject();
+        if (object.has("prefix")) {
+            setCommandPrefix(object.get("prefix").getAsString());
+        }
+        if (object.has("funnyVisible")) {
+            setFunnyVisible(object.get("funnyVisible").getAsBoolean());
+        }
+    }
+
+    @Override
+    public String getFileName() {
+        return "commands.json";
+    }
+}

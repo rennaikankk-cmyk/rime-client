@@ -1,0 +1,63 @@
+{
+  "evidenceDirectory": "crystal-v2-lab/slm129-ledger2",
+  "scope": "Real integrated-server functional probe. Not competitive duels; recorded snapshot applies to this probe revision, not subsequent flight changes.",
+  "completion": "checks=46\nreal integrated-server explosion cases=6\nplacements=1 attacks=1 damage=50.93341\n",
+  "sourceRuntimeObservation": {
+    "unchangedSince": "2026-10-02T11:17:40.392607+00:00",
+    "files": 1470,
+    "snapshotDigest": "2233eedc74eb2ebe88e032e046d71b44d2cbbcd0bf5aef873b5a2d743c59a42c",
+    "completed": "checks=46\nreal integrated-server explosion cases=6\nplacements=1 attacks=1 damage=50.93341\n",
+    "scope": "Functional probe only; observation begins at recorded timestamp, not a win-rate claim"
+  },
+  "damageCases": [
+    {
+      "case": "open",
+      "predicted": "47.666668",
+      "legacy_geometry": "47.666668",
+      "server_damage": "47.666687",
+      "error": "0.000019"
+    },
+    {
+      "case": "stone-wall",
+      "predicted": "1.000000",
+      "legacy_geometry": "47.666668",
+      "server_damage": "1.000000",
+      "error": "0.000000"
+    },
+    {
+      "case": "obsidian-wall",
+      "predicted": "1.000000",
+      "legacy_geometry": "0.000000",
+      "server_damage": "1.000000",
+      "error": "0.000000"
+    },
+    {
+      "case": "slab",
+      "predicted": "7.346667",
+      "legacy_geometry": "47.666668",
+      "server_damage": "7.346680",
+      "error": "0.000013"
+    },
+    {
+      "case": "armor",
+      "predicted": "44.616001",
+      "legacy_geometry": "44.616001",
+      "server_damage": "44.616028",
+      "error": "0.000027"
+    },
+    {
+      "case": "removed-wall",
+      "predicted": "47.666668",
+      "legacy_geometry": "47.666668",
+      "server_damage": "47.666687",
+      "error": "0.000019"
+    },
+    {
+      "case": "packet-chain",
+      "predicted": "1",
+      "legacy_geometry": "1",
+      "server_damage": "50.93341",
+      "error": "0"
+    }
+  ]
+}
